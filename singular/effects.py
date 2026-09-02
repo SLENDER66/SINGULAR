@@ -163,13 +163,7 @@ class ExternalEffectCoordinator:
         return normalized
 
     def recover_in_flight(self, request: EffectRequest, *, reason: str) -> dict[str, Any]:
-        """Quarantine an abandoned claim without calling the external provider.
-
-        Recovery is deliberately explicit: a caller must establish that the original
-        worker is no longer authoritative before moving IN_FLIGHT to UNKNOWN.
-        UNKNOWN can then only be resolved through ``reconcile``; this method never
-        re-executes the provider operation.
-        """
+        """Quarantine an abandoned claim without calling the external provider."""
         if not reason.strip():
             raise ValueError("Une raison de récupération explicite est obligatoire.")
         key = request.provider_idempotency_key
@@ -220,10 +214,12 @@ class ExternalEffectCoordinator:
             if status != current and status not in self._TRANSITIONS.get(current, frozenset()):
                 raise ValueError(f"Transition d'effet interdite : {current} -> {status}")
             encoded = None if result is None else json.dumps(result, sort_keys=True, default=str)
-            conn.execute(
-                "UPDATE external_effects SET status=?,result=?,error=?,updated_at=? WHERE provider_idempotency_key=?",
-                (status, encoded, error, self._now(), key),
+            cur = conn.execute(
+                "UPDATE external_effects SET status=?,result=?,error=?,updated_at=? WHERE provider_idempotency_key=? AND status=?",
+                (status, encoded, error, self._now(), key, current),
             )
+            if cur.rowcount != 1:
+                raise RuntimeError("La transition d'effet a échoué à cause d'une concurrence d'état.")
 
     @staticmethod
     def _decode(value: Any) -> Any:
