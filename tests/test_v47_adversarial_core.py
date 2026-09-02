@@ -34,8 +34,28 @@ def test_replay_completed_execution_is_durable_and_does_not_reexecute(tmp_path: 
     first = engine.execute(action, mission.mission_id, lambda _: calls.append(1) or "ok")
     second = engine.execute(action, mission.mission_id, lambda _: calls.append(1) or "must-not-run")
 
-    assert first == second
+    assert first.status == "COMPLETED"
+    assert second == first
+    assert first.result == "ok"
     assert calls == [1]
+
+
+def test_execution_identity_is_durable_and_tamper_evident(tmp_path: Path):
+    store = DurableStore(tmp_path / "s.db")
+    runtime = DurableMissionRuntime(store)
+    mission = runtime.create_mission("identity", "durable", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "run", 1, 1, 10)
+    engine = DurableExecutionEngine(runtime)
+    first = engine.execute(action, mission.mission_id, lambda _: "ok")
+    assert first.status == "COMPLETED"
+
+    execution_key = store.idempotency_key("execute", mission.mission_id, action.id)
+    identity_key = store.idempotency_key("execution_identity", execution_key)
+    with store._connect() as conn:
+        conn.execute("UPDATE idempotency SET fingerprint='tampered' WHERE key=?", (identity_key,))
+
+    with pytest.raises((ValueError, PermissionError), match="Identité|autorité|contenu"):
+        engine.execute(action, mission.mission_id, lambda _: pytest.fail("tampered replay must not execute"))
 
 
 def test_execution_key_cannot_be_reused_across_missions(tmp_path: Path):
@@ -71,13 +91,17 @@ def test_stale_execution_cannot_reexecute_after_restart(tmp_path: Path):
     mission = runtime.create_mission("stale", "recover", autonomy=Autonomy.EXECUTE_REVERSIBLE)
     action = ActionRequest("safe_action", "run", 1, 1, 10)
     engine = DurableExecutionEngine(runtime)
-    first = engine.execute(action, mission.mission_id, lambda _: "ok")
-    assert first == "ok"
+    execution_key = store_key(runtime.store, mission.mission_id, action.id)
+    runtime.store.begin_execution_and_start_mission(execution_key, mission.mission_id, action.id, lease_seconds=1)
+    with runtime.store._connect() as conn:
+        conn.execute("UPDATE executions SET lease_until='2000-01-01T00:00:00+00:00' WHERE execution_key=?", (execution_key,))
 
     restarted = DurableMissionRuntime(DurableStore(db))
     restarted_engine = DurableExecutionEngine(restarted)
-    result = restarted_engine.execute(action, mission.mission_id, lambda _: "must-not-run")
-    assert result == "ok"
+    with pytest.raises(ExecutionRecoveryRequired):
+        restarted_engine.execute(action, mission.mission_id, lambda _: pytest.fail("stale execution must not reexecute"))
+
+    assert restarted.store.get_execution(execution_key)["status"] == "RECOVERY_REQUIRED"
 
 
 def test_recovery_required_is_quarantined_and_requires_explicit_resolution(tmp_path: Path):
@@ -86,13 +110,13 @@ def test_recovery_required_is_quarantined_and_requires_explicit_resolution(tmp_p
     mission = runtime.create_mission("ambiguous", "recover", autonomy=Autonomy.EXECUTE_REVERSIBLE)
     action = ActionRequest("safe_action", "run", 1, 1, 10)
     engine = DurableExecutionEngine(runtime)
-    execution_key = engine.execution_key(action, mission.mission_id) if hasattr(engine, "execution_key") else store_key(runtime.store, mission.mission_id, action.id)
+    execution_key = store_key(runtime.store, mission.mission_id, action.id)
     runtime.store.begin_execution_and_start_mission(execution_key, mission.mission_id, action.id, lease_seconds=1)
     with runtime.store._connect() as conn:
         conn.execute("UPDATE executions SET lease_until='2000-01-01T00:00:00+00:00' WHERE execution_key=?", (execution_key,))
 
     with pytest.raises(ExecutionRecoveryRequired):
-        engine.execute(action, mission.mission_id, lambda _: "must-not-run")
+        engine.execute(action, mission.mission_id, lambda _: pytest.fail("recovery-required execution must not run"))
 
     assert runtime.store.get_execution(execution_key)["status"] == "RECOVERY_REQUIRED"
 
