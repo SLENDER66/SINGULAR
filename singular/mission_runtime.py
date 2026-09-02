@@ -52,7 +52,7 @@ class DurableMissionRuntime:
         contract = self.store.load_mission(mission_id) if mission_id else None
         if mission_id is not None and contract is None:
             reasons = ("Mission inconnue : exécution refusée par défaut.",)
-            return self._blocked(action, mission_id, reasons)
+            return self._blocked(action, None, reasons)
         if contract is None and action.contract_id is not None:
             reasons = ("Action liée à un contrat mais aucun contrat n'a été fourni.",)
             return self._blocked(action, None, reasons)
@@ -92,6 +92,8 @@ class DurableMissionRuntime:
             raise ValueError("Une approbation rejetée ne peut pas être réouverte.")
         if approval.status == ApprovalStatus.APPROVED:
             return
+        if mission_id is not None and self.store.get_mission_status(mission_id) != MissionStatus.WAITING_APPROVAL:
+            raise ValueError("Une approbation n'est plus valide pour l'état actuel de la mission.")
         self.store.update_approval(approval_id, ApprovalStatus.APPROVED)
         if mission_id:
             self._set_status(mission_id, MissionStatus.PLANNED)
@@ -105,6 +107,8 @@ class DurableMissionRuntime:
             return
         if approval.status == ApprovalStatus.APPROVED:
             raise ValueError("Une approbation déjà validée ne peut pas être rejetée.")
+        if mission_id is not None and self.store.get_mission_status(mission_id) != MissionStatus.WAITING_APPROVAL:
+            raise ValueError("Une approbation n'est plus valide pour l'état actuel de la mission.")
         self.store.update_approval(approval_id, ApprovalStatus.REJECTED)
         if mission_id:
             self._set_status(mission_id, MissionStatus.BLOCKED)
