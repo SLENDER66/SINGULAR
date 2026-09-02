@@ -61,23 +61,10 @@ class ApprovalIntegrityStore:
     def contract_fingerprint(cls, contract: DelegationContract | None) -> str:
         return cls._fingerprint({"contract": asdict(contract) if contract is not None else None})
 
-    def bind(
-        self,
-        approval_id: str,
-        action: ActionRequest,
-        mission_id: str | None,
-        contract: DelegationContract | None,
-    ) -> None:
-        values = (
-            self.action_fingerprint(action, mission_id),
-            self.capability_fingerprint(action),
-            self.contract_fingerprint(contract),
-        )
+    def bind(self, approval_id: str, action: ActionRequest, mission_id: str | None, contract: DelegationContract | None) -> None:
+        values = (self.action_fingerprint(action, mission_id), self.capability_fingerprint(action), self.contract_fingerprint(contract))
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT action_fingerprint,capability_fingerprint,contract_fingerprint FROM approvals WHERE approval_id=?",
-                (approval_id,),
-            ).fetchone()
+            row = conn.execute("SELECT action_fingerprint,capability_fingerprint,contract_fingerprint FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
             if row is None:
                 raise KeyError(approval_id)
             existing = tuple(row[name] for name in self._COLUMNS)
@@ -85,28 +72,16 @@ class ApprovalIntegrityStore:
                 if existing != values:
                     raise ValueError("L'identité immuable de l'approbation ne peut pas être modifiée.")
                 return
-            conn.execute(
-                "UPDATE approvals SET action_fingerprint=?, capability_fingerprint=?, contract_fingerprint=? WHERE approval_id=?",
-                (*values, approval_id),
-            )
+            conn.execute("UPDATE approvals SET action_fingerprint=?, capability_fingerprint=?, contract_fingerprint=? WHERE approval_id=?", (*values, approval_id))
 
     def get(self, approval_id: str) -> dict[str, str | None]:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT action_fingerprint,capability_fingerprint,contract_fingerprint FROM approvals WHERE approval_id=?",
-                (approval_id,),
-            ).fetchone()
+            row = conn.execute("SELECT action_fingerprint,capability_fingerprint,contract_fingerprint FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
         if row is None:
             raise KeyError(approval_id)
         return {name: row[name] for name in self._COLUMNS}
 
-    def validate(
-        self,
-        approval_id: str,
-        action: ActionRequest,
-        mission_id: str | None,
-        contract: DelegationContract | None,
-    ) -> None:
+    def validate(self, approval_id: str, action: ActionRequest, mission_id: str | None, contract: DelegationContract | None) -> None:
         stored = self.get(approval_id)
         expected = {
             "action_fingerprint": self.action_fingerprint(action, mission_id),
@@ -116,4 +91,4 @@ class ApprovalIntegrityStore:
         if any(stored[name] is None for name in expected):
             raise PermissionError("Approbation sans empreintes natives complètes : exécution refusée.")
         if stored != expected:
-            raise PermissionError("L'identité ou l'autorité de l'approbation ne correspond plus à l'action actuelle.")
+            raise PermissionError("L'identité, le contexte ou l'autorité de l'action a changé depuis l'approbation.")
