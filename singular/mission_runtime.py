@@ -139,7 +139,15 @@ class DurableMissionRuntime:
         self.audit.record("runtime_block", "GOVERNOR", MissionStatus.BLOCKED.value, {"action_id": action.id, "mission_id": mission_id, "reasons": list(reasons)})
         if mission_id is not None:
             self._set_status(mission_id, MissionStatus.BLOCKED)
-        result = GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+        result = GovernedAction(
+            action,
+            "BLACK",
+            GovernorDecision(action.id, Autonomy.BLOCK, reasons),
+            can_prepare=False,
+            can_execute=False,
+            requires_human=True,
+            reasons=reasons,
+        )
         self._persist_new_audit_events()
         return result
 
@@ -161,6 +169,9 @@ class DurableMissionRuntime:
             "mode": result.governor.mode.value,
             "reasons": list(result.reasons),
             "approval_id": result.governor.approval_id,
+            "can_prepare": result.can_prepare,
+            "can_execute": result.can_execute,
+            "requires_human": result.requires_human,
             "allowed": result.allowed,
         }
 
@@ -172,7 +183,18 @@ class DurableMissionRuntime:
             tuple(cached["reasons"]),
             cached.get("approval_id"),
         )
-        return GovernedAction(action, cached["policy_tier"], decision, bool(cached["allowed"]), tuple(cached["reasons"]))
+        can_prepare = bool(cached.get("can_prepare", cached.get("allowed", False)))
+        can_execute = bool(cached.get("can_execute", False))
+        requires_human = bool(cached.get("requires_human", decision.mode == Autonomy.ESCALATE))
+        return GovernedAction(
+            action,
+            cached["policy_tier"],
+            decision,
+            can_prepare,
+            can_execute,
+            requires_human,
+            tuple(cached["reasons"]),
+        )
 
     def _persist_new_audit_events(self) -> None:
         for event in self.audit.events():
