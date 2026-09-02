@@ -80,6 +80,7 @@ class DurableMissionRuntime:
         if result.governor.approval_id:
             approval = ApprovalRequest(action.id, "; ".join(result.governor.reasons), id=result.governor.approval_id)
             self.store.save_approval(approval, contract.mission_id if contract else None)
+            self._bind_approval(approval.id, action, contract.mission_id if contract else None, fingerprint)
         if contract is not None:
             target = {
                 Autonomy.ESCALATE: MissionStatus.WAITING_APPROVAL,
@@ -100,6 +101,8 @@ class DurableMissionRuntime:
             return
         if mission_id is not None and self.store.get_mission_status(mission_id) != MissionStatus.WAITING_APPROVAL:
             raise ValueError("Une approbation n'est plus valide pour l'état actuel de la mission.")
+        if self.store.get_idempotency_fingerprint(self._approval_binding_key(approval_id)) is None:
+            raise ValueError("Approbation sans liaison d'identité d'action : exécution refusée.")
         self.store.update_approval(approval_id, ApprovalStatus.APPROVED)
         if mission_id:
             self._set_status(mission_id, MissionStatus.PLANNED)
@@ -161,6 +164,25 @@ class DurableMissionRuntime:
             separators=(",", ":"),
         ).encode("utf-8")
         return hashlib.sha256(canonical).hexdigest()
+
+    @staticmethod
+    def _approval_binding_key(approval_id: str) -> str:
+        return DurableStore.idempotency_key("approval-binding", approval_id)
+
+    def _bind_approval(self, approval_id: str, action, mission_id: str | None, fingerprint: str) -> None:
+        """Persist an immutable approval->action binding using the durable idempotency ledger."""
+        binding = {
+            "approval_id": approval_id,
+            "action_id": action.id,
+            "mission_id": mission_id,
+            "fingerprint": fingerprint,
+        }
+        self.store.put_idempotent(self._approval_binding_key(approval_id), binding, fingerprint)
+
+    @classmethod
+    def approval_fingerprint(cls, approval_id: str, store: DurableStore) -> str | None:
+        """Return the immutable fingerprint bound to an approval, if one exists."""
+        return store.get_idempotency_fingerprint(cls._approval_binding_key(approval_id))
 
     @staticmethod
     def _cache(result: GovernedAction) -> dict[str, Any]:
