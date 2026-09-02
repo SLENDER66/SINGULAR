@@ -340,6 +340,75 @@ class DurableStore:
             return row
         return self.mark_execution_recovery_required(execution_key)
 
+    def resolve_execution_recovery(
+        self,
+        execution_key: str,
+        decision: str,
+        *,
+        result: Any = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Atomically resolve RECOVERY_REQUIRED without ever invoking the handler."""
+        if decision not in {"CONFIRM", "FAIL", "CANCEL"}:
+            raise ValueError(f"Décision de récupération inconnue: {decision}")
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT execution_key,mission_id,action_id,status,result,error FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(execution_key)
+            if row["status"] != "RECOVERY_REQUIRED":
+                raise ValueError("Seule une exécution RECOVERY_REQUIRED peut être résolue.")
+
+            mission = conn.execute(
+                "SELECT status FROM mission_states WHERE mission_id=?",
+                (row["mission_id"],),
+            ).fetchone()
+            if mission is None:
+                raise KeyError(row["mission_id"])
+            if mission["status"] != MissionStatus.RUNNING.value:
+                raise ValueError("La mission doit être RUNNING pendant une récupération.")
+
+            if decision == "CONFIRM":
+                execution_status = "COMPLETED"
+                mission_status = MissionStatus.COMPLETED
+                encoded_result = json.dumps(result, sort_keys=True, default=str)
+                error = reason
+            elif decision == "FAIL":
+                execution_status = "FAILED"
+                mission_status = MissionStatus.FAILED
+                encoded_result = None
+                error = reason or "Échec confirmé pendant la récupération."
+            else:
+                execution_status = "FAILED"
+                mission_status = MissionStatus.CANCELLED
+                encoded_result = None
+                error = reason or "Exécution annulée pendant la récupération."
+
+            execution_cur = conn.execute(
+                "UPDATE executions SET status=?,result=?,error=?,finished_at=?,lease_until=NULL WHERE execution_key=? AND status='RECOVERY_REQUIRED'",
+                (execution_status, encoded_result, error, now, execution_key),
+            )
+            if execution_cur.rowcount != 1:
+                raise RuntimeError("La résolution de récupération n'a pas été persistée.")
+
+            mission_cur = conn.execute(
+                "UPDATE mission_states SET status=?,updated_at=? WHERE mission_id=? AND status='RUNNING'",
+                (mission_status.value, now, row["mission_id"]),
+            )
+            if mission_cur.rowcount != 1:
+                raise RuntimeError("La résolution de récupération n'a pas pu finaliser la mission.")
+
+            final = conn.execute(
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+        if final is None:
+            raise RuntimeError("Execution record could not be persisted")
+        return dict(final)
+
     def finish_execution(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
         if status not in {"COMPLETED", "FAILED"}:
             raise ValueError("Un résultat d'exécution doit être COMPLETED ou FAILED.")
