@@ -25,11 +25,7 @@ class MissionStatus(str, Enum):
 
 
 class DurableStore:
-    """Small SQLite persistence boundary for mission, approval and audit state.
-
-    SQLite is deliberately used first: zero infrastructure, transactional writes,
-    deterministic local development, and a clean seam for a future managed store.
-    """
+    """Small SQLite persistence boundary for mission, approval and audit state."""
 
     def __init__(self, path: str | Path = "data/singular.db") -> None:
         self.path = Path(path)
@@ -37,7 +33,7 @@ class DurableStore:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path)
+        conn = sqlite3.connect(self.path, timeout=10.0)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -188,7 +184,13 @@ class DurableStore:
             row = conn.execute("SELECT result FROM idempotency WHERE key=?", (key,)).fetchone()
         return json.loads(row["result"]) if row else None
 
-    def put_idempotent(self, key: str, result: dict[str, Any]) -> None:
+    def put_idempotent(self, key: str, result: dict[str, Any]) -> dict[str, Any]:
+        """Atomically cache a result and always return the canonical stored value."""
         now = datetime.now(timezone.utc).isoformat()
+        encoded = json.dumps(result, sort_keys=True)
         with self._connect() as conn:
-            conn.execute("INSERT OR IGNORE INTO idempotency(key,result,created_at) VALUES(?,?,?)", (key, json.dumps(result, sort_keys=True), now))
+            conn.execute("INSERT OR IGNORE INTO idempotency(key,result,created_at) VALUES(?,?,?)", (key, encoded, now))
+            row = conn.execute("SELECT result FROM idempotency WHERE key=?", (key,)).fetchone()
+        if row is None:
+            raise RuntimeError("Idempotency record could not be persisted")
+        return json.loads(row["result"])
