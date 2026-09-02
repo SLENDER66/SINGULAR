@@ -25,7 +25,7 @@ class MissionStatus(str, Enum):
 
 
 class DurableStore:
-    """Small SQLite persistence boundary for mission, approval and audit state."""
+    """Small SQLite persistence boundary for mission, approval, audit and replay state."""
 
     def __init__(self, path: str | Path = "data/singular.db") -> None:
         self.path = Path(path)
@@ -74,6 +74,7 @@ class DurableStore:
                 );
                 CREATE TABLE IF NOT EXISTS idempotency (
                     key TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL DEFAULT '',
                     result TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
@@ -82,6 +83,9 @@ class DurableStore:
             columns = {row[1] for row in conn.execute("PRAGMA table_info(approvals)")}
             if "mission_id" not in columns:
                 conn.execute("ALTER TABLE approvals ADD COLUMN mission_id TEXT")
+            idempotency_columns = {row[1] for row in conn.execute("PRAGMA table_info(idempotency)")}
+            if "fingerprint" not in idempotency_columns:
+                conn.execute("ALTER TABLE idempotency ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''")
 
     def save_mission(self, contract: DelegationContract) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -184,13 +188,23 @@ class DurableStore:
             row = conn.execute("SELECT result FROM idempotency WHERE key=?", (key,)).fetchone()
         return json.loads(row["result"]) if row else None
 
-    def put_idempotent(self, key: str, result: dict[str, Any]) -> dict[str, Any]:
-        """Atomically cache a result and always return the canonical stored value."""
+    def get_idempotency_fingerprint(self, key: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT fingerprint FROM idempotency WHERE key=?", (key,)).fetchone()
+        return row["fingerprint"] if row else None
+
+    def put_idempotent(self, key: str, result: dict[str, Any], fingerprint: str = "") -> dict[str, Any]:
+        """Atomically cache a result; reject reuse of a key with different input."""
         now = datetime.now(timezone.utc).isoformat()
         encoded = json.dumps(result, sort_keys=True)
         with self._connect() as conn:
-            conn.execute("INSERT OR IGNORE INTO idempotency(key,result,created_at) VALUES(?,?,?)", (key, encoded, now))
-            row = conn.execute("SELECT result FROM idempotency WHERE key=?", (key,)).fetchone()
+            conn.execute(
+                "INSERT OR IGNORE INTO idempotency(key,fingerprint,result,created_at) VALUES(?,?,?,?)",
+                (key, fingerprint, encoded, now),
+            )
+            row = conn.execute("SELECT fingerprint,result FROM idempotency WHERE key=?", (key,)).fetchone()
         if row is None:
             raise RuntimeError("Idempotency record could not be persisted")
+        if row["fingerprint"] != fingerprint:
+            raise ValueError("Identité d'action réutilisée avec un contenu différent.")
         return json.loads(row["result"])
