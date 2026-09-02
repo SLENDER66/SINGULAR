@@ -18,6 +18,10 @@ class EffectStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class EffectInProgress(RuntimeError):
+    """Another worker currently owns the external-effect claim."""
+
+
 @dataclass(frozen=True)
 class EffectRequest:
     execution_key: str
@@ -55,6 +59,14 @@ class EffectProvider(Protocol):
 
 class ExternalEffectCoordinator:
     """Durable external-effect boundary; ambiguous outcomes never auto-retry."""
+
+    _TRANSITIONS = {
+        EffectStatus.INTENT.value: frozenset({EffectStatus.IN_FLIGHT.value}),
+        EffectStatus.IN_FLIGHT.value: frozenset({EffectStatus.COMPLETED.value, EffectStatus.UNKNOWN.value, EffectStatus.FAILED.value}),
+        EffectStatus.UNKNOWN.value: frozenset({EffectStatus.COMPLETED.value, EffectStatus.UNKNOWN.value, EffectStatus.FAILED.value}),
+        EffectStatus.COMPLETED.value: frozenset(),
+        EffectStatus.FAILED.value: frozenset(),
+    }
 
     def __init__(self, store: DurableStore) -> None:
         self.store = store
@@ -123,8 +135,19 @@ class ExternalEffectCoordinator:
             raise RuntimeError("Effet externe ambigu : réconciliation explicite requise avant toute nouvelle exécution.")
         if status == EffectStatus.FAILED.value:
             return ProviderResult("FAILED", error=existing.get("error"))
+        if status == EffectStatus.IN_FLIGHT.value:
+            raise EffectInProgress(key)
 
-        self._transition(key, EffectStatus.IN_FLIGHT.value)
+        if not self._claim(key):
+            current = self.prepare(request)
+            if current["status"] == EffectStatus.COMPLETED.value:
+                return ProviderResult("COMPLETED", current.get("result"))
+            if current["status"] == EffectStatus.FAILED.value:
+                return ProviderResult("FAILED", error=current.get("error"))
+            if current["status"] == EffectStatus.UNKNOWN.value:
+                raise RuntimeError("Effet externe ambigu : réconciliation explicite requise avant toute nouvelle exécution.")
+            raise EffectInProgress(key)
+
         try:
             outcome = provider.execute(request, key)
         except Exception as exc:
@@ -134,11 +157,11 @@ class ExternalEffectCoordinator:
 
         normalized = ProviderResult(str(outcome.status), outcome.result, outcome.error)
         if normalized.status == EffectStatus.COMPLETED.value:
-            self._transition(key, "COMPLETED", result=normalized.result)
+            self._transition(key, EffectStatus.COMPLETED.value, result=normalized.result)
         elif normalized.status == EffectStatus.FAILED.value:
-            self._transition(key, "FAILED", error=normalized.error)
+            self._transition(key, EffectStatus.FAILED.value, error=normalized.error)
         else:
-            self._transition(key, "UNKNOWN", result=normalized.result, error=normalized.error or "Provider returned an ambiguous outcome")
+            self._transition(key, EffectStatus.UNKNOWN.value, result=normalized.result, error=normalized.error or "Provider returned an ambiguous outcome")
             return ProviderResult("UNKNOWN", normalized.result, normalized.error)
         return normalized
 
@@ -153,26 +176,38 @@ class ExternalEffectCoordinator:
         outcome = provider.reconcile(request, key)
         normalized = ProviderResult(str(outcome.status), outcome.result, outcome.error)
         if normalized.status == EffectStatus.COMPLETED.value:
-            self._transition(key, "COMPLETED", result=normalized.result)
+            self._transition(key, EffectStatus.COMPLETED.value, result=normalized.result)
         elif normalized.status == EffectStatus.FAILED.value:
-            self._transition(key, "FAILED", error=normalized.error)
+            self._transition(key, EffectStatus.FAILED.value, error=normalized.error)
         else:
-            self._transition(key, "UNKNOWN", result=normalized.result, error=normalized.error or "Provider reconciliation remains ambiguous")
+            self._transition(key, EffectStatus.UNKNOWN.value, result=normalized.result, error=normalized.error or "Provider reconciliation remains ambiguous")
             return ProviderResult("UNKNOWN", normalized.result, normalized.error)
         return normalized
 
     def get(self, request: EffectRequest) -> dict[str, Any]:
         return self.prepare(request)
 
-    def _transition(self, key: str, status: str, *, result: Any = None, error: str | None = None) -> None:
-        encoded = None if result is None else json.dumps(result, sort_keys=True, default=str)
+    def _claim(self, key: str) -> bool:
         with self._connect() as conn:
             cur = conn.execute(
+                "UPDATE external_effects SET status=?,updated_at=? WHERE provider_idempotency_key=? AND status=?",
+                (EffectStatus.IN_FLIGHT.value, self._now(), key, EffectStatus.INTENT.value),
+            )
+            return cur.rowcount == 1
+
+    def _transition(self, key: str, status: str, *, result: Any = None, error: str | None = None) -> None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT status FROM external_effects WHERE provider_idempotency_key=?", (key,)).fetchone()
+            if row is None:
+                raise KeyError(key)
+            current = row["status"]
+            if status != current and status not in self._TRANSITIONS.get(current, frozenset()):
+                raise ValueError(f"Transition d'effet interdite : {current} -> {status}")
+            encoded = None if result is None else json.dumps(result, sort_keys=True, default=str)
+            conn.execute(
                 "UPDATE external_effects SET status=?,result=?,error=?,updated_at=? WHERE provider_idempotency_key=?",
                 (status, encoded, error, self._now(), key),
             )
-            if cur.rowcount != 1:
-                raise KeyError(key)
 
     @staticmethod
     def _decode(value: Any) -> Any:
