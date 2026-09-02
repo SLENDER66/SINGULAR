@@ -47,6 +47,7 @@ class ActionRequest:
     sensitive: bool = False
     contract_id: Optional[str] = None
     id: str = field(default_factory=lambda: 'ACT-' + uuid4().hex[:8])
+    capability: str | None = None
 
 @dataclass
 class ApprovalRequest:
