@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from singular.durable import DurableStore
-from singular.effects import EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
+from singular.effects import EffectInProgress, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
 
 
 class FakeProvider:
@@ -95,3 +95,17 @@ def test_same_provider_key_cannot_change_action_identity(tmp_path: Path):
     forged = request(action_fingerprint="forged-action")
     with pytest.raises(ValueError, match="identité d'action différente"):
         coordinator.prepare(forged)
+
+
+def test_in_flight_effect_has_single_claimant(tmp_path: Path):
+    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    provider = FakeProvider()
+    original = request()
+    coordinator.prepare(original)
+    key = original.provider_idempotency_key
+    with coordinator._connect() as conn:
+        conn.execute("UPDATE external_effects SET status=? WHERE provider_idempotency_key=?", (EffectStatus.IN_FLIGHT.value, key))
+
+    with pytest.raises(EffectInProgress):
+        coordinator.execute(original, provider)
+    assert provider.execute_calls == 0
