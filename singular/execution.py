@@ -8,7 +8,6 @@ from typing import Any
 from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
 from .autopilot import ApprovalStatus, Autonomy
-from .capabilities import normalize_capability
 from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
 from .mission_runtime import DurableMissionRuntime
@@ -44,43 +43,19 @@ class DurableExecutionEngine:
         self.effect_coordinator = effect_coordinator
         self.store.init_execution_schema()
 
-    @staticmethod
-    def execution_key(store: DurableStore, mission_id: str, action_id: str) -> str:
-        return store.idempotency_key("execute", mission_id, action_id)
-
-    def _identity_fingerprint(self, action, mission_id: str) -> str:
-        contract = self.store.load_mission(mission_id)
-        governed = self.runtime.route(action, mission_id)
-        capability = normalize_capability(getattr(action, "capability", None))
-        payload = {
-            "action": self.runtime._action_fingerprint(governed.action, mission_id),
-            "capability": capability,
-            "contract": self.runtime.approval_integrity.contract_fingerprint(contract),
-            "policy_tier": governed.policy_tier,
-            "mode": governed.governor.mode.value,
-            "can_prepare": governed.can_prepare,
-            "can_execute": governed.can_execute,
-            "requires_human": governed.requires_human,
-            "reasons": list(governed.reasons),
-        }
-        return self.runtime.approval_integrity._fingerprint(payload)
-
     def execute(self, action, mission_id: str, handler: Callable[[Any], Any]) -> ExecutionResult:
-        key = self.execution_key(self.store, mission_id, action.id)
+        key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
             return self._handle_existing_execution(key, existing)
         governed = self._authorize(action, mission_id)
         action = governed.action
-        identity = self._identity_fingerprint(action, mission_id)
-        key = self.execution_key(self.store, mission_id, action.id)
+        key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
-            self._validate_execution_identity(existing, mission_id, action, identity)
             return self._handle_existing_execution(key, existing)
-        claimed = self._claim(action, mission_id, key, identity)
+        claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
-            self._validate_execution_identity(claimed, mission_id, action, identity)
             return self._handle_existing_execution(key, claimed)
         try:
             value = handler(action)
@@ -89,23 +64,21 @@ class DurableExecutionEngine:
         return self._complete(key, mission_id, action.id, value)
 
     def execute_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        """Execute one governed external effect without ever auto-retrying ambiguity."""
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
-        key = self.execution_key(self.store, mission_id, action.id)
+        key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
             return self._handle_existing_execution(key, existing)
         governed = self._authorize(action, mission_id)
         action = governed.action
-        identity = self._identity_fingerprint(action, mission_id)
-        key = self.execution_key(self.store, mission_id, action.id)
+        key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
-            self._validate_execution_identity(existing, mission_id, action, identity)
             return self._handle_existing_execution(key, existing)
-        claimed = self._claim(action, mission_id, key, identity)
+        claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
-            self._validate_execution_identity(claimed, mission_id, action, identity)
             return self._handle_existing_execution(key, claimed)
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         outcome = self.effect_coordinator.execute(request, provider)
@@ -122,11 +95,12 @@ class DurableExecutionEngine:
         return self._complete(key, mission_id, action.id, outcome.result)
 
     def reconcile_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        """Reconcile an ambiguous external effect; never invokes provider.execute."""
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         governed = self._authorize_reconciliation(action, mission_id)
         action = governed.action
-        key = self.execution_key(self.store, mission_id, action.id)
+        key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is None or existing["status"] != "RECOVERY_REQUIRED":
             raise ValueError("L'exécution doit être RECOVERY_REQUIRED pour une réconciliation.")
@@ -177,18 +151,8 @@ class DurableExecutionEngine:
         if self.store.get_mission_status(mission_id) != MissionStatus.PLANNED:
             raise ValueError("La mission doit être PLANNED avant exécution.")
 
-    def _claim(self, action, mission_id: str, key: str, identity: str | None = None) -> dict[str, Any]:
-        claimed = self.store.begin_execution_and_start_mission(key, mission_id, action.id, self.execution_lease_seconds)
-        if claimed["claimed"]:
-            self.store.bind_execution_identity(key, identity or self._identity_fingerprint(action, mission_id))
-        return claimed
-
-    def _validate_execution_identity(self, execution: dict[str, Any], mission_id: str, action, expected_identity: str) -> None:
-        if execution["mission_id"] != mission_id or execution["action_id"] != action.id:
-            raise ValueError("Identité d'exécution réutilisée pour une autre mission ou action.")
-        actual = self.store.get_execution_identity(execution["execution_key"])
-        if actual is not None and actual != expected_identity:
-            raise PermissionError("L'identité d'exécution ne correspond plus à l'autorisation persistée.")
+    def _claim(self, action, mission_id: str, key: str) -> dict[str, Any]:
+        return self.store.begin_execution_and_start_mission(key, mission_id, action.id, self.execution_lease_seconds)
 
     def _fail(self, key: str, mission_id: str, action_id: str, exc: Exception) -> ExecutionResult:
         return self._fail_result(key, mission_id, action_id, f"{type(exc).__name__}: {exc}")
