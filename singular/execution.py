@@ -48,25 +48,19 @@ class DurableExecutionEngine:
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
-            if existing["status"] == "RUNNING":
-                recovered = self.store.recover_stale_execution(key)
-                if recovered is not None and recovered["status"] == "RECOVERY_REQUIRED":
-                    self.runtime.audit.record(
-                        "execution",
-                        "RECOVERY",
-                        "RECOVERY_REQUIRED",
-                        {"execution_key": key, "mission_id": mission_id, "action_id": action.id},
-                    )
-                    self.runtime._persist_new_audit_events()
-                    raise ExecutionRecoveryRequired(key)
-                raise ExecutionInProgress(key)
-            if existing["status"] in {"COMPLETED", "FAILED"}:
-                return self._result_from_row(existing)
-            if existing["status"] == "RECOVERY_REQUIRED":
-                raise ExecutionRecoveryRequired(key)
-            raise RuntimeError(f"État d'exécution inconnu: {existing['status']}")
+            return self._handle_existing_execution(key, existing)
 
-        governed = self.runtime.route(action, mission_id)
+        try:
+            governed = self.runtime.route(action, mission_id)
+        except ValueError:
+            # Another worker may have atomically claimed the same execution between
+            # the initial replay check and routing. Reconcile from durable execution
+            # state before surfacing the mission transition error.
+            existing = self.store.get_execution(key)
+            if existing is not None:
+                return self._handle_existing_execution(key, existing)
+            raise
+
         contract = self.store.load_mission(mission_id)
         if contract is None:
             raise KeyError(mission_id)
@@ -101,11 +95,7 @@ class DurableExecutionEngine:
             self.execution_lease_seconds,
         )
         if not claimed["claimed"]:
-            if claimed["status"] == "RUNNING":
-                raise ExecutionInProgress(key)
-            if claimed["status"] == "RECOVERY_REQUIRED":
-                raise ExecutionRecoveryRequired(key)
-            return self._result_from_row(claimed)
+            return self._handle_existing_execution(key, claimed)
 
         try:
             value = handler(action)
@@ -131,6 +121,29 @@ class DurableExecutionEngine:
         )
         self.runtime._persist_new_audit_events()
         return ExecutionResult(key, mission_id, action.id, "COMPLETED", result=encoded)
+
+    def _handle_existing_execution(self, key: str, existing: dict[str, Any]) -> ExecutionResult:
+        if existing["status"] == "RUNNING":
+            recovered = self.store.recover_stale_execution(key)
+            if recovered is not None and recovered["status"] == "RECOVERY_REQUIRED":
+                self.runtime.audit.record(
+                    "execution",
+                    "RECOVERY",
+                    "RECOVERY_REQUIRED",
+                    {
+                        "execution_key": key,
+                        "mission_id": existing["mission_id"],
+                        "action_id": existing["action_id"],
+                    },
+                )
+                self.runtime._persist_new_audit_events()
+                raise ExecutionRecoveryRequired(key)
+            raise ExecutionInProgress(key)
+        if existing["status"] in {"COMPLETED", "FAILED"}:
+            return self._result_from_row(existing)
+        if existing["status"] == "RECOVERY_REQUIRED":
+            raise ExecutionRecoveryRequired(key)
+        raise RuntimeError(f"État d'exécution inconnu: {existing['status']}")
 
     @staticmethod
     def _result_from_row(row: dict[str, Any]) -> ExecutionResult:
