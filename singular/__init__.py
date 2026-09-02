@@ -20,5 +20,5 @@ from .v32_governed_core import (
     WorkforceRouter,
 )
 
-from .mission_runtime import DurableMissionRuntime
-from .durable import DurableStore
+from .mission_runtime import DurableMissionRuntime, MissionState
+from .durable import DurableStore, MissionStatus
