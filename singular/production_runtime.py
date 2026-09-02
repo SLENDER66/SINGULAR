@@ -65,10 +65,10 @@ class AgentsSDKRuntime:
 
     def run_sync(self, agent: Any, input_text: str, *, max_turns: int = 8) -> Any:
         """Execute an agent only after explicit runtime configuration checks."""
-        self.require_sdk()
+        sdk = self.require_sdk()
         self.require_configured()
         if not input_text.strip():
             raise ValueError("input_text must not be empty")
         if max_turns < 1:
             raise ValueError("max_turns must be >= 1")
-        return self._sdk.Runner.run_sync(agent, input_text, max_turns=max_turns)
+        return sdk.Runner.run_sync(agent, input_text, max_turns=max_turns)
