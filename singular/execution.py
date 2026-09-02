@@ -67,11 +67,10 @@ class DurableExecutionEngine:
 
         if governed.governor.mode == Autonomy.BLOCK or not governed.can_prepare:
             raise PermissionError("Action bloquée par la gouvernance.")
-        if not governed.can_execute:
-            raise PermissionError("Action non autorisée à l'exécution par la politique de sécurité.")
-
         if governed.governor.mode == Autonomy.PREPARE:
             raise PermissionError("Action préparée mais non autorisée à l'exécution.")
+        if not governed.can_execute:
+            raise PermissionError("Action non autorisée à l'exécution par la politique de sécurité.")
 
         if governed.governor.mode == Autonomy.ESCALATE:
             approval_id = governed.governor.approval_id
