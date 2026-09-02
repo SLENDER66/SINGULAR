@@ -117,16 +117,46 @@ class DurableExecutionEngine:
         governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
+        request = EffectRequest(
+            execution_key=key,
+            provider=provider_name,
+            operation=operation,
+            payload=payload,
+            action_fingerprint=self.runtime._action_fingerprint(action, mission_id),
+        )
         existing = self.store.get_execution(key)
         if existing is not None:
             self._validate_execution_identity(key, action, mission_id, governed)
+            try:
+                effect = self.effect_coordinator.peek(request)
+            except KeyError:
+                effect = None
+            if effect is not None:
+                status = effect["status"]
+                if status == EffectStatus.COMPLETED.value:
+                    return self._complete(key, mission_id, action.id, effect.get("result"))
+                if status == EffectStatus.FAILED.value:
+                    return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
+                if status == EffectStatus.UNKNOWN.value:
+                    if existing["status"] == "RUNNING":
+                        self.store.mark_execution_recovery_required(key)
+                        self.runtime.audit.record("execution", "EXTERNAL_EFFECT", "RECOVERY_REQUIRED", {"execution_key": key, "mission_id": mission_id, "action_id": action.id, "provider": provider_name, "operation": operation, "reason": "Effet externe ambigu déjà persisté."})
+                        self.runtime._persist_new_audit_events()
+                        return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=effect.get("result"), error=effect.get("error"))
             return self._handle_existing_execution(key, existing)
         self._prepare_execution_identity(key, action, mission_id, governed)
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
             self._validate_execution_identity(key, action, mission_id, governed)
+            try:
+                effect = self.effect_coordinator.peek(request)
+            except KeyError:
+                effect = None
+            if effect is not None and effect["status"] == EffectStatus.COMPLETED.value:
+                return self._complete(key, mission_id, action.id, effect.get("result"))
+            if effect is not None and effect["status"] == EffectStatus.FAILED.value:
+                return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
             return self._handle_existing_execution(key, claimed)
-        request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         outcome = self.effect_coordinator.execute(request, provider)
         if outcome.status == EffectStatus.UNKNOWN.value:
             self.store.mark_execution_recovery_required(key)
