@@ -92,7 +92,7 @@ class DurableMissionRuntime:
         contract = self.store.load_mission(mission_id)
         if contract is None:
             raise KeyError(mission_id)
-        return MissionState(mission_id, self.store.get_mission_status(mission_id), len(self.store.pending_approvals()))
+        return MissionState(mission_id, self.store.get_mission_status(mission_id), len(self.store.pending_approvals(mission_id)))
 
     def _persist_new_audit_events(self) -> None:
         for event in self.audit.events():
