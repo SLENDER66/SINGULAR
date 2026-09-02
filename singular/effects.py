@@ -32,7 +32,10 @@ class EffectRequest:
 
     @property
     def provider_idempotency_key(self) -> str:
-        material = "\x1f".join((self.execution_key, self.provider, self.operation, self.payload_fingerprint))
+        # The operation identity deliberately excludes the payload. The payload is
+        # stored and checked separately, so reusing an operation key with altered
+        # arguments fails closed instead of silently creating a second effect.
+        material = "\x1f".join((self.execution_key, self.provider, self.operation))
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
