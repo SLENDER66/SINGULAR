@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+import hashlib
+import json
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 from uuid import uuid4
 
@@ -66,8 +68,12 @@ class DurableMissionRuntime:
                 action = replace(action, contract_id=contract.mission_id)
 
         idempotency_key = self.store.idempotency_key("route", contract.mission_id if contract else "", action.id)
+        fingerprint = self._action_fingerprint(action, contract.mission_id if contract else None)
         cached = self.store.get_idempotent(idempotency_key)
         if cached is not None:
+            stored_fingerprint = self.store.get_idempotency_fingerprint(idempotency_key)
+            if stored_fingerprint != fingerprint:
+                raise ValueError("Identité d'action réutilisée avec un contenu différent.")
             return self._from_cached(action, cached)
 
         result = self.governed.route(action, contract)
@@ -81,7 +87,7 @@ class DurableMissionRuntime:
             }.get(result.governor.mode, MissionStatus.PLANNED)
             self._set_status(contract.mission_id, target)
 
-        cached_result = self.store.put_idempotent(idempotency_key, self._cache(result))
+        cached_result = self.store.put_idempotent(idempotency_key, self._cache(result), fingerprint)
         self._persist_new_audit_events()
         return self._from_cached(action, cached_result)
 
@@ -136,6 +142,17 @@ class DurableMissionRuntime:
         result = GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
         self._persist_new_audit_events()
         return result
+
+    @staticmethod
+    def _action_fingerprint(action, mission_id: str | None) -> str:
+        payload = asdict(action)
+        payload.pop("id", None)
+        canonical = json.dumps(
+            {"mission_id": mission_id, "action": payload},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
 
     @staticmethod
     def _cache(result: GovernedAction) -> dict[str, Any]:
