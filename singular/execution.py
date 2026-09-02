@@ -7,6 +7,7 @@ from typing import Any
 
 from .autopilot import ApprovalStatus, Autonomy
 from .durable import DurableStore, MissionStatus
+from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
 from .mission_runtime import DurableMissionRuntime
 
 
@@ -25,18 +26,24 @@ class ExecutionInProgress(RuntimeError):
 
 
 class ExecutionRecoveryRequired(RuntimeError):
-    """A stale execution was quarantined and requires an explicit recovery decision."""
+    """A stale or externally ambiguous execution requires explicit recovery."""
 
 
 class DurableExecutionEngine:
     """Execution transaction boundary: authorize, claim, run, persist outcome."""
 
-    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300) -> None:
+    def __init__(
+        self,
+        runtime: DurableMissionRuntime,
+        execution_lease_seconds: int = 300,
+        effect_coordinator: ExternalEffectCoordinator | None = None,
+    ) -> None:
         if execution_lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         self.runtime = runtime
         self.store: DurableStore = runtime.store
         self.execution_lease_seconds = execution_lease_seconds
+        self.effect_coordinator = effect_coordinator
         self.store.init_execution_schema()
 
     def execute(
@@ -50,30 +57,123 @@ class DurableExecutionEngine:
         if existing is not None:
             return self._handle_existing_execution(key, existing)
 
+        governed = self._authorize(action, mission_id)
+        action = governed.action
+        key = self.store.idempotency_key("execute", mission_id, action.id)
+        existing = self.store.get_execution(key)
+        if existing is not None:
+            return self._handle_existing_execution(key, existing)
+
+        claimed = self._claim(governed, action, mission_id, key)
+        if not claimed["claimed"]:
+            return self._handle_existing_execution(key, claimed)
+
+        try:
+            value = handler(action)
+        except Exception as exc:
+            return self._fail(key, mission_id, action.id, exc)
+        return self._complete(key, mission_id, action.id, value)
+
+    def execute_effect(
+        self,
+        action,
+        mission_id: str,
+        provider: EffectProvider,
+        *,
+        provider_name: str,
+        operation: str,
+        payload: Any,
+    ) -> ExecutionResult:
+        """Execute one governed external effect without ever auto-retrying ambiguity."""
+        if self.effect_coordinator is None:
+            raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
+
+        governed = self._authorize(action, mission_id)
+        action = governed.action
+        key = self.store.idempotency_key("execute", mission_id, action.id)
+        existing = self.store.get_execution(key)
+        if existing is not None:
+            return self._handle_existing_execution(key, existing)
+
+        claimed = self._claim(governed, action, mission_id, key)
+        if not claimed["claimed"]:
+            return self._handle_existing_execution(key, claimed)
+
+        request = EffectRequest(
+            execution_key=key,
+            provider=provider_name,
+            operation=operation,
+            payload=payload,
+            action_fingerprint=self.runtime._action_fingerprint(action, mission_id),
+        )
+        outcome = self.effect_coordinator.execute(request, provider)
+        if outcome.status == EffectStatus.UNKNOWN.value:
+            self.store.mark_execution_recovery_required(key)
+            self.runtime.audit.record(
+                "execution",
+                "EXTERNAL_EFFECT",
+                "RECOVERY_REQUIRED",
+                {"execution_key": key, "mission_id": mission_id, "action_id": action.id, "provider": provider_name, "operation": operation},
+            )
+            self.runtime._persist_new_audit_events()
+            return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=outcome.result, error=outcome.error)
+        if outcome.status == EffectStatus.FAILED.value:
+            return self._fail_result(key, mission_id, action.id, outcome.error or "Effet externe échoué.")
+        if outcome.status != EffectStatus.COMPLETED.value:
+            self.store.mark_execution_recovery_required(key)
+            return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=outcome.result, error=outcome.error)
+        return self._complete(key, mission_id, action.id, outcome.result)
+
+    def reconcile_effect(
+        self,
+        action,
+        mission_id: str,
+        provider: EffectProvider,
+        *,
+        provider_name: str,
+        operation: str,
+        payload: Any,
+    ) -> ExecutionResult:
+        """Reconcile an ambiguous external effect; never invokes provider.execute."""
+        if self.effect_coordinator is None:
+            raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
+        governed = self._authorize(action, mission_id)
+        action = governed.action
+        key = self.store.idempotency_key("execute", mission_id, action.id)
+        existing = self.store.get_execution(key)
+        if existing is None or existing["status"] != "RECOVERY_REQUIRED":
+            raise ValueError("L'exécution doit être RECOVERY_REQUIRED pour une réconciliation.")
+        request = EffectRequest(
+            execution_key=key,
+            provider=provider_name,
+            operation=operation,
+            payload=payload,
+            action_fingerprint=self.runtime._action_fingerprint(action, mission_id),
+        )
+        outcome = self.effect_coordinator.reconcile(request, provider)
+        if outcome.status == EffectStatus.COMPLETED.value:
+            resolved = self.store.resolve_execution_recovery(key, "CONFIRM", result=outcome.result)
+            return self._result_from_row(resolved)
+        if outcome.status == EffectStatus.FAILED.value:
+            resolved = self.store.resolve_execution_recovery(key, "FAIL", reason=outcome.error)
+            return self._result_from_row(resolved)
+        return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=outcome.result, error=outcome.error)
+
+    def _authorize(self, action, mission_id: str):
         try:
             governed = self.runtime.route(action, mission_id)
         except ValueError:
+            key = self.store.idempotency_key("execute", mission_id, action.id)
             existing = self.store.get_execution(key)
             if existing is not None:
                 return self._handle_existing_execution(key, existing)
             raise
-
-        contract = self.store.load_mission(mission_id)
-        if contract is None:
-            raise KeyError(mission_id)
-
-        # Runtime routing canonicalizes the action identity by binding it to the
-        # mission contract. Approval fingerprints are computed over that canonical
-        # action, so validation and execution must use the same representation.
-        action = governed.action
-
         if governed.governor.mode == Autonomy.BLOCK or not governed.can_prepare:
             raise PermissionError("Action bloquée par la gouvernance.")
         if governed.governor.mode == Autonomy.PREPARE:
             raise PermissionError("Action is not executable: préparée mais non autorisée à l'exécution.")
         if not governed.can_execute:
             raise PermissionError("Action non autorisée à l'exécution par la politique de sécurité.")
-
         if governed.governor.mode == Autonomy.ESCALATE:
             approval_id = governed.governor.approval_id
             if not approval_id:
@@ -81,51 +181,43 @@ class DurableExecutionEngine:
             approval = self.store.get_approval(approval_id)
             if approval.status != ApprovalStatus.APPROVED:
                 raise PermissionError("Action en attente d'une approbation humaine valide.")
-            self._validate_approval_binding(approval_id, action, mission_id)
-
-        if governed.governor.mode not in (
-            Autonomy.EXECUTE_REVERSIBLE,
-            Autonomy.EXECUTE_AUTHORIZED,
-            Autonomy.ESCALATE,
-        ):
+            self._validate_approval_binding(approval_id, governed.action, mission_id)
+        if governed.governor.mode not in (Autonomy.EXECUTE_REVERSIBLE, Autonomy.EXECUTE_AUTHORIZED, Autonomy.ESCALATE):
             raise PermissionError("Mode de gouvernance non exécutable.")
-
         if self.store.get_mission_status(mission_id) != MissionStatus.PLANNED:
             raise ValueError("La mission doit être PLANNED avant exécution.")
+        return governed
 
-        claimed = self.store.begin_execution_and_start_mission(
+    def _claim(self, governed, action, mission_id: str, key: str) -> dict[str, Any]:
+        return self.store.begin_execution_and_start_mission(
             key,
             mission_id,
             action.id,
             self.execution_lease_seconds,
         )
-        if not claimed["claimed"]:
-            return self._handle_existing_execution(key, claimed)
 
-        try:
-            value = handler(action)
-        except Exception as exc:
-            message = f"{type(exc).__name__}: {exc}"
-            self.store.finish_execution_and_mission(key, "FAILED", error=message)
-            self.runtime.audit.record(
-                "execution",
-                "EXECUTION",
-                "FAILED",
-                {"execution_key": key, "mission_id": mission_id, "action_id": action.id, "error": message},
-            )
-            self.runtime._persist_new_audit_events()
-            return ExecutionResult(key, mission_id, action.id, "FAILED", error=message)
+    def _fail(self, key: str, mission_id: str, action_id: str, exc: Exception) -> ExecutionResult:
+        message = f"{type(exc).__name__}: {exc}"
+        return self._fail_result(key, mission_id, action_id, message)
 
+    def _fail_result(self, key: str, mission_id: str, action_id: str, message: str) -> ExecutionResult:
+        self.store.finish_execution_and_mission(key, "FAILED", error=message)
+        self.runtime.audit.record(
+            "execution", "EXECUTION", "FAILED",
+            {"execution_key": key, "mission_id": mission_id, "action_id": action_id, "error": message},
+        )
+        self.runtime._persist_new_audit_events()
+        return ExecutionResult(key, mission_id, action_id, "FAILED", error=message)
+
+    def _complete(self, key: str, mission_id: str, action_id: str, value: Any) -> ExecutionResult:
         encoded = json.loads(json.dumps(value, default=str))
         self.store.finish_execution_and_mission(key, "COMPLETED", result=encoded)
         self.runtime.audit.record(
-            "execution",
-            "EXECUTION",
-            "COMPLETED",
-            {"execution_key": key, "mission_id": mission_id, "action_id": action.id},
+            "execution", "EXECUTION", "COMPLETED",
+            {"execution_key": key, "mission_id": mission_id, "action_id": action_id},
         )
         self.runtime._persist_new_audit_events()
-        return ExecutionResult(key, mission_id, action.id, "COMPLETED", result=encoded)
+        return ExecutionResult(key, mission_id, action_id, "COMPLETED", result=encoded)
 
     def _validate_approval_binding(self, approval_id: str, action, mission_id: str) -> None:
         expected = self.runtime._action_fingerprint(action, mission_id)
@@ -140,14 +232,8 @@ class DurableExecutionEngine:
             recovered = self.store.recover_stale_execution(key)
             if recovered is not None and recovered["status"] == "RECOVERY_REQUIRED":
                 self.runtime.audit.record(
-                    "execution",
-                    "RECOVERY",
-                    "RECOVERY_REQUIRED",
-                    {
-                        "execution_key": key,
-                        "mission_id": existing["mission_id"],
-                        "action_id": existing["action_id"],
-                    },
+                    "execution", "RECOVERY", "RECOVERY_REQUIRED",
+                    {"execution_key": key, "mission_id": existing["mission_id"], "action_id": existing["action_id"]},
                 )
                 self.runtime._persist_new_audit_events()
                 raise ExecutionRecoveryRequired(key)
@@ -166,11 +252,4 @@ class DurableExecutionEngine:
                 result = json.loads(result)
             except json.JSONDecodeError:
                 pass
-        return ExecutionResult(
-            row["execution_key"],
-            row["mission_id"],
-            row["action_id"],
-            row["status"],
-            result=result,
-            error=row.get("error"),
-        )
+        return ExecutionResult(row["execution_key"], row["mission_id"], row["action_id"], row["status"], result=result, error=row.get("error"))
