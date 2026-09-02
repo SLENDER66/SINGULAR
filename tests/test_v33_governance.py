@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,17 @@ def test_route_is_idempotent_for_replayed_action(tmp_path: Path):
     pending = runtime.store.pending_approvals(contract.mission_id)
     assert len(pending) == 1
     assert pending[0].id == first.governor.approval_id
+
+
+def test_replayed_action_id_with_different_payload_fails_closed(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("career", "application prepared", autonomy=Autonomy.PREPARE)
+    action = ActionRequest("send_application", "send", 5, 6, 6)
+    runtime.route(action, contract.mission_id)
+    tampered = replace(action, description="different payload")
+    with pytest.raises(ValueError, match="contenu différent"):
+        runtime.route(tampered, contract.mission_id)
+    assert len(runtime.store.pending_approvals(contract.mission_id)) == 1
 
 
 def test_red_and_black_actions_fail_closed(tmp_path: Path):
