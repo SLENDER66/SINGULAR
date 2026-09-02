@@ -78,6 +78,17 @@ class DurableStore:
                     result TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS executions (
+                    execution_key TEXT PRIMARY KEY,
+                    mission_id TEXT NOT NULL,
+                    action_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    result TEXT,
+                    error TEXT,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    FOREIGN KEY(mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
+                );
                 """
             )
             columns = {row[1] for row in conn.execute("PRAGMA table_info(approvals)")}
@@ -86,6 +97,10 @@ class DurableStore:
             idempotency_columns = {row[1] for row in conn.execute("PRAGMA table_info(idempotency)")}
             if "fingerprint" not in idempotency_columns:
                 conn.execute("ALTER TABLE idempotency ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''")
+
+    def init_execution_schema(self) -> None:
+        """Compatibility hook; execution schema is created during store initialization."""
+        return None
 
     def save_mission(self, contract: DelegationContract) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -208,3 +223,47 @@ class DurableStore:
         if row["fingerprint"] != fingerprint:
             raise ValueError("Identité d'action réutilisée avec un contenu différent.")
         return json.loads(row["result"])
+
+    def begin_execution(self, execution_key: str, mission_id: str, action_id: str) -> dict[str, Any]:
+        """Atomically claim an execution key or return its canonical state."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO executions(execution_key,mission_id,action_id,status,started_at) VALUES(?,?,?,?,?)",
+                (execution_key, mission_id, action_id, "RUNNING", now),
+            )
+            row = conn.execute(
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Execution record could not be persisted")
+        return dict(row)
+
+    def finish_execution(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
+        if status not in {"COMPLETED", "FAILED"}:
+            raise ValueError("Un résultat d'exécution doit être COMPLETED ou FAILED.")
+        now = datetime.now(timezone.utc).isoformat()
+        encoded = None if result is None else json.dumps(result, sort_keys=True)
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE executions SET status=?,result=?,error=?,finished_at=? WHERE execution_key=? AND status='RUNNING'",
+                (status, encoded, error, now, execution_key),
+            )
+            row = conn.execute(
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(execution_key)
+        if cur.rowcount != 1 and row["status"] not in {"COMPLETED", "FAILED"}:
+            raise RuntimeError("Execution state could not be finalized")
+        return dict(row)
+
+    def get_execution(self, execution_key: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+        return dict(row) if row else None
