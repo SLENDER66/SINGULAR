@@ -104,9 +104,8 @@ def test_approval_without_binding_fails_closed(tmp_path: Path):
 
     runtime.route(action, contract.mission_id)
     approval = runtime.store.pending_approvals(contract.mission_id)[0]
-    binding_key = runtime._approval_binding_key(approval.id)
     with runtime.store._connect() as conn:
-        conn.execute("DELETE FROM idempotency WHERE key=?", (binding_key,))
+        conn.execute("DELETE FROM approval_bindings WHERE approval_id=?", (approval.id,))
 
     with pytest.raises(ValueError, match="liaison d'identité"):
         runtime.approve(approval.id)
