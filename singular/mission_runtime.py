@@ -10,7 +10,7 @@ from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
 from .audit import AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, Autonomy, DelegationContract
-from .durable import DurableStore, MissionStatus, MISSION_TRANSITIONS
+from .durable import MISSION_TRANSITIONS, DurableStore, MissionStatus
 from .v32_governed_core import GovernedAction, GovernedMission, GovernorDecision
 
 
@@ -51,6 +51,17 @@ class DurableMissionRuntime:
             if action.contract_id is None:
                 action = replace(action, contract_id=contract.mission_id)
 
+            # An action identity already approved for another mission cannot be
+            # rebound merely by attaching a different contract id.
+            with self.store._connect() as conn:
+                cross_mission = conn.execute(
+                    "SELECT 1 FROM approval_bindings WHERE action_id=? AND (mission_id IS NULL OR mission_id<>?) LIMIT 1",
+                    (action.id, contract.mission_id),
+                ).fetchone()
+            if cross_mission is not None:
+                self._set_status(contract.mission_id, MissionStatus.BLOCKED)
+                raise ValueError("L'action ne correspond pas au contrat de mission fourni.")
+
         idempotency_key = self.store.idempotency_key("route", contract.mission_id if contract else "", action.id)
         fingerprint = self.approval_integrity.action_fingerprint(action, contract.mission_id if contract else None)
         cached = self.store.get_idempotent(idempotency_key)
@@ -60,10 +71,7 @@ class DurableMissionRuntime:
                 raise ValueError("Identité d'action réutilisée avec un contenu différent.")
             current = self.governed.route(action, contract)
             if not self._governance_matches(current, cached):
-                self.audit.record(
-                    "governance_drift", "GOVERNOR", "BLOCKED",
-                    {"action_id": action.id, "mission_id": contract.mission_id if contract else None},
-                )
+                self.audit.record("governance_drift", "GOVERNOR", "BLOCKED", {"action_id": action.id, "mission_id": contract.mission_id if contract else None})
                 self._persist_new_audit_events()
                 raise PermissionError("La politique de gouvernance a changé depuis la décision persistée : exécution refusée.")
             return self._from_cached(action, cached)
@@ -105,7 +113,7 @@ class DurableMissionRuntime:
             raise ValueError("Approbation sans empreintes natives complètes : validation refusée.")
         legacy = self.approval_bindings.fingerprint(approval_id)
         if legacy is None or legacy != native["action_fingerprint"]:
-            raise ValueError("Les liaisons d'identité de l'approbation sont incohérentes : validation refusée.")
+            raise ValueError("La liaison d'identité de l'approbation est incohérente : validation refusée.")
         self.store.update_approval(approval_id, ApprovalStatus.APPROVED)
         if mission_id:
             self._set_status(mission_id, MissionStatus.PLANNED)
@@ -144,7 +152,7 @@ class DurableMissionRuntime:
         self.audit.record("runtime_block", "GOVERNOR", MissionStatus.BLOCKED.value, {"action_id": action.id, "mission_id": mission_id, "reasons": list(reasons)})
         if mission_id is not None:
             self._set_status(mission_id, MissionStatus.BLOCKED)
-        result = GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), can_prepare=False, can_execute=False, requires_human=True, reasons=reasons)
+        result = GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, False, True, reasons)
         self._persist_new_audit_events()
         return result
 
@@ -161,7 +169,7 @@ class DurableMissionRuntime:
 
     @classmethod
     def approval_fingerprint(cls, approval_id: str, store: DurableStore) -> str | None:
-        return ApprovalIntegrityStore(store.path).get(approval_id)["action_fingerprint"]
+        return ApprovalBindingStore(store.path).fingerprint(approval_id)
 
     @staticmethod
     def _cache(result: GovernedAction) -> dict[str, Any]:
