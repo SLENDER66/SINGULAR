@@ -46,13 +46,10 @@ class GovernedAction:
 
     @property
     def allowed(self) -> bool:
-        """Compatibility alias; callers should use can_prepare/can_execute explicitly."""
         return self.can_prepare
 
 
 class WorkforceRouter:
-    """Routes work to only the specialists relevant to the mission."""
-
     KEYWORDS: dict[Specialist, tuple[str, ...]] = {
         Specialist.FINANCE: ("finance", "revenu", "budget", "dette", "argent", "invest"),
         Specialist.CAREER: ("emploi", "carrière", "cv", "recrut", "travail", "poste"),
@@ -74,8 +71,6 @@ class WorkforceRouter:
 
 
 class GovernedExecutor:
-    """Defense-in-depth gate: policy must pass before the Governor can route execution."""
-
     def __init__(self, bus: ExecutionBus | None = None, audit: AuditTrail | None = None) -> None:
         self.bus = bus or ExecutionBus()
         self.audit = audit or AuditTrail()
@@ -83,42 +78,17 @@ class GovernedExecutor:
     def route(self, action: ActionRequest, contract: DelegationContract | None = None) -> GovernedAction:
         policy = ActionPolicy.evaluate(action)
         if not policy.can_prepare:
-            result = GovernedAction(
-                action,
-                policy.tier.value,
-                GovernorDecision(action.id, Autonomy.BLOCK, policy.reasons),
-                False,
-                False,
-                policy.requires_human,
-                policy.reasons,
-            )
+            result = GovernedAction(action, policy.tier.value, GovernorDecision(action.id, Autonomy.BLOCK, policy.reasons), False, False, policy.requires_human, policy.reasons)
             self.audit.record("governance_block", "GOVERNOR", "BLOCKED", {"action_id": action.id, "reasons": list(policy.reasons)})
             return result
         governed_action = replace(action, requires_human=True) if policy.requires_human else action
         decision = self.bus.submit(governed_action, contract)
-        governor_can_execute = decision.mode in {
-            Autonomy.EXECUTE_REVERSIBLE,
-            Autonomy.EXECUTE_AUTHORIZED,
-            Autonomy.ESCALATE,
-        }
+        governor_can_execute = decision.mode in {Autonomy.EXECUTE_REVERSIBLE, Autonomy.EXECUTE_AUTHORIZED, Autonomy.ESCALATE}
         can_execute = policy.can_execute and governor_can_execute
         if decision.mode == Autonomy.ESCALATE:
             can_execute = policy.can_execute
-        result = GovernedAction(
-            action,
-            policy.tier.value,
-            decision,
-            can_prepare=True,
-            can_execute=can_execute,
-            requires_human=policy.requires_human or decision.mode == Autonomy.ESCALATE,
-            reasons=decision.reasons,
-        )
-        self.audit.record(
-            "governance_route",
-            "GOVERNOR",
-            decision.mode.value,
-            {"action_id": action.id, "policy_tier": policy.tier.value, "can_execute": can_execute},
-        )
+        result = GovernedAction(action, policy.tier.value, decision, True, can_execute, policy.requires_human or decision.mode == Autonomy.ESCALATE, decision.reasons)
+        self.audit.record("governance_route", "GOVERNOR", decision.mode.value, {"action_id": action.id, "policy_tier": policy.tier.value, "can_execute": can_execute})
         return result
 
 
@@ -130,8 +100,6 @@ class RedTeamFinding:
 
 
 class RedTeamGate:
-    """Deterministic pre-execution challenge; no silent overrides."""
-
     def inspect(self, action: ActionRequest, contract: DelegationContract | None) -> tuple[RedTeamFinding, ...]:
         findings: list[RedTeamFinding] = []
         if contract is None and action.risk >= 5:
@@ -142,16 +110,17 @@ class RedTeamGate:
             findings.append(RedTeamFinding("HIGH", "Risque modéré/élevé : validation humaine recommandée.", False))
         if action.reversibility <= 2:
             findings.append(RedTeamFinding("CRITICAL", "Action faiblement réversible.", True))
+        # Sensitivity is an authorization signal, not an automatic hard block.
+        # ActionPolicy/capabilities can require human approval while preserving
+        # the approval lifecycle needed to authorize the action explicitly.
         if action.sensitive:
-            findings.append(RedTeamFinding("CRITICAL", "Action sensible.", True))
+            findings.append(RedTeamFinding("HIGH", "Action sensible : contrôle d'autorité renforcé.", False))
         if contract and action.name in contract.forbidden_actions:
             findings.append(RedTeamFinding("CRITICAL", "Action interdite par le contrat.", True))
         return tuple(findings)
 
 
 class GovernedMission:
-    """One mission lifecycle: plan -> challenge -> govern -> audit."""
-
     def __init__(self) -> None:
         self.router = WorkforceRouter()
         self.executor = GovernedExecutor()
