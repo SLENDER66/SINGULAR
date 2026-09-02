@@ -50,7 +50,6 @@ class ProviderResult:
 
 class EffectProvider(Protocol):
     def execute(self, request: EffectRequest, idempotency_key: str) -> ProviderResult: ...
-
     def reconcile(self, request: EffectRequest, idempotency_key: str) -> ProviderResult: ...
 
 
@@ -112,6 +111,23 @@ class ExternalEffectCoordinator:
         if row is None:
             raise RuntimeError("L'intention d'effet externe n'a pas pu être persistée.")
         existing = dict(row)
+        self._validate_request(existing, request)
+        existing["result"] = self._decode(existing.get("result"))
+        return existing
+
+    def peek(self, request: EffectRequest) -> dict[str, Any]:
+        """Inspect an effect without creating an intent; safe for crash-recovery decisions."""
+        key = request.provider_idempotency_key
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM external_effects WHERE provider_idempotency_key=?", (key,)).fetchone()
+        if row is None:
+            raise KeyError(key)
+        existing = dict(row)
+        self._validate_request(existing, request)
+        existing["result"] = self._decode(existing.get("result"))
+        return existing
+
+    def _validate_request(self, existing: dict[str, Any], request: EffectRequest) -> None:
         for field in ("execution_key", "provider", "operation"):
             if existing[field] != getattr(request, field):
                 raise ValueError("Clé d'idempotence fournisseur réutilisée avec un contexte différent.")
@@ -119,8 +135,6 @@ class ExternalEffectCoordinator:
             raise ValueError("Effet externe réutilisé avec une identité d'action différente.")
         if existing["payload_fingerprint"] != request.payload_fingerprint:
             raise ValueError("Clé d'idempotence fournisseur réutilisée avec un payload différent.")
-        existing["result"] = self._decode(existing.get("result"))
-        return existing
 
     def execute(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
         key = request.provider_idempotency_key
