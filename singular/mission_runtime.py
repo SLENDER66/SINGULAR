@@ -28,7 +28,8 @@ class DurableMissionRuntime:
         self.store = store or DurableStore()
         self.approval_bindings = ApprovalBindingStore(self.store.path)
         self.approval_integrity = ApprovalIntegrityStore(self.store.path)
-        self.audit = AuditTrail()
+        persisted_audit = self.store.audit_events()
+        self.audit = AuditTrail.restore(persisted_audit) if persisted_audit else AuditTrail()
         self.governed = GovernedMission()
 
     def create_mission(self, objective: str, expected_result: str, **kwargs: Any) -> DelegationContract:
