@@ -130,13 +130,65 @@ def test_tampered_native_approval_binding_is_refused_before_provider_call(tmp_pa
     runtime.approve(approval.id)
 
     with runtime.store._connect() as conn:
-        conn.execute(
-            "UPDATE approval_bindings SET action_fingerprint=? WHERE approval_id=?",
-            ("TAMPERED", approval.id),
-        )
+        conn.execute("UPDATE approval_bindings SET action_fingerprint=? WHERE approval_id=?", ("TAMPERED", approval.id))
 
     with pytest.raises(PermissionError, match="action ou son contexte a changé"):
         engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
 
     assert provider.execute_calls == 0
     assert runtime.state(contract.mission_id).status == MissionStatus.PLANNED
+
+
+def test_cached_route_detects_governance_drift(tmp_path: Path):
+    runtime, contract, _ = setup(tmp_path)
+    action = ActionRequest("safe_action", "send", 1, 1, 10)
+
+    first = runtime.route(action, contract.mission_id)
+    assert first.can_execute is True
+
+    contract_data = runtime.store.load_mission(contract.mission_id)
+    assert contract_data is not None
+    updated = contract_data.__class__(
+        mission_id=contract_data.mission_id,
+        objective=contract_data.objective,
+        expected_result=contract_data.expected_result,
+        autonomy=Autonomy.PREPARE,
+        budget_limit=contract_data.budget_limit,
+        deadline=contract_data.deadline,
+        forbidden_actions=contract_data.forbidden_actions,
+        escalation_conditions=contract_data.escalation_conditions,
+        success_criteria=contract_data.success_criteria,
+    )
+    runtime.store.save_mission(updated)
+
+    with pytest.raises(PermissionError, match="gouvernance a changé"):
+        runtime.route(action, contract.mission_id)
+
+
+def test_native_approval_rejects_contract_drift_before_provider_call(tmp_path: Path):
+    runtime, contract, engine = setup(tmp_path, autonomy=Autonomy.PREPARE)
+    action = ActionRequest("send_application", "send", 5, 6, 6)
+    provider = FakeProvider()
+
+    with pytest.raises(PermissionError):
+        engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    runtime.route(action, contract.mission_id)
+    approval = runtime.store.pending_approvals(contract.mission_id)[0]
+    runtime.approve(approval.id)
+
+    changed = contract.__class__(
+        mission_id=contract.mission_id,
+        objective=contract.objective + " changed",
+        expected_result=contract.expected_result,
+        autonomy=contract.autonomy,
+        budget_limit=contract.budget_limit,
+        deadline=contract.deadline,
+        forbidden_actions=contract.forbidden_actions,
+        escalation_conditions=contract.escalation_conditions,
+        success_criteria=contract.success_criteria,
+    )
+    runtime.store.save_mission(changed)
+
+    with pytest.raises(PermissionError, match="gouvernance a changé|identité ou son autorité"):
+        engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    assert provider.execute_calls == 0
