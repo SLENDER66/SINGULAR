@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .autopilot import ApprovalStatus, Autonomy
+from .approval_integrity import ApprovalIntegrityStore
 from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
 from .mission_runtime import DurableMissionRuntime
@@ -32,12 +33,7 @@ class ExecutionRecoveryRequired(RuntimeError):
 class DurableExecutionEngine:
     """Execution transaction boundary: authorize, claim, run, persist outcome."""
 
-    def __init__(
-        self,
-        runtime: DurableMissionRuntime,
-        execution_lease_seconds: int = 300,
-        effect_coordinator: ExternalEffectCoordinator | None = None,
-    ) -> None:
+    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None) -> None:
         if execution_lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         self.runtime = runtime
@@ -51,14 +47,12 @@ class DurableExecutionEngine:
         existing = self.store.get_execution(key)
         if existing is not None:
             return self._handle_existing_execution(key, existing)
-
         governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
             return self._handle_existing_execution(key, existing)
-
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
             return self._handle_existing_execution(key, claimed)
@@ -68,45 +62,24 @@ class DurableExecutionEngine:
             return self._fail(key, mission_id, action.id, exc)
         return self._complete(key, mission_id, action.id, value)
 
-    def execute_effect(
-        self,
-        action,
-        mission_id: str,
-        provider: EffectProvider,
-        *,
-        provider_name: str,
-        operation: str,
-        payload: Any,
-    ) -> ExecutionResult:
+    def execute_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
         """Execute one governed external effect without ever auto-retrying ambiguity."""
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
-
         governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
             return self._handle_existing_execution(key, existing)
-
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
             return self._handle_existing_execution(key, claimed)
-
-        request = EffectRequest(
-            execution_key=key,
-            provider=provider_name,
-            operation=operation,
-            payload=payload,
-            action_fingerprint=self.runtime._action_fingerprint(action, mission_id),
-        )
+        request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         outcome = self.effect_coordinator.execute(request, provider)
         if outcome.status == EffectStatus.UNKNOWN.value:
             self.store.mark_execution_recovery_required(key)
-            self.runtime.audit.record(
-                "execution", "EXTERNAL_EFFECT", "RECOVERY_REQUIRED",
-                {"execution_key": key, "mission_id": mission_id, "action_id": action.id, "provider": provider_name, "operation": operation},
-            )
+            self.runtime.audit.record("execution", "EXTERNAL_EFFECT", "RECOVERY_REQUIRED", {"execution_key": key, "mission_id": mission_id, "action_id": action.id, "provider": provider_name, "operation": operation})
             self.runtime._persist_new_audit_events()
             return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=outcome.result, error=outcome.error)
         if outcome.status == EffectStatus.FAILED.value:
@@ -116,16 +89,7 @@ class DurableExecutionEngine:
             return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=outcome.result, error=outcome.error)
         return self._complete(key, mission_id, action.id, outcome.result)
 
-    def reconcile_effect(
-        self,
-        action,
-        mission_id: str,
-        provider: EffectProvider,
-        *,
-        provider_name: str,
-        operation: str,
-        payload: Any,
-    ) -> ExecutionResult:
+    def reconcile_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
         """Reconcile an ambiguous external effect; never invokes provider.execute."""
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
@@ -135,20 +99,12 @@ class DurableExecutionEngine:
         existing = self.store.get_execution(key)
         if existing is None or existing["status"] != "RECOVERY_REQUIRED":
             raise ValueError("L'exécution doit être RECOVERY_REQUIRED pour une réconciliation.")
-        request = EffectRequest(
-            execution_key=key,
-            provider=provider_name,
-            operation=operation,
-            payload=payload,
-            action_fingerprint=self.runtime._action_fingerprint(action, mission_id),
-        )
+        request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         outcome = self.effect_coordinator.reconcile(request, provider)
         if outcome.status == EffectStatus.COMPLETED.value:
-            resolved = self.store.resolve_execution_recovery(key, "CONFIRM", result=outcome.result)
-            return self._result_from_row(resolved)
+            return self._result_from_row(self.store.resolve_execution_recovery(key, "CONFIRM", result=outcome.result))
         if outcome.status == EffectStatus.FAILED.value:
-            resolved = self.store.resolve_execution_recovery(key, "FAIL", reason=outcome.error)
-            return self._result_from_row(resolved)
+            return self._result_from_row(self.store.resolve_execution_recovery(key, "FAIL", reason=outcome.error))
         return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=outcome.result, error=outcome.error)
 
     def _authorize(self, action, mission_id: str):
@@ -158,8 +114,6 @@ class DurableExecutionEngine:
 
     def _authorize_reconciliation(self, action, mission_id: str):
         governed = self.runtime.route(action, mission_id)
-        # Reconciliation is a read/verification operation, but the original
-        # action identity and human approval must still be revalidated.
         if governed.governor.mode == Autonomy.BLOCK or not governed.can_prepare:
             raise PermissionError("Action bloquée par la gouvernance.")
         if governed.governor.mode == Autonomy.ESCALATE:
@@ -212,12 +166,14 @@ class DurableExecutionEngine:
         return ExecutionResult(key, mission_id, action_id, "COMPLETED", result=encoded)
 
     def _validate_approval_binding(self, approval_id: str, action, mission_id: str) -> None:
+        contract = self.store.load_mission(mission_id)
+        ApprovalIntegrityStore(self.store.path).validate(approval_id, action, mission_id, contract)
+        # Legacy V40 binding remains a secondary migration guard. It can never
+        # replace the native approval record above.
         expected = self.runtime._action_fingerprint(action, mission_id)
         actual = self.runtime.approval_fingerprint(approval_id, self.store)
-        if actual is None:
-            raise PermissionError("Approbation sans liaison d'identité d'action : exécution refusée.")
-        if actual != expected:
-            raise PermissionError("Approbation invalide : l'action ou son contexte a changé depuis la validation humaine.")
+        if actual is None or actual != expected:
+            raise PermissionError("Approbation invalide : la liaison historique ne correspond plus à l'action actuelle.")
 
     def _handle_existing_execution(self, key: str, existing: dict[str, Any]) -> ExecutionResult:
         if existing["status"] == "RUNNING":
