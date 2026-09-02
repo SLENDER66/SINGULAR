@@ -46,7 +46,6 @@ class DurableExecutionEngine:
 
     @staticmethod
     def _execution_identity_fingerprint(action: Any, mission_id: str, governed: Any, contract: Any) -> str:
-        """Stable authorization identity for a durable execution key."""
         payload = {
             "mission_id": mission_id,
             "action": {
@@ -88,7 +87,6 @@ class DurableExecutionEngine:
             raise PermissionError("Identité d'exécution réutilisée avec une autorité ou un contenu différent.")
 
     def _prepare_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any) -> None:
-        """Bind identity only for a new execution; never recreate trust for an existing one."""
         self._bind_execution_identity(key, action, mission_id, governed)
 
     def execute(self, action, mission_id: str, handler: Callable[[Any], Any]) -> ExecutionResult:
@@ -97,10 +95,6 @@ class DurableExecutionEngine:
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
-            # A live/stale in-flight execution is never replayed. Identity is
-            # required when consuming a terminal result, but refusing takeover
-            # is safe even for legacy RUNNING rows created before V48 identity
-            # records existed.
             if existing["status"] in {"COMPLETED", "FAILED"}:
                 self._validate_execution_identity(key, action, mission_id, governed)
             return self._handle_existing_execution(key, existing)
@@ -122,13 +116,7 @@ class DurableExecutionEngine:
         governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
-        request = EffectRequest(
-            execution_key=key,
-            provider=provider_name,
-            operation=operation,
-            payload=payload,
-            action_fingerprint=self.runtime._action_fingerprint(action, mission_id),
-        )
+        request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         existing = self.store.get_execution(key)
         if existing is not None:
             self._validate_execution_identity(key, action, mission_id, governed)
@@ -142,12 +130,11 @@ class DurableExecutionEngine:
                     return self._complete(key, mission_id, action.id, effect.get("result"))
                 if status == EffectStatus.FAILED.value:
                     return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
-                if status == EffectStatus.UNKNOWN.value:
-                    if existing["status"] == "RUNNING":
-                        self.store.mark_execution_recovery_required(key)
-                        self.runtime.audit.record("execution", "EXTERNAL_EFFECT", "RECOVERY_REQUIRED", {"execution_key": key, "mission_id": mission_id, "action_id": action.id, "provider": provider_name, "operation": operation, "reason": "Effet externe ambigu déjà persisté."})
-                        self.runtime._persist_new_audit_events()
-                        return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=effect.get("result"), error=effect.get("error"))
+                if status == EffectStatus.UNKNOWN.value and existing["status"] == "RUNNING":
+                    self.store.mark_execution_recovery_required(key)
+                    self.runtime.audit.record("execution", "EXTERNAL_EFFECT", "RECOVERY_REQUIRED", {"execution_key": key, "mission_id": mission_id, "action_id": action.id, "provider": provider_name, "operation": operation, "reason": "Effet externe ambigu déjà persisté."})
+                    self.runtime._persist_new_audit_events()
+                    return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=effect.get("result"), error=effect.get("error"))
             return self._handle_existing_execution(key, existing)
         self._prepare_execution_identity(key, action, mission_id, governed)
         claimed = self._claim(action, mission_id, key)
@@ -176,7 +163,6 @@ class DurableExecutionEngine:
         return self._complete(key, mission_id, action.id, outcome.result)
 
     def reconcile_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
-        """Reconcile an ambiguous external effect; never invokes provider.execute."""
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         governed = self._authorize_reconciliation(action, mission_id)
@@ -231,12 +217,13 @@ class DurableExecutionEngine:
         if governed.governor.mode not in (Autonomy.EXECUTE_REVERSIBLE, Autonomy.EXECUTE_AUTHORIZED, Autonomy.ESCALATE):
             raise PermissionError("Mode de gouvernance non exécutable.")
         status = self.store.get_mission_status(mission_id)
+        key = self.store.idempotency_key("execute", mission_id, action.id)
+        existing = self.store.get_execution(key)
+        if existing is not None and existing["status"] in {"RUNNING", "RECOVERY_REQUIRED", "COMPLETED", "FAILED"}:
+            return
         if status == MissionStatus.RUNNING:
-            key = self.store.idempotency_key("execute", mission_id, action.id)
-            existing = self.store.get_execution(key)
-            if existing is not None and existing["status"] == "RUNNING":
-                return
-        if status != MissionStatus.PLANNED:
+            return
+        if status not in {MissionStatus.PLANNED, MissionStatus.CREATED}:
             raise ValueError("La mission doit être PLANNED avant exécution.")
 
     def _claim(self, action, mission_id: str, key: str) -> dict[str, Any]:
