@@ -91,4 +91,4 @@ class ApprovalIntegrityStore:
         if any(stored[name] is None for name in expected):
             raise PermissionError("Approbation sans empreintes natives complètes : exécution refusée.")
         if stored != expected:
-            raise PermissionError("L'identité, le contexte ou l'autorité de l'action a changé depuis l'approbation.")
+            raise PermissionError("L'identité ou son autorité a changé depuis l'approbation.")
