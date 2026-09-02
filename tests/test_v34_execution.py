@@ -72,6 +72,47 @@ def test_approved_escalation_can_execute(tmp_path: Path):
     assert runtime.state(contract.mission_id).status == MissionStatus.COMPLETED
 
 
+def test_approval_is_bound_to_exact_action_fingerprint(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("human approved", "done", autonomy=Autonomy.PREPARE)
+    action = ActionRequest("send_application", "send", 5, 6, 6)
+
+    runtime.route(action, contract.mission_id)
+    approval = runtime.store.pending_approvals(contract.mission_id)[0]
+    runtime.approve(approval.id)
+
+    changed = ActionRequest(
+        action.name,
+        "send a different payload",
+        action.impact,
+        action.risk,
+        action.reversibility,
+        id=action.id,
+    )
+
+    with pytest.raises(PermissionError, match="action ou son contexte a changé"):
+        DurableExecutionEngine(runtime).execute(changed, contract.mission_id, lambda a: "must not run")
+
+    assert runtime.state(contract.mission_id).status == MissionStatus.PLANNED
+    assert runtime.store.get_execution(runtime.store.idempotency_key("execute", contract.mission_id, action.id)) is None
+
+
+def test_approval_without_binding_fails_closed(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("human approved", "done", autonomy=Autonomy.PREPARE)
+    action = ActionRequest("send_application", "send", 5, 6, 6)
+
+    runtime.route(action, contract.mission_id)
+    approval = runtime.store.pending_approvals(contract.mission_id)[0]
+    binding_key = runtime._approval_binding_key(approval.id)
+    with runtime.store._connect() as conn:
+        conn.execute("DELETE FROM idempotency WHERE key=?", (binding_key,))
+    runtime.approve(approval.id)
+
+    with pytest.raises(PermissionError, match="liaison d'identité"):
+        DurableExecutionEngine(runtime).execute(action, contract.mission_id, lambda a: "must not run")
+
+
 def test_pending_escalation_cannot_execute(tmp_path: Path):
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
     contract = runtime.create_mission("human approval", "done", autonomy=Autonomy.PREPARE)
