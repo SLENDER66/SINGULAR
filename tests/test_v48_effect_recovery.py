@@ -42,7 +42,7 @@ def test_abandoned_in_flight_claim_requires_explicit_recovery(tmp_path: Path):
             (EffectStatus.IN_FLIGHT.value, request.provider_idempotency_key),
         )
 
-    with pytest.raises(RuntimeError, match="IN_FLIGHT"):
+    with pytest.raises(ValueError, match="raison"):
         coordinator.recover_in_flight(request, reason="")
     with pytest.raises(Exception):
         coordinator.execute(request, provider)
