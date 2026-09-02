@@ -1,10 +1,11 @@
 from pathlib import Path
+import time
 
 import pytest
 
 from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
-from singular.execution import DurableExecutionEngine, ExecutionInProgress
+from singular.execution import DurableExecutionEngine, ExecutionInProgress, ExecutionRecoveryRequired
 from singular.mission_runtime import DurableMissionRuntime
 
 
@@ -115,3 +116,38 @@ def test_running_execution_can_be_recovered_as_canonical_state(tmp_path: Path):
     assert row["status"] == "RUNNING"
     assert row["mission_id"] == contract.mission_id
     assert row["action_id"] == action.id
+
+
+def test_stale_running_execution_is_quarantined_without_reexecution(tmp_path: Path):
+    db = tmp_path / "s.db"
+    runtime = DurableMissionRuntime(DurableStore(db))
+    contract = runtime.create_mission("recover safely", "done", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
+    runtime.store.begin_execution(key, contract.mission_id, action.id, lease_seconds=1)
+    time.sleep(1.1)
+
+    calls = []
+    with pytest.raises(ExecutionRecoveryRequired):
+        DurableExecutionEngine(runtime, execution_lease_seconds=1).execute(
+            action, contract.mission_id, lambda a: calls.append(a.id) or True
+        )
+
+    assert calls == []
+    row = runtime.store.get_execution(key)
+    assert row is not None
+    assert row["status"] == "RECOVERY_REQUIRED"
+
+
+def test_live_execution_lease_is_not_quarantined(tmp_path: Path):
+    db = tmp_path / "s.db"
+    runtime = DurableMissionRuntime(DurableStore(db))
+    contract = runtime.create_mission("live execution", "done", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
+    runtime.store.begin_execution(key, contract.mission_id, action.id, lease_seconds=30)
+
+    with pytest.raises(ExecutionInProgress):
+        DurableExecutionEngine(runtime).execute(action, contract.mission_id, lambda a: True)
+
+    assert runtime.store.get_execution(key)["status"] == "RUNNING"
