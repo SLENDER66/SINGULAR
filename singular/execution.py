@@ -192,7 +192,13 @@ class DurableExecutionEngine:
             self._validate_approval_binding(approval_id, governed.action, mission_id)
         if governed.governor.mode not in (Autonomy.EXECUTE_REVERSIBLE, Autonomy.EXECUTE_AUTHORIZED, Autonomy.ESCALATE):
             raise PermissionError("Mode de gouvernance non exécutable.")
-        if self.store.get_mission_status(mission_id) != MissionStatus.PLANNED:
+        status = self.store.get_mission_status(mission_id)
+        if status == MissionStatus.RUNNING:
+            key = self.store.idempotency_key("execute", mission_id, action.id)
+            existing = self.store.get_execution(key)
+            if existing is not None and existing["status"] == "RUNNING":
+                return
+        if status != MissionStatus.PLANNED:
             raise ValueError("La mission doit être PLANNED avant exécution.")
 
     def _claim(self, action, mission_id: str, key: str) -> dict[str, Any]:
