@@ -4,7 +4,7 @@ import pytest
 
 from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
-from singular.execution import DurableExecutionEngine
+from singular.execution import DurableExecutionEngine, ExecutionInProgress
 from singular.mission_runtime import DurableMissionRuntime
 
 
@@ -81,6 +81,22 @@ def test_pending_escalation_cannot_execute(tmp_path: Path):
         engine.execute(action, contract.mission_id, lambda a: True)
 
     assert runtime.state(contract.mission_id).status == MissionStatus.WAITING_APPROVAL
+
+
+def test_running_execution_cannot_be_taken_over(tmp_path: Path):
+    db = tmp_path / "s.db"
+    first = DurableMissionRuntime(DurableStore(db))
+    contract = first.create_mission("safe automation", "done", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    key = first.store.idempotency_key("execute", contract.mission_id, action.id)
+    first.store.begin_execution(key, contract.mission_id, action.id)
+    first._set_status(contract.mission_id, MissionStatus.RUNNING)
+
+    second = DurableMissionRuntime(DurableStore(db))
+    with pytest.raises(ExecutionInProgress):
+        DurableExecutionEngine(second).execute(action, contract.mission_id, lambda a: True)
+
+    assert second.store.get_execution(key)["status"] == "RUNNING"
 
 
 def test_running_execution_can_be_recovered_as_canonical_state(tmp_path: Path):
