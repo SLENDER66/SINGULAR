@@ -37,9 +37,6 @@ class EffectRequest:
 
     @property
     def provider_idempotency_key(self) -> str:
-        # Keep the provider key stable for a given execution operation. Payload and
-        # action identity are stored separately so reuse with changed inputs fails
-        # closed instead of silently creating a second external effect.
         material = "\x1f".join((self.execution_key, self.provider, self.operation))
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -164,6 +161,25 @@ class ExternalEffectCoordinator:
             self._transition(key, EffectStatus.UNKNOWN.value, result=normalized.result, error=normalized.error or "Provider returned an ambiguous outcome")
             return ProviderResult("UNKNOWN", normalized.result, normalized.error)
         return normalized
+
+    def recover_in_flight(self, request: EffectRequest, *, reason: str) -> dict[str, Any]:
+        """Quarantine an abandoned claim without calling the external provider.
+
+        Recovery is deliberately explicit: a caller must establish that the original
+        worker is no longer authoritative before moving IN_FLIGHT to UNKNOWN.
+        UNKNOWN can then only be resolved through ``reconcile``; this method never
+        re-executes the provider operation.
+        """
+        if not reason.strip():
+            raise ValueError("Une raison de récupération explicite est obligatoire.")
+        key = request.provider_idempotency_key
+        row = self.prepare(request)
+        if row["status"] == EffectStatus.UNKNOWN.value:
+            return row
+        if row["status"] != EffectStatus.IN_FLIGHT.value:
+            raise ValueError(f"Récupération d'effet impossible depuis l'état {row['status']}.")
+        self._transition(key, EffectStatus.UNKNOWN.value, error=f"Recovery required: {reason}")
+        return self.prepare(request)
 
     def reconcile(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
         key = request.provider_idempotency_key
