@@ -97,7 +97,12 @@ class DurableExecutionEngine:
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
-            self._validate_execution_identity(key, action, mission_id, governed)
+            # A live/stale in-flight execution is never replayed. Identity is
+            # required when consuming a terminal result, but refusing takeover
+            # is safe even for legacy RUNNING rows created before V48 identity
+            # records existed.
+            if existing["status"] in {"COMPLETED", "FAILED"}:
+                self._validate_execution_identity(key, action, mission_id, governed)
             return self._handle_existing_execution(key, existing)
         self._prepare_execution_identity(key, action, mission_id, governed)
         claimed = self._claim(action, mission_id, key)
