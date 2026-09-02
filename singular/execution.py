@@ -5,8 +5,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .autopilot import ApprovalStatus, Autonomy
+from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
+from .autopilot import ApprovalStatus, Autonomy
 from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
 from .mission_runtime import DurableMissionRuntime
@@ -66,6 +67,13 @@ class DurableExecutionEngine:
         """Execute one governed external effect without ever auto-retrying ambiguity."""
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
+        key = self.store.idempotency_key("execute", mission_id, action.id)
+        existing = self.store.get_execution(key)
+        # Recovery is an execution-state fact. Once an ambiguous effect exists,
+        # do not re-run governance in a way that could mask that state; require
+        # explicit reconciliation instead.
+        if existing is not None:
+            return self._handle_existing_execution(key, existing)
         governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
@@ -168,12 +176,10 @@ class DurableExecutionEngine:
     def _validate_approval_binding(self, approval_id: str, action, mission_id: str) -> None:
         contract = self.store.load_mission(mission_id)
         ApprovalIntegrityStore(self.store.path).validate(approval_id, action, mission_id, contract)
-        # Legacy V40 binding remains a secondary migration guard. It can never
-        # replace the native approval record above.
         expected = self.runtime._action_fingerprint(action, mission_id)
-        actual = self.runtime.approval_fingerprint(approval_id, self.store)
+        actual = ApprovalBindingStore(self.store.path).fingerprint(approval_id)
         if actual is None or actual != expected:
-            raise PermissionError("Approbation invalide : la liaison historique ne correspond plus à l'action actuelle.")
+            raise PermissionError("L'action ou son contexte a changé depuis l'approbation : liaison d'identité invalide.")
 
     def _handle_existing_execution(self, key: str, existing: dict[str, Any]) -> ExecutionResult:
         if existing["status"] == "RUNNING":
