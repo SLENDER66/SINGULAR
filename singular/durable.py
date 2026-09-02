@@ -158,9 +158,12 @@ class DurableStore:
             row = conn.execute("SELECT approval_id,action_id,reason,status FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
         return ApprovalRequest(row["action_id"], row["reason"], ApprovalStatus(row["status"]), row["approval_id"])
 
-    def pending_approvals(self) -> tuple[ApprovalRequest, ...]:
+    def pending_approvals(self, mission_id: str | None = None) -> tuple[ApprovalRequest, ...]:
         with self._connect() as conn:
-            rows = conn.execute("SELECT approval_id,action_id,reason,status FROM approvals WHERE status=? ORDER BY created_at", (ApprovalStatus.PENDING.value,)).fetchall()
+            if mission_id is None:
+                rows = conn.execute("SELECT approval_id,action_id,reason,status FROM approvals WHERE status=? ORDER BY created_at", (ApprovalStatus.PENDING.value,)).fetchall()
+            else:
+                rows = conn.execute("SELECT approval_id,action_id,reason,status FROM approvals WHERE status=? AND mission_id=? ORDER BY created_at", (ApprovalStatus.PENDING.value, mission_id)).fetchall()
         return tuple(ApprovalRequest(r["action_id"], r["reason"], ApprovalStatus(r["status"]), r["approval_id"]) for r in rows)
 
     def record_audit(self, event: AuditEvent) -> None:
