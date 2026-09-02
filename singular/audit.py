@@ -90,8 +90,25 @@ class AuditEvent:
 class AuditTrail:
     """Append-only audit trail with independently verifiable event and chain integrity."""
 
-    def __init__(self) -> None:
-        self._events: list[AuditEvent] = []
+    def __init__(self, events: list[AuditEvent] | tuple[AuditEvent, ...] | None = None) -> None:
+        self._events: list[AuditEvent] = list(events or ())
+
+    @classmethod
+    def restore(cls, persisted_events: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> "AuditTrail":
+        if not cls.verify_chain(persisted_events):
+            raise ValueError("L'intégrité de la chaîne d'audit ne peut pas être établie.")
+        events = tuple(
+            AuditEvent(
+                event_type=str(event["event_type"]),
+                actor=str(event["actor"]),
+                outcome=str(event["outcome"]),
+                payload=dict(event["payload"]),
+                timestamp=str(event["timestamp"]),
+                id=str(event["id"]),
+            )
+            for event in persisted_events
+        )
+        return cls(events)
 
     def record(self, event_type: str, actor: str, outcome: str, payload: dict[str, Any] | None = None) -> AuditEvent:
         base = dict(payload or {})
