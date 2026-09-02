@@ -36,7 +36,14 @@ class AuditEvent:
     @property
     def fingerprint(self) -> str:
         payload = dict(self.payload)
-        for key in ("audit_fingerprint", "audit_sequence", "related_ids", "correlation_id"):
+        for key in (
+            "audit_fingerprint",
+            "audit_sequence",
+            "audit_prev_fingerprint",
+            "audit_chain_fingerprint",
+            "related_ids",
+            "correlation_id",
+        ):
             payload.pop(key, None)
         canonical = json.dumps(
             {
@@ -53,17 +60,35 @@ class AuditEvent:
         ).encode("utf-8")
         return hashlib.sha256(canonical).hexdigest()
 
-    def durable_payload(self, sequence: int) -> dict[str, Any]:
+    @staticmethod
+    def chain_fingerprint(sequence: int, fingerprint: str, previous_fingerprint: str) -> str:
+        canonical = json.dumps(
+            {
+                "sequence": sequence,
+                "fingerprint": fingerprint,
+                "previous_fingerprint": previous_fingerprint,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
+
+    def durable_payload(self, sequence: int, previous_fingerprint: str = "") -> dict[str, Any]:
         payload = dict(self.payload)
         payload.setdefault("correlation_id", self.correlation_id)
         payload.setdefault("related_ids", self.related_ids)
         payload.setdefault("audit_sequence", sequence)
         payload.setdefault("audit_fingerprint", self.fingerprint)
+        payload.setdefault("audit_prev_fingerprint", previous_fingerprint)
+        payload.setdefault(
+            "audit_chain_fingerprint",
+            self.chain_fingerprint(sequence, self.fingerprint, previous_fingerprint),
+        )
         return payload
 
 
 class AuditTrail:
-    """Append-only audit trail for the runtime; persisted copies remain independently verifiable."""
+    """Append-only audit trail with independently verifiable event and chain integrity."""
 
     def __init__(self) -> None:
         self._events: list[AuditEvent] = []
@@ -71,7 +96,8 @@ class AuditTrail:
     def record(self, event_type: str, actor: str, outcome: str, payload: dict[str, Any] | None = None) -> AuditEvent:
         base = dict(payload or {})
         event = AuditEvent(event_type, actor, outcome, base)
-        persisted = event.durable_payload(len(self._events) + 1)
+        previous = self._events[-1].payload.get("audit_fingerprint", "") if self._events else ""
+        persisted = event.durable_payload(len(self._events) + 1, str(previous))
         event = AuditEvent(event_type, actor, outcome, persisted, event.timestamp, event.id)
         self._events.append(event)
         return event
@@ -100,3 +126,33 @@ class AuditTrail:
             id=str(event["id"]),
         )
         return candidate.fingerprint == expected
+
+    @classmethod
+    def verify_chain(cls, events: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> bool:
+        previous = ""
+        expected_sequence = 1
+        for event in events:
+            if not cls.verify_persisted_event(event):
+                return False
+            payload = dict(event.get("payload") or {})
+            sequence = payload.get("audit_sequence")
+            event_fingerprint = payload.get("audit_fingerprint")
+            previous_fingerprint = payload.get("audit_prev_fingerprint")
+            chain_fingerprint = payload.get("audit_chain_fingerprint")
+            if not isinstance(sequence, int) or sequence != expected_sequence:
+                return False
+            if not isinstance(event_fingerprint, str) or not event_fingerprint:
+                return False
+            if previous_fingerprint != previous:
+                return False
+            if not isinstance(chain_fingerprint, str) or not chain_fingerprint:
+                return False
+            if cls._chain_fingerprint(sequence, event_fingerprint, previous) != chain_fingerprint:
+                return False
+            previous = event_fingerprint
+            expected_sequence += 1
+        return True
+
+    @staticmethod
+    def _chain_fingerprint(sequence: int, fingerprint: str, previous_fingerprint: str) -> str:
+        return AuditEvent.chain_fingerprint(sequence, fingerprint, previous_fingerprint)
