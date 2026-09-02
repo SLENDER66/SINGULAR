@@ -140,26 +140,44 @@ class DurableStore:
         data["autonomy"] = Autonomy(data["autonomy"])
         return DelegationContract(**data)
 
-    def set_mission_status(self, mission_id: str, status: MissionStatus) -> None:
-        """Persist a mission transition while enforcing the state machine atomically."""
+    @staticmethod
+    def _transition_mission_status(
+        conn: sqlite3.Connection,
+        mission_id: str,
+        status: MissionStatus,
+        *,
+        expected_current: MissionStatus | None = None,
+    ) -> MissionStatus:
+        """Single connection-aware authority for every mission state transition."""
         if not isinstance(status, MissionStatus):
             status = MissionStatus(status)
-        now = datetime.now(timezone.utc).isoformat()
-        with self._connect() as conn:
-            row = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()
-            if row is None:
-                raise KeyError(mission_id)
-            current = MissionStatus(row["status"])
-            if current == status:
-                return
-            if status not in MISSION_TRANSITIONS[current]:
-                raise ValueError(f"Transition de mission interdite : {current.value} -> {status.value}")
-            cur = conn.execute(
-                "UPDATE mission_states SET status=?, updated_at=? WHERE mission_id=? AND status=?",
-                (status.value, now, mission_id, current.value),
+        if expected_current is not None and not isinstance(expected_current, MissionStatus):
+            expected_current = MissionStatus(expected_current)
+        row = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()
+        if row is None:
+            raise KeyError(mission_id)
+        current = MissionStatus(row["status"])
+        if expected_current is not None and current != expected_current:
+            raise ValueError(
+                f"État courant inattendu : {current.value}; attendu : {expected_current.value}."
             )
-            if cur.rowcount != 1:
-                raise RuntimeError("La transition de mission a échoué à cause d'une concurrence d'état.")
+        if current == status:
+            return current
+        if status not in MISSION_TRANSITIONS[current]:
+            raise ValueError(f"Transition de mission interdite : {current.value} -> {status.value}")
+        now = datetime.now(timezone.utc).isoformat()
+        cur = conn.execute(
+            "UPDATE mission_states SET status=?, updated_at=? WHERE mission_id=? AND status=?",
+            (status.value, now, mission_id, current.value),
+        )
+        if cur.rowcount != 1:
+            raise RuntimeError("La transition de mission a échoué à cause d'une concurrence d'état.")
+        return status
+
+    def set_mission_status(self, mission_id: str, status: MissionStatus) -> None:
+        """Persist a mission transition through the single transition primitive."""
+        with self._connect() as conn:
+            self._transition_mission_status(conn, mission_id, status)
 
     def get_mission_status(self, mission_id: str) -> MissionStatus:
         with self._connect() as conn:
@@ -283,15 +301,12 @@ class DurableStore:
                 result = dict(existing)
                 result["claimed"] = False
                 return result
-            cur = conn.execute(
-                "UPDATE mission_states SET status=?, updated_at=? WHERE mission_id=? AND status=?",
-                (MissionStatus.RUNNING.value, now.isoformat(), mission_id, MissionStatus.PLANNED.value),
+            self._transition_mission_status(
+                conn,
+                mission_id,
+                MissionStatus.RUNNING,
+                expected_current=MissionStatus.PLANNED,
             )
-            if cur.rowcount != 1:
-                row = conn.execute("SELECT mission_id FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()
-                if row is None:
-                    raise KeyError(mission_id)
-                raise ValueError("La mission doit être PLANNED avant exécution.")
             conn.execute(
                 "INSERT INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)",
                 (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until),
@@ -374,9 +389,12 @@ class DurableStore:
             execution_cur = conn.execute("UPDATE executions SET status=?,result=?,error=?,finished_at=?,lease_until=NULL WHERE execution_key=? AND status='RECOVERY_REQUIRED'", (execution_status, encoded_result, error, now, execution_key))
             if execution_cur.rowcount != 1:
                 raise RuntimeError("La résolution de récupération n'a pas été persistée.")
-            mission_cur = conn.execute("UPDATE mission_states SET status=?,updated_at=? WHERE mission_id=? AND status='RUNNING'", (mission_status.value, now, row["mission_id"]))
-            if mission_cur.rowcount != 1:
-                raise RuntimeError("La résolution de récupération n'a pas pu finaliser la mission.")
+            self._transition_mission_status(
+                conn,
+                row["mission_id"],
+                mission_status,
+                expected_current=MissionStatus.RUNNING,
+            )
             final = conn.execute("SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
         if final is None:
             raise RuntimeError("Execution record could not be persisted")
@@ -413,9 +431,12 @@ class DurableStore:
             if row is None:
                 raise KeyError(execution_key)
             mission_status = MissionStatus.COMPLETED if status == "COMPLETED" else MissionStatus.FAILED
-            mission_cur = conn.execute("UPDATE mission_states SET status=?, updated_at=? WHERE mission_id=? AND status=?", (mission_status.value, now, row["mission_id"], MissionStatus.RUNNING.value))
-            if mission_cur.rowcount != 1:
-                raise ValueError("La mission doit être RUNNING pour finaliser l'exécution.")
+            self._transition_mission_status(
+                conn,
+                row["mission_id"],
+                mission_status,
+                expected_current=MissionStatus.RUNNING,
+            )
             final = conn.execute("SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
         if final is None:
             raise RuntimeError("Execution record could not be persisted")
