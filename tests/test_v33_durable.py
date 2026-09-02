@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from singular.autopilot import ActionRequest, ApprovalStatus, Autonomy
-from singular.durable import DurableStore
+from singular.durable import DurableStore, MissionStatus
 from singular.mission_runtime import DurableMissionRuntime
 
 
@@ -12,6 +12,14 @@ def test_mission_survives_runtime_restart(tmp_path: Path):
 
     second = DurableMissionRuntime(DurableStore(db))
     assert second.store.load_mission(contract.mission_id).objective == "emploi et revenus"
+    assert second.state(contract.mission_id).status == MissionStatus.CREATED
+
+
+def test_missions_have_unique_ids(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    first = runtime.create_mission("same objective", "same result")
+    second = runtime.create_mission("same objective", "same result")
+    assert first.mission_id != second.mission_id
 
 
 def test_sensitive_action_creates_no_execution_and_is_blocked(tmp_path: Path):
@@ -21,6 +29,7 @@ def test_sensitive_action_creates_no_execution_and_is_blocked(tmp_path: Path):
     assert not result.allowed
     assert result.governor.mode == Autonomy.BLOCK
     assert runtime.store.pending_approvals() == ()
+    assert runtime.state(contract.mission_id).status == MissionStatus.BLOCKED
 
 
 def test_idempotency_key_is_deterministic(tmp_path: Path):
