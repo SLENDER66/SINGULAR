@@ -24,12 +24,19 @@ class ExecutionInProgress(RuntimeError):
     """Another worker owns the durable execution lease."""
 
 
+class ExecutionRecoveryRequired(RuntimeError):
+    """A stale execution was quarantined and requires an explicit recovery decision."""
+
+
 class DurableExecutionEngine:
     """Execution transaction boundary: authorize, claim, run, persist outcome."""
 
-    def __init__(self, runtime: DurableMissionRuntime) -> None:
+    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300) -> None:
+        if execution_lease_seconds <= 0:
+            raise ValueError("La durée du lease doit être positive.")
         self.runtime = runtime
         self.store: DurableStore = runtime.store
+        self.execution_lease_seconds = execution_lease_seconds
         self.store.init_execution_schema()
 
     def execute(
@@ -42,8 +49,22 @@ class DurableExecutionEngine:
         existing = self.store.get_execution(key)
         if existing is not None:
             if existing["status"] == "RUNNING":
+                recovered = self.store.recover_stale_execution(key)
+                if recovered is not None and recovered["status"] == "RECOVERY_REQUIRED":
+                    self.runtime.audit.record(
+                        "execution",
+                        "RECOVERY",
+                        "RECOVERY_REQUIRED",
+                        {"execution_key": key, "mission_id": mission_id, "action_id": action.id},
+                    )
+                    self.runtime._persist_new_audit_events()
+                    raise ExecutionRecoveryRequired(key)
                 raise ExecutionInProgress(key)
-            return self._result_from_row(existing)
+            if existing["status"] in {"COMPLETED", "FAILED"}:
+                return self._result_from_row(existing)
+            if existing["status"] == "RECOVERY_REQUIRED":
+                raise ExecutionRecoveryRequired(key)
+            raise RuntimeError(f"État d'exécution inconnu: {existing['status']}")
 
         governed = self.runtime.route(action, mission_id)
         contract = self.store.load_mission(mission_id)
@@ -73,10 +94,12 @@ class DurableExecutionEngine:
         if self.store.get_mission_status(mission_id) != MissionStatus.PLANNED:
             raise ValueError("La mission doit être PLANNED avant exécution.")
 
-        claimed = self.store.begin_execution(key, mission_id, action.id)
+        claimed = self.store.begin_execution(key, mission_id, action.id, self.execution_lease_seconds)
         if not claimed["claimed"]:
             if claimed["status"] == "RUNNING":
                 raise ExecutionInProgress(key)
+            if claimed["status"] == "RECOVERY_REQUIRED":
+                raise ExecutionRecoveryRequired(key)
             return self._result_from_row(claimed)
 
         self.runtime._set_status(mission_id, MissionStatus.RUNNING)
