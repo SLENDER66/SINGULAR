@@ -33,7 +33,7 @@ def test_runtime_fails_closed_when_persisted_audit_chain_is_tampered(tmp_path: P
     with runtime.store._connect() as conn:
         conn.execute(
             "UPDATE audit_events SET payload=? WHERE event_id=(SELECT event_id FROM audit_events ORDER BY timestamp,event_id LIMIT 1)",
-            '{"mission_id":"tampered","audit_sequence":1,"audit_fingerprint":"tampered","audit_prev_fingerprint":"","audit_chain_fingerprint":"tampered"}',
+            ('{"mission_id":"tampered","audit_sequence":1,"audit_fingerprint":"tampered","audit_prev_fingerprint":"","audit_chain_fingerprint":"tampered"}',),
         )
 
     with pytest.raises(ValueError, match="intégrité de la chaîne d'audit"):
