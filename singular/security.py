@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .autopilot import ActionRequest
+from .capabilities import CapabilityRegistry
 
 
 class ActionTier(str, Enum):
@@ -39,13 +40,49 @@ class ActionPolicy:
     def evaluate(cls, action: ActionRequest) -> PolicyDecision:
         name = action.name.lower()
         reasons: list[str] = []
+
+        if action.capability is not None:
+            capability = CapabilityRegistry.resolve(action.capability)
+            if capability is None:
+                return PolicyDecision(
+                    ActionTier.BLACK,
+                    False,
+                    False,
+                    True,
+                    ("Capacité inconnue : autorisation refusée par défaut.",),
+                )
+            if not CapabilityRegistry.is_action_compatible(action.capability, name):
+                return PolicyDecision(
+                    ActionTier.BLACK,
+                    False,
+                    False,
+                    True,
+                    ("La capacité déclarée ne correspond pas à l'action demandée.",),
+                )
+            if action.risk > capability.risk_ceiling or action.reversibility < capability.min_reversibility:
+                return PolicyDecision(
+                    ActionTier.RED,
+                    False,
+                    False,
+                    True,
+                    ("Les paramètres de risque dépassent les limites de la capacité.",),
+                )
+            if capability.requires_human:
+                return PolicyDecision(
+                    ActionTier.ORANGE,
+                    True,
+                    True,
+                    True,
+                    (f"Capacité {capability.name} soumise à validation humaine.",),
+                )
+
         if action.sensitive or name in cls.SENSITIVE_KEYWORDS:
             return PolicyDecision(
                 ActionTier.BLACK,
-                can_prepare=False,
-                can_execute=False,
-                requires_human=True,
-                reasons=("Opération sensible ou irréversible détectée.",),
+                False,
+                False,
+                True,
+                ("Opération sensible ou irréversible détectée.",),
             )
         if action.risk >= 8 or action.reversibility <= 2:
             reasons.append("Risque élevé ou faible réversibilité.")
