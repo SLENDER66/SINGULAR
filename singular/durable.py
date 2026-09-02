@@ -4,7 +4,7 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -87,6 +87,7 @@ class DurableStore:
                     error TEXT,
                     started_at TEXT NOT NULL,
                     finished_at TEXT,
+                    lease_until TEXT,
                     FOREIGN KEY(mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
                 );
                 """
@@ -97,6 +98,9 @@ class DurableStore:
             idempotency_columns = {row[1] for row in conn.execute("PRAGMA table_info(idempotency)")}
             if "fingerprint" not in idempotency_columns:
                 conn.execute("ALTER TABLE idempotency ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''")
+            execution_columns = {row[1] for row in conn.execute("PRAGMA table_info(executions)")}
+            if "lease_until" not in execution_columns:
+                conn.execute("ALTER TABLE executions ADD COLUMN lease_until TEXT")
 
     def init_execution_schema(self) -> None:
         return None
@@ -223,16 +227,19 @@ class DurableStore:
             raise ValueError("Identité d'action réutilisée avec un contenu différent.")
         return json.loads(row["result"])
 
-    def begin_execution(self, execution_key: str, mission_id: str, action_id: str) -> dict[str, Any]:
+    def begin_execution(self, execution_key: str, mission_id: str, action_id: str, lease_seconds: int = 300) -> dict[str, Any]:
         """Atomically claim an execution key or return its canonical state."""
-        now = datetime.now(timezone.utc).isoformat()
+        if lease_seconds <= 0:
+            raise ValueError("La durée du lease doit être positive.")
+        now = datetime.now(timezone.utc)
+        lease_until = (now + timedelta(seconds=lease_seconds)).isoformat()
         with self._connect() as conn:
             cur = conn.execute(
-                "INSERT OR IGNORE INTO executions(execution_key,mission_id,action_id,status,started_at) VALUES(?,?,?,?,?)",
-                (execution_key, mission_id, action_id, "RUNNING", now),
+                "INSERT OR IGNORE INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)",
+                (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until),
             )
             row = conn.execute(
-                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at FROM executions WHERE execution_key=?",
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions WHERE execution_key=?",
                 (execution_key,),
             ).fetchone()
         if row is None:
@@ -241,6 +248,52 @@ class DurableStore:
         result["claimed"] = cur.rowcount == 1
         return result
 
+    def heartbeat_execution(self, execution_key: str, lease_seconds: int = 300) -> dict[str, Any]:
+        """Extend a live execution lease; never resurrect a completed/failed execution."""
+        if lease_seconds <= 0:
+            raise ValueError("La durée du lease doit être positive.")
+        now = datetime.now(timezone.utc)
+        lease_until = (now + timedelta(seconds=lease_seconds)).isoformat()
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE executions SET lease_until=? WHERE execution_key=? AND status='RUNNING'",
+                (lease_until, execution_key),
+            )
+        if cur.rowcount != 1:
+            raise RuntimeError("Execution inexistante ou non active")
+        row = self.get_execution(execution_key)
+        if row is None:
+            raise KeyError(execution_key)
+        return row
+
+    def mark_execution_recovery_required(self, execution_key: str) -> dict[str, Any]:
+        """Quarantine a stale RUNNING execution; this does not re-execute its handler."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE executions SET status='RECOVERY_REQUIRED', finished_at=? WHERE execution_key=? AND status='RUNNING'",
+                (now, execution_key),
+            )
+            row = conn.execute(
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(execution_key)
+        if cur.rowcount != 1 and row["status"] == "RUNNING":
+            raise RuntimeError("Execution state could not enter recovery")
+        return dict(row)
+
+    def recover_stale_execution(self, execution_key: str) -> dict[str, Any] | None:
+        """Move an expired RUNNING execution to explicit recovery state."""
+        row = self.get_execution(execution_key)
+        if row is None or row["status"] != "RUNNING" or not row.get("lease_until"):
+            return row
+        lease_until = datetime.fromisoformat(row["lease_until"])
+        if lease_until > datetime.now(timezone.utc):
+            return row
+        return self.mark_execution_recovery_required(execution_key)
+
     def finish_execution(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
         if status not in {"COMPLETED", "FAILED"}:
             raise ValueError("Un résultat d'exécution doit être COMPLETED ou FAILED.")
@@ -248,11 +301,11 @@ class DurableStore:
         encoded = None if result is None else json.dumps(result, sort_keys=True)
         with self._connect() as conn:
             cur = conn.execute(
-                "UPDATE executions SET status=?,result=?,error=?,finished_at=? WHERE execution_key=? AND status='RUNNING'",
+                "UPDATE executions SET status=?,result=?,error=?,finished_at=?,lease_until=NULL WHERE execution_key=? AND status='RUNNING'",
                 (status, encoded, error, now, execution_key),
             )
             row = conn.execute(
-                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at FROM executions WHERE execution_key=?",
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions WHERE execution_key=?",
                 (execution_key,),
             ).fetchone()
         if row is None:
@@ -264,7 +317,7 @@ class DurableStore:
     def get_execution(self, execution_key: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at FROM executions WHERE execution_key=?",
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions WHERE execution_key=?",
                 (execution_key,),
             ).fetchone()
         return dict(row) if row else None
