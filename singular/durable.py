@@ -5,11 +5,23 @@ import json
 import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from .autopilot import ApprovalRequest, ApprovalStatus, DelegationContract
 from .audit import AuditEvent
+
+
+class MissionStatus(str, Enum):
+    CREATED = "CREATED"
+    PLANNED = "PLANNED"
+    RUNNING = "RUNNING"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
+    BLOCKED = "BLOCKED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class DurableStore:
@@ -40,13 +52,21 @@ class DurableStore:
                     payload TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS mission_states (
+                    mission_id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
+                );
                 CREATE TABLE IF NOT EXISTS approvals (
                     approval_id TEXT PRIMARY KEY,
                     action_id TEXT NOT NULL,
+                    mission_id TEXT,
                     reason TEXT NOT NULL,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(mission_id) REFERENCES missions(mission_id) ON DELETE SET NULL
                 );
                 CREATE TABLE IF NOT EXISTS audit_events (
                     event_id TEXT PRIMARY KEY,
@@ -63,6 +83,9 @@ class DurableStore:
                 );
                 """
             )
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(approvals)")}
+            if "mission_id" not in columns:
+                conn.execute("ALTER TABLE approvals ADD COLUMN mission_id TEXT")
 
     def save_mission(self, contract: DelegationContract) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -71,6 +94,10 @@ class DurableStore:
             conn.execute(
                 "INSERT OR REPLACE INTO missions(mission_id,payload,created_at) VALUES(?,?,?)",
                 (contract.mission_id, payload, now),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO mission_states(mission_id,status,updated_at) VALUES(?,?,?)",
+                (contract.mission_id, MissionStatus.CREATED.value, now),
             )
 
     def load_mission(self, mission_id: str) -> DelegationContract | None:
@@ -83,13 +110,44 @@ class DurableStore:
         data["autonomy"] = Autonomy(data["autonomy"])
         return DelegationContract(**data)
 
-    def save_approval(self, approval: ApprovalRequest) -> None:
+    def set_mission_status(self, mission_id: str, status: MissionStatus) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE mission_states SET status=?, updated_at=? WHERE mission_id=?",
+                (status.value, now, mission_id),
+            )
+            if cur.rowcount != 1:
+                raise KeyError(mission_id)
+
+    def get_mission_status(self, mission_id: str) -> MissionStatus:
+        with self._connect() as conn:
+            row = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()
+        if not row:
+            raise KeyError(mission_id)
+        return MissionStatus(row["status"])
+
+    def save_approval(self, approval: ApprovalRequest, mission_id: str | None = None) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO approvals(approval_id,action_id,reason,status,created_at,updated_at) VALUES(?,?,?,?,COALESCE((SELECT created_at FROM approvals WHERE approval_id=?),?),?)",
-                (approval.id, approval.action_id, approval.reason, approval.status.value, approval.id, now, now),
+                "INSERT OR REPLACE INTO approvals(approval_id,action_id,mission_id,reason,status,created_at,updated_at) VALUES(?,?,?,?,?,COALESCE((SELECT created_at FROM approvals WHERE approval_id=?),?),?)",
+                (approval.id, approval.action_id, mission_id, approval.reason, approval.status.value, approval.id, now, now),
             )
+
+    def get_approval(self, approval_id: str) -> ApprovalRequest:
+        with self._connect() as conn:
+            row = conn.execute("SELECT approval_id,action_id,reason,status FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
+        if not row:
+            raise KeyError(approval_id)
+        return ApprovalRequest(row["action_id"], row["reason"], ApprovalStatus(row["status"]), row["approval_id"])
+
+    def get_approval_mission(self, approval_id: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT mission_id FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
+        if not row:
+            raise KeyError(approval_id)
+        return row["mission_id"]
 
     def update_approval(self, approval_id: str, status: ApprovalStatus) -> ApprovalRequest:
         now = datetime.now(timezone.utc).isoformat()
