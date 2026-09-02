@@ -50,9 +50,6 @@ class DurableMissionRuntime:
                 return self._blocked(action, contract.mission_id, ("L'action ne correspond pas au contrat de mission fourni.",))
             if action.contract_id is None:
                 action = replace(action, contract_id=contract.mission_id)
-
-            # An action identity already approved for another mission cannot be
-            # rebound merely by attaching a different contract id.
             with self.store._connect() as conn:
                 cross_mission = conn.execute(
                     "SELECT 1 FROM approval_bindings WHERE action_id=? AND (mission_id IS NULL OR mission_id<>?) LIMIT 1",
@@ -83,7 +80,9 @@ class DurableMissionRuntime:
             self._bind_approval(approval.id, action, contract)
         if contract is not None:
             target = {Autonomy.ESCALATE: MissionStatus.WAITING_APPROVAL, Autonomy.BLOCK: MissionStatus.BLOCKED}.get(result.governor.mode, MissionStatus.PLANNED)
-            self._set_status(contract.mission_id, target)
+            current_status = self.store.get_mission_status(contract.mission_id)
+            if current_status in {MissionStatus.CREATED, MissionStatus.WAITING_APPROVAL} or (current_status == MissionStatus.PLANNED and target != MissionStatus.PLANNED):
+                self._set_status(contract.mission_id, target)
         cached_result = self.store.put_idempotent(idempotency_key, self._cache(result), fingerprint)
         self._persist_new_audit_events()
         return self._from_cached(action, cached_result)
