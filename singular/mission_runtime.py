@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import Any
+from uuid import uuid4
 
 from .audit import AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, Autonomy, DelegationContract
@@ -26,12 +27,11 @@ class DurableMissionRuntime:
 
     def create_mission(self, objective: str, expected_result: str, **kwargs: Any) -> DelegationContract:
         contract = DelegationContract(
-            mission_id=self.store.idempotency_key("mission", objective, expected_result)[:8],
+            mission_id="MIS-" + uuid4().hex[:8],
             objective=objective,
             expected_result=expected_result,
             **kwargs,
         )
-        contract = replace(contract, mission_id="MIS-" + contract.mission_id)
         self.store.save_mission(contract)
         self.audit.record("mission_created", "COMMANDER", MissionStatus.CREATED.value, {"mission_id": contract.mission_id})
         self._persist_new_audit_events()
