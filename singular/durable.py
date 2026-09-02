@@ -99,7 +99,6 @@ class DurableStore:
                 conn.execute("ALTER TABLE idempotency ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''")
 
     def init_execution_schema(self) -> None:
-        """Compatibility hook; execution schema is created during store initialization."""
         return None
 
     def save_mission(self, contract: DelegationContract) -> None:
@@ -228,7 +227,7 @@ class DurableStore:
         """Atomically claim an execution key or return its canonical state."""
         now = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
-            conn.execute(
+            cur = conn.execute(
                 "INSERT OR IGNORE INTO executions(execution_key,mission_id,action_id,status,started_at) VALUES(?,?,?,?,?)",
                 (execution_key, mission_id, action_id, "RUNNING", now),
             )
@@ -238,7 +237,9 @@ class DurableStore:
             ).fetchone()
         if row is None:
             raise RuntimeError("Execution record could not be persisted")
-        return dict(row)
+        result = dict(row)
+        result["claimed"] = cur.rowcount == 1
+        return result
 
     def finish_execution(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
         if status not in {"COMPLETED", "FAILED"}:
