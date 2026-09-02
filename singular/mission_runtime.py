@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from .audit import AuditTrail
-from .autopilot import ApprovalStatus, DelegationContract, MissionManager
+from .autopilot import ApprovalRequest, ApprovalStatus, Autonomy, DelegationContract, MissionManager
 from .durable import DurableStore
-from .v32_governed_core import GovernedMission, GovernedAction
+from .v32_governed_core import GovernedAction, GovernedMission, GovernorDecision
 
 
 @dataclass(frozen=True)
@@ -34,9 +34,27 @@ class DurableMissionRuntime:
 
     def route(self, action, mission_id: str | None = None) -> GovernedAction:
         contract = self.store.load_mission(mission_id) if mission_id else None
+        if mission_id is not None and contract is None:
+            reasons = ("Mission inconnue : exécution refusée par défaut.",)
+            self.audit.record("runtime_block", "GOVERNOR", "BLOCKED", {"action_id": action.id, "mission_id": mission_id})
+            self._persist_new_audit_events()
+            return GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+        if contract is None and action.contract_id is not None:
+            reasons = ("Action liée à un contrat mais aucun contrat n'a été fourni.",)
+            self.audit.record("runtime_block", "GOVERNOR", "BLOCKED", {"action_id": action.id, "reason": reasons[0]})
+            self._persist_new_audit_events()
+            return GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+        if contract is not None:
+            if action.contract_id is not None and action.contract_id != contract.mission_id:
+                reasons = ("L'action ne correspond pas au contrat de mission fourni.",)
+                self.audit.record("runtime_block", "GOVERNOR", "BLOCKED", {"action_id": action.id, "mission_id": contract.mission_id, "contract_id": action.contract_id})
+                self._persist_new_audit_events()
+                return GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+            if action.contract_id is None:
+                from dataclasses import replace
+                action = replace(action, contract_id=contract.mission_id)
         result = self.governed.route(action, contract)
         if result.governor.approval_id:
-            from .autopilot import ApprovalRequest
             approval = ApprovalRequest(action.id, "; ".join(result.governor.reasons), id=result.governor.approval_id)
             self.store.save_approval(approval)
         self._persist_new_audit_events()
