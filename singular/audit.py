@@ -87,7 +87,10 @@ class AuditTrail:
         payload = dict(event.get("payload") or {})
         expected = payload.get("audit_fingerprint")
         if not expected:
-            return True
+            return False
+        required = ("id", "event_type", "actor", "outcome", "timestamp")
+        if any(key not in event for key in required):
+            return False
         candidate = AuditEvent(
             event_type=str(event["event_type"]),
             actor=str(event["actor"]),
