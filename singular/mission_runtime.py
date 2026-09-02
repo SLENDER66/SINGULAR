@@ -59,7 +59,6 @@ class DurableMissionRuntime:
                 return self._blocked(action, contract.mission_id, ("L'action ne correspond pas au contrat de mission fourni.",))
             if action.contract_id is None:
                 action = replace(action, contract_id=contract.mission_id)
-
         idempotency_key = self.store.idempotency_key("route", contract.mission_id if contract else "", action.id)
         fingerprint = self._action_fingerprint(action, contract.mission_id if contract else None)
         cached = self.store.get_idempotent(idempotency_key)
@@ -68,7 +67,6 @@ class DurableMissionRuntime:
             if stored_fingerprint != fingerprint:
                 raise ValueError("Identité d'action réutilisée avec un contenu différent.")
             return self._from_cached(action, cached)
-
         result = self.governed.route(action, contract)
         if result.governor.approval_id:
             approval = ApprovalRequest(action.id, "; ".join(result.governor.reasons), id=result.governor.approval_id)
@@ -90,10 +88,11 @@ class DurableMissionRuntime:
             return
         if mission_id is not None and self.store.get_mission_status(mission_id) != MissionStatus.WAITING_APPROVAL:
             raise ValueError("Une approbation n'est plus valide pour l'état actuel de la mission.")
-        # Approval must already contain the immutable native authorization record.
-        self.approval_integrity.get(approval_id)
-        if self.approval_integrity.get(approval_id)["action_fingerprint"] is None:
-            raise ValueError("Approbation sans empreintes natives : validation refusée.")
+        native = self.approval_integrity.get(approval_id)
+        if any(native[name] is None for name in native):
+            raise ValueError("Approbation sans empreintes natives complètes : validation refusée.")
+        if self.approval_bindings.fingerprint(approval_id) is None:
+            raise ValueError("Approbation sans liaison d'identité d'action : exécution refusée.")
         self.store.update_approval(approval_id, ApprovalStatus.APPROVED)
         if mission_id:
             self._set_status(mission_id, MissionStatus.PLANNED)
@@ -145,7 +144,6 @@ class DurableMissionRuntime:
 
     def _bind_approval(self, approval_id: str, action, contract: DelegationContract | None) -> None:
         self.approval_integrity.bind(approval_id, action, contract.mission_id if contract else None, contract)
-        # Keep the V40 binding as a compatibility/audit bridge during migration.
         self.approval_bindings.bind(approval_id, action.id, contract.mission_id if contract else None, self._action_fingerprint(action, contract.mission_id if contract else None))
 
     @classmethod
