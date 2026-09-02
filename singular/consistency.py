@@ -37,6 +37,10 @@ class CrossDomainConsistencyChecker:
             ).fetchall()
 
             violations: list[ConsistencyViolation] = []
+            has_effect_table = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='external_effects'"
+            ).fetchone() is not None
+
             for execution in executions:
                 key = execution["execution_key"]
                 mid = execution["mission_id"]
@@ -67,13 +71,15 @@ class CrossDomainConsistencyChecker:
                         mid,
                     ))
 
+                if not has_effect_table:
+                    continue
+
                 effects = conn.execute(
                     "SELECT provider_idempotency_key,status FROM external_effects WHERE execution_key=?",
                     (key,),
                 ).fetchall()
                 for effect in effects:
                     effect_status = effect["status"]
-                    effect_key = effect["provider_idempotency_key"]
                     if execution_status == "COMPLETED" and effect_status != "COMPLETED":
                         violations.append(ConsistencyViolation(
                             "EXECUTION_COMPLETED_WITH_NONCOMPLETED_EFFECT",
@@ -95,9 +101,6 @@ class CrossDomainConsistencyChecker:
                             key,
                             mid,
                         ))
-                    # effect_key is deliberately read above: retaining the concrete key makes
-                    # future diagnostics able to identify the exact external side effect.
-                    _ = effect_key
 
             return tuple(violations)
 
