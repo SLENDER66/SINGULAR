@@ -27,3 +27,29 @@ def test_red_and_black_actions_fail_closed(tmp_path: Path):
     assert red.governor.mode == Autonomy.BLOCK
     assert black.governor.mode == Autonomy.BLOCK
     assert runtime.store.pending_approvals() == ()
+
+
+def test_unknown_mission_fails_closed(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    result = runtime.route(ActionRequest("safe_action", "safe", 1, 1, 10), "MIS-DOES-NOT-EXIST")
+    assert result.governor.mode == Autonomy.BLOCK
+    assert result.allowed is False
+    assert runtime.store.pending_approvals() == ()
+
+
+def test_mismatched_action_contract_fails_closed(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("career", "application prepared")
+    action = ActionRequest("safe_action", "safe", 1, 1, 10, contract_id="MIS-WRONG")
+    result = runtime.route(action, contract.mission_id)
+    assert result.governor.mode == Autonomy.BLOCK
+    assert result.allowed is False
+    assert runtime.store.pending_approvals() == ()
+
+
+def test_action_is_bound_to_mission_contract(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("career", "application prepared")
+    action = ActionRequest("safe_action", "safe", 1, 1, 10)
+    result = runtime.route(action, contract.mission_id)
+    assert result.action.contract_id == contract.mission_id
