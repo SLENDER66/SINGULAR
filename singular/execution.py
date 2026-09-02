@@ -68,7 +68,7 @@ class DurableExecutionEngine:
         if governed.governor.mode == Autonomy.BLOCK or not governed.can_prepare:
             raise PermissionError("Action bloquée par la gouvernance.")
         if governed.governor.mode == Autonomy.PREPARE:
-            raise PermissionError("Action préparée mais non autorisée à l'exécution.")
+            raise PermissionError("Action is not executable: préparée mais non autorisée à l'exécution.")
         if not governed.can_execute:
             raise PermissionError("Action non autorisée à l'exécution par la politique de sécurité.")
 
@@ -79,6 +79,7 @@ class DurableExecutionEngine:
             approval = self.store.get_approval(approval_id)
             if approval.status != ApprovalStatus.APPROVED:
                 raise PermissionError("Action en attente d'une approbation humaine valide.")
+            self._validate_approval_binding(approval_id, action, mission_id)
 
         if governed.governor.mode not in (
             Autonomy.EXECUTE_REVERSIBLE,
@@ -123,6 +124,14 @@ class DurableExecutionEngine:
         )
         self.runtime._persist_new_audit_events()
         return ExecutionResult(key, mission_id, action.id, "COMPLETED", result=encoded)
+
+    def _validate_approval_binding(self, approval_id: str, action, mission_id: str) -> None:
+        expected = self.runtime._action_fingerprint(action, mission_id)
+        actual = self.runtime.approval_fingerprint(approval_id, self.store)
+        if actual is None:
+            raise PermissionError("Approbation sans liaison d'identité d'action : exécution refusée.")
+        if actual != expected:
+            raise PermissionError("Approbation invalide : l'action ou son contexte a changé depuis la validation humaine.")
 
     def _handle_existing_execution(self, key: str, existing: dict[str, Any]) -> ExecutionResult:
         if existing["status"] == "RUNNING":
