@@ -115,3 +115,28 @@ def test_sensitive_effect_still_requires_human_approval(tmp_path: Path):
 
     assert result.status == "COMPLETED"
     assert provider.execute_calls == 1
+
+
+def test_tampered_native_approval_binding_is_refused_before_provider_call(tmp_path: Path):
+    runtime, contract, engine = setup(tmp_path, autonomy=Autonomy.PREPARE)
+    action = ActionRequest("send_application", "send", 5, 6, 6)
+    provider = FakeProvider()
+
+    with pytest.raises(PermissionError):
+        engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+
+    runtime.route(action, contract.mission_id)
+    approval = runtime.store.pending_approvals(contract.mission_id)[0]
+    runtime.approve(approval.id)
+
+    with runtime.store._connect() as conn:
+        conn.execute(
+            "UPDATE approval_bindings SET action_fingerprint=? WHERE approval_id=?",
+            ("TAMPERED", approval.id),
+        )
+
+    with pytest.raises(PermissionError, match="action ou son contexte a changé"):
+        engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+
+    assert provider.execute_calls == 0
+    assert runtime.state(contract.mission_id).status == MissionStatus.PLANNED
