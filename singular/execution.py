@@ -94,7 +94,12 @@ class DurableExecutionEngine:
         if self.store.get_mission_status(mission_id) != MissionStatus.PLANNED:
             raise ValueError("La mission doit être PLANNED avant exécution.")
 
-        claimed = self.store.begin_execution(key, mission_id, action.id, self.execution_lease_seconds)
+        claimed = self.store.begin_execution_and_start_mission(
+            key,
+            mission_id,
+            action.id,
+            self.execution_lease_seconds,
+        )
         if not claimed["claimed"]:
             if claimed["status"] == "RUNNING":
                 raise ExecutionInProgress(key)
@@ -102,13 +107,11 @@ class DurableExecutionEngine:
                 raise ExecutionRecoveryRequired(key)
             return self._result_from_row(claimed)
 
-        self.runtime._set_status(mission_id, MissionStatus.RUNNING)
         try:
             value = handler(action)
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
-            self.store.finish_execution(key, "FAILED", error=message)
-            self.runtime._set_status(mission_id, MissionStatus.FAILED)
+            self.store.finish_execution_and_mission(key, "FAILED", error=message)
             self.runtime.audit.record(
                 "execution",
                 "EXECUTION",
@@ -119,8 +122,7 @@ class DurableExecutionEngine:
             return ExecutionResult(key, mission_id, action.id, "FAILED", error=message)
 
         encoded = json.loads(json.dumps(value, default=str))
-        self.store.finish_execution(key, "COMPLETED", result=encoded)
-        self.runtime._set_status(mission_id, MissionStatus.COMPLETED)
+        self.store.finish_execution_and_mission(key, "COMPLETED", result=encoded)
         self.runtime.audit.record(
             "execution",
             "EXECUTION",
