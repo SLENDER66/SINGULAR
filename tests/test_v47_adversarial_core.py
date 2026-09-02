@@ -1,11 +1,12 @@
 from pathlib import Path
+from threading import Event, Thread
 
 import pytest
 
 from singular.audit import AuditTrail
 from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
-from singular.execution import DurableExecutionEngine, ExecutionRecoveryRequired
+from singular.execution import DurableExecutionEngine, ExecutionInProgress, ExecutionRecoveryRequired
 from singular.effects import ExternalEffectCoordinator, ProviderResult
 from singular.mission_runtime import DurableMissionRuntime
 
@@ -102,6 +103,43 @@ def test_execution_key_cannot_change_action_under_same_mission(tmp_path: Path):
 
     with pytest.raises(ValueError, match="Identité d'exécution réutilisée"):
         store.begin_execution(key, mission.mission_id, second.id)
+
+
+def test_concurrent_workers_have_one_execution_owner(tmp_path: Path):
+    store = DurableStore(tmp_path / "s.db")
+    runtime = DurableMissionRuntime(store)
+    mission = runtime.create_mission("concurrent", "single owner", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "run", 1, 1, 10)
+    engine_a = DurableExecutionEngine(runtime)
+    engine_b = DurableExecutionEngine(DurableMissionRuntime(store))
+    started = Event()
+    release = Event()
+    calls = []
+    first_result = []
+
+    def handler(_):
+        calls.append("handler")
+        started.set()
+        assert release.wait(timeout=5)
+        return "ok"
+
+    def run_first():
+        first_result.append(engine_a.execute(action, mission.mission_id, handler))
+
+    worker = Thread(target=run_first)
+    worker.start()
+    assert started.wait(timeout=5)
+
+    with pytest.raises(ExecutionInProgress):
+        engine_b.execute(action, mission.mission_id, lambda _: pytest.fail("second worker must not execute"))
+
+    release.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert [result.status for result in first_result] == ["COMPLETED"]
+    assert calls == ["handler"]
+    assert store.get_execution(store_key(store, mission.mission_id, action.id))["status"] == "COMPLETED"
+    assert store.get_mission_status(mission.mission_id) == MissionStatus.COMPLETED
 
 
 def test_stale_execution_cannot_reexecute_after_restart(tmp_path: Path):
