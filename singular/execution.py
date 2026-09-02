@@ -65,8 +65,11 @@ class DurableExecutionEngine:
         if contract is None:
             raise KeyError(mission_id)
 
-        if governed.governor.mode == Autonomy.BLOCK:
+        if governed.governor.mode == Autonomy.BLOCK or not governed.can_prepare:
             raise PermissionError("Action bloquée par la gouvernance.")
+        if not governed.can_execute:
+            raise PermissionError("Action non autorisée à l'exécution par la politique de sécurité.")
+
         if governed.governor.mode == Autonomy.PREPARE:
             raise PermissionError("Action préparée mais non autorisée à l'exécution.")
 
