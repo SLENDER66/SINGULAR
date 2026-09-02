@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from singular.audit import AuditTrail
 from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
 from singular.execution import DurableExecutionEngine, ExecutionRecoveryRequired
@@ -58,6 +59,24 @@ def test_execution_identity_is_durable_and_tamper_evident(tmp_path: Path):
         engine.execute(action, mission.mission_id, lambda _: pytest.fail("tampered replay must not execute"))
 
 
+def test_missing_execution_identity_fails_closed_on_replay(tmp_path: Path):
+    store = DurableStore(tmp_path / "s.db")
+    runtime = DurableMissionRuntime(store)
+    mission = runtime.create_mission("identity-missing", "durable", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "run", 1, 1, 10)
+    engine = DurableExecutionEngine(runtime)
+    first = engine.execute(action, mission.mission_id, lambda _: "ok")
+    assert first.status == "COMPLETED"
+
+    execution_key = store.idempotency_key("execute", mission.mission_id, action.id)
+    identity_key = store.idempotency_key("execution_identity", execution_key)
+    with store._connect() as conn:
+        conn.execute("DELETE FROM idempotency WHERE key=?", (identity_key,))
+
+    with pytest.raises(PermissionError, match="Identité d'exécution absente"):
+        engine.execute(action, mission.mission_id, lambda _: pytest.fail("missing identity must not replay"))
+
+
 def test_execution_key_cannot_be_reused_across_missions(tmp_path: Path):
     store = DurableStore(tmp_path / "s.db")
     runtime = DurableMissionRuntime(store)
@@ -90,7 +109,6 @@ def test_stale_execution_cannot_reexecute_after_restart(tmp_path: Path):
     runtime = DurableMissionRuntime(DurableStore(db))
     mission = runtime.create_mission("stale", "recover", autonomy=Autonomy.EXECUTE_REVERSIBLE)
     action = ActionRequest("safe_action", "run", 1, 1, 10)
-    engine = DurableExecutionEngine(runtime)
     execution_key = store_key(runtime.store, mission.mission_id, action.id)
     runtime.store.begin_execution_and_start_mission(execution_key, mission.mission_id, action.id, lease_seconds=1)
     with runtime.store._connect() as conn:
@@ -149,6 +167,32 @@ def test_provider_ambiguity_never_retries_provider_execute(tmp_path: Path):
     assert uncertain.execute_calls == 1
     assert provider.execute_calls == 0
     assert provider.reconcile_calls == 1
+
+
+def test_persisted_audit_event_verifies_and_detects_payload_tampering(tmp_path: Path):
+    store = DurableStore(tmp_path / "s.db")
+    event = AuditTrail().record("execution", "TEST", "COMPLETED", {"mission_id": "M1", "value": 42})
+    store.record_audit(event)
+
+    persisted = dict(store.audit_events()[0])
+    assert AuditTrail.verify_persisted_event(persisted) is True
+
+    tampered = dict(persisted)
+    tampered["payload"] = dict(persisted["payload"])
+    tampered["payload"]["value"] = 43
+    assert AuditTrail.verify_persisted_event(tampered) is False
+
+
+def test_persisted_audit_event_without_fingerprint_fails_closed():
+    event = {
+        "id": "AUD-test",
+        "event_type": "execution",
+        "actor": "TEST",
+        "outcome": "COMPLETED",
+        "payload": {"mission_id": "M1"},
+        "timestamp": "2026-01-01T00:00:00+00:00",
+    }
+    assert AuditTrail.verify_persisted_event(event) is False
 
 
 def test_illegal_state_transition_remains_impossible(tmp_path: Path):
