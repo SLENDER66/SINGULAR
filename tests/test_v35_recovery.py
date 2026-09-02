@@ -71,3 +71,17 @@ def test_recovery_cannot_be_resolved_twice(tmp_path: Path):
 
     with pytest.raises(ValueError, match="RECOVERY_REQUIRED"):
         manager.resolve(key, RecoveryDecision.CONFIRM, result=True)
+
+
+def test_recovery_transaction_rolls_back_if_mission_cannot_finalize(tmp_path: Path):
+    store, _, contract, _, key = _quarantined(tmp_path)
+    store.set_mission_status(contract.mission_id, MissionStatus.COMPLETED)
+
+    with pytest.raises(ValueError, match="RUNNING"):
+        RecoveryManager(store).resolve(key, RecoveryDecision.CONFIRM, result=True)
+
+    execution = store.get_execution(key)
+    assert execution is not None
+    assert execution["status"] == "RECOVERY_REQUIRED"
+    assert execution["result"] is None
+    assert execution["finished_at"] is not None
