@@ -87,16 +87,19 @@ class DurableExecutionEngine:
         if actual != expected:
             raise PermissionError("Identité d'exécution réutilisée avec une autorité ou un contenu différent.")
 
+    def _prepare_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any) -> None:
+        """Bind identity only for a new execution; never recreate trust for an existing one."""
+        self._bind_execution_identity(key, action, mission_id, governed)
+
     def execute(self, action, mission_id: str, handler: Callable[[Any], Any]) -> ExecutionResult:
-        key = self.store.idempotency_key("execute", mission_id, action.id)
         governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
-        self._bind_execution_identity(key, action, mission_id, governed)
         existing = self.store.get_execution(key)
         if existing is not None:
             self._validate_execution_identity(key, action, mission_id, governed)
             return self._handle_existing_execution(key, existing)
+        self._prepare_execution_identity(key, action, mission_id, governed)
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
             self._validate_execution_identity(key, action, mission_id, governed)
@@ -114,11 +117,11 @@ class DurableExecutionEngine:
         governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
-        self._bind_execution_identity(key, action, mission_id, governed)
         existing = self.store.get_execution(key)
         if existing is not None:
             self._validate_execution_identity(key, action, mission_id, governed)
             return self._handle_existing_execution(key, existing)
+        self._prepare_execution_identity(key, action, mission_id, governed)
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
             self._validate_execution_identity(key, action, mission_id, governed)
