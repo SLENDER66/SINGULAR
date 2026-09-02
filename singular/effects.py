@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol
@@ -43,29 +44,63 @@ class ProviderResult:
 
 
 class EffectProvider(Protocol):
-    def execute(self, request: EffectRequest, idempotency_key: str) -> ProviderResult:
-        """Perform one external effect using the supplied provider idempotency key."""
+    def execute(self, request: EffectRequest, idempotency_key: str) -> ProviderResult: ...
 
-    def reconcile(self, request: EffectRequest, idempotency_key: str) -> ProviderResult:
-        """Resolve whether the externally addressed effect exists."""
+    def reconcile(self, request: EffectRequest, idempotency_key: str) -> ProviderResult: ...
 
 
 class ExternalEffectCoordinator:
-    """Durable boundary for external side effects; ambiguous outcomes never auto-retry."""
+    """Durable external-effect boundary; ambiguous outcomes never auto-retry."""
 
     def __init__(self, store: DurableStore) -> None:
         self.store = store
-        self.store.init_effect_schema()
+        self._init_schema()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.store.path, timeout=10.0)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_schema(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS external_effects (
+                    provider_idempotency_key TEXT PRIMARY KEY,
+                    execution_key TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    operation TEXT NOT NULL,
+                    payload_fingerprint TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    result TEXT,
+                    error TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
 
     def prepare(self, request: EffectRequest) -> dict[str, Any]:
         key = request.provider_idempotency_key
-        return self.store.begin_effect(
-            key,
-            request.execution_key,
-            request.provider,
-            request.operation,
-            request.payload_fingerprint,
-        )
+        now = self._now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO external_effects "
+                "(provider_idempotency_key,execution_key,provider,operation,payload_fingerprint,status,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (key, request.execution_key, request.provider, request.operation, request.payload_fingerprint,
+                 EffectStatus.INTENT.value, now, now),
+            )
+            row = conn.execute("SELECT * FROM external_effects WHERE provider_idempotency_key=?", (key,)).fetchone()
+        if row is None:
+            raise RuntimeError("L'intention d'effet externe n'a pas pu être persistée.")
+        existing = dict(row)
+        if any(existing[field] != getattr(request, field) for field in ("execution_key", "provider", "operation")):
+            raise ValueError("Clé d'idempotence fournisseur réutilisée avec un contexte différent.")
+        if existing["payload_fingerprint"] != request.payload_fingerprint:
+            raise ValueError("Clé d'idempotence fournisseur réutilisée avec un payload différent.")
+        existing["result"] = self._decode(existing.get("result"))
+        return existing
 
     def execute(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
         key = request.provider_idempotency_key
@@ -78,29 +113,27 @@ class ExternalEffectCoordinator:
         if status == EffectStatus.FAILED.value:
             return ProviderResult("FAILED", error=existing.get("error"))
 
-        self.store.mark_effect_in_flight(key)
+        self._transition(key, EffectStatus.IN_FLIGHT.value)
         try:
             outcome = provider.execute(request, key)
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
-            self.store.mark_effect_unknown(key, message)
+            self._transition(key, EffectStatus.UNKNOWN.value, error=message)
             return ProviderResult("UNKNOWN", error=message)
 
         normalized = ProviderResult(str(outcome.status), outcome.result, outcome.error)
         if normalized.status == EffectStatus.COMPLETED.value:
-            self.store.finish_effect(key, "COMPLETED", result=normalized.result)
+            self._transition(key, "COMPLETED", result=normalized.result)
         elif normalized.status == EffectStatus.FAILED.value:
-            self.store.finish_effect(key, "FAILED", error=normalized.error)
+            self._transition(key, "FAILED", error=normalized.error)
         else:
-            self.store.mark_effect_unknown(key, normalized.error or "Provider returned an ambiguous outcome")
+            self._transition(key, "UNKNOWN", result=normalized.result, error=normalized.error or "Provider returned an ambiguous outcome")
             return ProviderResult("UNKNOWN", normalized.result, normalized.error)
         return normalized
 
     def reconcile(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
         key = request.provider_idempotency_key
-        row = self.store.get_effect(key)
-        if row is None:
-            raise KeyError(key)
+        row = self.prepare(request)
         if row["status"] == EffectStatus.COMPLETED.value:
             return ProviderResult("COMPLETED", row.get("result"))
         if row["status"] != EffectStatus.UNKNOWN.value:
@@ -109,10 +142,37 @@ class ExternalEffectCoordinator:
         outcome = provider.reconcile(request, key)
         normalized = ProviderResult(str(outcome.status), outcome.result, outcome.error)
         if normalized.status == EffectStatus.COMPLETED.value:
-            self.store.finish_effect(key, "COMPLETED", result=normalized.result)
+            self._transition(key, "COMPLETED", result=normalized.result)
         elif normalized.status == EffectStatus.FAILED.value:
-            self.store.finish_effect(key, "FAILED", error=normalized.error)
+            self._transition(key, "FAILED", error=normalized.error)
         else:
-            self.store.mark_effect_unknown(key, normalized.error or "Provider reconciliation remains ambiguous")
+            self._transition(key, "UNKNOWN", result=normalized.result, error=normalized.error or "Provider reconciliation remains ambiguous")
             return ProviderResult("UNKNOWN", normalized.result, normalized.error)
         return normalized
+
+    def get(self, request: EffectRequest) -> dict[str, Any]:
+        return self.prepare(request)
+
+    def _transition(self, key: str, status: str, *, result: Any = None, error: str | None = None) -> None:
+        encoded = None if result is None else json.dumps(result, sort_keys=True, default=str)
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE external_effects SET status=?,result=?,error=?,updated_at=? WHERE provider_idempotency_key=?",
+                (status, encoded, error, self._now(), key),
+            )
+            if cur.rowcount != 1:
+                raise KeyError(key)
+
+    @staticmethod
+    def _decode(value: Any) -> Any:
+        if value is None or not isinstance(value, str):
+            return value
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    @staticmethod
+    def _now() -> str:
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc).isoformat()
