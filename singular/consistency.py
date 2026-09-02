@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__
 
 import sqlite3
 from dataclasses import dataclass
@@ -50,7 +50,7 @@ class CrossDomainConsistencyChecker:
                 for effect in effects:
                     effect_status = effect["status"]
                     if execution_status == "COMPLETED" and effect_status != "COMPLETED":
-                        violations.append(ConsistencyViolation("EXECUTION_COMPLETED_WITH_NONCOMPLETED_EFFECT", "Une exécution d'effet externe COMPLETED doit avoir un effet externe COMPLETED.", key, mid))
+                        violations.append(ConsistencyViolation("EXECUTION_COMPLETED_WITH_NONTERMINAL_EFFECT", "Une exécution COMPLETED ne peut pas rester rattachée à un effet externe non terminé.", key, mid))
                     if mission_status == "COMPLETED" and effect_status != "COMPLETED":
                         violations.append(ConsistencyViolation("MISSION_COMPLETED_WITH_NONCOMPLETED_EFFECT", "Une mission COMPLETED ne peut pas masquer un effet externe non terminé.", key, mid))
                     if effect_status == "COMPLETED" and execution_status in {"FAILED", "RECOVERY_REQUIRED"}:
