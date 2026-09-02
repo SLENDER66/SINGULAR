@@ -39,8 +39,15 @@ class GovernedAction:
     action: ActionRequest
     policy_tier: str
     governor: GovernorDecision
-    allowed: bool
+    can_prepare: bool
+    can_execute: bool
+    requires_human: bool
     reasons: tuple[str, ...]
+
+    @property
+    def allowed(self) -> bool:
+        """Compatibility alias; callers should use can_prepare/can_execute explicitly."""
+        return self.can_prepare
 
 
 class WorkforceRouter:
@@ -75,15 +82,43 @@ class GovernedExecutor:
 
     def route(self, action: ActionRequest, contract: DelegationContract | None = None) -> GovernedAction:
         policy = ActionPolicy.evaluate(action)
-        if not policy.allowed:
-            result = GovernedAction(action, policy.tier.value, GovernorDecision(action.id, Autonomy.BLOCK, policy.reasons), False, policy.reasons)
+        if not policy.can_prepare:
+            result = GovernedAction(
+                action,
+                policy.tier.value,
+                GovernorDecision(action.id, Autonomy.BLOCK, policy.reasons),
+                False,
+                False,
+                policy.requires_human,
+                policy.reasons,
+            )
             self.audit.record("governance_block", "GOVERNOR", "BLOCKED", {"action_id": action.id, "reasons": list(policy.reasons)})
             return result
         governed_action = replace(action, requires_human=True) if policy.requires_human else action
         decision = self.bus.submit(governed_action, contract)
-        allowed = decision.mode in {Autonomy.EXECUTE_REVERSIBLE, Autonomy.EXECUTE_AUTHORIZED, Autonomy.PREPARE}
-        result = GovernedAction(action, policy.tier.value, decision, allowed, decision.reasons)
-        self.audit.record("governance_route", "GOVERNOR", decision.mode.value, {"action_id": action.id, "policy_tier": policy.tier.value})
+        governor_can_execute = decision.mode in {
+            Autonomy.EXECUTE_REVERSIBLE,
+            Autonomy.EXECUTE_AUTHORIZED,
+            Autonomy.ESCALATE,
+        }
+        can_execute = policy.can_execute and governor_can_execute
+        if decision.mode == Autonomy.ESCALATE:
+            can_execute = policy.can_execute
+        result = GovernedAction(
+            action,
+            policy.tier.value,
+            decision,
+            can_prepare=True,
+            can_execute=can_execute,
+            requires_human=policy.requires_human or decision.mode == Autonomy.ESCALATE,
+            reasons=decision.reasons,
+        )
+        self.audit.record(
+            "governance_route",
+            "GOVERNOR",
+            decision.mode.value,
+            {"action_id": action.id, "policy_tier": policy.tier.value, "can_execute": can_execute},
+        )
         return result
 
 
@@ -130,5 +165,5 @@ class GovernedMission:
         if any(f.blocking for f in findings):
             reasons = tuple(f.statement for f in findings if f.blocking)
             self.executor.audit.record("red_team_block", "ADVERSARY_CORE", "BLOCKED", {"action_id": action.id, "reasons": list(reasons)})
-            return GovernedAction(action, "RED", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+            return GovernedAction(action, "RED", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, False, True, reasons)
         return self.executor.route(action, contract)
