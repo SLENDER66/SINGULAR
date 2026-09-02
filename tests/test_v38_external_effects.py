@@ -24,15 +24,25 @@ class FakeProvider:
         return self.outcome
 
 
-def request() -> EffectRequest:
-    return EffectRequest("execute-key", "fake-mail", "send", {"to": "a@example.com", "body": "hello"})
+def request(**overrides) -> EffectRequest:
+    values = {
+        "execution_key": "execute-key",
+        "provider": "fake-mail",
+        "operation": "send",
+        "payload": {"to": "a@example.com", "body": "hello"},
+        "action_fingerprint": "action-fp-1",
+    }
+    values.update(overrides)
+    return EffectRequest(**values)
 
 
-def test_provider_key_is_stable_and_payload_bound():
+def test_provider_key_is_stable_and_payload_is_bound_separately():
     first = request()
     second = request()
+    changed = request(payload={"body": "changed"})
     assert first.provider_idempotency_key == second.provider_idempotency_key
-    assert first.provider_idempotency_key != EffectRequest(first.execution_key, first.provider, first.operation, {"body": "changed"}).provider_idempotency_key
+    assert first.provider_idempotency_key == changed.provider_idempotency_key
+    assert first.payload_fingerprint != changed.payload_fingerprint
 
 
 def test_completed_effect_is_not_sent_twice(tmp_path: Path):
@@ -73,7 +83,15 @@ def test_same_provider_key_cannot_change_payload(tmp_path: Path):
     coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
     original = request()
     coordinator.prepare(original)
-    # Deliberately construct the same external key while changing the payload.
-    forged = EffectRequest(original.execution_key, original.provider, original.operation, {"to": "attacker@example.com"})
+    forged = request(payload={"to": "attacker@example.com"})
     with pytest.raises(ValueError, match="payload différent"):
+        coordinator.prepare(forged)
+
+
+def test_same_provider_key_cannot_change_action_identity(tmp_path: Path):
+    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    original = request()
+    coordinator.prepare(original)
+    forged = request(action_fingerprint="forged-action")
+    with pytest.raises(ValueError, match="identité d'action différente"):
         coordinator.prepare(forged)
