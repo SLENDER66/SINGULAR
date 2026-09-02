@@ -146,6 +146,7 @@ def test_stale_execution_cannot_reexecute_after_restart(tmp_path: Path):
     db = tmp_path / "s.db"
     runtime = DurableMissionRuntime(DurableStore(db))
     mission = runtime.create_mission("stale", "recover", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    runtime.store.set_mission_status(mission.mission_id, MissionStatus.PLANNED)
     action = ActionRequest("safe_action", "run", 1, 1, 10)
     execution_key = store_key(runtime.store, mission.mission_id, action.id)
     runtime.store.begin_execution_and_start_mission(execution_key, mission.mission_id, action.id, lease_seconds=1)
@@ -164,6 +165,7 @@ def test_recovery_required_is_quarantined_and_requires_explicit_resolution(tmp_p
     db = tmp_path / "s.db"
     runtime = DurableMissionRuntime(DurableStore(db))
     mission = runtime.create_mission("ambiguous", "recover", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    runtime.store.set_mission_status(mission.mission_id, MissionStatus.PLANNED)
     action = ActionRequest("safe_action", "run", 1, 1, 10)
     engine = DurableExecutionEngine(runtime)
     execution_key = store_key(runtime.store, mission.mission_id, action.id)
