@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+
 class OpenAIRuntimeUnavailable(RuntimeError):
     pass
 
+
 def build_runtime(model: str = "gpt-5"):
-    """Optional OpenAI Agents SDK adapter. Kept separate from SINGULAR's deterministic policy core."""
+    """Optional OpenAI Agents SDK adapter kept outside deterministic policy logic."""
     try:
-        from agents import Agent, Runner  # type: ignore
+        from agents import Agent, Runner
     except ImportError as exc:
         raise OpenAIRuntimeUnavailable(
             "Install the current openai-agents package to enable the LLM runtime."
