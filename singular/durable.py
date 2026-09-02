@@ -289,9 +289,10 @@ class DurableStore:
                 result = dict(existing)
                 result["claimed"] = False
                 return result
-            current = MissionStatus(conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()["status"])
-            if current == MissionStatus.CREATED:
-                self._transition_mission_status(conn, mission_id, MissionStatus.PLANNED, expected_current=MissionStatus.CREATED)
+            current_row = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()
+            if current_row is None:
+                raise KeyError(mission_id)
+            current = MissionStatus(current_row["status"])
             self._transition_mission_status(conn, mission_id, MissionStatus.RUNNING, expected_current=MissionStatus.PLANNED)
             conn.execute("INSERT INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)", (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until))
             row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
