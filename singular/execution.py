@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from .autopilot import ApprovalStatus, Autonomy
 from .durable import DurableStore, MissionStatus
@@ -37,6 +38,13 @@ class DurableExecutionEngine:
         mission_id: str,
         handler: Callable[[Any], Any],
     ) -> ExecutionResult:
+        key = self.store.idempotency_key("execute", mission_id, action.id)
+        existing = self.store.get_execution(key)
+        if existing is not None:
+            if existing["status"] == "RUNNING":
+                raise ExecutionInProgress(key)
+            return self._result_from_row(existing)
+
         governed = self.runtime.route(action, mission_id)
         contract = self.store.load_mission(mission_id)
         if contract is None:
@@ -61,13 +69,6 @@ class DurableExecutionEngine:
             Autonomy.ESCALATE,
         ):
             raise PermissionError("Mode de gouvernance non exécutable.")
-
-        key = self.store.idempotency_key("execute", mission_id, action.id)
-        existing = self.store.get_execution(key)
-        if existing is not None:
-            if existing["status"] == "RUNNING":
-                raise ExecutionInProgress(key)
-            return self._result_from_row(existing)
 
         if self.store.get_mission_status(mission_id) != MissionStatus.PLANNED:
             raise ValueError("La mission doit être PLANNED avant exécution.")
