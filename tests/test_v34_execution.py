@@ -88,6 +88,7 @@ def test_running_execution_cannot_be_taken_over(tmp_path: Path):
     first = DurableMissionRuntime(DurableStore(db))
     contract = first.create_mission("safe automation", "done", autonomy=Autonomy.EXECUTE_REVERSIBLE)
     action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    first._set_status(contract.mission_id, MissionStatus.PLANNED)
     key = first.store.idempotency_key("execute", contract.mission_id, action.id)
     first.store.begin_execution(key, contract.mission_id, action.id)
     first._set_status(contract.mission_id, MissionStatus.RUNNING)
