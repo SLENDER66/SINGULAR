@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from singular.autopilot import ActionRequest
+from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
 from singular.effects import EffectRequest, ExternalEffectCoordinator, ProviderResult
 from singular.execution import DurableExecutionEngine
@@ -26,7 +26,7 @@ class FakeProvider:
 
 def setup(tmp_path: Path):
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
-    contract = runtime.create_mission("external effect", "provider outcome")
+    contract = runtime.create_mission("external effect", "provider outcome", autonomy=Autonomy.EXECUTE_REVERSIBLE)
     coordinator = ExternalEffectCoordinator(runtime.store)
     engine = DurableExecutionEngine(runtime, effect_coordinator=coordinator)
     action = ActionRequest("safe_action", "send", 1, 1, 10)
@@ -40,17 +40,17 @@ def reset_to_running(store: DurableStore, mission_id: str, execution_key: str) -
 
 
 def test_completed_external_effect_repairs_running_execution_without_reexecution(tmp_path: Path):
-    runtime, contract, engine, coordinator, action = setup(tmp_path)
+    runtime, contract, _engine, coordinator, action = setup(tmp_path)
     provider = FakeProvider(ProviderResult("COMPLETED", {"provider_id": "one"}))
 
-    first = engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    first = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
     assert first.status == "COMPLETED"
     assert provider.execute_calls == 1
 
     key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
     reset_to_running(runtime.store, contract.mission_id, key)
 
-    replay = engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    replay = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
 
     assert replay.status == "COMPLETED"
     assert replay.result == {"provider_id": "one"}
@@ -60,17 +60,17 @@ def test_completed_external_effect_repairs_running_execution_without_reexecution
 
 
 def test_failed_external_effect_repairs_running_execution_without_reexecution(tmp_path: Path):
-    runtime, contract, engine, coordinator, action = setup(tmp_path)
+    runtime, contract, _engine, coordinator, action = setup(tmp_path)
     provider = FakeProvider(ProviderResult("FAILED", error="provider rejected"))
 
-    first = engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    first = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
     assert first.status == "FAILED"
     assert provider.execute_calls == 1
 
     key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
     reset_to_running(runtime.store, contract.mission_id, key)
 
-    replay = engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    replay = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
 
     assert replay.status == "FAILED"
     assert replay.error == "provider rejected"
@@ -79,17 +79,17 @@ def test_failed_external_effect_repairs_running_execution_without_reexecution(tm
 
 
 def test_unknown_external_effect_quarantines_running_execution_without_reexecution(tmp_path: Path):
-    runtime, contract, engine, coordinator, action = setup(tmp_path)
+    runtime, contract, _engine, coordinator, action = setup(tmp_path)
     provider = FakeProvider(ProviderResult("UNKNOWN", error="ambiguous"))
 
-    first = engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    first = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
     assert first.status == "RECOVERY_REQUIRED"
     assert provider.execute_calls == 1
 
     key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
     reset_to_running(runtime.store, contract.mission_id, key)
 
-    replay = engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
+    replay = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
 
     assert replay.status == "RECOVERY_REQUIRED"
     assert replay.error == "ambiguous"
@@ -98,7 +98,7 @@ def test_unknown_external_effect_quarantines_running_execution_without_reexecuti
 
 
 def test_peek_does_not_create_missing_effect_intent(tmp_path: Path):
-    runtime, contract, engine, coordinator, action = setup(tmp_path)
+    runtime, contract, _engine, coordinator, action = setup(tmp_path)
     key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
     request = EffectRequest(
         execution_key=key,
