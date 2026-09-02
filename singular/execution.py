@@ -53,9 +53,6 @@ class DurableExecutionEngine:
         try:
             governed = self.runtime.route(action, mission_id)
         except ValueError:
-            # Another worker may have atomically claimed the same execution between
-            # the initial replay check and routing. Reconcile from durable execution
-            # state before surfacing the mission transition error.
             existing = self.store.get_execution(key)
             if existing is not None:
                 return self._handle_existing_execution(key, existing)
@@ -64,6 +61,11 @@ class DurableExecutionEngine:
         contract = self.store.load_mission(mission_id)
         if contract is None:
             raise KeyError(mission_id)
+
+        # Runtime routing canonicalizes the action identity by binding it to the
+        # mission contract. Approval fingerprints are computed over that canonical
+        # action, so validation and execution must use the same representation.
+        action = governed.action
 
         if governed.governor.mode == Autonomy.BLOCK or not governed.can_prepare:
             raise PermissionError("Action bloquée par la gouvernance.")
