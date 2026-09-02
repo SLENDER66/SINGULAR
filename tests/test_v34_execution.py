@@ -4,7 +4,7 @@ import pytest
 
 from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
-from singular.execution import DurableExecutionEngine, ExecutionInProgress
+from singular.execution import DurableExecutionEngine
 from singular.mission_runtime import DurableMissionRuntime
 
 
@@ -32,10 +32,13 @@ def test_execution_failure_is_durable_and_mission_fails(tmp_path: Path):
     action = ActionRequest("safe_action", "execute", 1, 1, 10)
     engine = DurableExecutionEngine(runtime)
 
-    result = engine.execute(action, contract.mission_id, lambda a: (_ for _ in ()).throw(RuntimeError("boom")))
+    def fail(_):
+        raise RuntimeError("boom")
+
+    result = engine.execute(action, contract.mission_id, fail)
 
     assert result.status == "FAILED"
-    assert "RuntimeError: boom" == result.error
+    assert result.error == "RuntimeError: boom"
     assert runtime.state(contract.mission_id).status == MissionStatus.FAILED
     assert runtime.store.get_execution(result.execution_key)["status"] == "FAILED"
 
@@ -80,15 +83,18 @@ def test_pending_escalation_cannot_execute(tmp_path: Path):
     assert runtime.state(contract.mission_id).status == MissionStatus.WAITING_APPROVAL
 
 
-def test_execution_claim_is_single_writer(tmp_path: Path):
-    store = DurableStore(tmp_path / "s.db")
-    key = store.idempotency_key("execute", "MIS-1", "ACT-1")
-    first = store.begin_execution(key, "MIS-1", "ACT-1")
-    second = store.begin_execution(key, "MIS-1", "ACT-1")
+def test_running_execution_can_be_recovered_as_canonical_state(tmp_path: Path):
+    db = tmp_path / "s.db"
+    first = DurableMissionRuntime(DurableStore(db))
+    contract = first.create_mission("safe automation", "done", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    key = first.store.idempotency_key("execute", contract.mission_id, action.id)
+    first.store.begin_execution(key, contract.mission_id, action.id)
 
-    assert first["status"] == "RUNNING"
-    assert second["status"] == "RUNNING"
-    assert first["started_at"] == second["started_at"]
+    second = DurableMissionRuntime(DurableStore(db))
+    row = second.store.get_execution(key)
 
-    with pytest.raises(ExecutionInProgress):
-        raise ExecutionInProgress(key)
+    assert row is not None
+    assert row["status"] == "RUNNING"
+    assert row["mission_id"] == contract.mission_id
+    assert row["action_id"] == action.id
