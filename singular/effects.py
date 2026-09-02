@@ -226,6 +226,8 @@ class ExternalEffectCoordinator:
                 raise KeyError(key)
             current = row["status"]
             if status != current and status not in self._TRANSITIONS.get(current, frozenset()):
+                if current in {EffectStatus.COMPLETED.value, EffectStatus.FAILED.value}:
+                    raise RuntimeError(f"Transition d'effet perdue : état terminal déjà atteint ({current} -> {status}).")
                 raise ValueError(f"Transition d'effet interdite : {current} -> {status}")
             encoded = None if result is None else json.dumps(result, sort_keys=True, default=str)
             cur = conn.execute(
