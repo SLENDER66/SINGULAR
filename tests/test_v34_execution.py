@@ -90,7 +90,7 @@ def test_approval_is_bound_to_exact_action_fingerprint(tmp_path: Path):
         id=action.id,
     )
 
-    with pytest.raises(PermissionError, match="action ou son contexte a changé"):
+    with pytest.raises(ValueError, match="Identité d'action réutilisée"):
         DurableExecutionEngine(runtime).execute(changed, contract.mission_id, lambda a: "must not run")
 
     assert runtime.state(contract.mission_id).status == MissionStatus.PLANNED
@@ -107,10 +107,12 @@ def test_approval_without_binding_fails_closed(tmp_path: Path):
     binding_key = runtime._approval_binding_key(approval.id)
     with runtime.store._connect() as conn:
         conn.execute("DELETE FROM idempotency WHERE key=?", (binding_key,))
-    runtime.approve(approval.id)
 
-    with pytest.raises(PermissionError, match="liaison d'identité"):
-        DurableExecutionEngine(runtime).execute(action, contract.mission_id, lambda a: "must not run")
+    with pytest.raises(ValueError, match="liaison d'identité"):
+        runtime.approve(approval.id)
+
+    assert runtime.store.get_approval(approval.id).status.value == "PENDING"
+    assert runtime.state(contract.mission_id).status == MissionStatus.WAITING_APPROVAL
 
 
 def test_pending_escalation_cannot_execute(tmp_path: Path):
