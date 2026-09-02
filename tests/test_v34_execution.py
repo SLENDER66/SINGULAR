@@ -151,3 +151,51 @@ def test_live_execution_lease_is_not_quarantined(tmp_path: Path):
         DurableExecutionEngine(runtime).execute(action, contract.mission_id, lambda a: True)
 
     assert runtime.store.get_execution(key)["status"] == "RUNNING"
+
+
+def test_atomic_start_cannot_leave_orphan_execution(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("atomic start", "running", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
+
+    with pytest.raises(ValueError, match="PLANNED"):
+        runtime.store.begin_execution_and_start_mission(key, contract.mission_id, action.id)
+
+    assert runtime.state(contract.mission_id).status == MissionStatus.CREATED
+    assert runtime.store.get_execution(key) is None
+
+
+def test_atomic_start_and_finish_keep_states_consistent(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("atomic lifecycle", "done", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
+    runtime._set_status(contract.mission_id, MissionStatus.PLANNED)
+
+    started = runtime.store.begin_execution_and_start_mission(key, contract.mission_id, action.id)
+    assert started["claimed"] is True
+    assert started["status"] == "RUNNING"
+    assert runtime.state(contract.mission_id).status == MissionStatus.RUNNING
+
+    finished = runtime.store.finish_execution_and_mission(key, "COMPLETED", result={"ok": True})
+    assert finished["status"] == "COMPLETED"
+    assert runtime.state(contract.mission_id).status == MissionStatus.COMPLETED
+
+
+def test_atomic_finish_rejects_non_running_mission_without_partial_completion(tmp_path: Path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
+    contract = runtime.create_mission("atomic finish", "done", autonomy=Autonomy.EXECUTE_REVERSIBLE)
+    action = ActionRequest("safe_action", "execute", 1, 1, 10)
+    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
+
+    runtime._set_status(contract.mission_id, MissionStatus.PLANNED)
+    runtime.store.begin_execution(key, contract.mission_id, action.id)
+
+    with pytest.raises(ValueError, match="RUNNING"):
+        runtime.store.finish_execution_and_mission(key, "COMPLETED", result={"ok": True})
+
+    row = runtime.store.get_execution(key)
+    assert row is not None
+    assert row["status"] == "RUNNING"
+    assert runtime.state(contract.mission_id).status == MissionStatus.PLANNED
