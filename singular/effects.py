@@ -24,6 +24,7 @@ class EffectRequest:
     provider: str
     operation: str
     payload: Any
+    action_fingerprint: str | None = None
 
     @property
     def payload_fingerprint(self) -> str:
@@ -32,9 +33,9 @@ class EffectRequest:
 
     @property
     def provider_idempotency_key(self) -> str:
-        # The operation identity deliberately excludes the payload. The payload is
-        # stored and checked separately, so reusing an operation key with altered
-        # arguments fails closed instead of silently creating a second effect.
+        # Keep the provider key stable for a given execution operation. Payload and
+        # action identity are stored separately so reuse with changed inputs fails
+        # closed instead of silently creating a second external effect.
         material = "\x1f".join((self.execution_key, self.provider, self.operation))
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -73,6 +74,7 @@ class ExternalEffectCoordinator:
                     execution_key TEXT NOT NULL,
                     provider TEXT NOT NULL,
                     operation TEXT NOT NULL,
+                    action_fingerprint TEXT,
                     payload_fingerprint TEXT NOT NULL,
                     status TEXT NOT NULL,
                     result TEXT,
@@ -82,6 +84,9 @@ class ExternalEffectCoordinator:
                 )
                 """
             )
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(external_effects)")}
+            if "action_fingerprint" not in columns:
+                conn.execute("ALTER TABLE external_effects ADD COLUMN action_fingerprint TEXT")
 
     def prepare(self, request: EffectRequest) -> dict[str, Any]:
         key = request.provider_idempotency_key
@@ -89,17 +94,20 @@ class ExternalEffectCoordinator:
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO external_effects "
-                "(provider_idempotency_key,execution_key,provider,operation,payload_fingerprint,status,created_at,updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (key, request.execution_key, request.provider, request.operation, request.payload_fingerprint,
-                 EffectStatus.INTENT.value, now, now),
+                "(provider_idempotency_key,execution_key,provider,operation,action_fingerprint,payload_fingerprint,status,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (key, request.execution_key, request.provider, request.operation, request.action_fingerprint,
+                 request.payload_fingerprint, EffectStatus.INTENT.value, now, now),
             )
             row = conn.execute("SELECT * FROM external_effects WHERE provider_idempotency_key=?", (key,)).fetchone()
         if row is None:
             raise RuntimeError("L'intention d'effet externe n'a pas pu être persistée.")
         existing = dict(row)
-        if any(existing[field] != getattr(request, field) for field in ("execution_key", "provider", "operation")):
-            raise ValueError("Clé d'idempotence fournisseur réutilisée avec un contexte différent.")
+        for field in ("execution_key", "provider", "operation"):
+            if existing[field] != getattr(request, field):
+                raise ValueError("Clé d'idempotence fournisseur réutilisée avec un contexte différent.")
+        if existing["action_fingerprint"] != request.action_fingerprint:
+            raise ValueError("Effet externe réutilisé avec une identité d'action différente.")
         if existing["payload_fingerprint"] != request.payload_fingerprint:
             raise ValueError("Clé d'idempotence fournisseur réutilisée avec un payload différent.")
         existing["result"] = self._decode(existing.get("result"))
