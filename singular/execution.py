@@ -61,10 +61,17 @@ class DurableExecutionEngine:
             Autonomy.ESCALATE,
         ):
             raise PermissionError("Mode de gouvernance non exécutable.")
+
+        key = self.store.idempotency_key("execute", mission_id, action.id)
+        existing = self.store.get_execution(key)
+        if existing is not None:
+            if existing["status"] == "RUNNING":
+                raise ExecutionInProgress(key)
+            return self._result_from_row(existing)
+
         if self.store.get_mission_status(mission_id) != MissionStatus.PLANNED:
             raise ValueError("La mission doit être PLANNED avant exécution.")
 
-        key = self.store.idempotency_key("execute", mission_id, action.id)
         claimed = self.store.begin_execution(key, mission_id, action.id)
         if not claimed["claimed"]:
             if claimed["status"] == "RUNNING":
