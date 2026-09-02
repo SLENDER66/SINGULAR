@@ -10,7 +10,7 @@ from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
 from .audit import AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, Autonomy, DelegationContract
-from .durable import DurableStore, MissionStatus
+from .durable import DurableStore, MissionStatus, MISSION_TRANSITIONS
 from .v32_governed_core import GovernedAction, GovernedMission, GovernorDecision
 
 
@@ -23,15 +23,6 @@ class MissionState:
 
 class DurableMissionRuntime:
     """Durable orchestration seam: restart-safe state, approvals, audit and replay safety."""
-
-    _TRANSITIONS: dict[MissionStatus, frozenset[MissionStatus]] = {
-        MissionStatus.CREATED: frozenset({MissionStatus.PLANNED, MissionStatus.WAITING_APPROVAL, MissionStatus.BLOCKED, MissionStatus.CANCELLED}),
-        MissionStatus.PLANNED: frozenset({MissionStatus.RUNNING, MissionStatus.WAITING_APPROVAL, MissionStatus.BLOCKED, MissionStatus.CANCELLED}),
-        MissionStatus.RUNNING: frozenset({MissionStatus.COMPLETED, MissionStatus.FAILED, MissionStatus.CANCELLED}),
-        MissionStatus.WAITING_APPROVAL: frozenset({MissionStatus.PLANNED, MissionStatus.BLOCKED, MissionStatus.CANCELLED}),
-        MissionStatus.BLOCKED: frozenset(), MissionStatus.COMPLETED: frozenset(),
-        MissionStatus.FAILED: frozenset({MissionStatus.PLANNED, MissionStatus.CANCELLED}), MissionStatus.CANCELLED: frozenset(),
-    }
 
     def __init__(self, store: DurableStore | None = None) -> None:
         self.store = store or DurableStore()
@@ -145,7 +136,7 @@ class DurableMissionRuntime:
         current = self.store.get_mission_status(mission_id)
         if current == target:
             return
-        if target not in self._TRANSITIONS[current]:
+        if target not in MISSION_TRANSITIONS[current]:
             raise ValueError(f"Transition de mission interdite : {current.value} -> {target.value}")
         self.store.set_mission_status(mission_id, target)
 
