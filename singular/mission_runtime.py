@@ -18,7 +18,18 @@ class MissionState:
 
 
 class DurableMissionRuntime:
-    """Durable orchestration seam: restart-safe state, approvals and audit."""
+    """Durable orchestration seam: restart-safe state, approvals, audit and replay safety."""
+
+    _TRANSITIONS: dict[MissionStatus, frozenset[MissionStatus]] = {
+        MissionStatus.CREATED: frozenset({MissionStatus.PLANNED, MissionStatus.WAITING_APPROVAL, MissionStatus.BLOCKED, MissionStatus.CANCELLED}),
+        MissionStatus.PLANNED: frozenset({MissionStatus.RUNNING, MissionStatus.WAITING_APPROVAL, MissionStatus.BLOCKED, MissionStatus.CANCELLED}),
+        MissionStatus.RUNNING: frozenset({MissionStatus.COMPLETED, MissionStatus.FAILED, MissionStatus.CANCELLED}),
+        MissionStatus.WAITING_APPROVAL: frozenset({MissionStatus.PLANNED, MissionStatus.BLOCKED, MissionStatus.CANCELLED}),
+        MissionStatus.BLOCKED: frozenset(),
+        MissionStatus.COMPLETED: frozenset(),
+        MissionStatus.FAILED: frozenset({MissionStatus.PLANNED, MissionStatus.CANCELLED}),
+        MissionStatus.CANCELLED: frozenset(),
+    }
 
     def __init__(self, store: DurableStore | None = None) -> None:
         self.store = store or DurableStore()
@@ -41,50 +52,62 @@ class DurableMissionRuntime:
         contract = self.store.load_mission(mission_id) if mission_id else None
         if mission_id is not None and contract is None:
             reasons = ("Mission inconnue : exécution refusée par défaut.",)
-            self.audit.record("runtime_block", "GOVERNOR", MissionStatus.BLOCKED.value, {"action_id": action.id, "mission_id": mission_id})
-            self._persist_new_audit_events()
-            return GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+            return self._blocked(action, mission_id, reasons)
         if contract is None and action.contract_id is not None:
             reasons = ("Action liée à un contrat mais aucun contrat n'a été fourni.",)
-            self.audit.record("runtime_block", "GOVERNOR", MissionStatus.BLOCKED.value, {"action_id": action.id, "reason": reasons[0]})
-            self._persist_new_audit_events()
-            return GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+            return self._blocked(action, None, reasons)
+
         if contract is not None:
             if action.contract_id is not None and action.contract_id != contract.mission_id:
                 reasons = ("L'action ne correspond pas au contrat de mission fourni.",)
-                self.audit.record("runtime_block", "GOVERNOR", MissionStatus.BLOCKED.value, {"action_id": action.id, "mission_id": contract.mission_id, "contract_id": action.contract_id})
-                self._persist_new_audit_events()
-                self.store.set_mission_status(contract.mission_id, MissionStatus.BLOCKED)
-                return GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+                self._set_status(contract.mission_id, MissionStatus.BLOCKED)
+                return self._blocked(action, contract.mission_id, reasons)
             if action.contract_id is None:
                 action = replace(action, contract_id=contract.mission_id)
+
+        idempotency_key = self.store.idempotency_key("route", contract.mission_id if contract else "", action.id)
+        cached = self.store.get_idempotent(idempotency_key)
+        if cached is not None:
+            return self._from_cached(action, cached)
+
         result = self.governed.route(action, contract)
         if result.governor.approval_id:
             approval = ApprovalRequest(action.id, "; ".join(result.governor.reasons), id=result.governor.approval_id)
             self.store.save_approval(approval, contract.mission_id if contract else None)
         if contract is not None:
-            if result.governor.mode == Autonomy.ESCALATE:
-                self.store.set_mission_status(contract.mission_id, MissionStatus.WAITING_APPROVAL)
-            elif result.governor.mode == Autonomy.BLOCK:
-                self.store.set_mission_status(contract.mission_id, MissionStatus.BLOCKED)
-            else:
-                self.store.set_mission_status(contract.mission_id, MissionStatus.PLANNED)
+            target = {
+                Autonomy.ESCALATE: MissionStatus.WAITING_APPROVAL,
+                Autonomy.BLOCK: MissionStatus.BLOCKED,
+            }.get(result.governor.mode, MissionStatus.PLANNED)
+            self._set_status(contract.mission_id, target)
+
+        cached_result = self.store.put_idempotent(idempotency_key, self._cache(result))
         self._persist_new_audit_events()
-        return result
+        return self._from_cached(action, cached_result)
 
     def approve(self, approval_id: str) -> None:
+        approval = self.store.get_approval(approval_id)
         mission_id = self.store.get_approval_mission(approval_id)
+        if approval.status == ApprovalStatus.REJECTED:
+            raise ValueError("Une approbation rejetée ne peut pas être réouverte.")
+        if approval.status == ApprovalStatus.APPROVED:
+            return
         self.store.update_approval(approval_id, ApprovalStatus.APPROVED)
         if mission_id:
-            self.store.set_mission_status(mission_id, MissionStatus.PLANNED)
+            self._set_status(mission_id, MissionStatus.PLANNED)
         self.audit.record("approval", "HUMAN", "APPROVED", {"approval_id": approval_id, "mission_id": mission_id})
         self._persist_new_audit_events()
 
     def reject(self, approval_id: str) -> None:
+        approval = self.store.get_approval(approval_id)
         mission_id = self.store.get_approval_mission(approval_id)
+        if approval.status == ApprovalStatus.REJECTED:
+            return
+        if approval.status == ApprovalStatus.APPROVED:
+            raise ValueError("Une approbation déjà validée ne peut pas être rejetée.")
         self.store.update_approval(approval_id, ApprovalStatus.REJECTED)
         if mission_id:
-            self.store.set_mission_status(mission_id, MissionStatus.BLOCKED)
+            self._set_status(mission_id, MissionStatus.BLOCKED)
         self.audit.record("approval", "HUMAN", "REJECTED", {"approval_id": approval_id, "mission_id": mission_id})
         self._persist_new_audit_events()
 
@@ -93,6 +116,42 @@ class DurableMissionRuntime:
         if contract is None:
             raise KeyError(mission_id)
         return MissionState(mission_id, self.store.get_mission_status(mission_id), len(self.store.pending_approvals(mission_id)))
+
+    def _set_status(self, mission_id: str, target: MissionStatus) -> None:
+        current = self.store.get_mission_status(mission_id)
+        if current == target:
+            return
+        if target not in self._TRANSITIONS[current]:
+            raise ValueError(f"Transition de mission interdite : {current.value} -> {target.value}")
+        self.store.set_mission_status(mission_id, target)
+
+    def _blocked(self, action, mission_id: str | None, reasons: tuple[str, ...]) -> GovernedAction:
+        self.audit.record("runtime_block", "GOVERNOR", MissionStatus.BLOCKED.value, {"action_id": action.id, "mission_id": mission_id, "reasons": list(reasons)})
+        if mission_id is not None:
+            self._set_status(mission_id, MissionStatus.BLOCKED)
+        result = GovernedAction(action, "BLACK", GovernorDecision(action.id, Autonomy.BLOCK, reasons), False, reasons)
+        self._persist_new_audit_events()
+        return result
+
+    @staticmethod
+    def _cache(result: GovernedAction) -> dict[str, Any]:
+        return {
+            "policy_tier": result.policy_tier,
+            "mode": result.governor.mode.value,
+            "reasons": list(result.reasons),
+            "approval_id": result.governor.approval_id,
+            "allowed": result.allowed,
+        }
+
+    @staticmethod
+    def _from_cached(action, cached: dict[str, Any]) -> GovernedAction:
+        decision = GovernorDecision(
+            action.id,
+            Autonomy(cached["mode"]),
+            tuple(cached["reasons"]),
+            cached.get("approval_id"),
+        )
+        return GovernedAction(action, cached["policy_tier"], decision, bool(cached["allowed"]), tuple(cached["reasons"]))
 
     def _persist_new_audit_events(self) -> None:
         for event in self.audit.events():
