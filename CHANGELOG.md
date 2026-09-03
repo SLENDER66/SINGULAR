@@ -5,10 +5,13 @@
 - Made durable execution itself require a valid, active `DecisionAttestationStore` record; the inner executor can no longer bypass durable issuance/revocation checks.
 - Bound durable execution identities to the exact `ValidatedTrajectoryDecision.context_fingerprint`, preventing a distinct decision context from reusing the same mission/action execution identity.
 - Routed handler execution, external-effect execution and external-effect reconciliation through the strict validated boundary surface.
-- Added a static/dynamic `ExecutionBoundaryAuditor` for production call-site bypass detection and deny-by-default raw API probes.
-- Strengthened historical reasoning so contested evidence remains counterevidence instead of inflating support.
+- Added a static/dynamic `ExecutionBoundaryAuditor` for production call-site bypass detection, direct inner-executor detection and deny-by-default raw API probes.
+- Added a canonical `ValidatedDecisionService` lifecycle surface so production callers can build, attest, execute and revoke decisions without manually sequencing security-critical primitives.
+- Added a durable outcome ledger that binds forecast, actual outcome, execution status and decision context for calibration and replay-safe learning.
+- Added a human-reviewed learning proposal queue and a bounded self-improvement engine; measured error can produce strategy tests, but never automatic policy or authorization mutation.
+- Strengthened historical reasoning so contested evidence remains counterevidence instead of inflating pattern support.
 - Added explicit temporal forecast signals for collective cognition while preserving a non-authorizing boundary.
-- Expanded adversarial tests for attestation, restart, replay identity, external-effect routing and temporal authority separation.
+- Expanded adversarial tests for attestation, restart, replay identity, external-effect routing, temporal authority separation and continuous-learning governance.
 
 ## 3.5.0 — Fail-Closed Validated Execution Boundary
 
