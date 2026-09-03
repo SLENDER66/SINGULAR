@@ -3,7 +3,7 @@ from singular.models import Action
 from singular.state import CapacitySnapshot
 
 
-def test_commander_respects_capacity_limit():
+def test_commander_recommends_scope_reduction_when_headroom_exists():
     action = Action(id="a1", name="Deep work", impact=8, urgency=5, leverage=7, effort=5, risk=1, reversibility=8)
     result = Commander().command(
         "Advance the mission",
@@ -12,4 +12,4 @@ def test_commander_respects_capacity_limit():
         effort=0.2,
     )
     assert result["mode"] == "CAPACITY_LIMIT"
-    assert result["capacity_recommendation"] == "DEFER_OR_DROP"
+    assert result["capacity_recommendation"] == "REDUCE_SCOPE"
