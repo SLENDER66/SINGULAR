@@ -34,28 +34,48 @@ class DurableIntegrityChecker:
         violations: list[IntegrityViolation] = []
         with self.store._connect() as conn:
             executions = conn.execute(
-                "SELECT execution_key,mission_id,action_id,status FROM executions ORDER BY execution_key"
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions ORDER BY execution_key"
             ).fetchall()
             effects = conn.execute(
                 "SELECT provider_idempotency_key,execution_key,status,action_fingerprint FROM external_effects ORDER BY provider_idempotency_key"
             ).fetchall()
 
             execution_keys = {row["execution_key"] for row in executions}
+            valid_execution_statuses = {"RUNNING", "RECOVERY_REQUIRED", "COMPLETED", "FAILED"}
             for row in executions:
+                execution_status = row["status"]
+                if execution_status not in valid_execution_statuses:
+                    violations.append(IntegrityViolation("execution", row["execution_key"], "EXEC-STATUS", f"unknown execution status: {execution_status}"))
+                    continue
+
                 mission = conn.execute(
                     "SELECT status FROM mission_states WHERE mission_id=?", (row["mission_id"],)
                 ).fetchone()
                 if mission is None:
                     violations.append(IntegrityViolation("execution", row["execution_key"], "EXEC-MISSION", "execution references a missing mission state"))
                     continue
-                execution_status = row["status"]
                 mission_status = mission["status"]
-                if execution_status == "RECOVERY_REQUIRED" and mission_status != MissionStatus.RUNNING.value:
-                    violations.append(IntegrityViolation("execution", row["execution_key"], "RECOVERY-MISSION", "RECOVERY_REQUIRED execution must keep its mission RUNNING"))
-                if execution_status == "COMPLETED" and mission_status != MissionStatus.COMPLETED.value:
-                    violations.append(IntegrityViolation("execution", row["execution_key"], "COMPLETED-MISSION", "COMPLETED execution must have a COMPLETED mission"))
-                if execution_status == "FAILED" and mission_status not in {MissionStatus.FAILED.value, MissionStatus.CANCELLED.value}:
-                    violations.append(IntegrityViolation("execution", row["execution_key"], "FAILED-MISSION", "FAILED execution must have a FAILED or CANCELLED mission"))
+
+                if execution_status == "RUNNING":
+                    if row["finished_at"] is not None:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "RUNNING-FINISHED", "RUNNING execution must not have finished_at"))
+                elif execution_status == "RECOVERY_REQUIRED":
+                    if mission_status != MissionStatus.RUNNING.value:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "RECOVERY-MISSION", "RECOVERY_REQUIRED execution must keep its mission RUNNING"))
+                    if row["lease_until"] is not None:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "RECOVERY-LEASE", "RECOVERY_REQUIRED execution must not retain an execution lease"))
+                    if row["finished_at"] is None:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "RECOVERY-FINISHED", "RECOVERY_REQUIRED execution must record when it entered recovery"))
+                elif execution_status == "COMPLETED":
+                    if mission_status != MissionStatus.COMPLETED.value:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "COMPLETED-MISSION", "COMPLETED execution must have a COMPLETED mission"))
+                    if row["finished_at"] is None or row["lease_until"] is not None:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "COMPLETED-LIFECYCLE", "COMPLETED execution must be finished and have no lease"))
+                elif execution_status == "FAILED":
+                    if mission_status not in {MissionStatus.FAILED.value, MissionStatus.CANCELLED.value}:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "FAILED-MISSION", "FAILED execution must have a FAILED or CANCELLED mission"))
+                    if row["finished_at"] is None or row["lease_until"] is not None:
+                        violations.append(IntegrityViolation("execution", row["execution_key"], "FAILED-LIFECYCLE", "FAILED execution must be finished and have no lease"))
 
             valid_effect_statuses = {status.value for status in EffectStatus}
             for row in effects:
