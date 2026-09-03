@@ -6,6 +6,7 @@ from .agents import Commander
 from .autopilot import ActionRequest, Autonomy, Governor
 from .coherence import CoherenceReport, GlobalCoherenceGuard
 from .collective_intelligence import CollectiveIntelligence, Deliberation, SharedSignal
+from .human_optimization import HumanOptimizationReport
 from .models import Action, Risk
 from .security import ActionPolicy
 from .state import CapacityEngine, CapacitySnapshot
@@ -32,6 +33,7 @@ class GlobalDecisionReport:
     coherence: CoherenceReport | None
     deliberation: Deliberation | None = None
     trajectory: TrajectoryAssessment | None = None
+    human_optimization: HumanOptimizationReport | None = None
 
     @property
     def can_prepare(self) -> bool:
@@ -43,7 +45,7 @@ class GlobalDecisionReport:
 
 
 class GlobalDecisionGate:
-    """Integrate mission, collective cognition, trajectory, context, risk and governance."""
+    """Integrate mission, collective cognition, human optimization, trajectory and governance."""
 
     def __init__(self, commander: Commander | None = None, red_team: RedTeamGate | None = None, coherence_guard: GlobalCoherenceGuard | None = None, collective_intelligence: CollectiveIntelligence | None = None) -> None:
         self.commander = commander or Commander()
@@ -66,6 +68,7 @@ class GlobalDecisionGate:
         calibration: dict[str, float] | None = None,
         trajectory_profile: TrajectoryProfile | None = None,
         trajectory_dimensions: dict[str, float] | None = None,
+        human_optimization: HumanOptimizationReport | None = None,
     ) -> GlobalDecisionReport:
         blockers: list[str] = []
         warnings: list[str] = []
@@ -73,6 +76,14 @@ class GlobalDecisionGate:
         deliberation = None
         trajectory = None
         value_results = values or []
+
+        if human_optimization is not None:
+            if human_optimization.uncertainties:
+                warnings.extend(f"HUMAN_OPTIMIZATION:{item}" for item in human_optimization.uncertainties)
+            if human_optimization.capacity_remaining <= 0 and human_optimization.capacity_budget != float("inf"):
+                warnings.append("HUMAN_OPTIMIZATION:NO_CAPACITY_REMAINING")
+            if not human_optimization.candidates and human_optimization.bottlenecks:
+                warnings.append("HUMAN_OPTIMIZATION:NO_POSITIVE_CANDIDATE")
 
         if shared_signals:
             deliberation = self.collective_intelligence.deliberate(action.id, shared_signals, calibration=calibration)
@@ -146,4 +157,19 @@ class GlobalDecisionGate:
             blockers.extend(f"GOVERNOR:{reason}" for reason in governor.reasons)
 
         decision = "BLOCK" if blockers else ("REVIEW" if warnings or policy.requires_human else "PROCEED")
-        return GlobalDecisionReport(objective=objective, action_id=action.id, decision=decision, blockers=tuple(dict.fromkeys(blockers)), warnings=tuple(dict.fromkeys(warnings)), capacity_recommendation=capacity_decision, policy_tier=policy.tier.value, policy_requires_human=policy.requires_human, governor_mode=governor.mode, red_team_findings=findings, coherence=coherence, deliberation=deliberation, trajectory=trajectory)
+        return GlobalDecisionReport(
+            objective=objective,
+            action_id=action.id,
+            decision=decision,
+            blockers=tuple(dict.fromkeys(blockers)),
+            warnings=tuple(dict.fromkeys(warnings)),
+            capacity_recommendation=capacity_decision,
+            policy_tier=policy.tier.value,
+            policy_requires_human=policy.requires_human,
+            governor_mode=governor.mode,
+            red_team_findings=findings,
+            coherence=coherence,
+            deliberation=deliberation,
+            trajectory=trajectory,
+            human_optimization=human_optimization,
+        )
