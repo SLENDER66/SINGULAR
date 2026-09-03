@@ -85,6 +85,20 @@ def test_pipeline_rejects_symbolic_execution_target_without_capability():
         )
 
 
+def test_decision_temporal_window_is_enforced():
+    decision = _build_decision()
+    assert decision.verify(now=decision.issued_at) is True
+    assert decision.verify(now=decision.expires_at) is False
+    assert decision.verify(now=decision.issued_at - 0.001) is False
+
+
+def test_decision_expiry_is_fingerprinted():
+    decision = _build_decision()
+    from dataclasses import replace
+    altered = replace(decision, expires_at=decision.expires_at + 1)
+    assert altered.verify() is False
+
+
 def test_executor_rejects_handler_substitution_before_handler_call(tmp_path):
     decision = _build_decision()
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
