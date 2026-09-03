@@ -87,7 +87,9 @@ class LearningEngine:
         if not isfinite(actual):
             raise ValueError("actual outcome must be finite")
         error = actual - forecast.expected_value
-        direction = "underestimated" if error > 0 else "overestimated" if error < 0 else "matched"
+        direction = (
+            "underestimated" if error > 0 else "overestimated" if error < 0 else "matched"
+        )
         lesson = (
             f"Forecast {forecast.id} {direction}: "
             f"expected {forecast.expected_value:.4g}, observed {actual:.4g}."
@@ -103,7 +105,9 @@ class LearningEngine:
         )
 
     @staticmethod
-    def propose_update(record: CalibrationRecord, *, repeated_pattern: bool = False) -> LearningUpdate:
+    def propose_update(
+        record: CalibrationRecord, *, repeated_pattern: bool = False
+    ) -> LearningUpdate:
         """Turn evidence into a reviewable hypothesis, never an automatic rule change."""
         strength = min(1.0, record.forecast_confidence + (0.25 if repeated_pattern else 0.0))
         if record.kind == ForecastKind.BINARY:
@@ -119,16 +123,29 @@ class LearningEngine:
         else:
             hypothesis = "L'estimation reste compatible avec l'erreur observée; accumuler davantage de données."
             action = "COLLECT_MORE_EVIDENCE"
-        return LearningUpdate(record.forecast_id, record.lesson, hypothesis, round(strength, 4), action)
+        return LearningUpdate(
+            record.forecast_id,
+            record.lesson,
+            hypothesis,
+            round(strength, 4),
+            action,
+        )
 
     @staticmethod
     def summarize(records: list[CalibrationRecord]) -> dict[str, float | int]:
         if not records:
-            return {"count": 0, "mean_absolute_error": 0.0, "mean_brier_score": 0.0, "binary_count": 0}
+            return {
+                "count": 0,
+                "mean_absolute_error": 0.0,
+                "mean_brier_score": 0.0,
+                "binary_count": 0,
+            }
         binary = [record for record in records if record.brier_score is not None]
         return {
             "count": len(records),
             "mean_absolute_error": round(sum(r.error for r in records) / len(records), 6),
-            "mean_brier_score": round(sum(r.brier_score for r in binary) / len(binary), 6) if binary else 0.0,
+            "mean_brier_score": round(sum(r.brier_score for r in binary) / len(binary), 6)
+            if binary
+            else 0.0,
             "binary_count": len(binary),
         }
