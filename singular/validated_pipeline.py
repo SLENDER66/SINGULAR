@@ -43,6 +43,8 @@ class ValidatedTrajectoryPipeline:
             raise ValueError("objective must match the execution contract")
         if execution_kind not in {"handler", "external_effect"}:
             raise ValueError("execution_kind must be handler or external_effect")
+        if not execution_target.startswith("cap_"):
+            raise ValueError("executable validation requires an opaque execution capability id")
         if capacity_budget is None or not isfinite(capacity_budget) or capacity_budget < 0:
             raise ValueError("a finite non-negative capacity_budget is required for executable validation")
         if max_portfolio_candidates < 1:
