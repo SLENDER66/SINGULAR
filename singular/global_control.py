@@ -11,6 +11,7 @@ from .models import Action, Risk
 from .security import ActionPolicy
 from .state import CapacityEngine, CapacitySnapshot
 from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryEngine, TrajectoryProfile
+from .trajectory_optimization import TrajectoryPortfolio
 from .values import ValueAssessment, ValueAssessmentResult, ValueMode
 from .world_model import EpistemicType, WorldModel
 from .v32_governed_core import RedTeamFinding, RedTeamGate
@@ -69,6 +70,7 @@ class GlobalDecisionGate:
         calibration: dict[str, float] | None = None,
         trajectory_profile: TrajectoryProfile | None = None,
         trajectory_dimensions: dict[str, float] | None = None,
+        trajectory_portfolio: TrajectoryPortfolio | None = None,
         human_optimization: HumanOptimizationReport | None = None,
     ) -> GlobalDecisionReport:
         blockers: list[str] = []
@@ -108,11 +110,20 @@ class GlobalDecisionGate:
                 warnings.append("TRAJECTORY:MISSING_DIMENSIONS")
                 trajectory = TrajectoryAssessment(TrajectoryDecision.REVIEW, 0.0, 0.0, ("INSUFFICIENT_TRAJECTORY_DATA",), True)
             else:
-                trajectory = TrajectoryEngine.assess(trajectory_profile, dimensions=trajectory_dimensions, value_results=tuple(value_results), capacity=capacity)
+                trajectory = TrajectoryEngine.assess(
+                    trajectory_profile,
+                    dimensions=trajectory_dimensions,
+                    value_results=tuple(value_results),
+                    capacity=capacity,
+                    portfolio=trajectory_portfolio,
+                )
                 if trajectory.decision is TrajectoryDecision.BLOCK:
                     blockers.extend(f"TRAJECTORY:{reason}" for reason in trajectory.rationale)
                 elif trajectory.decision is TrajectoryDecision.REVIEW:
                     warnings.append("TRAJECTORY:REVIEW")
+
+        if trajectory_portfolio is not None and not trajectory_portfolio.candidates:
+            blockers.append("TRAJECTORY:EMPTY_PORTFOLIO")
 
         if self.coherence_guard is not None:
             coherence = self.coherence_guard.inspect(mission_id)
