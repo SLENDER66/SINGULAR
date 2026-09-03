@@ -90,6 +90,22 @@ def test_capacity_is_accounted_for_in_selected_portfolio() -> None:
     assert report.capacity_remaining == 1
 
 
+def test_portfolio_selection_is_globally_optimal_not_greedy() -> None:
+    states = (
+        DomainState(LearningDomain.CAREER, 0.2, confidence=1.0, leverage=1.0),
+        DomainState(LearningDomain.BUSINESS, 0.2, confidence=1.0, leverage=1.0),
+        DomainState(LearningDomain.INVESTING, 0.2, confidence=1.0, leverage=1.0),
+    )
+    interventions = (
+        Intervention("large", LearningDomain.CAREER, 40.0, evidence=1.0, causal_confidence=1.0, capacity=6),
+        Intervention("small_a", LearningDomain.BUSINESS, 36.0, evidence=1.0, causal_confidence=1.0, capacity=5),
+        Intervention("small_b", LearningDomain.INVESTING, 36.0, evidence=1.0, causal_confidence=1.0, capacity=5),
+    )
+    report = HumanOptimizationEngine.optimize(states, interventions, capacity_budget=10)
+    assert tuple(candidate.intervention_id for candidate in report.candidates) == ("small_a", "small_b")
+    assert report.capacity_used == 10
+
+
 def test_hypothesis_bridge_preserves_learning_signal() -> None:
     hypothesis = DomainHypothesis(
         LearningDomain.CAREER,
