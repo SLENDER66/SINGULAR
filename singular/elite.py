@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 
 @dataclass(frozen=True)
@@ -41,13 +42,32 @@ class EliteReview:
     wealth_relevance: str
 
 
-class EliteEngine:
-    """Continuously raise agent quality and convert quality into real-world leverage.
+class ConflictType(str, Enum):
+    """Kinds of disagreement with an explicit owner for resolution."""
 
-    "Elite" is never a status. It is a measured trajectory. The system optimizes
-    for Thomas's durable position: stability first, then earning power, capability,
-    opportunities, patrimony and freedom. Wealth is an outcome to improve toward,
-    never a guaranteed promise or a reason to bypass risk controls.
+    FACTUAL = "FACTUAL"
+    FORECAST = "FORECAST"
+    STRATEGIC = "STRATEGIC"
+    RISK = "RISK"
+    AUTHORIZATION = "AUTHORIZATION"
+    OBJECTIVE = "OBJECTIVE"
+    UNSOLVED = "UNSOLVED"
+
+
+@dataclass(frozen=True)
+class ConflictResolution:
+    conflict_type: ConflictType
+    resolver: str
+    action: str
+    execution_allowed: bool
+
+
+class EliteEngine:
+    """Continuously raise agent quality without creating agent power struggles.
+
+    "Elite" is never a status. It is a measured trajectory. Specialists may
+    disagree, but disagreement is routed by type; no agent wins by assertion,
+    and advice never becomes authorization.
     """
 
     _DIRECTIVES = {
@@ -94,3 +114,18 @@ class EliteEngine:
             "directive": review.directive,
             "wealth_test": review.wealth_relevance,
         }
+
+    @staticmethod
+    def resolve_conflict(conflict_type: ConflictType) -> ConflictResolution:
+        """Route disagreement to the correct authority; never resolve by assertion."""
+        routes = {
+            ConflictType.FACTUAL: ("INTELLIGENCE", "Verify the disputed claim against the strongest available evidence.", False),
+            ConflictType.FORECAST: ("STRATEGY", "Compare assumptions, scenarios and calibration against prior outcomes.", False),
+            ConflictType.STRATEGIC: ("COMMANDER", "Compare options against the objective hierarchy and explicit criteria.", False),
+            ConflictType.RISK: ("RED_TEAM", "Stress-test downside, failure modes and irreversible consequences.", False),
+            ConflictType.AUTHORIZATION: ("GOVERNOR", "Evaluate policy, capability, risk tier and human-approval requirements.", False),
+            ConflictType.OBJECTIVE: ("COMMANDER", "Return to the approved objective hierarchy and resolve the priority conflict.", False),
+            ConflictType.UNSOLVED: ("HUMAN", "Escalate when material disagreement remains unresolved or evidence is insufficient.", False),
+        }
+        resolver, action, execution_allowed = routes[conflict_type]
+        return ConflictResolution(conflict_type, resolver, action, execution_allowed)
