@@ -20,6 +20,8 @@ def test_production_has_no_direct_raw_execution_api_calls():
                 continue
             if node.func.attr in FORBIDDEN_METHODS:
                 violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: .{node.func.attr}(...)")
+            if node.func.attr == "execute" and isinstance(node.func.value, ast.Name) and node.func.value.id == "DurableExecutionEngine":
+                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: DurableExecutionEngine.execute(...)")
     assert not violations, "raw execution APIs must never be called from production modules:\n" + "\n".join(violations)
 
 
