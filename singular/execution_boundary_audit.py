@@ -54,23 +54,42 @@ class ExecutionBoundaryAuditor:
             findings.extend(self._scan(path, tree))
         raw_denied = self._raw_api_is_denied()
         if not raw_denied:
-            findings.append(BoundaryFinding("runtime", 0, "RAW_API_NOT_DENY_BY_DEFAULT", "A public raw execution entry point did not raise PermissionError."))
+            findings.append(
+                BoundaryFinding(
+                    "runtime", 0, "RAW_API_NOT_DENY_BY_DEFAULT",
+                    "A public raw execution entry point did not raise PermissionError.",
+                )
+            )
         return BoundaryAuditReport(tuple(findings), checked, raw_denied)
 
     @staticmethod
     def _scan(path: Path, tree: ast.AST) -> list[BoundaryFinding]:
         findings: list[BoundaryFinding] = []
+        durable_engine_receivers: set[str] = set()
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                constructor = node.value.func
+                if isinstance(constructor, ast.Name) and constructor.id == "DurableExecutionEngine":
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            durable_engine_receivers.add(target.id)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
             target = node.func
-            if isinstance(target, ast.Attribute):
-                if target.attr in RAW_TOOL_METHODS:
-                    findings.append(BoundaryFinding(str(path), target.lineno, "RAW_TOOL_BYPASS", target.attr))
-                if target.attr in RAW_METHODS and isinstance(target.value, ast.Name) and target.value.id == "DurableExecutionEngine":
-                    findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", target.attr))
-                if target.attr == "handler" and isinstance(target.value, ast.Name):
-                    findings.append(BoundaryFinding(str(path), target.lineno, "DIRECT_HANDLER_BYPASS", f"{target.value.id}.handler(...)"))
+            receiver = target.value
+            if target.attr in RAW_TOOL_METHODS:
+                findings.append(BoundaryFinding(str(path), target.lineno, "RAW_TOOL_BYPASS", target.attr))
+            if target.attr in {"execute_effect", "reconcile_effect"}:
+                findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", target.attr))
+            if target.attr == "execute":
+                if isinstance(receiver, ast.Name) and receiver.id in durable_engine_receivers:
+                    findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", "executor.execute"))
+                if isinstance(receiver, ast.Name) and receiver.id == "DurableExecutionEngine":
+                    findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", "DurableExecutionEngine.execute"))
+            if target.attr == "handler" and isinstance(receiver, ast.Name):
+                findings.append(BoundaryFinding(str(path), target.lineno, "DIRECT_HANDLER_BYPASS", f"{receiver.id}.handler(...)"))
         return findings
 
     @staticmethod
