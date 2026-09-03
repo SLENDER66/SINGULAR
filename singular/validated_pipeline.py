@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from math import isfinite
 from time import time
 from typing import Any
@@ -66,6 +67,13 @@ class ValidatedTrajectoryPipeline:
         if max_portfolio_candidates < 1:
             raise ValueError("max_portfolio_candidates must be positive")
 
+        action = actions[0]
+        if action.capability not in (None, execution_target):
+            raise PermissionError("action capability does not match the validated execution target")
+        # The executable artifact owns the capability binding. A caller may omit it
+        # on the source ActionRequest, but it cannot end up with a different binding.
+        action = replace(action, capability=execution_target)
+
         intervention_map = {item.id: item for item in interventions}
         if len(intervention_map) != len(interventions):
             raise ValueError("intervention ids must be unique")
@@ -82,7 +90,6 @@ class ValidatedTrajectoryPipeline:
             trajectory_profile, dimensions=trajectory_dimensions, value_results=value_results,
             capacity=capacity, portfolio=portfolio,
         )
-        action = actions[0]
         global_report: GlobalDecisionReport = (gate or GlobalDecisionGate()).evaluate(
             objective, action, values=list(value_results), capacity=capacity, effort=effort, risks=risks,
             mission_id=contract.mission_id, contract=contract, shared_signals=shared_signals,
@@ -117,7 +124,7 @@ class ValidatedTrajectoryPipeline:
             payload_hash = payload_fingerprint(execution_payload)
 
         return ValidatedTrajectoryDecision.create(
-            decision_id=decision_id, issued_at=issued_at, expires_at=expires_at, actions=actions,
+            decision_id=decision_id, issued_at=issued_at, expires_at=expires_at, actions=(action,),
             action_to_intervention=action_to_intervention, domain_states=tuple(domain_states), interventions=tuple(interventions),
             human_interactions=human_interactions, trajectory_interactions=trajectory_interactions,
             portfolio_capacity_budget=capacity_budget, portfolio_max_candidates=max_portfolio_candidates,
