@@ -49,7 +49,9 @@ class ExecutionBoundaryAuditor:
     def audit(self) -> BoundaryAuditReport:
         findings: list[BoundaryFinding] = []
         checked = 0
-        for path in sorted(self.package_dir.glob("*.py")):
+        for path in sorted(self.package_dir.rglob("*.py")):
+            if any(part in {"__pycache__", ".git"} for part in path.parts):
+                continue
             if path.name in DEFINITION_MODULES or path.name == "execution_boundary_audit.py":
                 continue
             checked += 1
@@ -77,7 +79,6 @@ class ExecutionBoundaryAuditor:
         executor_type_names = {"DurableExecutionEngine"}
         executor_receivers: set[str] = set()
 
-        # Resolve common absolute and relative import spellings.
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == "execution" and node.level >= 1:
                 for alias in node.names:
@@ -95,7 +96,6 @@ class ExecutionBoundaryAuditor:
                 return expr.attr == "DurableExecutionEngine"
             return False
 
-        # Track direct constructions and transitive assignment aliases.
         changed = True
         while changed:
             changed = False
