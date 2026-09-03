@@ -36,6 +36,7 @@ from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine 
 from .learning_strategy import LearningStrategyEngine, StrategyDisposition, StrategyProposal
 from .decision_engine import DecisionContext, DecisionOption, DecisionRecommendation, DecisionStatus, DecisionEngine as GovernedDecisionEngine
 from .execution_result import ExecutionIntent, ExecutionResult, ExecutionResultBridge, ExecutionStatus
+from .durable_execution import DurableExecutionLedger
 from .learning_bridge import ExecutionLearningBridge, LearningResult
 from .economic_learning import EconomicLearningCycle, EconomicLearningEngine
 from .wealth_engine import WealthAction, WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
