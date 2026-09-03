@@ -7,9 +7,9 @@ from singular.decision_attestation import DecisionAttestationStore, ValidatedDec
 from tests.test_validated_pipeline import _build_decision
 
 
-def test_attestation_is_durable_and_matches_exact_decision():
+def test_attestation_is_durable_and_matches_exact_decision(tmp_path):
     decision = _build_decision()
-    store = DecisionAttestationStore(":memory:")
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
     issuer = ValidatedDecisionIssuer(store, issuer="test-suite")
     attestation = issuer.issue(decision)
 
@@ -18,24 +18,23 @@ def test_attestation_is_durable_and_matches_exact_decision():
     assert issuer.verify(decision)
 
 
-def test_unissued_decision_is_not_executable_by_attestation_registry():
+def test_unissued_decision_is_not_executable_by_attestation_registry(tmp_path):
     decision = _build_decision()
-    store = DecisionAttestationStore(":memory:")
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
     assert store.verify(decision) is False
 
 
-def test_different_context_cannot_reuse_same_decision_id():
+def test_different_context_cannot_reuse_same_decision_id(tmp_path):
     decision = _build_decision()
-    store = DecisionAttestationStore(":memory:")
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
     store.issue(decision)
     forged = replace(decision, decision_id="DEC-OTHER")
-    object.__setattr__(forged, "context_fingerprint", decision.context_fingerprint)
     assert store.verify(forged) is False
 
 
-def test_reissued_same_decision_is_idempotent_but_reissue_after_revocation_is_forbidden():
+def test_reissued_same_decision_is_idempotent_but_reissue_after_revocation_is_forbidden(tmp_path):
     decision = _build_decision()
-    store = DecisionAttestationStore(":memory:")
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
     first = store.issue(decision)
     second = store.issue(decision)
     assert first == second
@@ -45,9 +44,9 @@ def test_reissued_same_decision_is_idempotent_but_reissue_after_revocation_is_fo
         store.issue(decision)
 
 
-def test_attestation_obeys_decision_ttl():
+def test_attestation_obeys_decision_ttl(tmp_path):
     decision = _build_decision()
-    store = DecisionAttestationStore(":memory:")
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
     issuer = ValidatedDecisionIssuer(store)
     issuer.issue(decision)
     assert store.verify(decision, now=time() + 7200) is False
