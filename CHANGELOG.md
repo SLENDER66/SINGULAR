@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.4.2 — Decision Audit Hardening
+
+- Replaced the large-search-space greedy fallback with deterministic branch-and-bound using an admissible optimistic bound and an explicit node budget.
+- Preserved an explicit heuristic fallback only when the branch-and-bound budget is exhausted, with `exact=False` surfaced as a warning condition.
+- Added duplicate cross-domain interaction rejection so the same causal edge cannot be silently double-counted.
+- Made missing domain state auditable through explicit warnings instead of silently dropping interventions.
+- Stopped the `DomainHypothesis` bridge from equating evidence strength with causal confidence; callers can now provide causal confidence explicitly.
+- Added regression coverage for duplicate interactions, missing-state auditability and conservative causal bridging.
+
 ## 3.4.1 — Optimization Quality Hardening
 
 - Replaced greedy small-portfolio selection with deterministic exact portfolio optimization for search spaces up to 22 candidates.
