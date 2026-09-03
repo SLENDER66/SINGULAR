@@ -46,6 +46,7 @@ from .patrimony_engine import FailureConversion, FailureDisposition, FailureReco
 from .generational import GenerationalCharter, GenerationalEngine, GenerationalReadiness
 from .meta_audit import AgentCalibration, MetaAuditEngine, MetaAuditFinding, MetaAuditReport, MetaAuditSeverity
 from .economic_control import EconomicControlPlan, EconomicControlPlane, EconomicPlanStatus
+from .economic_sequence import EconomicSequence, EconomicSequenceEngine, EconomicStage, EconomicStep
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
