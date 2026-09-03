@@ -55,9 +55,21 @@ class DurableExecutionEngine:
         self.store.init_execution_schema()
 
     @staticmethod
-    def _execution_identity_fingerprint(action: Any, mission_id: str, governed: Any, contract: Any, decision_fingerprint: str | None = None) -> str:
+    def _execution_identity_fingerprint(
+        action: Any,
+        mission_id: str,
+        governed: Any,
+        contract: Any,
+        decision_id: str | None = None,
+        decision_fingerprint: str | None = None,
+    ) -> str:
         payload = {
             "mission_id": mission_id,
+            # Both identifiers are intentionally bound. The context fingerprint
+            # protects the decision's full validated content; decision_id prevents
+            # a distinct decision record from silently inheriting an old execution
+            # even when two decisions happen to have identical content.
+            "decision_id": decision_id,
             "decision_context_fingerprint": decision_fingerprint,
             "action": {
                 "id": getattr(action, "id", None),
@@ -100,23 +112,60 @@ class DurableExecutionEngine:
         if not self.attestation_store.verify(decision):
             raise PermissionError("La décision validée n'est pas durablement attestée, est révoquée ou a expiré.")
 
-    def _bind_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any, decision_fingerprint: str | None = None) -> None:
+    def _bind_execution_identity(
+        self,
+        key: str,
+        action: Any,
+        mission_id: str,
+        governed: Any,
+        decision_id: str | None = None,
+        decision_fingerprint: str | None = None,
+    ) -> None:
         contract = self.store.load_mission(mission_id)
-        fingerprint = self._execution_identity_fingerprint(action, mission_id, governed, contract, decision_fingerprint)
+        fingerprint = self._execution_identity_fingerprint(
+            action, mission_id, governed, contract, decision_id, decision_fingerprint
+        )
         identity_key = self.store.idempotency_key("execution_identity", key)
-        self.store.put_idempotent(identity_key, {"execution_key": key, "mission_id": mission_id, "action_id": action.id}, fingerprint=fingerprint)
+        self.store.put_idempotent(
+            identity_key,
+            {"execution_key": key, "mission_id": mission_id, "action_id": action.id},
+            fingerprint=fingerprint,
+        )
 
-    def _validate_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any, decision_fingerprint: str | None = None) -> None:
+    def _validate_execution_identity(
+        self,
+        key: str,
+        action: Any,
+        mission_id: str,
+        governed: Any,
+        decision_id: str | None = None,
+        decision_fingerprint: str | None = None,
+    ) -> None:
         identity_key = self.store.idempotency_key("execution_identity", key)
-        expected = self._execution_identity_fingerprint(action, mission_id, governed, self.store.load_mission(mission_id), decision_fingerprint)
+        expected = self._execution_identity_fingerprint(
+            action,
+            mission_id,
+            governed,
+            self.store.load_mission(mission_id),
+            decision_id,
+            decision_fingerprint,
+        )
         actual = self.store.get_idempotency_fingerprint(identity_key)
         if actual is None:
             raise PermissionError("Identité d'exécution absente : exécution/rejeu refusé par sécurité.")
         if actual != expected:
             raise PermissionError("Identité d'exécution réutilisée avec une autorité, une décision ou un contenu différent.")
 
-    def _prepare_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any, decision_fingerprint: str | None = None) -> None:
-        self._bind_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+    def _prepare_execution_identity(
+        self,
+        key: str,
+        action: Any,
+        mission_id: str,
+        governed: Any,
+        decision_id: str | None = None,
+        decision_fingerprint: str | None = None,
+    ) -> None:
+        self._bind_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
 
     def execute(self, action, mission_id: str, handler: Callable[[Any], Any]) -> ExecutionResult:
         raise PermissionError("Raw ActionRequest execution is disabled: a ValidatedTrajectoryDecision is required.")
@@ -140,20 +189,36 @@ class DurableExecutionEngine:
             raise PermissionError("Current governance no longer matches the validated decision.")
         if getattr(governed, "policy", None) != decision.policy:
             raise PermissionError("Current policy no longer matches the validated decision.")
-        return self._execute_authorized(action, mission_id, handler, governed, decision.context_fingerprint)
+        return self._execute_authorized(
+            action,
+            mission_id,
+            handler,
+            governed,
+            decision_id=decision.decision_id,
+            decision_fingerprint=decision.context_fingerprint,
+        )
 
-    def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any, decision_fingerprint: str | None = None) -> ExecutionResult:
+    def _execute_authorized(
+        self,
+        action,
+        mission_id: str,
+        handler: Callable[[Any], Any],
+        governed: Any,
+        *,
+        decision_id: str | None = None,
+        decision_fingerprint: str | None = None,
+    ) -> ExecutionResult:
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
             if existing["status"] in {"COMPLETED", "FAILED"}:
-                self._validate_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+                self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             return self._handle_existing_execution(key, existing)
-        self._prepare_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+        self._prepare_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
-            self._validate_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+            self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             return self._handle_existing_execution(key, claimed)
         try:
             value = handler(action)
@@ -182,9 +247,31 @@ class DurableExecutionEngine:
         governed = self._authorize(action, decision.contract.mission_id)
         if governed.governor != decision.governor or getattr(governed, "policy", None) != decision.policy:
             raise PermissionError("Current governance or policy no longer matches the validated decision.")
-        return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_fingerprint=decision.context_fingerprint)
+        return self._execute_effect_authorized(
+            action,
+            decision.contract.mission_id,
+            provider,
+            provider_name=provider_name,
+            operation=operation,
+            payload=payload,
+            governed=governed,
+            decision_id=decision.decision_id,
+            decision_fingerprint=decision.context_fingerprint,
+        )
 
-    def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_fingerprint: str | None = None) -> ExecutionResult:
+    def _execute_effect_authorized(
+        self,
+        action,
+        mission_id: str,
+        provider: EffectProvider,
+        *,
+        provider_name: str,
+        operation: str,
+        payload: Any,
+        governed: Any,
+        decision_id: str | None = None,
+        decision_fingerprint: str | None = None,
+    ) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         action = governed.action
@@ -192,7 +279,7 @@ class DurableExecutionEngine:
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         existing = self.store.get_execution(key)
         if existing is not None:
-            self._validate_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+            self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             try:
                 effect = self.effect_coordinator.peek(request)
             except KeyError:
@@ -209,10 +296,10 @@ class DurableExecutionEngine:
                     self.runtime._persist_new_audit_events()
                     return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=effect.get("result"), error=effect.get("error"))
             return self._handle_existing_execution(key, existing)
-        self._prepare_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+        self._prepare_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
-            self._validate_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+            self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             try:
                 effect = self.effect_coordinator.peek(request)
             except KeyError:
@@ -256,9 +343,31 @@ class DurableExecutionEngine:
         governed = self._authorize_reconciliation(action, decision.contract.mission_id)
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
-        return self._reconcile_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_fingerprint=decision.context_fingerprint)
+        return self._reconcile_effect_authorized(
+            action,
+            decision.contract.mission_id,
+            provider,
+            provider_name=provider_name,
+            operation=operation,
+            payload=payload,
+            governed=governed,
+            decision_id=decision.decision_id,
+            decision_fingerprint=decision.context_fingerprint,
+        )
 
-    def _reconcile_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_fingerprint: str | None = None) -> ExecutionResult:
+    def _reconcile_effect_authorized(
+        self,
+        action,
+        mission_id: str,
+        provider: EffectProvider,
+        *,
+        provider_name: str,
+        operation: str,
+        payload: Any,
+        governed: Any,
+        decision_id: str | None = None,
+        decision_fingerprint: str | None = None,
+    ) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         action = governed.action
@@ -266,7 +375,7 @@ class DurableExecutionEngine:
         existing = self.store.get_execution(key)
         if existing is None or existing["status"] != "RECOVERY_REQUIRED":
             raise ValueError("L'exécution doit être RECOVERY_REQUIRED pour une réconciliation.")
-        self._validate_execution_identity(key, action, mission_id, governed, decision_fingerprint)
+        self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         outcome = self.effect_coordinator.reconcile(request, provider)
         if outcome.status == EffectStatus.COMPLETED.value:
