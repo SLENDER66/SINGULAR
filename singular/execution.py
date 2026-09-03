@@ -11,6 +11,7 @@ from .approval_integrity import ApprovalIntegrityStore
 from .autopilot import ApprovalStatus, Autonomy
 from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
+from .execution_capability import execution_capability_matches
 from .mission_runtime import DurableMissionRuntime
 from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
 
@@ -112,8 +113,8 @@ class DurableExecutionEngine:
             raise PermissionError("Validated trajectory decision is missing or invalid.")
         if decision.execution_kind != "handler":
             raise PermissionError("Validated decision is bound to an external effect, not a handler.")
-        if decision.execution_target != self._callable_target(handler):
-            raise PermissionError("Handler does not match the execution target authorized by the validated decision.")
+        if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, handler):
+            raise PermissionError("Handler capability does not match the exact executable target authorized by the validated decision.")
         mission_id = decision.contract.mission_id
         action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
         if action is None:
@@ -154,8 +155,8 @@ class DurableExecutionEngine:
             raise PermissionError("Validated trajectory decision is missing or invalid.")
         if decision.execution_kind != "external_effect":
             raise PermissionError("Validated decision is not bound to an external effect.")
-        if decision.execution_target != self._provider_target(provider):
-            raise PermissionError("Provider implementation does not match the execution target authorized by the validated decision.")
+        if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
+            raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
         if decision.provider_name != provider_name or decision.operation != operation:
             raise PermissionError("Provider or operation does not match the validated decision.")
         if decision.payload_fingerprint != payload_fingerprint(payload):
@@ -227,8 +228,8 @@ class DurableExecutionEngine:
             raise PermissionError("Validated trajectory decision is missing or invalid.")
         if decision.execution_kind != "external_effect":
             raise PermissionError("Validated decision is not bound to an external effect.")
-        if decision.execution_target != self._provider_target(provider):
-            raise PermissionError("Provider implementation does not match the execution target authorized by the validated decision.")
+        if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
+            raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
         if decision.provider_name != provider_name or decision.operation != operation:
             raise PermissionError("Provider or operation does not match the validated decision.")
         if decision.payload_fingerprint != payload_fingerprint(payload):
