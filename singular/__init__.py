@@ -48,6 +48,7 @@ from .generational import GenerationalCharter, GenerationalEngine, GenerationalR
 from .meta_audit import AgentCalibration, MetaAuditEngine, MetaAuditFinding, MetaAuditReport, MetaAuditSeverity
 from .economic_control import EconomicControlPlan, EconomicControlPlane, EconomicPlanStatus
 from .economic_sequence import EconomicSequence, EconomicSequenceEngine, EconomicStage, EconomicStep
+from .provenance import ProvenanceChain, ProvenanceRecord
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
