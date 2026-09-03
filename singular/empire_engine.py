@@ -56,7 +56,13 @@ class EmpireEngine:
     """Measure wealth maturity without treating unknown institutional data as zero."""
 
     @staticmethod
-    def assess(assets: list[EmpireAsset], *, systemization: float | None = None, governance: float | None = None, succession: float | None = None) -> EmpireAssessment:
+    def assess(
+        assets: list[EmpireAsset],
+        *,
+        systemization: float | None = None,
+        governance: float | None = None,
+        succession: float | None = None,
+    ) -> EmpireAssessment:
         for name, value in (("systemization", systemization), ("governance", governance), ("succession", succession)):
             if value is not None and not 0 <= value <= 1:
                 raise ValueError(f"{name} must be between 0 and 1")
@@ -74,7 +80,16 @@ class EmpireEngine:
         durability = sum(asset.value * asset.durability for asset in assets) / productive_value
 
         score = round((ownership_value * (1 + growth) + cash_flow + productive_value * weighted_control * durability) / (1 + productive_value * concentration), 6)
-        institutional = all(value is not None for value in (systemization, governance, succession)) and ownership_value / productive_value >= 0.7 and weighted_control >= 0.7 and durability >= 0.8 and concentration <= 0.5 and systemization >= 0.7 and governance >= 0.7 and succession >= 0.7
+        institutional = (
+            all(value is not None for value in (systemization, governance, succession))
+            and ownership_value / productive_value >= 0.7
+            and weighted_control >= 0.7
+            and durability >= 0.8
+            and concentration <= 0.5
+            and systemization >= 0.7
+            and governance >= 0.7
+            and succession >= 0.7
+        )
         if institutional:
             stage = EmpireStage.INSTITUTION
         elif ownership_value <= 0:
@@ -106,8 +121,27 @@ class EmpireEngine:
         if not priorities and stage in {EmpireStage.COMPOUNDING, EmpireStage.CONTROL, EmpireStage.INSTITUTION}:
             priorities.append("REINVEST_AND_COMPOUND")
 
-        return EmpireAssessment(stage, round(productive_value, 6), round(ownership_value, 6), round(cash_flow, 6), round(weighted_control, 6), round(concentration, 6), score, tuple(priorities), systemization, governance, succession)
+        return EmpireAssessment(
+            stage,
+            round(productive_value, 6),
+            round(ownership_value, 6),
+            round(cash_flow, 6),
+            round(weighted_control, 6),
+            round(concentration, 6),
+            score,
+            tuple(priorities),
+            systemization,
+            governance,
+            succession,
+        )
 
     @staticmethod
     def strategic_layers() -> tuple[str, ...]:
-        return ("CASH_FLOW: create reliable surplus", "OWNERSHIP: convert labor into equity and productive assets", "CONTROL: acquire durable strategic decision rights", "COMPOUNDING: reinvest surplus into higher-value productive assets", "SYSTEMIZATION: make the machine less dependent on founder time", "INSTITUTION: protect, govern and transmit the patrimony")
+        return (
+            "CASH_FLOW: create reliable surplus",
+            "OWNERSHIP: convert labor into equity and productive assets",
+            "CONTROL: acquire durable strategic decision rights",
+            "COMPOUNDING: reinvest surplus into higher-value productive assets",
+            "SYSTEMIZATION: make the machine less dependent on founder time",
+            "INSTITUTION: protect, govern and transmit the patrimony",
+        )
