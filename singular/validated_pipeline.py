@@ -69,7 +69,8 @@ class ValidatedTrajectoryPipeline:
             objective, action, values=list(value_results), capacity=capacity, effort=effort, risks=risks,
             mission_id=contract.mission_id, contract=contract, shared_signals=shared_signals,
             calibration=calibration, trajectory_profile=trajectory_profile,
-            trajectory_dimensions=trajectory_dimensions, human_optimization=human,
+            trajectory_dimensions=trajectory_dimensions, trajectory_portfolio=portfolio,
+            human_optimization=human,
         )
 
         if global_report.trajectory != assessment:
