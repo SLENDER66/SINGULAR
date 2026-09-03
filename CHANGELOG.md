@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.5.0 — Fail-Closed Validated Execution Boundary
+
+- Added an immutable, tamper-evident `ValidatedTrajectoryDecision` as the sole executable authorization artifact.
+- Bound validated execution to the exact handler target, or for external effects to provider implementation, provider name, operation and payload fingerprint.
+- Disabled raw durable action, effect and reconciliation entry points; callers must present a validated decision.
+- Closed direct execution bypasses in ToolFabric, MissionAutopilot and Empire AutopilotSupervisor.
+- Added a mandatory construction pipeline: domain state -> Human Optimization -> exact Trajectory Optimization -> Trajectory Engine -> Global Decision Gate -> validated decision.
+- Persisted the source domain/intervention/interaction inputs and re-ran deterministic human and trajectory optimization during validation to resist forged portfolios.
+- Added strict `ActionRequest` validation for finite, bounded security-relevant numeric inputs and nonblank identifiers.
+- Added adversarial tests for handler, provider, operation and payload substitution plus direct execution bypasses.
+- Kept the new execution boundary fail-closed until all production callers are migrated and CI is green.
+
 ## 3.4.3 — Interaction-Aware Trajectory Optimization
 
 - Added a dedicated trajectory layer that evaluates portfolios rather than only individual interventions.
