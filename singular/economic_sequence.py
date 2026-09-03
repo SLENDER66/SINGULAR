@@ -101,36 +101,33 @@ class EconomicSequenceEngine:
         if len({item.id for item in ordered}) != len(ordered):
             raise ValueError("step ids must be unique")
 
-        completed = set(completed_stages)
+        completed = {stage.value for stage in completed_stages}
+        completed.update(stage.name for stage in completed_stages)
         lessons = set(failure_lesson_ids)
         eligible: list[tuple[float, EconomicStep]] = []
         blocked: list[str] = []
         for step in ordered:
-            prerequisites_ok = all(
-                prerequisite in {stage.value for stage in completed} or prerequisite in completed
-                for prerequisite in step.prerequisites
-            )
-            explicit_ok = set(step.prerequisites).issubset(set(step.satisfied_prerequisites))
-            if step.capacity_required > available_capacity or not prerequisites_ok or not explicit_ok:
+            effective_satisfied = completed | set(step.satisfied_prerequisites)
+            prerequisites_ok = all(prerequisite in effective_satisfied for prerequisite in step.prerequisites)
+            if step.capacity_required > available_capacity or not prerequisites_ok:
                 blocked.append(step.id)
                 continue
-            lesson_bonus = 0.0
-            if lessons.intersection(step.lesson_ids):
-                lesson_bonus = 0.05
+            lesson_bonus = 0.05 if lessons.intersection(step.lesson_ids) else 0.0
             eligible.append((cls._score(step, lesson_bonus), step))
 
-        # Sequence is stage-first: select the highest-scoring eligible step in the
-        # earliest unlocked stage. This prevents a distant high-value opportunity
-        # from starving the immediate cash/capacity bottleneck.
         selected: list[EconomicStep] = []
         remaining_capacity = available_capacity
+        selected_score = 0.0
         for stage in cls.STAGE_ORDER:
-            candidates = [item for score, item in eligible if item.stage is stage and item.capacity_required <= remaining_capacity]
+            candidates = [
+                (score, item) for score, item in eligible
+                if item.stage is stage and item.capacity_required <= remaining_capacity
+            ]
             if not candidates:
                 continue
-            winner = max(candidates, key=lambda item: (cls._score(item, 0.05 if lessons.intersection(set(item.lesson_ids)) else 0.0), item.id))
+            winner_score, winner = max(candidates, key=lambda item: (item[0], item[1].id))
             selected.append(winner)
-            remaining_capacity -= winner.capacity_required
+            selected_score = winner_score
             break
 
         rationale = ["SEQUENCE_BEATS_STATIC_RANKING", "EARLIEST_UNLOCKED_STAGE_FIRST", "RECOMMENDATION_ONLY"]
@@ -141,6 +138,6 @@ class EconomicSequenceEngine:
         return EconomicSequence(
             steps=tuple(selected),
             blocked_steps=tuple(blocked),
-            score=round(sum(cls._score(step, 0.05 if lessons.intersection(set(step.lesson_ids)) else 0.0) for step in selected), 6),
+            score=round(selected_score, 6),
             rationale=tuple(rationale),
         )
