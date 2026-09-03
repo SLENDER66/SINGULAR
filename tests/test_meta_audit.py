@@ -38,6 +38,38 @@ def test_calibration_summary_is_deterministic() -> None:
     }
 
 
+def test_learning_records_are_aggregated_by_agent() -> None:
+    records = [
+        LearningEngine.evaluate_binary(Forecast(f"f{i}", ForecastKind.BINARY, probability=0.9), False)
+        for i in range(5)
+    ]
+
+    report = MetaAuditEngine.audit_learning({"finance": records})
+
+    assert report.healthy is True
+    assert [finding.code for finding in report.findings] == [
+        "MIS_CALIBRATED_AGENT",
+        "POOR_BINARY_CALIBRATION",
+    ]
+    assert report.findings[0].subject == "finance"
+
+
+def test_learning_meta_audit_does_not_flag_small_samples() -> None:
+    record = LearningEngine.evaluate_binary(
+        Forecast("small", ForecastKind.BINARY, probability=0.99), False
+    )
+
+    report = MetaAuditEngine.audit_learning({"finance": [record]})
+
+    assert report.findings == ()
+    assert report.healthy is True
+
+
+def test_minimum_sample_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="minimum_sample must be positive"):
+        MetaAuditEngine.audit(minimum_sample=0)
+
+
 def test_negative_audit_counter_is_rejected() -> None:
     with pytest.raises(ValueError, match="cannot be negative"):
         MetaAuditEngine.audit(unknown_count=-1)
