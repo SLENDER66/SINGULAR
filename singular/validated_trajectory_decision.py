@@ -14,13 +14,13 @@ from hashlib import sha256
 from math import isfinite
 from typing import Any
 
-from .autopilot import ActionRequest, Autonomy, DelegationContract, GovernorDecision
+from .autopilot import ActionRequest, Autonomy, DelegationContract, Governor, GovernorDecision
 from .global_control import GlobalDecisionReport
 from .human_optimization import HumanOptimizationReport
-from .security import PolicyDecision
+from .security import ActionPolicy, PolicyDecision
 from .trajectory import TrajectoryAssessment, TrajectoryDecision
 from .trajectory_optimization import TrajectoryPortfolio
-from .v32_governed_core import RedTeamFinding
+from .v32_governed_core import RedTeamFinding, RedTeamGate
 
 
 @dataclass(frozen=True)
@@ -64,12 +64,27 @@ class ValidatedActionRequest:
             if not isfinite(value) or not 0 <= value <= 10:
                 raise ValueError(f"validated action {name} must be finite and between 0 and 10")
 
+    def to_action(self) -> ActionRequest:
+        """Reconstruct the exact action snapshot represented by this artifact."""
+        return ActionRequest(
+            name=self.name,
+            description=self.description,
+            impact=self.impact,
+            risk=self.risk,
+            reversibility=self.reversibility,
+            requires_human=self.requires_human,
+            sensitive=self.sensitive,
+            contract_id=self.contract_id,
+            id=self.id,
+            capability=self.capability,
+        )
+
 
 @dataclass(frozen=True)
 class ValidatedTrajectoryDecision:
     """A trajectory-backed decision that is safe to present to a future executor.
 
-    It is intentionally a contract, not an execution instruction.  The class
+    It is intentionally a contract, not an execution instruction. The class
     captures immutable action snapshots plus all required validation artifacts
     and protects them with a deterministic context fingerprint.
     """
@@ -219,6 +234,10 @@ class ValidatedTrajectoryDecision:
             raise ValueError("governor decision must target an authorized action")
         if self.governor.mode not in {Autonomy.EXECUTE_REVERSIBLE, Autonomy.EXECUTE_AUTHORIZED}:
             raise ValueError("governor decision must explicitly authorize execution")
+        if self.global_report.governor_mode is not self.governor.mode:
+            raise ValueError("global report governor mode must match the validated governor decision")
+        if self.global_report.objective != self.contract.objective:
+            raise ValueError("global report objective must match the execution contract")
         if not self.policy.can_prepare or not self.policy.can_execute or self.policy.requires_human:
             raise ValueError("policy must explicitly permit execution without pending human review")
         if self.policy.tier.value != self.global_report.policy_tier:
@@ -255,6 +274,18 @@ class ValidatedTrajectoryDecision:
         for action in self.authorized_actions:
             if action.contract_id != self.contract.mission_id:
                 raise ValueError("authorized action must be bound to the execution contract")
+
+        selected_action = next(action for action in self.authorized_actions if action.id == self.global_report.action_id)
+        materialized = selected_action.to_action()
+        expected_policy = ActionPolicy.evaluate(materialized)
+        if self.policy != expected_policy:
+            raise ValueError("validated policy does not match the authorized action")
+        expected_governor = Governor.evaluate(materialized, self.contract)
+        if self.governor != expected_governor:
+            raise ValueError("validated governor decision does not match the authorized action and contract")
+        expected_red_team = RedTeamGate().inspect(materialized, self.contract)
+        if self.red_team_findings != expected_red_team:
+            raise ValueError("validated red-team findings do not match the authorized action and contract")
 
         _validate_finite("human capacity budget", self.human_optimization.capacity_budget, minimum=0)
         _validate_finite("human capacity used", self.human_optimization.capacity_used, minimum=0)
