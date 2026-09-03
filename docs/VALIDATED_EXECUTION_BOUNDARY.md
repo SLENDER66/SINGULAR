@@ -13,11 +13,41 @@ DomainLearning
     -> TrajectoryEngine
     -> GlobalDecisionGate
     -> ValidatedTrajectoryDecision
+    -> DurableDecisionAttestation
+    -> ValidatedExecutionBoundary
     -> DurableExecutionEngine
     -> handler/provider
 ```
 
 Every executable path must preserve the complete context needed to reproduce the authorization decision.
+
+## Authority invariant
+
+The system separates cognition from authority:
+
+```text
+evidence / analysis / forecast / recommendation
+              |
+              v
+      decision recommendation
+              |
+              v
+   GlobalDecisionGate (advisory)
+              |
+              v
+ ValidatedTrajectoryDecision
+              |
+              v
+ durable attestation
+              |
+              v
+ validated execution boundary
+              |
+              v
+     durable side effect
+```
+
+A recommendation is not an authorization. A global `PROCEED` report is not, by itself, an authorization. An approval record is not, by itself, an authorization. Future scenarios and collective consensus are never executable authority.
 
 ## Validated artifact invariants
 
@@ -33,6 +63,20 @@ A `ValidatedTrajectoryDecision` is executable only when all of the following hol
 - the decision has a finite validity interval (`issued_at < now < expires_at`);
 - the complete artifact, including its validity interval and execution binding, is covered by a deterministic SHA-256 fingerprint.
 
+## Durable attestation
+
+A decision must also be durably issued before it can execute. `DecisionAttestationStore` binds:
+
+- decision id;
+- complete decision context fingerprint;
+- issuance and expiration timestamps;
+- issuer;
+- revocation state.
+
+Attestation is idempotent for the exact same decision and refuses reuse of an existing decision id with another context. Revocation is durable and cannot be followed by re-issuance of the same decision id.
+
+The durable executor performs this check itself. The outer `ValidatedExecutionBoundary` is defense in depth, not a substitute for the inner execution check.
+
 ## Execution-target binding
 
 The textual module/qualified-name target is retained only as descriptive metadata. Executable authority is an opaque capability id (`cap_...`) registered against the exact in-process handler or provider object. The durable executor requires the supplied object to be the same registered object; copied callables and forged `__module__`/`__qualname__` metadata do not satisfy the binding.
@@ -46,11 +90,38 @@ For an external effect, the artifact additionally stores:
 
 The executor rechecks the opaque capability, provider name, operation and payload fingerprint before the provider is reached. A provider, operation, or payload substitution is rejected before external side effects.
 
+## Durable execution identity
+
+The durable execution identity is bound to the exact `ValidatedTrajectoryDecision.context_fingerprint`. This closes a class of replay errors where the same mission/action pair could otherwise collide across different validated contexts.
+
+The execution identity includes the mission, action security fields, current governance state, contract and decision context fingerprint. Completed or failed executions are replayed only when this identity still matches.
+
 ## Temporal validity and replay
 
-Validated decisions are short-lived by default. The construction pipeline issues a bounded validity window and includes both timestamps in the artifact fingerprint. A decision is invalid before `issued_at` or at/after `expires_at`. This limits replay of an otherwise valid authorization and makes expiry-window tampering detectable.
+Validated decisions are short-lived by default. The construction pipeline issues a bounded validity window and includes both timestamps in the artifact fingerprint. A decision is invalid before `issued_at` or at/after `expires_at`.
 
-The durable executor also re-evaluates current governance and policy immediately before execution. Durable execution identities are idempotent and fingerprinted. A previously authorized action cannot silently acquire new parameters, contract context, policy, or governance and still execute under the old identity.
+The durable executor re-evaluates current governance and policy immediately before execution. An attestation may be revoked independently of the decision's cryptographic self-consistency, which makes revocation an additional durable gate.
+
+## Historical and future cognition
+
+Historical memory is evidence-bounded. Established and probable facts may enter the canonical world snapshot; contested evidence remains explicitly visible as counterevidence. Historical patterns represent mechanisms rather than moral labels.
+
+Future scenarios remain hypotheses with explicit assumptions, probability, evidence and horizon. Long horizons increase uncertainty. `TemporalAdvisor` can produce `PREPARE` or `WATCH` signals and can expose forecasts to collective cognition, but it is structurally non-authorizing.
+
+```text
+historical evidence -> mechanisms -> patterns
+                              \
+future scenarios ----> bounded temporal advisory
+                              |
+                              +--> cognition only
+                                   never authority
+```
+
+## Collective cognition
+
+Shared signals are typed as evidence, analysis, forecast, challenge or recommendation. Repeated contributions from one contributor do not create a majority. Critical challenges remain blocking. Consensus is explicitly separate from authorization.
+
+Temporal forecasts enter this space as `FORECAST` signals with noncritical authority and therefore cannot silently turn a scenario into an action.
 
 ## Raw paths
 
@@ -64,7 +135,17 @@ These public methods are intentionally deny-by-default:
 - `MissionAutopilot.run` handler execution
 - `AutopilotSupervisor.route` handler execution
 
-Callers must migrate to the validated boundary instead of restoring compatibility through raw execution.
+The strict boundary also exposes only validated variants for handler execution, external-effect execution and external-effect reconciliation.
+
+## Self-audit
+
+`ExecutionBoundaryAuditor` provides a static/dynamic integrity check that:
+
+- scans production Python files for obvious raw-tool, raw-engine and direct-handler bypasses;
+- parses every checked production file;
+- probes the legacy raw methods and requires `PermissionError`.
+
+This is a guardrail, not a formal proof. It is intentionally conservative and should be extended whenever a new execution surface appears.
 
 ## Human review
 
@@ -72,6 +153,6 @@ Sensitive actions and actions requiring human judgment remain non-executable thr
 
 ## Integration rule
 
-`GlobalDecisionGate` remains usable for advisory recommendations. That is not an execution authorization. Only `ValidatedTrajectoryDecision` can cross the durable execution boundary.
+`GlobalDecisionGate` remains usable for advisory recommendations. That is not an execution authorization. Only an attested `ValidatedTrajectoryDecision` can cross the durable execution boundary.
 
-Do not merge this architecture into `main` until the branch CI is green and all production callers have migrated to the validated path.
+The architecture stays isolated on `feat/validated-execution-boundary` until CI is green and production callers are fully migrated. Do not merge this architecture into `main` without explicit human authorization.
