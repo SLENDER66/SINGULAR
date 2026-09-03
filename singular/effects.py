@@ -169,7 +169,7 @@ class ExternalEffectCoordinator:
             raise EffectInProgress(key)
 
         if not self._claim(key):
-            current = self.prepare(request)
+            current = self.peek(request)
             if current["status"] == EffectStatus.COMPLETED.value:
                 return ProviderResult("COMPLETED", current.get("result"))
             if current["status"] == EffectStatus.FAILED.value:
@@ -196,22 +196,29 @@ class ExternalEffectCoordinator:
         return normalized
 
     def recover_in_flight(self, request: EffectRequest, *, reason: str) -> dict[str, Any]:
-        """Quarantine an abandoned claim without calling the external provider."""
+        """Quarantine an existing abandoned claim without creating a new effect intent."""
         if not reason.strip():
             raise ValueError("Une raison de récupération explicite est obligatoire.")
         key = request.provider_idempotency_key
-        row = self.prepare(request)
+        try:
+            row = self.peek(request)
+        except KeyError:
+            raise KeyError(key) from None
         if row["status"] == EffectStatus.UNKNOWN.value:
             return row
         if row["status"] != EffectStatus.IN_FLIGHT.value:
             raise ValueError(f"Récupération d'effet impossible depuis l'état {row['status']}.")
         self._transition(key, EffectStatus.UNKNOWN.value, error=f"Recovery required: {reason}")
-        return self.prepare(request)
+        return self.peek(request)
 
     def reconcile(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
+        """Reconcile only an existing UNKNOWN effect; never create recovery intent."""
         self._authorize_reconciliation(request)
         key = request.provider_idempotency_key
-        row = self.prepare(request)
+        try:
+            row = self.peek(request)
+        except KeyError:
+            raise RuntimeError("Aucune preuve durable de l'effet externe n'existe pour cette réconciliation.") from None
         if row["status"] == EffectStatus.COMPLETED.value:
             return ProviderResult("COMPLETED", row.get("result"))
         if row["status"] != EffectStatus.UNKNOWN.value:
@@ -229,7 +236,7 @@ class ExternalEffectCoordinator:
         return normalized
 
     def get(self, request: EffectRequest) -> dict[str, Any]:
-        return self.prepare(request)
+        return self.peek(request)
 
     def _claim(self, key: str) -> bool:
         with self._connect() as conn:
@@ -245,7 +252,9 @@ class ExternalEffectCoordinator:
             if row is None:
                 raise KeyError(key)
             current = row["status"]
-            if status != current and status not in self._TRANSITIONS.get(current, frozenset()):
+            if status == current:
+                return
+            if status not in self._TRANSITIONS.get(current, frozenset()):
                 if current in {EffectStatus.COMPLETED.value, EffectStatus.FAILED.value}:
                     raise RuntimeError(f"Transition d'effet perdue : état terminal déjà atteint ({current} -> {status}).")
                 raise ValueError(f"Transition d'effet interdite : {current} -> {status}")
