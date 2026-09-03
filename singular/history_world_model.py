@@ -7,7 +7,7 @@ authorize execution.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from hashlib import sha256
 from math import isfinite
@@ -53,8 +53,9 @@ class HistoricalEvidence:
             raise ValueError("historical evidence id, statement and source are required")
         if not isfinite(self.reliability) or not 0.0 <= self.reliability <= 1.0:
             raise ValueError("historical evidence reliability must be between 0 and 1")
-        if not self.mechanisms:
-            raise ValueError("historical evidence must name at least one mechanism")
+        mechanisms = tuple(item.strip() for item in self.mechanisms)
+        if not mechanisms or any(not item for item in mechanisms):
+            raise ValueError("historical evidence must name at least one non-empty mechanism")
 
 
 @dataclass(frozen=True)
@@ -69,9 +70,13 @@ class HistoricalPattern:
     def __post_init__(self) -> None:
         if not self.id.strip() or not self.mechanism.strip() or not self.evidence_ids:
             raise ValueError("historical pattern requires an id, mechanism and evidence")
+        if len(self.evidence_ids) != len(set(self.evidence_ids)):
+            raise ValueError("historical pattern evidence ids must be unique")
         for name, value in (("support", self.support), ("recurrence", self.recurrence)):
             if not isfinite(value) or not 0.0 <= value <= 1.0:
                 raise ValueError(f"historical pattern {name} must be between 0 and 1")
+        if not set(self.counterevidence) <= set(self.evidence_ids):
+            raise ValueError("historical pattern counterevidence must reference its evidence")
 
 
 @dataclass(frozen=True)
@@ -92,8 +97,10 @@ class FutureScenario:
                 raise ValueError(f"future scenario {name} must be finite")
         if self.horizon_years <= 0 or not 0.0 <= self.probability <= 1.0:
             raise ValueError("future scenario horizon must be positive and probability between 0 and 1")
-        if not self.assumptions:
-            raise ValueError("future scenario assumptions must be explicit")
+        if not self.assumptions or any(not item.strip() for item in self.assumptions):
+            raise ValueError("future scenario assumptions must be explicit and non-empty")
+        if len(self.evidence_ids) != len(set(self.evidence_ids)):
+            raise ValueError("future scenario evidence ids must be unique")
 
 
 @dataclass(frozen=True)
@@ -109,9 +116,18 @@ class WorldStateSnapshot:
               patterns: tuple[HistoricalPattern, ...], scenarios: tuple[FutureScenario, ...]) -> "WorldStateSnapshot":
         if not as_of.strip():
             raise ValueError("as_of is required")
+        fact_ids = tuple(item.id for item in canonical_facts)
+        if len(fact_ids) != len(set(fact_ids)):
+            raise ValueError("canonical fact ids must be unique")
         for fact in canonical_facts:
             if fact.level not in {EpistemicLevel.ESTABLISHED_FACT, EpistemicLevel.PROBABLE_FACT}:
                 raise ValueError("only established/probable evidence can enter canonical facts")
+        pattern_ids = tuple(item.id for item in patterns)
+        if len(pattern_ids) != len(set(pattern_ids)):
+            raise ValueError("world-state pattern ids must be unique")
+        scenario_ids = tuple(item.id for item in scenarios)
+        if len(scenario_ids) != len(set(scenario_ids)):
+            raise ValueError("world-state scenario ids must be unique")
         payload = {
             "as_of": as_of,
             "canonical_facts": canonical_facts,
@@ -122,6 +138,8 @@ class WorldStateSnapshot:
 
     def verify(self) -> bool:
         try:
+            if any(fact.level not in {EpistemicLevel.ESTABLISHED_FACT, EpistemicLevel.PROBABLE_FACT} for fact in self.canonical_facts):
+                return False
             return self.fingerprint == _fingerprint({
                 "as_of": self.as_of,
                 "canonical_facts": self.canonical_facts,
@@ -141,6 +159,9 @@ class TemporalContext:
     def __post_init__(self) -> None:
         if not self.canonical_world.verify():
             raise ValueError("canonical world snapshot fingerprint is invalid")
+        snapshot_pattern_ids = {pattern.id for pattern in self.canonical_world.patterns}
+        if {pattern.id for pattern in self.historical_patterns} != snapshot_pattern_ids:
+            raise ValueError("temporal historical patterns must match the canonical snapshot")
         scenario_ids = {scenario.id for scenario in self.canonical_world.scenarios}
         if any(scenario.id not in scenario_ids for scenario in self.active_scenarios):
             raise ValueError("active scenario must belong to the canonical world snapshot")
@@ -169,11 +190,13 @@ class HistoricalReasoner:
                     grouped.setdefault(mechanism, []).append(item)
         patterns: list[HistoricalPattern] = []
         for mechanism, items in sorted(grouped.items()):
-            if not items:
-                continue
-            support = sum(item.reliability for item in items) / len(items)
-            recurrence = min(1.0, len(items) / 5.0)
-            counterevidence = tuple(item.id for item in items if item.level is EpistemicLevel.CONTESTED)
+            supportive = [item for item in items if item.level in {EpistemicLevel.ESTABLISHED_FACT, EpistemicLevel.PROBABLE_FACT}]
+            contested = [item for item in items if item.level is EpistemicLevel.CONTESTED]
+            positive_support = sum(item.reliability for item in supportive) / len(supportive) if supportive else 0.0
+            counterweight = sum(item.reliability for item in contested) / len(contested) if contested else 0.0
+            support = max(0.0, min(1.0, positive_support * (1.0 - 0.5 * counterweight)))
+            recurrence = min(1.0, len(set(item.id for item in items)) / 5.0)
+            counterevidence = tuple(item.id for item in contested)
             patterns.append(HistoricalPattern(
                 id=f"PAT-{sha256(mechanism.encode()).hexdigest()[:10]}",
                 mechanism=mechanism,
@@ -188,15 +211,20 @@ class HistoricalReasoner:
 class FutureReasoner:
     @staticmethod
     def assess(scenario: FutureScenario, evidence: tuple[HistoricalEvidence, ...]) -> TemporalAssessment:
-        supporting = {item.id: item.reliability for item in evidence}
-        support = [supporting[eid] for eid in scenario.evidence_ids if eid in supporting]
-        evidence_confidence = sum(support) / len(support) if support else 0.25
+        indexed = {item.id: item for item in evidence}
+        support = [item.reliability for eid in scenario.evidence_ids if (item := indexed.get(eid)) and item.level in {EpistemicLevel.ESTABLISHED_FACT, EpistemicLevel.PROBABLE_FACT}]
+        contested = [item.reliability for eid in scenario.evidence_ids if (item := indexed.get(eid)) and item.level is EpistemicLevel.CONTESTED]
+        positive_confidence = sum(support) / len(support) if support else 0.25
+        counterweight = sum(contested) / len(contested) if contested else 0.0
+        evidence_confidence = max(0.0, positive_confidence * (1.0 - 0.5 * counterweight))
         horizon_penalty = min(0.7, scenario.horizon_years / 100.0)
         confidence = max(0.0, min(1.0, scenario.probability * evidence_confidence * (1.0 - horizon_penalty)))
         uncertainty = 1.0 - confidence
         reasons = [f"SCENARIO_PROBABILITY:{scenario.probability:.3f}"]
         if not support:
-            reasons.append("NO_DIRECT_EVIDENCE")
+            reasons.append("NO_DIRECT_FACT_EVIDENCE")
+        if contested:
+            reasons.append("CONTESTED_EVIDENCE_PRESENT")
         if scenario.horizon_years > 10:
             reasons.append("LONG_HORIZON")
         return TemporalAssessment(round(confidence, 4), round(uncertainty, 4), scenario.disposition is FutureDisposition.PREPARE, tuple(reasons))
@@ -227,7 +255,7 @@ def _fingerprint(payload: Any) -> str:
 def _normalize(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
-    if hasattr(value, "__dataclass_fields__"):
+    if is_dataclass(value):
         return {key: _normalize(item) for key, item in asdict(value).items()}
     if isinstance(value, dict):
         return {str(key): _normalize(item) for key, item in sorted(value.items(), key=lambda item: str(item[0]))}
