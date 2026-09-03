@@ -4,11 +4,13 @@ from singular.autopilot import ActionRequest
 from singular.coherence import GlobalCoherenceGuard
 from singular.consistency import CrossDomainConsistencyChecker
 from singular.global_control import GlobalDecisionGate
+from singular.human_optimization import DomainState, HumanOptimizationEngine, Intervention
 from singular.models import Risk
 from singular.state import CapacitySnapshot
 from singular.trajectory import TrajectoryProfile
 from singular.values import CoreValue, ValueAssessment, ValuesEngine, Vision
 from singular.world_model import EpistemicType, WorldFact, WorldModel
+from singular.domain_learning import LearningDomain
 
 
 def action(**overrides):
@@ -28,9 +30,7 @@ def test_global_gate_proceeds_when_domains_are_coherent():
 
 def test_global_gate_propagates_global_trajectory_review():
     profile = TrajectoryProfile(Vision("Build durable freedom and ownership."))
-    report = GlobalDecisionGate().evaluate(
-        "grow", action(), trajectory_profile=profile, trajectory_dimensions={"money": 0.9}
-    )
+    report = GlobalDecisionGate().evaluate("grow", action(), trajectory_profile=profile, trajectory_dimensions={"money": 0.9})
     assert report.decision == "REVIEW"
     assert report.trajectory is not None
     assert report.trajectory.human_review is True
@@ -41,7 +41,7 @@ def test_global_gate_blocks_value_violation():
     values = [ValuesEngine.assess(CoreValue("respect"), ValueAssessment.VIOLATED, "conflict")]
     report = GlobalDecisionGate().evaluate("objectif", action(), values=values)
     assert report.decision == "BLOCK"
-    assert "VALUES:VIOLATED" in report.blockers
+    assert "VALUES:HARD_CONSTRAINT_VIOLATED:RESPECT" in report.blockers
 
 
 def test_global_gate_reviews_unknown_values_and_low_confidence_state():
@@ -64,6 +64,17 @@ def test_global_gate_never_executes_sensitive_action():
     assert report.decision == "BLOCK"
     assert report.policy_tier == "BLACK"
     assert report.governor_mode.value == "ESCALATE"
+
+
+def test_global_gate_carries_human_optimization_into_trajectory_control():
+    human_report = HumanOptimizationEngine.optimize(
+        (DomainState(LearningDomain.CAREER, 0.2, confidence=0.4, leverage=1.0),),
+        (Intervention("career", LearningDomain.CAREER, 0.8, evidence=0.9, causal_confidence=0.9),),
+    )
+    report = GlobalDecisionGate().evaluate("career", action(), human_optimization=human_report)
+    assert report.human_optimization is human_report
+    assert report.decision == "REVIEW"
+    assert "HUMAN_OPTIMIZATION:LOW_STATE_CONFIDENCE" in report.warnings
 
 
 def test_global_gate_fails_closed_on_durable_coherence_violation(tmp_path):
