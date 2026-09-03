@@ -1,5 +1,6 @@
 import math
 from dataclasses import FrozenInstanceError
+from time import time
 
 import pytest
 
@@ -11,6 +12,12 @@ from singular.security import ActionPolicy
 from singular.trajectory import TrajectoryAssessment, TrajectoryDecision
 from singular.trajectory_optimization import TrajectoryPortfolio
 from singular.validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
+
+
+VALID_FROM = time()
+VALID_TO = VALID_FROM + 3600.0
+HANDLER_CAPABILITY = "cap_test_authorized_handler"
+PROVIDER_CAPABILITY = "cap_test_provider"
 
 
 def artifacts(*, global_decision: str = "PROCEED"):
@@ -36,12 +43,13 @@ def artifacts(*, global_decision: str = "PROCEED"):
 def build(**overrides):
     action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
     values = {
-        "decision_id": "DEC-1", "actions": (action,), "action_to_intervention": ((action.id, "career"),),
+        "decision_id": "DEC-1", "issued_at": VALID_FROM, "expires_at": VALID_TO,
+        "actions": (action,), "action_to_intervention": ((action.id, "career"),),
         "domain_states": (state,), "interventions": (intervention,), "human_interactions": (), "trajectory_interactions": (),
         "portfolio_capacity_budget": 2, "portfolio_max_candidates": 5,
         "human_optimization": human, "trajectory_portfolio": portfolio, "trajectory_assessment": assessment,
         "global_report": report, "contract": contract, "policy": policy, "red_team_findings": findings,
-        "governor": governor, "execution_target": "tests.test_validated_trajectory_decision:authorized_handler",
+        "governor": governor, "execution_target": HANDLER_CAPABILITY,
     }
     values.update(overrides)
     return ValidatedTrajectoryDecision.create(**values)
@@ -60,11 +68,12 @@ def test_rejects_non_proceed_global_report(status):
     action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts(global_decision=status)
     with pytest.raises(ValueError, match="PROCEED"):
         ValidatedTrajectoryDecision.create(
-            decision_id="DEC-1", actions=(action,), action_to_intervention=((action.id, "career"),),
+            decision_id="DEC-1", issued_at=VALID_FROM, expires_at=VALID_TO,
+            actions=(action,), action_to_intervention=((action.id, "career"),),
             domain_states=(state,), interventions=(intervention,), human_interactions=(), trajectory_interactions=(),
             portfolio_capacity_budget=2, portfolio_max_candidates=5, human_optimization=human, trajectory_portfolio=portfolio,
             trajectory_assessment=assessment, global_report=report, contract=contract, policy=policy,
-            red_team_findings=findings, governor=governor, execution_target="tests.test_validated_trajectory_decision:authorized_handler",
+            red_team_findings=findings, governor=governor, execution_target=HANDLER_CAPABILITY,
         )
 
 
@@ -83,11 +92,12 @@ def test_rejects_action_missing_from_portfolio():
     action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
     with pytest.raises(ValueError, match="share the validated intervention"):
         ValidatedTrajectoryDecision.create(
-            decision_id="DEC-1", actions=(action,), action_to_intervention=((action.id, "not-in-portfolio"),),
+            decision_id="DEC-1", issued_at=VALID_FROM, expires_at=VALID_TO,
+            actions=(action,), action_to_intervention=((action.id, "not-in-portfolio"),),
             domain_states=(state,), interventions=(intervention,), human_interactions=(), trajectory_interactions=(),
             portfolio_capacity_budget=2, portfolio_max_candidates=5, human_optimization=human, trajectory_portfolio=portfolio,
             trajectory_assessment=assessment, global_report=report, contract=contract, policy=policy,
-            red_team_findings=findings, governor=governor, execution_target="tests.test_validated_trajectory_decision:authorized_handler",
+            red_team_findings=findings, governor=governor, execution_target=HANDLER_CAPABILITY,
         )
 
 
@@ -108,16 +118,24 @@ def test_detects_tampered_context_fingerprint():
 def test_fingerprint_is_deterministic_for_identical_context():
     action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
     values = {
-        "decision_id": "DEC-1", "actions": (action,), "action_to_intervention": ((action.id, "career"),),
+        "decision_id": "DEC-1", "issued_at": VALID_FROM, "expires_at": VALID_TO,
+        "actions": (action,), "action_to_intervention": ((action.id, "career"),),
         "domain_states": (state,), "interventions": (intervention,), "human_interactions": (), "trajectory_interactions": (),
         "portfolio_capacity_budget": 2, "portfolio_max_candidates": 5, "human_optimization": human,
         "trajectory_portfolio": portfolio, "trajectory_assessment": assessment, "global_report": report, "contract": contract,
         "policy": policy, "red_team_findings": findings, "governor": governor,
-        "execution_target": "tests.test_validated_trajectory_decision:authorized_handler",
+        "execution_target": HANDLER_CAPABILITY,
     }
     first = ValidatedTrajectoryDecision.create(**values)
     second = ValidatedTrajectoryDecision.create(**values)
     assert first.context_fingerprint == second.context_fingerprint
+
+
+def test_temporal_validity_is_part_of_the_fingerprint():
+    decision = build()
+    object.__setattr__(decision, "expires_at", decision.expires_at + 1)
+    assert decision.verify() is False
+    assert decision.verify(now=VALID_TO) is False
 
 
 def test_external_effect_binding_requires_provider_operation_and_payload():
@@ -125,7 +143,7 @@ def test_external_effect_binding_requires_provider_operation_and_payload():
         build(execution_kind="external_effect")
     payload = {"amount": 42, "target": "bounded"}
     decision = build(
-        execution_kind="external_effect", execution_target="tests.fake:Provider", provider_name="bounded-provider",
+        execution_kind="external_effect", execution_target=PROVIDER_CAPABILITY, provider_name="bounded-provider",
         provider_target="tests.fake:Provider", operation="apply", payload_fingerprint=payload_fingerprint(payload),
     )
     assert decision.verify() is True
@@ -134,7 +152,7 @@ def test_external_effect_binding_requires_provider_operation_and_payload():
 def test_external_effect_payload_fingerprint_is_tamper_evident():
     payload = {"amount": 42}
     decision = build(
-        execution_kind="external_effect", execution_target="tests.fake:Provider", provider_name="bounded-provider",
+        execution_kind="external_effect", execution_target=PROVIDER_CAPABILITY, provider_name="bounded-provider",
         provider_target="tests.fake:Provider", operation="apply", payload_fingerprint=payload_fingerprint(payload),
     )
     object.__setattr__(decision, "payload_fingerprint", payload_fingerprint({"amount": 43}))
