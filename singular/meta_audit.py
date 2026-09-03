@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
+from typing import Mapping, Sequence
 
 from .learning import CalibrationRecord
 
@@ -52,7 +53,7 @@ class MetaAuditEngine:
     """Audit the decision system itself without acquiring authority over it."""
 
     @staticmethod
-    def calibration(records: list[CalibrationRecord]) -> dict[str, float | int]:
+    def calibration(records: Sequence[CalibrationRecord]) -> dict[str, float | int]:
         if not records:
             return {"count": 0, "mean_absolute_error": 0.0, "mean_brier_score": 0.0}
         brier = [record.brier_score for record in records if record.brier_score is not None]
@@ -63,6 +64,31 @@ class MetaAuditEngine:
         }
 
     @classmethod
+    def audit_learning(
+        cls,
+        records_by_agent: Mapping[str, Sequence[CalibrationRecord]],
+        *,
+        minimum_sample: int = 5,
+    ) -> MetaAuditReport:
+        """Audit raw learning records by agent; emits findings only, never mutations."""
+        if minimum_sample < 1:
+            raise ValueError("minimum_sample must be positive")
+        calibrations = tuple(
+            AgentCalibration(
+                agent_id=agent_id,
+                forecast_count=len(records),
+                mean_absolute_error=float(cls.calibration(records)["mean_absolute_error"]),
+                mean_brier_score=(
+                    float(cls.calibration(records)["mean_brier_score"])
+                    if any(record.brier_score is not None for record in records)
+                    else None
+                ),
+            )
+            for agent_id, records in records_by_agent.items()
+        )
+        return cls.audit(calibrations=calibrations, minimum_sample=minimum_sample)
+
+    @classmethod
     def audit(
         cls,
         *,
@@ -71,8 +97,11 @@ class MetaAuditEngine:
         contradiction_count: int = 0,
         stale_rule_count: int = 0,
         low_information_decision_count: int = 0,
+        minimum_sample: int = 5,
     ) -> MetaAuditReport:
         del cls
+        if minimum_sample < 1:
+            raise ValueError("minimum_sample must be positive")
         for name, value in (
             ("unknown_count", unknown_count),
             ("contradiction_count", contradiction_count),
@@ -84,7 +113,7 @@ class MetaAuditEngine:
 
         findings: list[MetaAuditFinding] = []
         for calibration in sorted(calibrations, key=lambda item: item.agent_id):
-            if calibration.forecast_count >= 5 and calibration.mean_absolute_error >= 0.4:
+            if calibration.forecast_count >= minimum_sample and calibration.mean_absolute_error >= 0.4:
                 findings.append(
                     MetaAuditFinding(
                         "MIS_CALIBRATED_AGENT",
@@ -96,7 +125,7 @@ class MetaAuditEngine:
                 )
             if (
                 calibration.mean_brier_score is not None
-                and calibration.forecast_count >= 5
+                and calibration.forecast_count >= minimum_sample
                 and calibration.mean_brier_score >= 0.25
             ):
                 findings.append(
