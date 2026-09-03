@@ -72,6 +72,16 @@ def test_duplicate_domain_state_fails_closed() -> None:
         HumanOptimizationEngine.find_bottlenecks(states)
 
 
+def test_duplicate_interaction_fails_closed() -> None:
+    states = (DomainState(LearningDomain.CAREER, 0.5), DomainState(LearningDomain.SLEEP, 0.5))
+    interactions = (
+        DomainInteraction(LearningDomain.SLEEP, LearningDomain.CAREER),
+        DomainInteraction(LearningDomain.SLEEP, LearningDomain.CAREER, multiplier=2),
+    )
+    with pytest.raises(ValueError):
+        HumanOptimizationEngine.optimize(states, (), interactions)
+
+
 def test_capacity_is_accounted_for_in_selected_portfolio() -> None:
     states = (
         DomainState(LearningDomain.CAREER, 0.2, confidence=0.9, leverage=1.0),
@@ -106,7 +116,7 @@ def test_portfolio_selection_is_globally_optimal_not_greedy() -> None:
     assert report.capacity_used == 10
 
 
-def test_hypothesis_bridge_preserves_learning_signal() -> None:
+def test_hypothesis_bridge_does_not_invent_causal_certainty() -> None:
     hypothesis = DomainHypothesis(
         LearningDomain.CAREER,
         "testing improves interview conversion",
@@ -121,7 +131,28 @@ def test_hypothesis_bridge_preserves_learning_signal() -> None:
     assert intervention.domain is LearningDomain.CAREER
     assert intervention.expected_improvement == 0.7
     assert intervention.evidence == 0.8
-    assert intervention.causal_confidence == 0.8
+    assert intervention.causal_confidence == 0.5
+
+
+def test_hypothesis_bridge_accepts_explicit_causal_confidence() -> None:
+    hypothesis = DomainHypothesis(
+        LearningDomain.CAREER,
+        "testing improves interview conversion",
+        "run interview experiments",
+        expected_improvement=0.7,
+        evidence_strength=0.8,
+    )
+    intervention = Intervention.from_hypothesis(hypothesis, causal_confidence=0.9)
+    assert intervention.causal_confidence == 0.9
+
+
+def test_missing_domain_state_is_auditable() -> None:
+    report = HumanOptimizationEngine.optimize(
+        (DomainState(LearningDomain.CAREER, 0.5),),
+        (Intervention("sleep", LearningDomain.SLEEP, 0.8, evidence=0.9, causal_confidence=0.9),),
+    )
+    assert report.candidates == ()
+    assert "MISSING_DOMAIN_STATE:sleep" in report.warnings
 
 
 def test_non_finite_and_self_interaction_fail_closed() -> None:
