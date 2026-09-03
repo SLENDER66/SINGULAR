@@ -77,9 +77,9 @@ class ExecutionBoundaryAuditor:
         executor_type_names = {"DurableExecutionEngine"}
         executor_receivers: set[str] = set()
 
-        # Resolve the common import spellings used by production code.
+        # Resolve common absolute and relative import spellings.
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == ".execution":
+            if isinstance(node, ast.ImportFrom) and node.module == "execution" and node.level >= 1:
                 for alias in node.names:
                     if alias.name == "DurableExecutionEngine":
                         executor_type_names.add(alias.asname or alias.name)
@@ -95,7 +95,7 @@ class ExecutionBoundaryAuditor:
                 return expr.attr == "DurableExecutionEngine"
             return False
 
-        # Track direct constructions and one-step aliases (runner = executor).
+        # Track direct constructions and transitive assignment aliases.
         changed = True
         while changed:
             changed = False
@@ -103,7 +103,8 @@ class ExecutionBoundaryAuditor:
                 if isinstance(node, (ast.Assign, ast.AnnAssign)):
                     value = node.value
                     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                    if value is not None and is_executor_constructor(value.func if isinstance(value, ast.Call) else value):
+                    constructor_expr = value.func if isinstance(value, ast.Call) else value
+                    if value is not None and is_executor_constructor(constructor_expr):
                         for target in targets:
                             if isinstance(target, ast.Name) and target.id not in executor_receivers:
                                 executor_receivers.add(target.id)
@@ -125,8 +126,6 @@ class ExecutionBoundaryAuditor:
                 findings.append(BoundaryFinding(str(path), target.lineno, "RAW_TOOL_BYPASS", target.attr))
 
             if target.attr in {"execute_effect", "reconcile_effect"}:
-                # These names are execution primitives; any production call outside
-                # the definition/approved adapter is suspicious and must be reviewed.
                 findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", target.attr))
 
             if target.attr in INNER_VALIDATED_METHODS and not inner_allowed:
