@@ -42,6 +42,7 @@ from .empire_engine import EmpireAsset, EmpireAssessment, EmpireEngine, EmpireSt
 from .cashflow_engine import CashflowAction, CashflowAssessment, CashflowOpportunity, RapidCashEngine, RapidCashObjective
 from .rapid_wealth import RapidWealthEngine, RapidWealthSprint
 from .patrimony_engine import FailureConversion, FailureDisposition, FailureRecord, PatrimonyAssessment, PatrimonyEngine
+from .generational import GenerationalCharter, GenerationalEngine, GenerationalReadiness
 from .meta_audit import AgentCalibration, MetaAuditEngine, MetaAuditFinding, MetaAuditReport, MetaAuditSeverity
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
