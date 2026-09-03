@@ -27,3 +27,4 @@ from .coherence import CoherenceReport, GlobalCoherenceGuard
 from .authority import AgentPower, AuthorityProfile, AuthorityProtocol, ConflictResolution, ConflictType
 from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldModel, WorldOpportunity
 from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValuesEngine, Vision
+from .state import CapacityEngine, CapacitySnapshot, StateDimension, StateObservation
