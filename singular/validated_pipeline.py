@@ -7,7 +7,7 @@ from typing import Any
 
 from .autopilot import ActionRequest, DelegationContract, Governor
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
-from .human_optimization import DomainState, HumanOptimizationEngine, Intervention
+from .human_optimization import DomainInteraction, DomainState, HumanOptimizationEngine, Intervention
 from .security import ActionPolicy
 from .state import CapacitySnapshot
 from .trajectory import TrajectoryEngine, TrajectoryProfile
@@ -41,7 +41,8 @@ class ValidatedTrajectoryPipeline:
         provider_target: str | None = None,
         operation: str | None = None,
         execution_payload: Any = None,
-        interactions: tuple[TrajectoryInteraction, ...] = (),
+        human_interactions: tuple[DomainInteraction, ...] = (),
+        trajectory_interactions: tuple[TrajectoryInteraction, ...] = (),
         value_results: tuple[ValueAssessmentResult, ...] = (),
         capacity: CapacitySnapshot | None = None,
         effort: float | None = None,
@@ -69,9 +70,9 @@ class ValidatedTrajectoryPipeline:
             raise ValueError("intervention ids must be unique")
         budget = capacity_budget if capacity_budget is not None else float("inf")
 
-        human = HumanOptimizationEngine.optimize(tuple(domain_states), tuple(interventions), capacity_budget=budget)
+        human = HumanOptimizationEngine.optimize(tuple(domain_states), tuple(interventions), human_interactions, capacity_budget=budget)
         portfolio = TrajectoryOptimizationEngine.optimize(
-            human.candidates, intervention_map, interactions,
+            human.candidates, intervention_map, trajectory_interactions,
             capacity_budget=budget, max_candidates=max_portfolio_candidates,
         )
         if not portfolio.candidates:
@@ -115,11 +116,14 @@ class ValidatedTrajectoryPipeline:
 
         return ValidatedTrajectoryDecision.create(
             decision_id=decision_id, actions=actions, action_to_intervention=action_to_intervention,
-            human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
-            global_report=global_report, contract=contract, policy=ActionPolicy.evaluate(action),
-            red_team_findings=global_report.red_team_findings, governor=Governor.evaluate(action, contract),
-            execution_target=execution_target, execution_kind=execution_kind, provider_name=provider_name,
-            provider_target=provider_target, operation=operation, payload_fingerprint=payload_hash,
+            domain_states=tuple(domain_states), interventions=tuple(interventions), human_interactions=human_interactions,
+            trajectory_interactions=trajectory_interactions, portfolio_capacity_budget=budget,
+            portfolio_max_candidates=max_portfolio_candidates, human_optimization=human,
+            trajectory_portfolio=portfolio, trajectory_assessment=assessment, global_report=global_report,
+            contract=contract, policy=ActionPolicy.evaluate(action), red_team_findings=global_report.red_team_findings,
+            governor=Governor.evaluate(action, contract), execution_target=execution_target,
+            execution_kind=execution_kind, provider_name=provider_name, provider_target=provider_target,
+            operation=operation, payload_fingerprint=payload_hash,
         )
 
 
