@@ -1,4 +1,4 @@
-from singular.enterprise_core import Initiative, InitiativeStatus
+from singular.enterprise_core import Initiative
 from singular.portfolio_reallocation import (
     DynamicPortfolioEngine,
     InitiativeResult,
@@ -68,10 +68,15 @@ def test_dangerous_result_stops_initiative() -> None:
 
 def test_bottlenecks_and_overcapacity_are_visible() -> None:
     a = initiative("A", 100, 5, 5)
+    b = initiative("B", 80, 5, 5)
     plan = DynamicPortfolioEngine.rebalance(
-        "grow", (a,),
+        "grow", (a, b),
         results=(InitiativeResult("A", 90, 7, 7),),
-        current_active_ids=("A", "UNKNOWN"),
+        current_active_ids=("A", "B"),
         capacity_budget=5,
         financial_budget=5,
+        max_active=1,
     )
+    assert "EFFORT:A" in plan.bottlenecks
+    assert "BUDGET:A" in plan.bottlenecks
+    assert "CURRENT_PORTFOLIO_OVER_CAPACITY" in plan.warnings
