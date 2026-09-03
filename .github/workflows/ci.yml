@@ -4,10 +4,16 @@ on:
   push:
   pull_request:
 
+# Do not spend runner time validating commits that have already been superseded.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: true
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
