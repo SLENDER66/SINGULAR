@@ -68,6 +68,12 @@ from .human_optimization import (
 )
 from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine, TrajectoryPortfolio
 from .human_optimizer import HumanDomainState, HumanOptimizationPlan, HumanOptimizationPriority, OptimizationAction
+from .execution_capability import (
+    ExecutionCapabilityRegistry,
+    GLOBAL_EXECUTION_CAPABILITIES,
+    execution_capability_matches,
+    register_execution_capability,
+)
 from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTrajectoryDecision, payload_fingerprint
 from .validated_execution import ValidatedExecutionBoundary
 from .validated_pipeline import ValidatedTrajectoryPipeline
