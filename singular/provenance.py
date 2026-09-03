@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from hashlib import sha256
 import json
+import math
 from typing import Any
 
 
@@ -29,7 +30,7 @@ class ProvenanceRecord:
             raise ValueError("recorded_at is required")
         if not self.epistemic_type.strip():
             raise ValueError("epistemic_type is required")
-        if not 0 <= self.confidence <= 1:
+        if not math.isfinite(self.confidence) or not 0 <= self.confidence <= 1:
             raise ValueError("confidence must be between 0 and 1")
         if not self.payload_digest:
             raise ValueError("payload_digest is required")
