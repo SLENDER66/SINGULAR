@@ -3,7 +3,7 @@
 A ValidatedTrajectoryDecision is cryptographically self-consistent, but durability
 still matters: after a process restart the execution boundary needs to know that
 the exact decision was actually issued and has not been revoked. This module
-stores only the attestation metadata, never executable callables.
+stores only attestation metadata, never executable callables.
 """
 from __future__ import annotations
 
@@ -38,15 +38,29 @@ class DecisionAttestation:
 
 
 class DecisionAttestationStore:
-    """SQLite-backed, fail-closed attestation registry."""
+    """SQLite-backed, fail-closed attestation registry.
+
+    `:memory:` is supported as a real in-memory database rather than SQLite's
+    per-connection ephemeral database. A private anchor connection keeps the
+    shared in-memory database alive for the lifetime of this store instance.
+    """
 
     def __init__(self, path: str | Path = "data/singular.db") -> None:
+        raw_path = str(path)
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._sqlite_uri = False
+        self._sqlite_target = raw_path
+        self._anchor: sqlite3.Connection | None = None
+        if raw_path == ":memory:":
+            self._sqlite_uri = True
+            self._sqlite_target = f"file:singular_attestation_{id(self)}?mode=memory&cache=shared"
+            self._anchor = sqlite3.connect(self._sqlite_target, uri=True, timeout=10.0)
+            self._anchor.row_factory = sqlite3.Row
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
+        conn = sqlite3.connect(self._sqlite_target, uri=self._sqlite_uri, timeout=10.0)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -92,11 +106,24 @@ class DecisionAttestationStore:
             conn.execute(
                 "INSERT INTO decision_attestations(decision_id,context_fingerprint,issued_at,expires_at,status,issuer,created_at) "
                 "VALUES(?,?,?,?,?,?,?)",
-                (decision.decision_id, decision.context_fingerprint, decision.issued_at, decision.expires_at, "ISSUED", issuer, created_at),
+                (
+                    decision.decision_id,
+                    decision.context_fingerprint,
+                    decision.issued_at,
+                    decision.expires_at,
+                    "ISSUED",
+                    issuer,
+                    created_at,
+                ),
             )
         return DecisionAttestation(
-            decision.decision_id, decision.context_fingerprint, decision.issued_at, decision.expires_at,
-            "ISSUED", issuer, created_at,
+            decision.decision_id,
+            decision.context_fingerprint,
+            decision.issued_at,
+            decision.expires_at,
+            "ISSUED",
+            issuer,
+            created_at,
         )
 
     def get(self, decision_id: str) -> DecisionAttestation | None:
@@ -125,7 +152,8 @@ class DecisionAttestationStore:
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             cur = conn.execute(
-                "UPDATE decision_attestations SET status='REVOKED', revoked_at=? WHERE decision_id=? AND status='ISSUED'",
+                "UPDATE decision_attestations SET status='REVOKED', revoked_at=? "
+                "WHERE decision_id=? AND status='ISSUED'",
                 (now, decision_id),
             )
             if cur.rowcount != 1:
@@ -140,8 +168,14 @@ class DecisionAttestationStore:
     @staticmethod
     def _row(row: sqlite3.Row) -> DecisionAttestation:
         return DecisionAttestation(
-            row["decision_id"], row["context_fingerprint"], float(row["issued_at"]), float(row["expires_at"]),
-            row["status"], row["issuer"], row["created_at"], row["revoked_at"],
+            row["decision_id"],
+            row["context_fingerprint"],
+            float(row["issued_at"]),
+            float(row["expires_at"]),
+            row["status"],
+            row["issuer"],
+            row["created_at"],
+            row["revoked_at"],
         )
 
 
