@@ -1,3 +1,10 @@
+"""Compatibility facade for the canonical human optimization engine.
+
+New code should import from ``singular.human_optimization``. This module keeps
+SINGULAR's historical HumanDomainState/Plan API stable while delegating all
+optimization math to the canonical engine.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -5,6 +12,12 @@ from enum import Enum
 from math import isfinite
 
 from .domain_learning import LearningDomain
+from .human_optimization import (
+    DomainInteraction,
+    DomainState,
+    HumanOptimizationEngine as CanonicalHumanOptimizationEngine,
+    OptimizationDisposition,
+)
 
 
 class OptimizationAction(str, Enum):
@@ -16,13 +29,6 @@ class OptimizationAction(str, Enum):
 
 @dataclass(frozen=True)
 class HumanDomainState:
-    """Normalized state of one human-development domain.
-
-    level, confidence and leverage are in [0, 1]. A dependency is another
-    domain whose weakness can constrain this domain. This is a decision model,
-    not a medical or psychological diagnosis.
-    """
-
     domain: LearningDomain
     level: float
     target: float = 1.0
@@ -67,20 +73,7 @@ class HumanOptimizationPlan:
 
 
 class HumanOptimizationEngine:
-    """Optimize the whole trajectory instead of maximizing isolated domains.
-
-    Weak high-leverage domains and dependency bottlenecks receive priority.
-    Low-confidence states are surfaced for review rather than converted into
-    false certainty. The engine recommends priorities; it never authorizes an
-    intervention or mutates the person/system autonomously.
-    """
-
-    SENSITIVE = {
-        LearningDomain.PSYCHOLOGY,
-        LearningDomain.NUTRITION,
-        LearningDomain.PHYSICAL,
-        LearningDomain.SLEEP,
-    }
+    """Legacy API adapter; the canonical engine lives in human_optimization."""
 
     @staticmethod
     def optimize(states: tuple[HumanDomainState, ...], *, max_priorities: int = 5) -> HumanOptimizationPlan:
@@ -89,34 +82,52 @@ class HumanOptimizationEngine:
         if not states:
             return HumanOptimizationPlan((), (), ("NO_HUMAN_STATE_DATA",), 0.0)
 
-        by_domain = {state.domain: state for state in states}
-        if len(by_domain) != len(states):
-            raise ValueError("domain states must be unique")
+        canonical_states = tuple(
+            DomainState(
+                domain=state.domain,
+                level=state.level,
+                target=state.target,
+                confidence=state.confidence,
+                leverage=state.leverage,
+            )
+            for state in states
+        )
+        known_domains = {item.domain for item in canonical_states}
+        interactions = tuple(
+            DomainInteraction(source=state.domain, target=dependency, multiplier=state.leverage, confidence=1.0)
+            for state in states
+            for dependency in state.dependencies
+            if dependency in known_domains
+        )
+        report = CanonicalHumanOptimizationEngine.optimize(
+            canonical_states,
+            (),
+            interactions,
+            max_candidates=max_priorities,
+        )
 
-        warnings: list[str] = []
-        priorities: list[HumanOptimizationPriority] = []
-        dependency_pressure: dict[LearningDomain, float] = {domain: 0.0 for domain in by_domain}
-
+        by_domain = {state.domain: state for state in canonical_states}
+        pressures = {domain: 0.0 for domain in by_domain}
+        warnings = list(report.warnings)
         for state in states:
             for dependency in state.dependencies:
                 dependency_state = by_domain.get(dependency)
                 if dependency_state is None:
                     warnings.append(f"MISSING_DEPENDENCY:{state.domain.value}:{dependency.value}")
-                    continue
-                dependency_pressure[dependency] += state.leverage * dependency_state.gap
+                else:
+                    pressures[dependency] += state.leverage * dependency_state.gap
 
-        for state in states:
-            pressure = dependency_pressure[state.domain]
-            bottleneck = state.gap * (0.5 + state.leverage) + pressure
-            evidence_factor = 0.35 + 0.65 * state.confidence
-            score = bottleneck * evidence_factor
+        priorities: list[HumanOptimizationPriority] = []
+        for domain in report.bottlenecks:
+            state = by_domain[domain]
+            bottleneck = state.gap * (0.5 + state.leverage) + pressures[domain]
+            score = bottleneck * (0.35 + 0.65 * state.confidence)
             reasons: list[str] = []
-
             if state.gap >= 0.5:
                 reasons.append("LARGE_TARGET_GAP")
             if state.leverage >= 0.7:
                 reasons.append("HIGH_CROSS_DOMAIN_LEVERAGE")
-            if pressure > 0:
+            if pressures[domain] > 0:
                 reasons.append("CONSTRAINS_DEPENDENT_DOMAINS")
             if state.confidence < 0.5:
                 reasons.append("LOW_STATE_CONFIDENCE")
@@ -127,33 +138,37 @@ class HumanOptimizationEngine:
                 action = OptimizationAction.ACCELERATE
             else:
                 action = OptimizationAction.IMPROVE
-
-            sensitive = state.domain in HumanOptimizationEngine.SENSITIVE
-            if sensitive:
+            if domain in CanonicalHumanOptimizationEngine.SENSITIVE:
                 reasons.append("SENSITIVE_DOMAIN_EVIDENCE_REQUIRED")
-
             priorities.append(HumanOptimizationPriority(
-                domain=state.domain,
-                action=action,
-                score=round(score, 6),
-                bottleneck_score=round(bottleneck, 6),
-                reasons=tuple(dict.fromkeys(reasons)),
-                human_review=sensitive or state.confidence < 0.5,
+                domain,
+                action,
+                round(score, 6),
+                round(bottleneck, 6),
+                tuple(dict.fromkeys(reasons)),
+                domain in CanonicalHumanOptimizationEngine.SENSITIVE or state.confidence < 0.5,
             ))
 
-        priorities.sort(key=lambda item: (-item.score, item.domain.value))
-        bottlenecks = tuple(item.domain for item in priorities if item.bottleneck_score >= 0.5)
-
-        total_weight = sum(0.25 + state.leverage for state in states)
-        readiness = sum((0.25 + state.leverage) * state.level * state.confidence for state in states) / total_weight
-        if any(state.confidence < 0.5 for state in states):
+        total_weight = sum(0.25 + state.leverage for state in canonical_states)
+        readiness = sum((0.25 + state.leverage) * state.level * state.confidence for state in canonical_states) / total_weight
+        if any(state.confidence < 0.5 for state in canonical_states):
             warnings.append("LOW_CONFIDENCE_STATE_REQUIRES_MEASUREMENT")
-        if bottlenecks:
+        if report.bottlenecks:
             warnings.append("BOTTLENECKS_DETECTED")
 
         return HumanOptimizationPlan(
-            priorities=tuple(priorities[:max_priorities]),
-            bottlenecks=bottlenecks,
-            warnings=tuple(dict.fromkeys(warnings)),
-            global_readiness=round(readiness, 6),
+            tuple(sorted(priorities, key=lambda item: (-item.score, item.domain.value))[:max_priorities]),
+            report.bottlenecks,
+            tuple(dict.fromkeys(warnings)),
+            round(readiness, 6),
         )
+
+
+__all__ = [
+    "HumanDomainState",
+    "HumanOptimizationEngine",
+    "HumanOptimizationPlan",
+    "HumanOptimizationPriority",
+    "OptimizationAction",
+    "OptimizationDisposition",
+]
