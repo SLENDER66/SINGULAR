@@ -92,6 +92,7 @@ from .learning_review_queue import LearningReview, LearningReviewQueue
 from .continuous_learning import ContinuousLearningCycle, LearningCycleResult
 from .self_improvement import SelfImprovementEngine, SelfImprovementProposal
 from .durable_recovery import confirm_execution_recovery_from_effect
+from .durable_approval import save_approval as _save_approval_hardening, update_approval as _update_approval_hardening
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
