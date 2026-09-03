@@ -39,6 +39,7 @@ from .learning_bridge import ExecutionLearningBridge, LearningResult
 from .wealth_engine import WealthAction, WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
 from .capital_allocation import AllocationBucket, AllocationCandidate, CapitalAllocation, CapitalAllocationEngine
 from .empire_engine import EmpireAsset, EmpireAssessment, EmpireEngine, EmpireStage
+from .cashflow_engine import CashflowAction, CashflowAssessment, CashflowOpportunity, RapidCashEngine, RapidCashObjective
 from .meta_audit import AgentCalibration, MetaAuditEngine, MetaAuditFinding, MetaAuditReport, MetaAuditSeverity
 
 # The package historically exported DecisionEngine and WorldModel from legacy
