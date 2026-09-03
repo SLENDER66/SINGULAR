@@ -92,8 +92,25 @@ class Intervention:
             raise ValueError("evidence, causal_confidence, reversibility, recurrence and cross_domain_impact must be between 0 and 1")
 
     @classmethod
-    def from_hypothesis(cls, hypothesis: DomainHypothesis, *, id: str | None = None, capacity: float = 0.0) -> "Intervention":
-        return cls(id=id or hypothesis.intervention, domain=hypothesis.domain, expected_improvement=hypothesis.expected_improvement, evidence=hypothesis.evidence_strength, causal_confidence=hypothesis.evidence_strength, cost=hypothesis.cost, risk=hypothesis.risk, capacity=capacity, reversibility=hypothesis.reversibility)
+    def from_hypothesis(cls, hypothesis: DomainHypothesis, *, id: str | None = None, capacity: float = 0.0, causal_confidence: float | None = None) -> "Intervention":
+        """Bridge a learning hypothesis without inventing causal certainty.
+
+        Older hypotheses expose evidence strength but not a separate causal
+        estimate. Callers can provide one explicitly; otherwise the conservative
+        default of Intervention (0.5) is retained rather than equating evidence
+        quality with causal confidence.
+        """
+        return cls(
+            id=id or hypothesis.intervention,
+            domain=hypothesis.domain,
+            expected_improvement=hypothesis.expected_improvement,
+            evidence=hypothesis.evidence_strength,
+            causal_confidence=0.5 if causal_confidence is None else causal_confidence,
+            cost=hypothesis.cost,
+            risk=hypothesis.risk,
+            capacity=capacity,
+            reversibility=hypothesis.reversibility,
+        )
 
 
 @dataclass(frozen=True)
@@ -127,6 +144,7 @@ class HumanOptimizationEngine:
     """
 
     SENSITIVE = frozenset({LearningDomain.PSYCHOLOGY, LearningDomain.NUTRITION, LearningDomain.PHYSICAL, LearningDomain.SLEEP})
+    _MAX_BRANCH_AND_BOUND_NODES = 250_000
 
     @staticmethod
     def _validate_unique_domains(states: tuple[DomainState, ...]) -> None:
@@ -199,25 +217,28 @@ class HumanOptimizationEngine:
         return OptimizationCandidate(intervention.id, intervention.domain, round(score, 6), round(global_gain, 6), disposition, tuple(dict.fromkeys(reasons)), human_review)
 
     @staticmethod
-    def _select_portfolio(candidates: tuple[OptimizationCandidate, ...], interventions: dict[str, Intervention], capacity_budget: float, max_candidates: int) -> tuple[OptimizationCandidate, ...]:
-        """Choose the highest-value feasible portfolio, not a greedy prefix.
+    def _sort_selected(selected: list[OptimizationCandidate]) -> tuple[OptimizationCandidate, ...]:
+        return tuple(sorted(selected, key=lambda c: (-c.score, c.domain.value, c.intervention_id)))
 
-        Exact enumeration is used for small portfolios (the normal operating
-        case), avoiding the common greedy-knapsack failure. For larger sets we
-        use deterministic branch-and-bound with an admissible optimistic bound.
-        One intervention per domain is retained as a diversification invariant;
-        this can be relaxed later only as an explicit policy change.
+    @staticmethod
+    def _select_portfolio(candidates: tuple[OptimizationCandidate, ...], interventions: dict[str, Intervention], capacity_budget: float, max_candidates: int) -> tuple[tuple[OptimizationCandidate, ...], bool]:
+        """Choose the highest-value feasible portfolio under declared constraints.
+
+        Returns (selection, exact). Small sets are exhaustively solved. Larger
+        sets use deterministic branch-and-bound with an explicit node budget;
+        if that budget is exhausted, the function falls back to a deterministic
+        density heuristic and reports that exact optimality was not established.
         """
         items = [candidate for candidate in candidates if interventions[candidate.intervention_id].capacity <= capacity_budget]
         items.sort(key=lambda c: (-c.score, c.domain.value, c.intervention_id))
         if not items:
-            return ()
+            return (), True
 
-        best: tuple[float, tuple[str, ...], tuple[OptimizationCandidate, ...]] = (-1.0, (), ())
         n = len(items)
         if n <= 22:
-            # Exhaustive search is deterministic and globally optimal under the
-            # declared constraints. Tie-breaks are stable for reproducibility.
+            best_value = 0.0
+            best_key: tuple[str, ...] = ()
+            best_selection: tuple[OptimizationCandidate, ...] = ()
             for mask in range(1, 1 << n):
                 selected: list[OptimizationCandidate] = []
                 used = 0.0
@@ -237,15 +258,60 @@ class HumanOptimizationEngine:
                     continue
                 value = sum(c.score for c in selected)
                 key = tuple(c.intervention_id for c in selected)
-                if value > best[0] + 1e-12 or (abs(value - best[0]) <= 1e-12 and key < best[1]):
-                    best = (value, key, tuple(sorted(selected, key=lambda c: (-c.score, c.domain.value, c.intervention_id))))
-            return best[2]
+                if value > best_value + 1e-12 or (abs(value - best_value) <= 1e-12 and (not best_key or key < best_key)):
+                    best_value = value
+                    best_key = key
+                    best_selection = HumanOptimizationEngine._sort_selected(selected)
+            return best_selection, True
 
-        # Large-set fallback: deterministic greedy by marginal score density.
-        # This path is intentionally visible in the API docs rather than being
-        # mistaken for an exact optimizer.
+        nodes = 0
+        exhausted = False
+        best_value = 0.0
+        best_key: tuple[str, ...] = ()
+        best_selection: tuple[OptimizationCandidate, ...] = ()
+
+        # Suffix sums form an admissible upper bound because they deliberately
+        # ignore capacity/domain/count constraints. That makes pruning safe.
+        suffix_positive = [0.0] * (n + 1)
+        for index in range(n - 1, -1, -1):
+            suffix_positive[index] = suffix_positive[index + 1] + max(items[index].score, 0.0)
+
+        def visit(index: int, used: float, selected: list[OptimizationCandidate], domains: set[LearningDomain], value: float) -> None:
+            nonlocal nodes, exhausted, best_value, best_key, best_selection
+            nodes += 1
+            if nodes > HumanOptimizationEngine._MAX_BRANCH_AND_BOUND_NODES:
+                exhausted = True
+                return
+            if index >= n or len(selected) >= max_candidates:
+                key = tuple(c.intervention_id for c in selected)
+                if value > best_value + 1e-12 or (abs(value - best_value) <= 1e-12 and (not best_key or key < best_key)):
+                    best_value = value
+                    best_key = key
+                    best_selection = HumanOptimizationEngine._sort_selected(selected)
+                return
+            if value + suffix_positive[index] < best_value - 1e-12:
+                return
+
+            candidate = items[index]
+            intervention = interventions[candidate.intervention_id]
+            if candidate.domain not in domains and used + intervention.capacity <= capacity_budget:
+                selected.append(candidate)
+                domains.add(candidate.domain)
+                visit(index + 1, used + intervention.capacity, selected, domains, value + candidate.score)
+                domains.remove(candidate.domain)
+                selected.pop()
+                if exhausted:
+                    return
+            visit(index + 1, used, selected, domains, value)
+
+        visit(0, 0.0, [], set(), 0.0)
+        if not exhausted:
+            return best_selection, True
+
+        # Explicit non-exact fallback. This is deterministic and conservative
+        # about its claim: callers receive exact=False and a warning.
         remaining = capacity_budget
-        selected: list[OptimizationCandidate] = []
+        selected = []
         domains: set[LearningDomain] = set()
         for candidate in sorted(items, key=lambda c: (-(c.score / max(interventions[c.intervention_id].capacity, 1e-12)), -c.score, c.domain.value, c.intervention_id)):
             intervention = interventions[candidate.intervention_id]
@@ -256,7 +322,7 @@ class HumanOptimizationEngine:
             remaining -= intervention.capacity
             if len(selected) >= max_candidates:
                 break
-        return tuple(sorted(selected, key=lambda c: (-c.score, c.domain.value, c.intervention_id)))
+        return HumanOptimizationEngine._sort_selected(selected), False
 
     @staticmethod
     def optimize(states: tuple[DomainState, ...], interventions: tuple[Intervention, ...], interactions: tuple[DomainInteraction, ...] = (), capacity_budget: float = float("inf"), max_candidates: int = 5) -> HumanOptimizationReport:
@@ -280,23 +346,33 @@ class HumanOptimizationEngine:
             uncertainties.append("LOW_EVIDENCE_OR_CAUSAL_CONFIDENCE")
 
         seen: set[str] = set()
+        seen_interactions: set[tuple[LearningDomain, LearningDomain]] = set()
         by_id: dict[str, Intervention] = {}
         evaluated: list[OptimizationCandidate] = []
+        for edge in interactions:
+            edge_key = (edge.source, edge.target)
+            if edge_key in seen_interactions:
+                raise ValueError("domain interactions must be unique by source and target")
+            seen_interactions.add(edge_key)
         for intervention in interventions:
             if intervention.id in seen:
                 raise ValueError("intervention ids must be unique")
             seen.add(intervention.id)
             by_id[intervention.id] = intervention
-            if intervention.capacity > capacity_budget:
-                continue
             candidate = HumanOptimizationEngine.evaluate(intervention, states, interactions)
+            if candidate.reasons == ("DOMAIN_STATE_MISSING",):
+                warnings.append(f"MISSING_DOMAIN_STATE:{intervention.domain.value}")
+                continue
+            if intervention.capacity > capacity_budget:
+                warnings.append(f"INTERVENTION_OVER_CAPACITY:{intervention.id}")
+                continue
             if candidate.disposition is not OptimizationDisposition.BLOCK and candidate.score > 0:
                 evaluated.append(candidate)
 
-        selected = HumanOptimizationEngine._select_portfolio(tuple(evaluated), by_id, capacity_budget, max_candidates)
+        selected, exact = HumanOptimizationEngine._select_portfolio(tuple(evaluated), by_id, capacity_budget, max_candidates)
         used = sum(by_id[candidate.intervention_id].capacity for candidate in selected)
         remaining = capacity_budget - used if capacity_budget != float("inf") else float("inf")
-        if len(evaluated) > 22:
+        if not exact:
             warnings.append("PORTFOLIO_HEURISTIC_FALLBACK_LARGE_SEARCH_SPACE")
         if any(candidate.human_review for candidate in selected):
             warnings.append("SELECTED_CANDIDATE_REQUIRES_HUMAN_REVIEW")
