@@ -28,19 +28,16 @@ def test_raw_execution_is_closed_even_when_recovery_exists(tmp_path: Path):
     assert store.get_execution(key)["status"] == "RECOVERY_REQUIRED"
 
 
-def test_recovery_confirm_finalizes_without_handler_reexecution(tmp_path: Path):
-    store, runtime, contract, action, key = _quarantined(tmp_path)
-    result = RecoveryManager(store).resolve(
-        key,
-        RecoveryDecision.CONFIRM,
-        result={"provider": "already_done"},
-        reason="Provider reconciled externally.",
-    )
-    assert result.execution_status == "COMPLETED"
-    assert result.mission_status == MissionStatus.COMPLETED
-    assert result.result == {"provider": "already_done"}
-    assert store.get_execution(key)["status"] == "COMPLETED"
-    assert runtime.state(contract.mission_id).status == MissionStatus.COMPLETED
+def test_recovery_confirmation_requires_external_evidence(tmp_path: Path):
+    store, _, _, _, key = _quarantined(tmp_path)
+    with pytest.raises(ValueError, match="preuve externe"):
+        RecoveryManager(store).resolve(
+            key,
+            RecoveryDecision.CONFIRM,
+            result={"provider": "already_done"},
+            reason="Provider reconciled externally.",
+        )
+    assert store.get_execution(key)["status"] == "RECOVERY_REQUIRED"
 
 
 def test_recovery_fail_finalizes_without_reexecution(tmp_path: Path):
@@ -72,7 +69,7 @@ def test_recovery_transaction_rolls_back_if_mission_cannot_finalize(tmp_path: Pa
     store, _, contract, _, key = _quarantined(tmp_path)
     store.set_mission_status(contract.mission_id, MissionStatus.COMPLETED)
     with pytest.raises(ValueError, match="RUNNING"):
-        RecoveryManager(store).resolve(key, RecoveryDecision.CONFIRM, result=True)
+        RecoveryManager(store).resolve(key, RecoveryDecision.FAIL, reason="Late failure evidence.")
     execution = store.get_execution(key)
     assert execution is not None
     assert execution["status"] == "RECOVERY_REQUIRED"
