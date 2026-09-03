@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import replace
 
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
 from singular.durable import DurableStore
@@ -94,9 +95,9 @@ def test_decision_temporal_window_is_enforced():
 
 def test_decision_expiry_is_fingerprinted():
     decision = _build_decision()
-    from dataclasses import replace
-    altered = replace(decision, expires_at=decision.expires_at + 1)
-    assert altered.verify() is False
+    original_expiry = decision.expires_at
+    object.__setattr__(decision, "expires_at", original_expiry + 1)
+    assert decision.verify() is False
 
 
 def test_executor_rejects_handler_substitution_before_handler_call(tmp_path):
