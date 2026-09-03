@@ -7,7 +7,7 @@ from math import isfinite
 from .autopilot import ActionRequest
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
 from .learning import Forecast
-from .world_model import EpistemicType, WorldModel
+from .world_model import WorldModel
 
 
 class DecisionStatus(str, Enum):
@@ -117,8 +117,6 @@ class DecisionEngine:
                 tuple(dict.fromkeys(unresolved)),
             )
 
-        # Deterministic score: prefer impact, leverage and reversibility while
-        # penalizing risk and effort. This ranks options; it does not authorize them.
         ranked = sorted(
             viable,
             key=lambda item: self._score(item[0].action),
@@ -131,7 +129,11 @@ class DecisionEngine:
             unresolved.append("ALTERNATIVES_REQUIRE_REVIEW")
 
         confidence = self._confidence(selected_report, context.forecasts)
-        status = DecisionStatus.REVIEW if unresolved or selected_report.decision == "REVIEW" else DecisionStatus.PROPOSED
+        status = (
+            DecisionStatus.REVIEW
+            if unresolved or selected_report.decision == "REVIEW"
+            else DecisionStatus.PROPOSED
+        )
         rationale = (
             f"Option {selected.id} sélectionnée par classement déterministe; "
             "la recommandation ne constitue ni une autorisation ni une exécution."
@@ -152,8 +154,7 @@ class DecisionEngine:
         if not all(isfinite(value) for value in (action.impact, action.risk, action.reversibility)):
             return float("-inf")
         return round(
-            action.impact * (0.5 + action.reversibility / 20)
-            / (1 + action.risk),
+            action.impact * (0.5 + action.reversibility / 20) / (1 + action.risk),
             6,
         )
 
