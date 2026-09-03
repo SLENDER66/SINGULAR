@@ -61,3 +61,14 @@ def test_boundary_auditor_detects_qualified_executor_bypass(tmp_path: Path):
 
     report = ExecutionBoundaryAuditor(package).audit()
     assert any(f.rule == "RAW_ENGINE_BYPASS" for f in report.findings)
+
+
+def test_boundary_auditor_scans_nested_python_modules(tmp_path: Path):
+    package = tmp_path / "singular"
+    nested = package / "nested"
+    nested.mkdir(parents=True)
+    (nested / "unsafe.py").write_text("agent.handler(action)\n", encoding="utf-8")
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "DIRECT_HANDLER_BYPASS" and f.path.endswith("nested/unsafe.py") for f in report.findings)
+    assert report.checked_files == 1
