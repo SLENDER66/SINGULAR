@@ -4,7 +4,7 @@ from singular.state import CapacitySnapshot
 
 
 def test_commander_respects_capacity_limit():
-    action = Action(name="Deep work", impact=8, urgency=5, effort=5, risk=1, reversibility=8)
+    action = Action(id="a1", name="Deep work", impact=8, urgency=5, leverage=7, effort=5, risk=1, reversibility=8)
     result = Commander().command(
         "Advance the mission",
         [action],
