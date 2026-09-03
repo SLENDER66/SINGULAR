@@ -42,6 +42,14 @@ def test_control_plane_accepts_explicit_sequence_and_completed_stage() -> None:
     assert plan.economic_sequence.steps[0].id == "recurring"
 
 
+def test_control_plane_preserves_explicit_empty_sequence() -> None:
+    kwargs = base_kwargs()
+    kwargs["economic_sequence_steps"] = []
+    plan = EconomicControlPlane.build(**kwargs)
+    assert plan.economic_sequence.steps == ()
+    assert plan.economic_sequence.rationale[-1] == "NO_ELIGIBLE_NEXT_STEP"
+
+
 def test_control_plane_blocks_when_no_economic_path_exists() -> None:
     plan = EconomicControlPlane.build(
         cashflow_opportunities=[], rapid_cash_objective=RapidCashObjective(1000), wealth_opportunities=[], wealth_objective=WealthObjective(),
