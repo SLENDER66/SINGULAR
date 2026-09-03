@@ -10,6 +10,7 @@ from singular.history_world_model import (
     HistoricalEvidence,
     HistoricalMode,
     HistoricalReasoner,
+    TemporalContext,
     WorldStateSnapshot,
     build_temporal_context,
 )
@@ -27,13 +28,13 @@ def evidence(eid="E1", *, level=EpistemicLevel.ESTABLISHED_FACT, reliability=0.9
     )
 
 
-def scenario(sid="S1", *, horizon=5.0, probability=0.7):
+def scenario(sid="S1", *, horizon=5.0, probability=0.7, evidence_ids=("E1",)):
     return FutureScenario(
         id=sid,
         horizon_years=horizon,
         statement="A plausible future condition",
         probability=probability,
-        evidence_ids=("E1",),
+        evidence_ids=evidence_ids,
         assumptions=("Current causal mechanism persists",),
         disposition=FutureDisposition.PREPARE,
     )
@@ -56,6 +57,15 @@ def test_low_reliability_does_not_become_high_confidence():
     assessment = FutureReasoner.assess(scenario(probability=0.9), (low,))
     assert assessment.confidence < 0.2
     assert assessment.uncertainty > 0.8
+
+
+def test_contested_evidence_reduces_future_confidence():
+    fact = evidence("EF", reliability=0.9)
+    contested = evidence("EC", level=EpistemicLevel.CONTESTED, reliability=0.9)
+    near_fact = FutureReasoner.assess(scenario(evidence_ids=("EF",)), (fact, contested))
+    challenged = FutureReasoner.assess(scenario(evidence_ids=("EF", "EC")), (fact, contested))
+    assert challenged.confidence < near_fact.confidence
+    assert "CONTESTED_EVIDENCE_PRESENT" in challenged.reasons
 
 
 def test_long_horizon_reduces_confidence_and_surfaces_uncertainty():
@@ -82,6 +92,19 @@ def test_contested_evidence_remains_visible_as_counterevidence():
     assert pattern.counterevidence == ("EC",)
 
 
+def test_temporal_context_rejects_pattern_set_mismatch():
+    context = build_temporal_context(as_of="2026-09-03", evidence=(evidence(),), scenarios=(scenario(),))
+    with pytest.raises(ValueError, match="patterns"):
+        TemporalContext((), context.active_scenarios, context.canonical_world)
+
+
+def test_snapshot_rejects_injected_contested_canonical_fact():
+    snapshot = WorldStateSnapshot.build("2026-09-03", (evidence(),), (), ())
+    contested = evidence("EC", level=EpistemicLevel.CONTESTED)
+    object.__setattr__(snapshot, "canonical_facts", (contested,))
+    assert not snapshot.verify()
+
+
 def test_snapshot_fingerprint_detects_tampering():
     snapshot = WorldStateSnapshot.build("2026-09-03", (evidence(),), (), (scenario(),))
     assert snapshot.verify()
@@ -93,3 +116,9 @@ def test_snapshot_fingerprint_detects_tampering():
 def test_future_inputs_reject_non_finite_values(value):
     with pytest.raises(ValueError):
         FutureScenario("S", value, "x", 0.5, assumptions=("a",))
+
+
+@pytest.mark.parametrize("mechanisms", [(), ("",), ("valid", "")])
+def test_historical_evidence_rejects_empty_mechanisms(mechanisms):
+    with pytest.raises(ValueError, match="mechanism"):
+        evidence(mechanisms=mechanisms)
