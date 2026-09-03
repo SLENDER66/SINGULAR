@@ -27,6 +27,7 @@ class OutcomeObservation:
     execution_key: str
     forecast_id: str
     forecast_kind: ForecastKind
+    forecast_confidence: float
     predicted_value: float
     actual_value: float
     absolute_error: float
@@ -64,6 +65,7 @@ class OutcomeLedger:
                     execution_key TEXT NOT NULL,
                     forecast_id TEXT NOT NULL,
                     forecast_kind TEXT NOT NULL,
+                    forecast_confidence REAL NOT NULL DEFAULT 0.0,
                     predicted_value REAL NOT NULL,
                     actual_value REAL NOT NULL,
                     absolute_error REAL NOT NULL,
@@ -77,6 +79,9 @@ class OutcomeLedger:
                 )
                 """
             )
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(outcome_ledger)")}
+            if "forecast_confidence" not in columns:
+                conn.execute("ALTER TABLE outcome_ledger ADD COLUMN forecast_confidence REAL NOT NULL DEFAULT 0.0")
 
     def record(
         self,
@@ -114,6 +119,7 @@ class OutcomeLedger:
             "execution_key": execution_key,
             "forecast_id": forecast.id,
             "forecast_kind": forecast.kind.value,
+            "forecast_confidence": forecast.confidence,
             "predicted_value": predicted,
             "actual_value": observed,
             "absolute_error": calibration.error,
@@ -142,6 +148,7 @@ class OutcomeLedger:
                     "execution_key": current.execution_key,
                     "forecast_id": current.forecast_id,
                     "forecast_kind": current.forecast_kind.value,
+                    "forecast_confidence": current.forecast_confidence,
                     "predicted_value": current.predicted_value,
                     "actual_value": current.actual_value,
                     "execution_status": current.execution_status,
@@ -158,12 +165,12 @@ class OutcomeLedger:
                 json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
             ).hexdigest()
             conn.execute(
-                "INSERT INTO outcome_ledger(record_id,decision_id,context_fingerprint,execution_key,forecast_id,forecast_kind,predicted_value,actual_value,absolute_error,signed_error,brier_score,execution_status,observed_at,lesson,previous_fingerprint,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO outcome_ledger(record_id,decision_id,context_fingerprint,execution_key,forecast_id,forecast_kind,forecast_confidence,predicted_value,actual_value,absolute_error,signed_error,brier_score,execution_status,observed_at,lesson,previous_fingerprint,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     record_id, payload["decision_id"], payload["context_fingerprint"], payload["execution_key"],
-                    payload["forecast_id"], payload["forecast_kind"], payload["predicted_value"], payload["actual_value"],
-                    payload["absolute_error"], payload["signed_error"], payload["brier_score"], payload["execution_status"],
-                    payload["observed_at"], payload["lesson"], previous, fingerprint,
+                    payload["forecast_id"], payload["forecast_kind"], payload["forecast_confidence"], payload["predicted_value"],
+                    payload["actual_value"], payload["absolute_error"], payload["signed_error"], payload["brier_score"],
+                    payload["execution_status"], payload["observed_at"], payload["lesson"], previous, fingerprint,
                 ),
             )
             return OutcomeObservation(record_id=record_id, previous_fingerprint=previous, fingerprint=fingerprint, **payload)
@@ -189,6 +196,7 @@ class OutcomeLedger:
                     "execution_key": row.execution_key,
                     "forecast_id": row.forecast_id,
                     "forecast_kind": row.forecast_kind.value,
+                    "forecast_confidence": row.forecast_confidence,
                     "predicted_value": row.predicted_value,
                     "actual_value": row.actual_value,
                     "absolute_error": row.absolute_error,
@@ -228,6 +236,7 @@ class OutcomeLedger:
             execution_key=row["execution_key"],
             forecast_id=row["forecast_id"],
             forecast_kind=ForecastKind(row["forecast_kind"]),
+            forecast_confidence=float(row["forecast_confidence"]),
             predicted_value=float(row["predicted_value"]),
             actual_value=float(row["actual_value"]),
             absolute_error=float(row["absolute_error"]),
