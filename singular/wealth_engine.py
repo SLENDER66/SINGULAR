@@ -15,12 +15,7 @@ class WealthAction(str, Enum):
 
 @dataclass(frozen=True)
 class WealthObjective:
-    """North-star objective for the economic layer.
-
-    Wealth is treated as durable, risk-adjusted net worth and productive
-    ownership, not as short-term cash maximization. Human-defined values and
-    governance remain outside this objective and can block it.
-    """
+    """North-star objective for durable, risk-adjusted wealth creation."""
 
     target: str = "MAXIMIZE_DURABLE_RISK_ADJUSTED_NET_WORTH"
     horizon_years: int = 20
@@ -28,6 +23,8 @@ class WealthObjective:
     preserve_optionality: bool = True
 
     def __post_init__(self) -> None:
+        if not self.target.strip():
+            raise ValueError("target must be non-empty")
         if self.horizon_years <= 0:
             raise ValueError("horizon_years must be positive")
 
@@ -59,7 +56,7 @@ class WealthOpportunity:
             ("optionality", self.optionality),
             ("reversibility", self.reversibility),
         ):
-            if not 0 <= value <= 1:
+            if not isfinite(value) or not 0 <= value <= 1:
                 raise ValueError(f"{name} must be between 0 and 1")
         for name, value in (("downside", self.downside), ("cost", self.cost), ("time", self.time)):
             if value < 0 or not isfinite(value):
@@ -76,27 +73,50 @@ class WealthAssessment:
 
 
 class WealthEngine:
-    """Turn the north-star wealth objective into disciplined capital priorities.
-
-    The engine deliberately rewards ownership and compounding while penalizing
-    downside, capital consumption and long time-to-feedback. It produces
-    recommendations only; it never invests, borrows, signs contracts or moves
-    money.
-    """
+    """Translate the wealth objective into disciplined economic priorities."""
 
     @staticmethod
-    def assess(opportunity: WealthOpportunity) -> WealthAssessment:
+    def assess(
+        opportunity: WealthOpportunity,
+        objective: WealthObjective | None = None,
+    ) -> WealthAssessment:
+        objective = objective or WealthObjective()
         expected_value = opportunity.expected_wealth_delta * opportunity.probability
         upside = max(0.0, expected_value)
-        risk_penalty = opportunity.downside * (1.25 if opportunity.reversibility < 0.3 else 0.75)
+        risk_penalty = opportunity.downside * (
+            1.25 if opportunity.reversibility < 0.3 else 0.75
+        )
+        if not objective.protect_downside:
+            risk_penalty *= 0.5
         friction = 1.0 + opportunity.cost + 0.25 * opportunity.time
         ownership_factor = 1.0 + opportunity.ownership
         compounding_factor = 1.0 + opportunity.compounding
-        optionality_factor = 1.0 + opportunity.optionality
-        score = (upside * ownership_factor * compounding_factor * optionality_factor - risk_penalty) / friction
+        optionality_factor = 1.0 + (
+            opportunity.optionality
+            if objective.preserve_optionality
+            else 0.5 * opportunity.optionality
+        )
+        horizon_factor = (
+            1.0 if opportunity.time <= objective.horizon_years * 365 else 0.5
+        )
+        score = (
+            upside
+            * ownership_factor
+            * compounding_factor
+            * optionality_factor
+            * horizon_factor
+            - risk_penalty
+        ) / friction
         score = round(score, 6)
 
-        reasons: list[str] = []
+        reasons: list[str] = [
+            f"OBJECTIVE={objective.target}",
+            f"HORIZON_YEARS={objective.horizon_years}",
+        ]
+        if objective.protect_downside:
+            reasons.append("DOWNSIDE_PROTECTED")
+        if objective.preserve_optionality:
+            reasons.append("OPTIONALITY_PRESERVED")
         if opportunity.ownership >= 0.7:
             reasons.append("HIGH_OWNERSHIP")
         if opportunity.compounding >= 0.7:
@@ -107,8 +127,14 @@ class WealthEngine:
             reasons.append("HIGH_DOWNSIDE")
         if opportunity.time >= 5:
             reasons.append("SLOW_FEEDBACK")
+        if opportunity.time > objective.horizon_years * 365:
+            reasons.append("BEYOND_OBJECTIVE_HORIZON")
 
-        if opportunity.downside >= 0.9 and opportunity.reversibility <= 0.2:
+        if (
+            objective.protect_downside
+            and opportunity.downside >= 0.9
+            and opportunity.reversibility <= 0.2
+        ):
             action = WealthAction.HUMAN_REVIEW
         elif score >= 10 and opportunity.cost <= 3 and opportunity.reversibility >= 0.6:
             action = WealthAction.PRIORITIZE
@@ -119,16 +145,21 @@ class WealthEngine:
         else:
             action = WealthAction.IGNORE
 
-        return WealthAssessment(opportunity.id, score, action, round(expected_value, 6), tuple(reasons))
+        return WealthAssessment(
+            opportunity.id, score, action, round(expected_value, 6), tuple(reasons)
+        )
 
     @classmethod
-    def rank(cls, opportunities: list[WealthOpportunity]) -> tuple[WealthAssessment, ...]:
-        assessments = [cls.assess(item) for item in opportunities]
+    def rank(
+        cls,
+        opportunities: list[WealthOpportunity],
+        objective: WealthObjective | None = None,
+    ) -> tuple[WealthAssessment, ...]:
+        assessments = [cls.assess(item, objective) for item in opportunities]
         return tuple(sorted(assessments, key=lambda item: (-item.score, item.opportunity_id)))
 
     @classmethod
     def capital_stack(cls) -> tuple[str, ...]:
-        """Strategic order of the wealth machine, not a personal allocation ratio."""
         return (
             "PROTECT_BASE: eliminate ruin risk and preserve liquidity",
             "INCREASE_EARNING_POWER: scarce skills, network, credibility, career leverage",
