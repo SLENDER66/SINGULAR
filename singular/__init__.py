@@ -29,3 +29,4 @@ from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFa
 from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValuesEngine, Vision
 from .state import CapacityEngine, CapacitySnapshot, StateDimension, StateObservation
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
+from .opportunity_engine import OpportunityAssessment, OpportunityDecision, OpportunityEngine
