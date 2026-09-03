@@ -29,6 +29,7 @@ def test_control_plane_builds_reviewable_economic_plan() -> None:
     assert plan.failure_conversions
     assert plan.economic_sequence.steps
     assert plan.next_actions[0].startswith("FOLLOW_ECONOMIC_SEQUENCE:")
+    assert f"OBJECTIVE={base_kwargs()['wealth_objective'].target}" in plan.wealth_assessments[0].reasons
 
 
 def test_control_plane_accepts_explicit_sequence_and_completed_stage() -> None:
