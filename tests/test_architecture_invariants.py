@@ -12,6 +12,7 @@ def test_core_invariants_exist():
     assert {
         "AUTH-001",
         "AUTH-002",
+        "AUTH-003",
         "EXEC-001",
         "EXEC-002",
         "EXEC-003",
