@@ -38,13 +38,7 @@ class ExecutionRecoveryRequired(RuntimeError):
 class DurableExecutionEngine:
     """Durable execution boundary; raw actions and unattested decisions are never executable."""
 
-    def __init__(
-        self,
-        runtime: DurableMissionRuntime,
-        execution_lease_seconds: int = 300,
-        effect_coordinator: ExternalEffectCoordinator | None = None,
-        attestation_store: DecisionAttestationStore | None = None,
-    ) -> None:
+    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None, attestation_store: DecisionAttestationStore | None = None) -> None:
         if execution_lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         self.runtime = runtime
@@ -55,38 +49,8 @@ class DurableExecutionEngine:
         self.store.init_execution_schema()
 
     @staticmethod
-    def _execution_identity_fingerprint(
-        action: Any,
-        mission_id: str,
-        governed: Any,
-        contract: Any,
-        decision_id: str | None = None,
-        decision_fingerprint: str | None = None,
-    ) -> str:
-        payload = {
-            "mission_id": mission_id,
-            "decision_id": decision_id,
-            "decision_context_fingerprint": decision_fingerprint,
-            "action": {
-                "id": getattr(action, "id", None),
-                "name": getattr(action, "name", None),
-                "payload": getattr(action, "payload", None),
-                "risk": getattr(action, "risk", None),
-                "reversibility": getattr(action, "reversibility", None),
-                "sensitive": getattr(action, "sensitive", None),
-                "capability": getattr(action, "capability", None),
-            },
-            "governance": {
-                "policy_tier": getattr(governed, "policy_tier", None),
-                "can_prepare": getattr(governed, "can_prepare", None),
-                "can_execute": getattr(governed, "can_execute", None),
-                "requires_human": getattr(governed, "requires_human", None),
-                "reasons": list(getattr(governed, "reasons", ()) or ()),
-                "mode": getattr(getattr(governed, "governor", None), "mode", None),
-                "approval_id": getattr(getattr(governed, "governor", None), "approval_id", None),
-            },
-            "contract": None if contract is None else str(contract),
-        }
+    def _execution_identity_fingerprint(action: Any, mission_id: str, governed: Any, contract: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> str:
+        payload = {"mission_id": mission_id, "decision_id": decision_id, "decision_context_fingerprint": decision_fingerprint, "action": {"id": getattr(action, "id", None), "name": getattr(action, "name", None), "payload": getattr(action, "payload", None), "risk": getattr(action, "risk", None), "reversibility": getattr(action, "reversibility", None), "sensitive": getattr(action, "sensitive", None), "capability": getattr(action, "capability", None)}, "governance": {"policy_tier": getattr(governed, "policy_tier", None), "can_prepare": getattr(governed, "can_prepare", None), "can_execute": getattr(governed, "can_execute", None), "requires_human": getattr(governed, "requires_human", None), "reasons": list(getattr(governed, "reasons", ()) or ()), "mode": getattr(getattr(governed, "governor", None), "mode", None), "approval_id": getattr(getattr(governed, "governor", None), "approval_id", None)}, "contract": None if contract is None else str(contract)}
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -208,8 +172,14 @@ class DurableExecutionEngine:
             if effect is not None:
                 status = effect["status"]
                 if status == EffectStatus.COMPLETED.value:
+                    if existing["status"] == "RECOVERY_REQUIRED":
+                        return self._result_from_row(self.store.confirm_execution_recovery_from_effect(key, request.provider_idempotency_key))
+                    if existing["status"] in {"COMPLETED", "FAILED"}:
+                        return self._handle_existing_execution(key, existing)
                     return self._complete(key, mission_id, action.id, effect.get("result"))
                 if status == EffectStatus.FAILED.value:
+                    if existing["status"] in {"COMPLETED", "FAILED"}:
+                        return self._handle_existing_execution(key, existing)
                     return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
                 if status == EffectStatus.UNKNOWN.value and existing["status"] == "RUNNING":
                     self.store.mark_execution_recovery_required(key)
@@ -226,8 +196,14 @@ class DurableExecutionEngine:
             except KeyError:
                 effect = None
             if effect is not None and effect["status"] == EffectStatus.COMPLETED.value:
+                if claimed["status"] == "RECOVERY_REQUIRED":
+                    return self._result_from_row(self.store.confirm_execution_recovery_from_effect(key, request.provider_idempotency_key))
+                if claimed["status"] in {"COMPLETED", "FAILED"}:
+                    return self._handle_existing_execution(key, claimed)
                 return self._complete(key, mission_id, action.id, effect.get("result"))
             if effect is not None and effect["status"] == EffectStatus.FAILED.value:
+                if claimed["status"] in {"COMPLETED", "FAILED"}:
+                    return self._handle_existing_execution(key, claimed)
                 return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
             return self._handle_existing_execution(key, claimed)
         outcome = self.effect_coordinator.execute(request, provider)
