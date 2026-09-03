@@ -36,7 +36,12 @@ class BoundaryAuditReport:
 
 
 class ExecutionBoundaryAuditor:
-    """Detect production execution bypasses and verify raw API denial."""
+    """Detect production execution bypasses and verify raw API denial.
+
+    The static pass is deliberately conservative: it tracks imports, direct
+    executor construction and simple assignment aliases so that a trivial rename
+    cannot hide an execution bypass. It is a guardrail, not a formal proof.
+    """
 
     def __init__(self, package_dir: Path | None = None) -> None:
         self.package_dir = package_dir or Path(__file__).resolve().parent
@@ -56,20 +61,58 @@ class ExecutionBoundaryAuditor:
             findings.extend(self._scan(path, tree))
         raw_denied = self._raw_api_is_denied()
         if not raw_denied:
-            findings.append(BoundaryFinding("runtime", 0, "RAW_API_NOT_DENY_BY_DEFAULT", "A public raw execution entry point did not raise PermissionError."))
+            findings.append(
+                BoundaryFinding(
+                    "runtime",
+                    0,
+                    "RAW_API_NOT_DENY_BY_DEFAULT",
+                    "A public raw execution entry point did not raise PermissionError.",
+                )
+            )
         return BoundaryAuditReport(tuple(findings), checked, raw_denied)
 
     @staticmethod
     def _scan(path: Path, tree: ast.AST) -> list[BoundaryFinding]:
         findings: list[BoundaryFinding] = []
-        durable_engine_receivers: set[str] = set()
+        executor_type_names = {"DurableExecutionEngine"}
+        executor_receivers: set[str] = set()
+
+        # Resolve the common import spellings used by production code.
         for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-                constructor = node.value.func
-                if isinstance(constructor, ast.Name) and constructor.id == "DurableExecutionEngine":
-                    for target in node.targets:
-                        if isinstance(target, ast.Name):
-                            durable_engine_receivers.add(target.id)
+            if isinstance(node, ast.ImportFrom) and node.module == ".execution":
+                for alias in node.names:
+                    if alias.name == "DurableExecutionEngine":
+                        executor_type_names.add(alias.asname or alias.name)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.endswith("execution"):
+                        executor_type_names.add(alias.asname or alias.name.split(".")[-1])
+
+        def is_executor_constructor(expr: ast.AST) -> bool:
+            if isinstance(expr, ast.Name):
+                return expr.id in executor_type_names
+            if isinstance(expr, ast.Attribute):
+                return expr.attr == "DurableExecutionEngine"
+            return False
+
+        # Track direct constructions and one-step aliases (runner = executor).
+        changed = True
+        while changed:
+            changed = False
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    value = node.value
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                    if value is not None and is_executor_constructor(value.func if isinstance(value, ast.Call) else value):
+                        for target in targets:
+                            if isinstance(target, ast.Name) and target.id not in executor_receivers:
+                                executor_receivers.add(target.id)
+                                changed = True
+                    elif isinstance(value, ast.Name) and value.id in executor_receivers:
+                        for target in targets:
+                            if isinstance(target, ast.Name) and target.id not in executor_receivers:
+                                executor_receivers.add(target.id)
+                                changed = True
 
         inner_allowed = path.name in INNER_ALLOWED_MODULES
         for node in ast.walk(tree):
@@ -77,19 +120,29 @@ class ExecutionBoundaryAuditor:
                 continue
             target = node.func
             receiver = target.value
+
             if target.attr in RAW_TOOL_METHODS:
                 findings.append(BoundaryFinding(str(path), target.lineno, "RAW_TOOL_BYPASS", target.attr))
+
             if target.attr in {"execute_effect", "reconcile_effect"}:
+                # These names are execution primitives; any production call outside
+                # the definition/approved adapter is suspicious and must be reviewed.
                 findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", target.attr))
+
             if target.attr in INNER_VALIDATED_METHODS and not inner_allowed:
                 findings.append(BoundaryFinding(str(path), target.lineno, "INNER_EXECUTOR_BYPASS", target.attr))
+
             if target.attr == "execute":
-                if isinstance(receiver, ast.Name) and receiver.id in durable_engine_receivers:
+                if isinstance(receiver, ast.Name) and receiver.id in executor_receivers:
                     findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", "executor.execute"))
-                if isinstance(receiver, ast.Name) and receiver.id == "DurableExecutionEngine":
+                if isinstance(receiver, ast.Name) and receiver.id in executor_type_names:
                     findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", "DurableExecutionEngine.execute"))
+                if isinstance(receiver, ast.Attribute) and receiver.attr == "DurableExecutionEngine":
+                    findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", "DurableExecutionEngine.execute"))
+
             if target.attr == "handler" and isinstance(receiver, ast.Name):
                 findings.append(BoundaryFinding(str(path), target.lineno, "DIRECT_HANDLER_BYPASS", f"{receiver.id}.handler(...)"))
+
         return findings
 
     @staticmethod
