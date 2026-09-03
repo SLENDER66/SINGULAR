@@ -52,6 +52,7 @@ from .economic_control import EconomicControlPlan, EconomicControlPlane, Economi
 from .economic_sequence import EconomicSequence, EconomicSequenceEngine, EconomicStage, EconomicStep
 from .provenance import ProvenanceChain, ProvenanceRecord
 from .adversarial import AttackClass, AdversarialEngine, AdversarialFinding, AdversarialReport, AttackSeverity
+from .collective_intelligence import CollectiveIntelligence, Deliberation, KnowledgeKind, SharedSignal
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
