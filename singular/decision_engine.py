@@ -102,7 +102,7 @@ class DecisionEngine:
         if context.world_model is not None:
             unresolved.extend(
                 f"WORLD_MODEL:UNKNOWN:{key}"
-                for key in sorted(context.world_model.unknowns())
+                for key in sorted(context.world_model.unknowns(), key=str)
             )
 
         if not viable:
