@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.4.1 — Optimization Quality Hardening
+
+- Replaced greedy small-portfolio selection with deterministic exact portfolio optimization for search spaces up to 22 candidates.
+- Added deterministic tie-breaking for reproducible decisions.
+- Added an explicit large-search-space heuristic fallback warning rather than presenting a heuristic as globally optimal.
+- Preserved capacity, domain-diversification and governance constraints during portfolio selection.
+- Added regression coverage proving the optimizer avoids a classic greedy-knapsack failure.
+
 ## 3.4.0 — Canonical Human Optimization
 
 - Consolidated the two Human Optimization implementations around `singular.human_optimization`.
