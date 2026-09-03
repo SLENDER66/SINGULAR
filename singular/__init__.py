@@ -51,7 +51,7 @@ from .meta_audit import AgentCalibration, MetaAuditEngine, MetaAuditFinding, Met
 from .economic_control import EconomicControlPlan, EconomicControlPlane, EconomicPlanStatus
 from .economic_sequence import EconomicSequence, EconomicSequenceEngine, EconomicStage, EconomicStep
 from .provenance import ProvenanceChain, ProvenanceRecord
-from .adversarial import AdversarialEngine, AdversarialFinding, AdversarialReport, AttackSeverity
+from .adversarial import AttackClass, AdversarialEngine, AdversarialFinding, AdversarialReport, AttackSeverity
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
