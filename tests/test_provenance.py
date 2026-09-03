@@ -47,7 +47,7 @@ def test_chain_rejects_broken_link_and_duplicate_id() -> None:
     with pytest.raises(ValueError, match="does not link"):
         chain.append(record("r2", "wrong"))
     with pytest.raises(ValueError, match="already exists"):
-        chain.append(record("r1"))
+        chain.append(record("r1", first.digest()))
 
 
 def test_record_requires_payload_digest_and_valid_confidence() -> None:
@@ -60,7 +60,7 @@ def test_record_requires_payload_digest_and_valid_confidence() -> None:
             confidence=0.9,
         )
     with pytest.raises(ValueError, match="between 0 and 1"):
-        record("r1").__class__.from_payload(
+        ProvenanceRecord.from_payload(
             record_id="r2",
             source="test",
             recorded_at="2026-09-03T10:00:00Z",
