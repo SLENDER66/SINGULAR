@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from singular.decision_attestation import ValidatedDecisionIssuer
@@ -8,8 +10,10 @@ from singular.validated_pipeline import ValidatedTrajectoryPipeline
 from test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
 
 
-def build_decision(decision_id, dimensions=None):
+def build_decision(decision_id, dimensions=None, action_id=None):
     contract, action, state, intervention, profile, default_dimensions = _inputs()
+    if action_id is not None:
+        action = replace(action, id=action_id)
     chosen_dimensions = dimensions or default_dimensions
     return ValidatedTrajectoryPipeline.build(
         objective=contract.objective,
@@ -30,7 +34,8 @@ def test_execution_identity_is_bound_to_decision_context(tmp_path):
     first = build_decision("DEC-CONTEXT-1")
     altered_dimensions = {name: 0.8 for name in first.trajectory_profile.weights}
     altered_dimensions["learning"] = 0.9
-    second = build_decision("DEC-CONTEXT-2", altered_dimensions)
+    second = build_decision("DEC-CONTEXT-2", altered_dimensions, action_id=first.authorized_actions[0].id)
+    assert first.context_fingerprint != second.context_fingerprint
 
     db = tmp_path / "singular.db"
     runtime = DurableMissionRuntime(DurableStore(db))
