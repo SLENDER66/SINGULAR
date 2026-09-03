@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from .agents import Commander
 from .autopilot import ActionRequest, Autonomy, Governor
 from .coherence import CoherenceReport, GlobalCoherenceGuard
+from .collective_intelligence import CollectiveIntelligence, Deliberation, SharedSignal
 from .models import Action, Risk
 from .security import ActionPolicy
 from .state import CapacityEngine, CapacitySnapshot
@@ -33,6 +34,7 @@ class GlobalDecisionReport:
     governor_mode: Autonomy
     red_team_findings: tuple[RedTeamFinding, ...]
     coherence: CoherenceReport | None
+    deliberation: Deliberation | None = None
 
     @property
     def can_prepare(self) -> bool:
@@ -44,21 +46,24 @@ class GlobalDecisionReport:
             bool(self.warnings)
             or self.policy_requires_human
             or self.governor_mode is Autonomy.ESCALATE
+            or (self.deliberation is not None and self.deliberation.unresolved)
         )
 
 
 class GlobalDecisionGate:
-    """Integrate mission, world model, values, capacity, risk and governance."""
+    """Integrate mission, collective cognition, context, risk and governance."""
 
     def __init__(
         self,
         commander: Commander | None = None,
         red_team: RedTeamGate | None = None,
         coherence_guard: GlobalCoherenceGuard | None = None,
+        collective_intelligence: CollectiveIntelligence | None = None,
     ) -> None:
         self.commander = commander or Commander()
         self.red_team = red_team or RedTeamGate()
         self.coherence_guard = coherence_guard
+        self.collective_intelligence = collective_intelligence or CollectiveIntelligence()
 
     def evaluate(
         self,
@@ -71,10 +76,27 @@ class GlobalDecisionGate:
         effort: float | None = None,
         risks: list[Risk] | None = None,
         mission_id: str | None = None,
+        shared_signals: tuple[SharedSignal, ...] = (),
+        calibration: dict[str, float] | None = None,
     ) -> GlobalDecisionReport:
         blockers: list[str] = []
         warnings: list[str] = []
         coherence = None
+        deliberation = None
+
+        if shared_signals:
+            deliberation = self.collective_intelligence.deliberate(
+                action.id,
+                shared_signals,
+                calibration=calibration,
+            )
+            if deliberation.unresolved:
+                warnings.append("COLLECTIVE:UNRESOLVED_DELIBERATION")
+            if deliberation.blocking_challenges:
+                blockers.extend(
+                    f"COLLECTIVE:CRITICAL_CHALLENGE:{claim}"
+                    for claim in deliberation.blocking_challenges
+                )
 
         if self.coherence_guard is not None:
             coherence = self.coherence_guard.inspect(mission_id)
@@ -156,4 +178,5 @@ class GlobalDecisionGate:
             governor_mode=governor.mode,
             red_team_findings=findings,
             coherence=coherence,
+            deliberation=deliberation,
         )
