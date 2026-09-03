@@ -5,6 +5,7 @@ from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
 from singular.execution_capability import register_execution_capability
 from singular.human_optimization import DomainState, Intervention
+from singular.domain_learning import LearningDomain
 from singular.mission_runtime import DurableMissionRuntime
 from singular.trajectory import TrajectoryProfile
 from singular.validated_pipeline import ValidatedTrajectoryPipeline
