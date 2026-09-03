@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from math import isfinite
 from itertools import combinations
+from math import isfinite
 
-from .wealth_engine import WealthAction, WealthOpportunity
+from .wealth_engine import WealthOpportunity
 
 
 class AllocationBucket(str, Enum):
@@ -46,20 +46,20 @@ class CapitalAllocation:
 
 
 class CapitalAllocationEngine:
-    """Selects a bounded capital portfolio under explicit safety constraints.
+    """Select a bounded capital portfolio under explicit safety constraints.
 
     The engine separates protection from deployment and only recommends an
     allocation. It does not invest, borrow, transfer money or authorize effects.
-    Exhaustive search is deliberately used for small bounded portfolios so an
-    exact result can be honestly reported. Larger-scale optimization should
-    replace this with branch-and-bound without changing the public contract.
+    Exhaustive search is used for small bounded portfolios so an exact result
+    can be honestly reported. A later branch-and-bound implementation can
+    preserve this contract for larger candidate sets.
     """
 
     @staticmethod
     def _utility(candidate: AllocationCandidate) -> float:
-        opportunity = candidate.opportunity
-        assessment = _wealth_assessment(opportunity)
-        return assessment.score
+        from .wealth_engine import WealthEngine
+
+        return WealthEngine.assess(candidate.opportunity).score
 
     @classmethod
     def optimize(
@@ -75,16 +75,19 @@ class CapitalAllocationEngine:
             ("available_capital", available_capital),
             ("protected_capital", protected_capital),
             ("risk_budget", risk_budget),
-            ("capacity_budget", capacity_budget),
         ):
-            if value < 0 or not isfinite(value) and value != float("inf"):
-                raise ValueError(f"{name} must be non-negative and finite, except capacity_budget may be inf")
+            if value < 0 or not isfinite(value):
+                raise ValueError(f"{name} must be finite and non-negative")
+        if capacity_budget < 0 or not isfinite(capacity_budget):
+            raise ValueError("capacity_budget must be finite and non-negative")
         if protected_capital > available_capital:
             raise ValueError("protected_capital cannot exceed available_capital")
         if max_positions < 0:
             raise ValueError("max_positions cannot be negative")
 
         ordered = tuple(sorted(candidates, key=lambda item: item.opportunity.id))
+        if len({item.opportunity.id for item in ordered}) != len(ordered):
+            raise ValueError("candidate opportunity ids must be unique")
         investable = available_capital - protected_capital
         best: tuple[float, tuple[str, ...], float, float, float] | None = None
 
@@ -97,7 +100,6 @@ class CapitalAllocationEngine:
                     continue
                 utility = sum(cls._utility(item) for item in combo)
                 ids = tuple(item.opportunity.id for item in combo)
-                key = (utility, tuple(reversed(ids)))
                 if best is None or utility > best[0] or (utility == best[0] and ids < best[1]):
                     best = (utility, ids, capital, risk, capacity)
 
@@ -105,19 +107,18 @@ class CapitalAllocationEngine:
             best = (0.0, (), 0.0, 0.0, 0.0)
 
         _, ids, capital, risk, capacity = best
+        selected = {item.opportunity.id: item for item in ordered if item.opportunity.id in ids}
         rationale = ["PROTECTION_RESERVE_FIRST", "RECOMMENDATION_ONLY"]
-        if ids:
-            rationale.append("SELECTED_BY_RISK_ADJUSTED_WEALTH_UTILITY")
-        else:
-            rationale.append("NO_CANDIDATE_FITS_CONSTRAINTS")
+        rationale.append("SELECTED_BY_RISK_ADJUSTED_WEALTH_UTILITY" if ids else "NO_CANDIDATE_FITS_CONSTRAINTS")
 
         return CapitalAllocation(
             candidate_ids=ids,
             protected_capital=round(protected_capital, 6),
             unallocated_capital=round(investable - capital, 6),
             expected_wealth_delta=round(sum(
-                item.opportunity.expected_wealth_delta * item.opportunity.probability
-                for item in ordered if item.opportunity.id in ids
+                selected[item_id].opportunity.expected_wealth_delta
+                * selected[item_id].opportunity.probability
+                for item_id in ids
             ), 6),
             risk_exposure=round(risk, 6),
             capacity_used=round(capacity, 6),
@@ -125,10 +126,3 @@ class CapitalAllocationEngine:
             search_complete=True,
             rationale=tuple(rationale),
         )
-
-
-def _wealth_assessment(opportunity: WealthOpportunity):
-    """Local import boundary keeps allocation dependent on the wealth layer only."""
-    from .wealth_engine import WealthEngine
-
-    return WealthEngine.assess(opportunity)
