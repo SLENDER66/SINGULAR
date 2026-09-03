@@ -1,5 +1,8 @@
+import pytest
+
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
 from singular.empire import AgentRegistry, AgentSpec, AutopilotSupervisor
+from singular.execution import DurableExecutionEngine
 from singular.mission_autopilot import Mission, MissionAutopilot
 from singular.tool_fabric import ToolFabric, ToolSpec
 
@@ -13,25 +16,36 @@ def _contract():
     )
 
 
+def test_durable_executor_cannot_execute_raw_action():
+    executor = object.__new__(DurableExecutionEngine)
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
+        executor.execute(ActionRequest("raw", "raw", 1, 1, 9), "MIS-TEST", lambda _: None)
+
+
+def test_durable_executor_cannot_execute_raw_external_effect():
+    executor = object.__new__(DurableExecutionEngine)
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
+        executor.execute_effect(None, "MIS-TEST", object(), provider_name="p", operation="op", payload={})
+
+
+def test_durable_executor_cannot_reconcile_raw_external_effect():
+    executor = object.__new__(DurableExecutionEngine)
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
+        executor.reconcile_effect(None, "MIS-TEST", object(), provider_name="p", operation="op", payload={})
+
+
 def test_tool_fabric_cannot_execute_autonomous_raw_action():
     fabric = ToolFabric()
     called = []
     fabric.register(
         ToolSpec(
-            name="safe_tool",
-            description="safe",
-            risk=1,
-            reversibility=9,
+            name="safe_tool", description="safe", risk=1, reversibility=9,
             handler=lambda **kwargs: called.append(kwargs),
         )
     )
 
-    try:
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
         fabric.execute_autonomous("safe_tool", _contract(), value=1)
-    except PermissionError:
-        pass
-    else:
-        raise AssertionError("direct ToolFabric autonomous execution bypassed the validated boundary")
     assert called == []
 
 
@@ -40,17 +54,13 @@ def test_tool_fabric_cannot_swap_approved_tool_name():
     called = []
     fabric.register(ToolSpec("approved", "approved", 1, 9, sensitive=True, handler=lambda **kw: called.append("approved")))
     fabric.register(ToolSpec("other", "other", 1, 9, handler=lambda **kw: called.append("other")))
-    action, decision = fabric.plan("approved", "approved", _contract())
+    _, decision = fabric.plan("approved", "approved", _contract())
     approval_id = decision.approval_id
     assert approval_id is not None
     fabric.bus.approve(approval_id)
 
-    try:
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
         fabric.execute_approved(approval_id, "other")
-    except PermissionError:
-        pass
-    else:
-        raise AssertionError("approved action was replayed against a different tool")
     assert called == []
 
 
@@ -71,14 +81,7 @@ def test_mission_autopilot_cannot_call_handler_without_validated_decision():
 def test_empire_supervisor_cannot_call_agent_handler_without_validated_decision():
     calls = []
     registry = AgentRegistry()
-    registry.register(
-        AgentSpec(
-            name="worker",
-            mission="work",
-            capabilities=("work",),
-            handler=lambda payload: calls.append(payload),
-        )
-    )
+    registry.register(AgentSpec(name="worker", mission="work", capabilities=("work",), handler=lambda payload: calls.append(payload)))
     supervisor = AutopilotSupervisor(registry)
     run = supervisor.create_run("test")
 
