@@ -149,6 +149,11 @@ class ExternalEffectCoordinator:
         if status != "RUNNING":
             raise RuntimeError(f"Effet externe interdit pour une exécution dans l'état {status}.")
 
+    def _authorize_reconciliation(self, request: EffectRequest) -> None:
+        status = self._execution_status(request.execution_key)
+        if status != "RECOVERY_REQUIRED":
+            raise RuntimeError("La réconciliation externe est réservée aux exécutions RECOVERY_REQUIRED.")
+
     def execute(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
         self._authorize_execution(request)
         key = request.provider_idempotency_key
@@ -204,6 +209,7 @@ class ExternalEffectCoordinator:
         return self.prepare(request)
 
     def reconcile(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
+        self._authorize_reconciliation(request)
         key = request.provider_idempotency_key
         row = self.prepare(request)
         if row["status"] == EffectStatus.COMPLETED.value:
