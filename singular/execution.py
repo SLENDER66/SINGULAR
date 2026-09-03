@@ -38,14 +38,20 @@ class ExecutionRecoveryRequired(RuntimeError):
 class DurableExecutionEngine:
     """Durable execution boundary; raw actions and unattested decisions are never executable."""
 
-    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None) -> None:
+    def __init__(
+        self,
+        runtime: DurableMissionRuntime,
+        execution_lease_seconds: int = 300,
+        effect_coordinator: ExternalEffectCoordinator | None = None,
+        attestation_store: DecisionAttestationStore | None = None,
+    ) -> None:
         if execution_lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         self.runtime = runtime
         self.store: DurableStore = runtime.store
         self.execution_lease_seconds = execution_lease_seconds
         self.effect_coordinator = effect_coordinator
-        self.attestation_store = DecisionAttestationStore(self.store.path)
+        self.attestation_store = attestation_store or DecisionAttestationStore(self.store.path)
         self.store.init_execution_schema()
 
     @staticmethod
