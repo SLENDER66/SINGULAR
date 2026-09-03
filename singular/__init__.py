@@ -23,3 +23,4 @@ from .v32_governed_core import (
 from .mission_runtime import DurableMissionRuntime, MissionState
 from .durable import DurableStore, MissionStatus
 from .effects import EffectInProgress, EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
+from .coherence import CoherenceReport, GlobalCoherenceGuard
