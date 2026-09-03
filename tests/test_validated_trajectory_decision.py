@@ -6,7 +6,7 @@ import pytest
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract, GovernorDecision
 from singular.domain_learning import LearningDomain
 from singular.global_control import GlobalDecisionReport
-from singular.human_optimization import DomainState, HumanOptimizationEngine, Intervention, OptimizationCandidate, OptimizationDisposition
+from singular.human_optimization import DomainState, HumanOptimizationEngine, Intervention
 from singular.security import ActionPolicy
 from singular.trajectory import TrajectoryAssessment, TrajectoryDecision
 from singular.trajectory_optimization import TrajectoryPortfolio
@@ -16,13 +16,11 @@ from singular.validated_trajectory_decision import ValidatedTrajectoryDecision, 
 def artifacts(*, global_decision: str = "PROCEED"):
     contract = DelegationContract("MIS-1", "Improve career", "Completed", autonomy=Autonomy.EXECUTE_REVERSIBLE)
     action = ActionRequest("career_test", "Run a bounded career test", 4, 1, 9, contract_id=contract.mission_id)
-    candidate = OptimizationCandidate("career", LearningDomain.CAREER, 1.2, 1.2, OptimizationDisposition.PROPOSE, (), False)
-    human = HumanOptimizationEngine.optimize(
-        (DomainState(LearningDomain.CAREER, 0.2, confidence=0.9),),
-        (Intervention("career", LearningDomain.CAREER, 0.9, evidence=0.9, causal_confidence=0.9, capacity=1),),
-        capacity_budget=2,
-    )
-    portfolio = TrajectoryPortfolio((candidate,), 1.2, 1.0, 1.0, 0.0)
+    state = DomainState(LearningDomain.CAREER, 0.2, confidence=0.9)
+    intervention = Intervention("career", LearningDomain.CAREER, 0.9, evidence=0.9, causal_confidence=0.9, capacity=1)
+    human = HumanOptimizationEngine.optimize((state,), (intervention,), capacity_budget=2)
+    candidate = human.candidates[0]
+    portfolio = TrajectoryPortfolio((candidate,), candidate.score, 1.0, 1.0, 0.0)
     assessment = TrajectoryAssessment(TrajectoryDecision.PROCEED, 0.8, 7.2, (), False)
     governor = GovernorDecision(action.id, Autonomy.EXECUTE_REVERSIBLE, ("Action couverte par le contrat d'autonomie.",))
     report = GlobalDecisionReport(
@@ -32,13 +30,15 @@ def artifacts(*, global_decision: str = "PROCEED"):
         coherence=None, trajectory=assessment, human_optimization=human,
     )
     policy = ActionPolicy.evaluate(action)
-    return action, human, portfolio, assessment, report, contract, policy, (), governor
+    return action, state, intervention, human, portfolio, assessment, report, contract, policy, (), governor
 
 
 def build(**overrides):
-    action, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
+    action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
     values = {
         "decision_id": "DEC-1", "actions": (action,), "action_to_intervention": ((action.id, "career"),),
+        "domain_states": (state,), "interventions": (intervention,), "human_interactions": (), "trajectory_interactions": (),
+        "portfolio_capacity_budget": 2, "portfolio_max_candidates": 5,
         "human_optimization": human, "trajectory_portfolio": portfolio, "trajectory_assessment": assessment,
         "global_report": report, "contract": contract, "policy": policy, "red_team_findings": findings,
         "governor": governor, "execution_target": "tests.test_validated_trajectory_decision:authorized_handler",
@@ -57,22 +57,22 @@ def test_creates_valid_immutable_tamper_evident_decision():
 
 @pytest.mark.parametrize("status", ["REVIEW", "BLOCK"])
 def test_rejects_non_proceed_global_report(status):
-    action, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts(global_decision=status)
+    action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts(global_decision=status)
     with pytest.raises(ValueError, match="PROCEED"):
         ValidatedTrajectoryDecision.create(
             decision_id="DEC-1", actions=(action,), action_to_intervention=((action.id, "career"),),
-            human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
-            global_report=report, contract=contract, policy=policy, red_team_findings=findings, governor=governor,
-            execution_target="tests.test_validated_trajectory_decision:authorized_handler",
+            domain_states=(state,), interventions=(intervention,), human_interactions=(), trajectory_interactions=(),
+            portfolio_capacity_budget=2, portfolio_max_candidates=5, human_optimization=human, trajectory_portfolio=portfolio,
+            trajectory_assessment=assessment, global_report=report, contract=contract, policy=policy,
+            red_team_findings=findings, governor=governor, execution_target="tests.test_validated_trajectory_decision:authorized_handler",
         )
 
 
 @pytest.mark.parametrize(
     ("field", "message"),
     [("human_optimization", "human_optimization"), ("trajectory_portfolio", "trajectory_portfolio"),
-     ("trajectory_assessment", "trajectory_assessment"), ("global_report", "global_report"),
-     ("contract", "contract"), ("policy", "policy"), ("red_team_findings", "red_team_findings"),
-     ("governor", "governor")],
+     ("trajectory_assessment", "trajectory_assessment"), ("global_report", "global_report"), ("contract", "contract"),
+     ("policy", "policy"), ("red_team_findings", "red_team_findings"), ("governor", "governor")],
 )
 def test_rejects_missing_required_context(field, message):
     with pytest.raises(ValueError, match=message):
@@ -80,19 +80,20 @@ def test_rejects_missing_required_context(field, message):
 
 
 def test_rejects_action_missing_from_portfolio():
-    action, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
-    with pytest.raises(ValueError, match="portfolio"):
+    action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
+    with pytest.raises(ValueError, match="share the validated intervention"):
         ValidatedTrajectoryDecision.create(
             decision_id="DEC-1", actions=(action,), action_to_intervention=((action.id, "not-in-portfolio"),),
-            human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
-            global_report=report, contract=contract, policy=policy, red_team_findings=findings, governor=governor,
-            execution_target="tests.test_validated_trajectory_decision:authorized_handler",
+            domain_states=(state,), interventions=(intervention,), human_interactions=(), trajectory_interactions=(),
+            portfolio_capacity_budget=2, portfolio_max_candidates=5, human_optimization=human, trajectory_portfolio=portfolio,
+            trajectory_assessment=assessment, global_report=report, contract=contract, policy=policy,
+            red_team_findings=findings, governor=governor, execution_target="tests.test_validated_trajectory_decision:authorized_handler",
         )
 
 
 @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
 def test_rejects_non_finite_critical_numeric_context(value):
-    _, _, portfolio, _, _, _, _, _, _ = artifacts()
+    _, _, _, _, portfolio, _, _, _, _, _, _ = artifacts()
     invalid = TrajectoryPortfolio(portfolio.candidates, value, portfolio.capacity_used, portfolio.capacity_remaining, portfolio.interaction_effect)
     with pytest.raises(ValueError, match="finite"):
         build(trajectory_portfolio=invalid)
@@ -100,17 +101,19 @@ def test_rejects_non_finite_critical_numeric_context(value):
 
 def test_detects_tampered_context_fingerprint():
     decision = build()
-    object.__setattr__(decision, "global_report", artifacts(global_decision="BLOCK")[4])
+    object.__setattr__(decision, "global_report", artifacts(global_decision="BLOCK")[6])
     assert decision.verify() is False
 
 
 def test_fingerprint_is_deterministic_for_identical_context():
-    action, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
+    action, state, intervention, human, portfolio, assessment, report, contract, policy, findings, governor = artifacts()
     values = {
         "decision_id": "DEC-1", "actions": (action,), "action_to_intervention": ((action.id, "career"),),
-        "human_optimization": human, "trajectory_portfolio": portfolio, "trajectory_assessment": assessment,
-        "global_report": report, "contract": contract, "policy": policy, "red_team_findings": findings,
-        "governor": governor, "execution_target": "tests.test_validated_trajectory_decision:authorized_handler",
+        "domain_states": (state,), "interventions": (intervention,), "human_interactions": (), "trajectory_interactions": (),
+        "portfolio_capacity_budget": 2, "portfolio_max_candidates": 5, "human_optimization": human,
+        "trajectory_portfolio": portfolio, "trajectory_assessment": assessment, "global_report": report, "contract": contract,
+        "policy": policy, "red_team_findings": findings, "governor": governor,
+        "execution_target": "tests.test_validated_trajectory_decision:authorized_handler",
     }
     first = ValidatedTrajectoryDecision.create(**values)
     second = ValidatedTrajectoryDecision.create(**values)
@@ -122,12 +125,8 @@ def test_external_effect_binding_requires_provider_operation_and_payload():
         build(execution_kind="external_effect")
     payload = {"amount": 42, "target": "bounded"}
     decision = build(
-        execution_kind="external_effect",
-        execution_target="tests.fake:Provider",
-        provider_name="bounded-provider",
-        provider_target="tests.fake:Provider",
-        operation="apply",
-        payload_fingerprint=payload_fingerprint(payload),
+        execution_kind="external_effect", execution_target="tests.fake:Provider", provider_name="bounded-provider",
+        provider_target="tests.fake:Provider", operation="apply", payload_fingerprint=payload_fingerprint(payload),
     )
     assert decision.verify() is True
 
