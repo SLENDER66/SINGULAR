@@ -57,7 +57,16 @@ from .portfolio_reallocation import DynamicPortfolioEngine, InitiativePerformanc
 from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryEngine, TrajectoryProfile
 from .domain_learning import DomainHypothesis, DomainLearningResult, DomainObservation, LearningDisposition, LearningDomain, UniversalLearningEngine
 from .value_evolution import ValueEvolutionAssessment, ValueEvolutionDisposition, ValueEvolutionEngine, ValueHypothesis
-from .human_optimizer import HumanDomainState, HumanOptimizationEngine, HumanOptimizationPlan, HumanOptimizationPriority, OptimizationAction
+from .human_optimization import (
+    DomainInteraction,
+    DomainState,
+    HumanOptimizationEngine as CanonicalHumanOptimizationEngine,
+    HumanOptimizationReport,
+    Intervention,
+    OptimizationCandidate,
+    OptimizationDisposition,
+)
+from .human_optimizer import HumanDomainState, HumanOptimizationPlan, HumanOptimizationPriority, OptimizationAction
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
