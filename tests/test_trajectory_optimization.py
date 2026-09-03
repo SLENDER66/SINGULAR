@@ -61,7 +61,7 @@ def test_duplicate_interaction_pair_fails_closed() -> None:
 
 def test_large_search_space_is_not_presented_as_exact() -> None:
     domains = list(LearningDomain)
-    candidates = tuple(candidate(f"i{index}", domains[index], 1) for index in range(23))
+    candidates = tuple(candidate(f"i{index}", domains[index % len(domains)], 1) for index in range(23))
     interventions = {item.intervention_id: Intervention(item.intervention_id, item.domain, 1) for item in candidates}
     with pytest.raises(ValueError, match="exact safety limit"):
         TrajectoryOptimizationEngine.optimize(candidates, interventions)
