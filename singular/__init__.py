@@ -25,7 +25,7 @@ from .durable import DurableStore, MissionStatus
 from .effects import EffectInProgress, EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
 from .coherence import CoherenceReport, GlobalCoherenceGuard
 from .authority import AgentPower, AuthorityProfile, AuthorityProtocol, ConflictResolution, ConflictType
-from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldModel, WorldOpportunity
+from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldOpportunity
 from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValuesEngine, Vision
 from .state import CapacityEngine, CapacitySnapshot, StateDimension, StateObservation
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
@@ -44,7 +44,6 @@ from .rapid_wealth import RapidWealthEngine, RapidWealthSprint
 from .patrimony_engine import FailureConversion, FailureDisposition, FailureRecord, PatrimonyAssessment, PatrimonyEngine
 from .meta_audit import AgentCalibration, MetaAuditEngine, MetaAuditFinding, MetaAuditReport, MetaAuditSeverity
 
-# The package historically exported DecisionEngine and WorldModel from legacy
-# modules. Keep those root names backward-compatible; expose the governed
-# replacements explicitly to avoid silently changing public semantics.
-EpistemicWorldModel = WorldModel
+# Preserve the historical root API: models.WorldModel remains WorldModel.
+# The epistemic model is intentionally exposed under a distinct name.
+from .world_model import WorldModel as EpistemicWorldModel
