@@ -12,6 +12,7 @@ from .autopilot import ApprovalStatus, Autonomy
 from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
 from .mission_runtime import DurableMissionRuntime
+from .validated_trajectory_decision import ValidatedTrajectoryDecision
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ class ExecutionRecoveryRequired(RuntimeError):
 
 
 class DurableExecutionEngine:
-    """Execution transaction boundary: authorize, claim, run, persist outcome."""
+    """Durable execution boundary; raw actions are never executable."""
 
     def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None) -> None:
         if execution_lease_seconds <= 0:
@@ -90,7 +91,27 @@ class DurableExecutionEngine:
         self._bind_execution_identity(key, action, mission_id, governed)
 
     def execute(self, action, mission_id: str, handler: Callable[[Any], Any]) -> ExecutionResult:
+        """Legacy raw entry point: permanently deny execution."""
+        raise PermissionError("Raw ActionRequest execution is disabled: a ValidatedTrajectoryDecision is required.")
+
+    def execute_validated(self, decision: ValidatedTrajectoryDecision, handler: Callable[[Any], Any]) -> ExecutionResult:
+        """Execute exactly the action authorized by a verified trajectory decision."""
+        if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
+            raise PermissionError("Validated trajectory decision is missing or invalid.")
+        mission_id = decision.contract.mission_id
+        action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
+        if action is None:
+            raise PermissionError("Validated decision does not authorize an executable action.")
+        if action.contract_id != mission_id:
+            raise PermissionError("Validated action is not bound to the validated contract.")
         governed = self._authorize(action, mission_id)
+        if governed.governor != decision.governor:
+            raise PermissionError("Current governance no longer matches the validated decision.")
+        if getattr(governed, "policy", None) != decision.policy:
+            raise PermissionError("Current policy no longer matches the validated decision.")
+        return self._execute_authorized(action, mission_id, handler, governed)
+
+    def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any) -> ExecutionResult:
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
@@ -110,10 +131,22 @@ class DurableExecutionEngine:
         return self._complete(key, mission_id, action.id, value)
 
     def execute_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
-        """Execute one governed external effect without ever auto-retrying ambiguity."""
+        raise PermissionError("Raw external-effect execution is disabled: a ValidatedTrajectoryDecision is required.")
+
+    def execute_effect_validated(self, decision: ValidatedTrajectoryDecision, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
+            raise PermissionError("Validated trajectory decision is missing or invalid.")
+        action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
+        if action is None:
+            raise PermissionError("Validated decision does not authorize an executable action.")
+        governed = self._authorize(action, decision.contract.mission_id)
+        if governed.governor != decision.governor or getattr(governed, "policy", None) != decision.policy:
+            raise PermissionError("Current governance or policy no longer matches the validated decision.")
+        return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed)
+
+    def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
-        governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
@@ -163,9 +196,22 @@ class DurableExecutionEngine:
         return self._complete(key, mission_id, action.id, outcome.result)
 
     def reconcile_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        raise PermissionError("Raw effect reconciliation is disabled: a ValidatedTrajectoryDecision is required.")
+
+    def reconcile_effect_validated(self, decision: ValidatedTrajectoryDecision, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
+            raise PermissionError("Validated trajectory decision is missing or invalid.")
+        action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
+        if action is None:
+            raise PermissionError("Validated decision does not authorize an executable action.")
+        governed = self._authorize_reconciliation(action, decision.contract.mission_id)
+        if governed.governor != decision.governor:
+            raise PermissionError("Current governance no longer matches the validated decision.")
+        return self._reconcile_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed)
+
+    def _reconcile_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
-        governed = self._authorize_reconciliation(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
