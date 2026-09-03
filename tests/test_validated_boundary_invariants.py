@@ -14,8 +14,8 @@ from tests.test_validated_pipeline import _build_decision, authorized_handler
 def test_tampering_with_action_risk_invalidates_decision():
     decision = _build_decision()
     action = replace(decision.authorized_actions[0], risk=decision.authorized_actions[0].risk + 0.1)
-    tampered = replace(decision, authorized_actions=(action,))
-    assert not tampered.verify()
+    object.__setattr__(decision, "authorized_actions", (action,))
+    assert not decision.verify()
 
 
 def test_tampering_with_portfolio_interaction_effect_is_rejected():
@@ -24,24 +24,25 @@ def test_tampering_with_portfolio_interaction_effect_is_rejected():
         decision.trajectory_portfolio,
         interaction_effect=decision.trajectory_portfolio.interaction_effect + 1.0,
     )
-    tampered = replace(decision, trajectory_portfolio=altered_portfolio)
-    assert not tampered.verify()
+    object.__setattr__(decision, "trajectory_portfolio", altered_portfolio)
+    assert not decision.verify()
 
 
 def test_tampering_with_global_verdict_is_rejected():
     decision = _build_decision()
     report = replace(decision.global_report, decision="BLOCK")
-    tampered = replace(decision, global_report=report)
-    assert not tampered.verify()
+    object.__setattr__(decision, "global_report", report)
+    assert not decision.verify()
 
 
 def test_tampering_with_action_mapping_is_rejected():
     decision = _build_decision()
-    tampered = replace(
+    object.__setattr__(
         decision,
-        action_to_intervention=((decision.authorized_actions[0].id, "unknown-intervention"),),
+        "action_to_intervention",
+        ((decision.authorized_actions[0].id, "unknown-intervention"),),
     )
-    assert not tampered.verify()
+    assert not decision.verify()
 
 
 def test_executor_requires_the_exact_validated_artifact():
