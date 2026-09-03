@@ -136,7 +136,21 @@ class ExternalEffectCoordinator:
         if existing["payload_fingerprint"] != request.payload_fingerprint:
             raise ValueError("Clé d'idempotence fournisseur réutilisée avec un payload différent.")
 
+    def _execution_status(self, execution_key: str) -> str:
+        row = self.store.get_execution(execution_key)
+        if row is None:
+            raise KeyError(execution_key)
+        return str(row["status"])
+
+    def _authorize_execution(self, request: EffectRequest) -> None:
+        status = self._execution_status(request.execution_key)
+        if status == "RECOVERY_REQUIRED":
+            raise RuntimeError("Exécution en récupération : réconciliation explicite requise avant tout nouvel effet externe.")
+        if status != "RUNNING":
+            raise RuntimeError(f"Effet externe interdit pour une exécution dans l'état {status}.")
+
     def execute(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
+        self._authorize_execution(request)
         key = request.provider_idempotency_key
         existing = self.prepare(request)
         status = existing["status"]
