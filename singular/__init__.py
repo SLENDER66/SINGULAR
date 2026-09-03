@@ -32,3 +32,4 @@ from .global_control import GlobalDecisionGate, GlobalDecisionReport
 from .opportunity_engine import OpportunityAssessment, OpportunityDecision, OpportunityEngine
 from .opportunity_adapter import OpportunityAdapter
 from .portfolio import PortfolioAssessment, PortfolioEngine, PortfolioSelection
+from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine as CalibrationLearningEngine, LearningUpdate
