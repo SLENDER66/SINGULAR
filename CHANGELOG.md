@@ -10,6 +10,13 @@
 - Persisted the source domain/intervention/interaction inputs and re-ran deterministic human and trajectory optimization during validation to resist forged portfolios.
 - Added strict `ActionRequest` validation for finite, bounded security-relevant numeric inputs and nonblank identifiers.
 - Added adversarial tests for handler, provider, operation and payload substitution plus direct execution bypasses.
+- Added durable `DecisionAttestationStore` issuance/revocation with TTL and exact context binding.
+- Made the durable executor itself require a valid attestation, so the inner execution API cannot bypass the attestation registry.
+- Bound durable execution identity fingerprints to the exact validated decision context fingerprint, preventing a different decision from silently reusing a completed execution identity.
+- Added a strict execution adapter for external-effect execution and reconciliation, keeping both paths behind the same validated authority.
+- Added a static/dynamic execution-boundary auditor that continuously checks for obvious production bypasses and raw API violations.
+- Added evidence-bounded historical memory and probabilistic future reasoning: canonical facts, contested evidence, explicit mechanisms, long-horizon uncertainty and non-authorizing future scenarios.
+- Added `TemporalAdvisor` to turn future scenarios into auditable PREPARE/WATCH forecast signals without granting authority.
 - Kept the new execution boundary fail-closed until all production callers are migrated and CI is green.
 
 ## 3.4.3 — Interaction-Aware Trajectory Optimization
