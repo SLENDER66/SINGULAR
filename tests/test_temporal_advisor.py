@@ -1,5 +1,6 @@
 import pytest
 
+from singular.collective_intelligence import KnowledgeKind
 from singular.history_world_model import (
     EpistemicLevel,
     FutureDisposition,
@@ -8,7 +9,7 @@ from singular.history_world_model import (
     HistoricalMode,
     build_temporal_context,
 )
-from singular.temporal_advisor import TemporalAdvisor
+from singular.temporal_advisor import TemporalAdvisor, TemporalSignal
 
 
 def _context():
@@ -36,6 +37,13 @@ def test_temporal_advisor_never_authorizes():
     assert TemporalAdvisor.can_authorize(advisory) is False
 
 
+def test_temporal_advisory_exports_forecasts_without_critical_authority():
+    advisory = TemporalAdvisor().assess(_context())
+    signals = advisory.as_shared_signals()
+    assert all(signal.kind is KnowledgeKind.FORECAST for signal in signals)
+    assert all(signal.critical is False for signal in signals)
+
+
 def test_empty_advisory_is_maximally_uncertain():
     context = build_temporal_context(as_of="2026-09-03", evidence=(), scenarios=())
     advisory = TemporalAdvisor().assess(context)
@@ -47,3 +55,8 @@ def test_advisory_rejects_unknown_preparation_reference():
     with pytest.raises(ValueError, match="unknown scenario"):
         from singular.temporal_advisor import TemporalAdvisory
         TemporalAdvisory((), ("UNKNOWN",), ())
+
+
+def test_temporal_signal_rejects_non_finite_or_out_of_range_confidence():
+    with pytest.raises(ValueError):
+        TemporalSignal("S", FutureDisposition.WATCH, 2.0, 0.2, ())
