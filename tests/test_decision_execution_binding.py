@@ -50,6 +50,24 @@ def test_execution_identity_is_bound_to_decision_context(tmp_path):
         executor.execute_validated(second, authorized_handler)
 
 
+def test_execution_identity_binds_distinct_decision_id_even_with_same_context(tmp_path):
+    first = build_decision("DEC-ID-1")
+    second = build_decision("DEC-ID-2")
+    assert first.context_fingerprint != second.context_fingerprint
+
+    db = tmp_path / "singular.db"
+    runtime = DurableMissionRuntime(DurableStore(db))
+    runtime.store.save_mission(first.contract)
+    executor = DurableExecutionEngine(runtime)
+    issuer = ValidatedDecisionIssuer(executor.attestation_store)
+    issuer.issue(first)
+    issuer.issue(second)
+
+    executor.execute_validated(first, authorized_handler)
+    with pytest.raises(PermissionError, match="autorité, une décision ou un contenu différent"):
+        executor.execute_validated(second, authorized_handler)
+
+
 def test_attestation_and_execution_identity_survive_executor_restart(tmp_path):
     decision = build_decision("DEC-RESTART")
     db = tmp_path / "singular.db"
