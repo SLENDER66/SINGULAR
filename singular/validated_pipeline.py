@@ -9,6 +9,7 @@ from time import time
 from typing import Any
 
 from .autopilot import ActionRequest, DelegationContract, Governor
+from .decision_attestation import DecisionAttestation, DecisionAttestationStore
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
 from .human_optimization import DomainInteraction, DomainState, HumanOptimizationEngine, Intervention
 from .security import ActionPolicy
@@ -134,6 +135,12 @@ class ValidatedTrajectoryPipeline:
             execution_target=execution_target, execution_kind=execution_kind, provider_name=provider_name,
             provider_target=provider_target, operation=operation, payload_fingerprint=payload_hash,
         )
+
+    @staticmethod
+    def build_and_attest(*, attestation_store: DecisionAttestationStore, issuer: str = "singular", **kwargs: Any) -> tuple[ValidatedTrajectoryDecision, DecisionAttestation]:
+        """Build a validated decision and durably issue its execution attestation."""
+        decision = ValidatedTrajectoryPipeline.build(**kwargs)
+        return decision, attestation_store.issue(decision, issuer=issuer)
 
 
 __all__ = ["ValidatedTrajectoryPipeline"]
