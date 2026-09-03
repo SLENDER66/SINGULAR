@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from singular.learning import Forecast, ForecastKind
@@ -27,6 +29,24 @@ def test_learning_review_is_reviewable_not_automatic_mutation(tmp_path):
     assert review.outcome_record_id == outcome.record_id
     assert review.evidence_strength == 0.9
     assert queue.pending() == (review,)
+
+
+def test_learning_review_rejects_forged_or_unpersisted_outcome(tmp_path):
+    decision = _build_decision()
+    outcomes = OutcomeLedger(tmp_path / "learning.db")
+    outcomes.attestation_store.issue(decision)
+    forecast = Forecast("F-FORGED", ForecastKind.BINARY, probability=0.8, confidence=0.8)
+    outcome = outcomes.record(
+        decision=decision,
+        forecast=forecast,
+        actual=True,
+        execution_key="EXEC-FORGED",
+        execution_status="COMPLETED",
+    )
+    queue = LearningReviewQueue(tmp_path / "learning.db")
+    forged = replace(outcome, actual_value=0.0)
+    with pytest.raises(PermissionError, match="exact persisted outcome"):
+        queue.propose(forged)
 
 
 def test_learning_review_requires_explicit_accept_or_reject(tmp_path):
