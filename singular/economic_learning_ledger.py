@@ -8,7 +8,7 @@ from typing import Any
 
 from .durable import DurableStore
 from .economic_learning import EconomicLearningCycle
-from .execution_result import ExecutionResult, ExecutionStatus
+from .execution_result import ExecutionStatus
 from .learning import CalibrationRecord, ForecastKind, LearningUpdate
 from .learning_bridge import LearningResult
 from .learning_strategy import StrategyDisposition, StrategyProposal
