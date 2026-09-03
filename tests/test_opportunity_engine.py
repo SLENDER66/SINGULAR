@@ -36,8 +36,14 @@ def test_ordinary_low_value_opportunity_is_ignored():
 
 def test_rank_and_shortlist_are_deterministic():
     opportunities = [
-        Opportunity("O1", "test", 9, .7, 9, 1, 3, 9, 9),
-        Opportunity("O2", "watch", 7, .6, 5, 2, 3, 7, 7),
+        Opportunity(
+            id="O1", name="test", impact=9, probability=0.7,
+            leverage=9, cost=1, risk=3, reversibility=9, optionality=9,
+        ),
+        Opportunity(
+            id="O2", name="watch", impact=7, probability=0.6,
+            leverage=5, cost=2, risk=3, reversibility=7, optionality=7,
+        ),
     ]
     ranked = OpportunityEngine.rank(opportunities)
     assert [item.opportunity_id for item in ranked] == ["O1", "O2"]
