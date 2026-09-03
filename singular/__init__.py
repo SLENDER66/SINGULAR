@@ -79,6 +79,7 @@ from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTraj
 from .validated_execution import ValidatedExecutionBoundary
 from .validated_pipeline import ValidatedTrajectoryPipeline
 from .validated_decision_service import ValidatedDecisionService
+from .control_plane import ControlPlaneDecision, SingularControlPlane
 from .history_world_model import (
     EpistemicLevel, FutureDisposition, FutureReasoner, FutureScenario, HistoricalEvidence,
     HistoricalMode, HistoricalPattern, HistoricalReasoner, TemporalAssessment, TemporalContext,
