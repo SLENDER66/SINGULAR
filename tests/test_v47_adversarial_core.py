@@ -5,6 +5,7 @@ import pytest
 
 from singular.audit import AuditTrail
 from singular.autopilot import ActionRequest, Autonomy
+from singular.decision_attestation import ValidatedDecisionIssuer
 from singular.durable import DurableStore, MissionStatus
 from singular.effects import ExternalEffectCoordinator, ProviderResult
 from singular.execution import DurableExecutionEngine, ExecutionInProgress, ExecutionRecoveryRequired
@@ -54,7 +55,9 @@ def _inputs(*, decision_id: str = "DEC-V47"):
 def _runtime_and_engine(tmp_path: Path, decision):
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
     runtime.store.save_mission(decision.contract)
-    return runtime, DurableExecutionEngine(runtime)
+    engine = DurableExecutionEngine(runtime)
+    ValidatedDecisionIssuer(engine.attestation_store).issue(decision)
+    return runtime, engine
 
 
 def test_replay_completed_execution_is_durable_and_does_not_reexecute(tmp_path: Path):
@@ -229,6 +232,7 @@ def test_external_effect_ambiguity_never_reexecutes_provider(tmp_path: Path):
     runtime.store.save_mission(contract)
     coordinator = ExternalEffectCoordinator(runtime.store)
     engine = DurableExecutionEngine(runtime, effect_coordinator=coordinator)
+    ValidatedDecisionIssuer(engine.attestation_store).issue(decision)
     first = engine.execute_effect_validated(decision, provider, provider_name="fake-provider", operation="send", payload={"x": 1})
     assert first.status == "RECOVERY_REQUIRED"
     assert provider.execute_calls == 1
