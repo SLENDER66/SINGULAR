@@ -84,7 +84,11 @@ class EconomicSequenceEngine:
         ownership = 1.0 + max(step.ownership_value, 0.0) / 10.0
         compounding = 1.0 + max(step.compounding_value, 0.0) / 10.0
         safety = (0.5 + step.reversibility / 20.0) / (1.0 + step.risk / 10.0)
-        return round(expected * step.probability * ownership * compounding * safety + failure_lesson_bonus, 6)
+        return round(
+            expected * step.probability * ownership * compounding * safety
+            + failure_lesson_bonus,
+            6,
+        )
 
     @classmethod
     def plan(
@@ -97,7 +101,10 @@ class EconomicSequenceEngine:
     ) -> EconomicSequence:
         if not isfinite(available_capacity) or available_capacity < 0:
             raise ValueError("available_capacity must be finite and non-negative")
-        ordered = sorted(steps, key=lambda item: (cls.STAGE_ORDER.index(item.stage), item.id))
+        ordered = sorted(
+            steps,
+            key=lambda item: (cls.STAGE_ORDER.index(item.stage), item.id),
+        )
         if len({item.id for item in ordered}) != len(ordered):
             raise ValueError("step ids must be unique")
 
@@ -108,7 +115,10 @@ class EconomicSequenceEngine:
         blocked: list[str] = []
         for step in ordered:
             effective_satisfied = completed | set(step.satisfied_prerequisites)
-            prerequisites_ok = all(prerequisite in effective_satisfied for prerequisite in step.prerequisites)
+            prerequisites_ok = all(
+                prerequisite in effective_satisfied
+                for prerequisite in step.prerequisites
+            )
             if step.capacity_required > available_capacity or not prerequisites_ok:
                 blocked.append(step.id)
                 continue
@@ -116,21 +126,29 @@ class EconomicSequenceEngine:
             eligible.append((cls._score(step, lesson_bonus), step))
 
         selected: list[EconomicStep] = []
-        remaining_capacity = available_capacity
         selected_score = 0.0
         for stage in cls.STAGE_ORDER:
             candidates = [
-                (score, item) for score, item in eligible
-                if item.stage is stage and item.capacity_required <= remaining_capacity
+                (score, item)
+                for score, item in eligible
+                if item.stage is stage
+                and item.capacity_required <= available_capacity
             ]
             if not candidates:
                 continue
-            winner_score, winner = max(candidates, key=lambda item: (item[0], item[1].id))
+            winner_score, winner = max(
+                candidates,
+                key=lambda item: (item[0], item[1].id),
+            )
             selected.append(winner)
             selected_score = winner_score
             break
 
-        rationale = ["SEQUENCE_BEATS_STATIC_RANKING", "EARLIEST_UNLOCKED_STAGE_FIRST", "RECOMMENDATION_ONLY"]
+        rationale = [
+            "SEQUENCE_BEATS_STATIC_RANKING",
+            "EARLIEST_UNLOCKED_STAGE_FIRST",
+            "RECOMMENDATION_ONLY",
+        ]
         if selected:
             rationale.append(f"NEXT_STAGE={selected[0].stage.value}")
         else:
