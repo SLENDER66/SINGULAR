@@ -5,7 +5,7 @@ from enum import Enum
 from math import isfinite
 
 from .state import CapacitySnapshot
-from .values import ValueAssessment, ValueAssessmentResult, Vision
+from .values import ValueAssessment, ValueAssessmentResult, ValueMode, Vision
 
 
 class TrajectoryDecision(str, Enum):
@@ -16,11 +16,7 @@ class TrajectoryDecision(str, Enum):
 
 @dataclass(frozen=True)
 class TrajectoryProfile:
-    """The explicit optimization contract for SINGULAR's shared trajectory.
-
-    These dimensions are constraints/weights for global decisions. They are not
-    promises of financial outcomes and do not authorize execution.
-    """
+    """Explicit multi-objective optimization contract for SINGULAR."""
 
     vision: Vision
     money: float = 1.0
@@ -34,10 +30,7 @@ class TrajectoryProfile:
     transmission: float = 1.0
 
     def __post_init__(self) -> None:
-        weights = (
-            self.money, self.time, self.capability, self.energy, self.freedom,
-            self.ownership, self.learning, self.resilience, self.transmission,
-        )
+        weights = (self.money, self.time, self.capability, self.energy, self.freedom, self.ownership, self.learning, self.resilience, self.transmission)
         if any(not isfinite(value) or value < 0 for value in weights):
             raise ValueError("Trajectory weights must be finite and non-negative")
         if not any(weights):
@@ -45,17 +38,7 @@ class TrajectoryProfile:
 
     @property
     def weights(self) -> dict[str, float]:
-        return {
-            "money": self.money,
-            "time": self.time,
-            "capability": self.capability,
-            "energy": self.energy,
-            "freedom": self.freedom,
-            "ownership": self.ownership,
-            "learning": self.learning,
-            "resilience": self.resilience,
-            "transmission": self.transmission,
-        }
+        return {"money": self.money, "time": self.time, "capability": self.capability, "energy": self.energy, "freedom": self.freedom, "ownership": self.ownership, "learning": self.learning, "resilience": self.resilience, "transmission": self.transmission}
 
 
 @dataclass(frozen=True)
@@ -68,7 +51,7 @@ class TrajectoryAssessment:
 
 
 class TrajectoryEngine:
-    """Evaluate an action as part of the whole trajectory rather than a local KPI."""
+    """Optimize the whole trajectory; hard constraints remain fail-closed."""
 
     @staticmethod
     def assess(
@@ -85,11 +68,12 @@ class TrajectoryEngine:
             raise ValueError("Trajectory dimension values must be finite")
 
         rationale: list[str] = []
-        if any(result.assessment is ValueAssessment.VIOLATED for result in value_results):
-            return TrajectoryAssessment(
-                TrajectoryDecision.BLOCK, 0.0, 0.0,
-                ("CORE_VALUE_VIOLATION",), True,
-            )
+        hard_violations = [result.value.name for result in value_results if result.assessment is ValueAssessment.VIOLATED and result.value.mode is ValueMode.HARD_CONSTRAINT]
+        overrideable_violations = [result.value.name for result in value_results if result.assessment is ValueAssessment.VIOLATED and result.value.mode is not ValueMode.HARD_CONSTRAINT]
+        if hard_violations:
+            return TrajectoryAssessment(TrajectoryDecision.BLOCK, 0.0, 0.0, ("HARD_CONSTRAINT_VIOLATION:" + ",".join(hard_violations),), True)
+        if overrideable_violations:
+            rationale.append("VALUE_TRADEOFF_REQUIRES_EXPLICIT_REVIEW:" + ",".join(overrideable_violations))
         if any(result.assessment is ValueAssessment.UNKNOWN for result in value_results):
             rationale.append("CORE_VALUE_STATE_UNKNOWN")
 
@@ -106,10 +90,7 @@ class TrajectoryEngine:
             total_weight += weight
 
         if total_weight == 0:
-            return TrajectoryAssessment(
-                TrajectoryDecision.REVIEW, 0.0, 0.0,
-                tuple(dict.fromkeys(rationale + ["INSUFFICIENT_TRAJECTORY_DATA"])), True,
-            )
+            return TrajectoryAssessment(TrajectoryDecision.REVIEW, 0.0, 0.0, tuple(dict.fromkeys(rationale + ["INSUFFICIENT_TRAJECTORY_DATA"])), True)
 
         score = round(weighted / total_weight, 6)
         if capacity is not None and capacity.confidence < 0.5:
@@ -126,10 +107,4 @@ class TrajectoryEngine:
         else:
             decision = TrajectoryDecision.PROCEED
 
-        return TrajectoryAssessment(
-            decision,
-            score,
-            round(weighted, 6),
-            tuple(dict.fromkeys(rationale)),
-            human_review,
-        )
+        return TrajectoryAssessment(decision, score, round(weighted, 6), tuple(dict.fromkeys(rationale)), human_review)
