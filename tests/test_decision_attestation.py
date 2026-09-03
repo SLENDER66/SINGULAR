@@ -21,6 +21,16 @@ def test_attestation_is_durable_and_matches_exact_decision(tmp_path):
     assert restarted_store.verify(decision)
 
 
+def test_in_memory_attestation_store_persists_across_connections():
+    decision = _build_decision()
+    store = DecisionAttestationStore(":memory:")
+    store.issue(decision)
+    assert store.get(decision.decision_id) is not None
+    assert store.verify(decision)
+    store.revoke(decision.decision_id)
+    assert store.verify(decision) is False
+
+
 def test_unissued_decision_is_not_executable_by_attestation_registry(tmp_path):
     decision = _build_decision()
     store = DecisionAttestationStore(tmp_path / "attestations.db")
