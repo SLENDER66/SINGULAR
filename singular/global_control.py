@@ -29,6 +29,7 @@ class GlobalDecisionReport:
     warnings: tuple[str, ...]
     capacity_recommendation: str | None
     policy_tier: str
+    policy_requires_human: bool
     governor_mode: Autonomy
     red_team_findings: tuple[RedTeamFinding, ...]
     coherence: CoherenceReport | None
@@ -39,7 +40,11 @@ class GlobalDecisionReport:
 
     @property
     def requires_human(self) -> bool:
-        return bool(self.warnings) or self.governor_mode is Autonomy.ESCALATE
+        return (
+            bool(self.warnings)
+            or self.policy_requires_human
+            or self.governor_mode is Autonomy.ESCALATE
+        )
 
 
 class GlobalDecisionGate:
@@ -147,6 +152,7 @@ class GlobalDecisionGate:
             warnings=tuple(dict.fromkeys(warnings)),
             capacity_recommendation=capacity_decision,
             policy_tier=policy.tier.value,
+            policy_requires_human=policy.requires_human,
             governor_mode=governor.mode,
             red_team_findings=findings,
             coherence=coherence,
