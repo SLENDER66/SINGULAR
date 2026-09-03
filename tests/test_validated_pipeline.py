@@ -1,15 +1,22 @@
 import pytest
 
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
-from singular.domain_learning import LearningDomain
 from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
+from singular.execution_capability import register_execution_capability
 from singular.human_optimization import DomainState, Intervention
 from singular.mission_runtime import DurableMissionRuntime
 from singular.trajectory import TrajectoryProfile
 from singular.validated_pipeline import ValidatedTrajectoryPipeline
 from singular.values import Vision
 from singular.validated_trajectory_decision import payload_fingerprint
+
+
+def authorized_handler(action):
+    return {"action_id": action.id, "executed": True}
+
+
+AUTHORIZED_HANDLER_CAPABILITY = register_execution_capability(authorized_handler, "cap_test_authorized_handler")
 
 
 def _inputs():
@@ -28,13 +35,9 @@ def _build_decision():
         objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
         domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
         trajectory_dimensions=dimensions, contract=contract,
-        execution_target="tests.test_validated_pipeline:authorized_handler",
+        execution_target=AUTHORIZED_HANDLER_CAPABILITY,
         decision_id="DEC-PIPE", capacity_budget=2,
     )
-
-
-def authorized_handler(action):
-    return {"action_id": action.id, "executed": True}
 
 
 def test_pipeline_constructs_decision_only_after_all_required_stages():
@@ -52,7 +55,7 @@ def test_pipeline_fails_closed_when_trajectory_requires_review():
             objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
             domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
             trajectory_dimensions=dimensions, contract=contract,
-            execution_target="tests.test_validated_pipeline:authorized_handler",
+            execution_target=AUTHORIZED_HANDLER_CAPABILITY,
             decision_id="DEC-PIPE-BLOCK", capacity_budget=2,
         )
 
@@ -64,8 +67,20 @@ def test_pipeline_rejects_action_outside_selected_portfolio():
             objective=contract.objective, actions=(action,), action_to_intervention=((action.id, "wrong-intervention"),),
             domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
             trajectory_dimensions=dimensions, contract=contract,
-            execution_target="tests.test_validated_pipeline:authorized_handler",
+            execution_target=AUTHORIZED_HANDLER_CAPABILITY,
             decision_id="DEC-PIPE-MISMATCH", capacity_budget=2,
+        )
+
+
+def test_pipeline_rejects_symbolic_execution_target_without_capability():
+    contract, action, state, intervention, profile, dimensions = _inputs()
+    with pytest.raises(ValueError, match="opaque execution capability"):
+        ValidatedTrajectoryPipeline.build(
+            objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
+            domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
+            trajectory_dimensions=dimensions, contract=contract,
+            execution_target="tests.test_validated_pipeline:authorized_handler",
+            decision_id="DEC-PIPE-SYMBOLIC", capacity_budget=2,
         )
 
 
@@ -76,8 +91,11 @@ def test_executor_rejects_handler_substitution_before_handler_call(tmp_path):
     executor = DurableExecutionEngine(runtime)
     calls = []
 
-    with pytest.raises(PermissionError, match="execution target"):
-        executor.execute_validated(decision, lambda action: calls.append("wrong"))
+    def wrong_handler(action):
+        calls.append("wrong")
+
+    with pytest.raises(PermissionError, match="Handler capability"):
+        executor.execute_validated(decision, wrong_handler)
 
     assert calls == []
 
@@ -94,6 +112,21 @@ def test_executor_accepts_only_the_bound_handler(tmp_path):
     assert result.result["executed"] is True
 
 
+def test_executor_rejects_forged_callable_metadata(tmp_path):
+    decision = _build_decision()
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    runtime.store.save_mission(decision.contract)
+    executor = DurableExecutionEngine(runtime)
+
+    def forged_handler(action):
+        return {"action_id": action.id, "executed": False}
+
+    forged_handler.__module__ = authorized_handler.__module__
+    forged_handler.__qualname__ = authorized_handler.__qualname__
+    with pytest.raises(PermissionError, match="Handler capability"):
+        executor.execute_validated(decision, forged_handler)
+
+
 class AuthorizedProvider:
     def execute(self, request, idempotency_key):
         raise AssertionError("provider should not be called by substitution tests")
@@ -106,6 +139,10 @@ class OtherProvider(AuthorizedProvider):
     pass
 
 
+AUTHORIZED_PROVIDER = AuthorizedProvider()
+AUTHORIZED_PROVIDER_CAPABILITY = register_execution_capability(AUTHORIZED_PROVIDER, "cap_test_authorized_provider")
+
+
 def _build_effect_decision():
     contract, action, state, intervention, profile, dimensions = _inputs()
     payload = {"amount": 42, "target": "bounded"}
@@ -113,7 +150,7 @@ def _build_effect_decision():
         objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
         domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
         trajectory_dimensions=dimensions, contract=contract,
-        execution_target="tests.test_validated_pipeline:AuthorizedProvider", execution_kind="external_effect",
+        execution_target=AUTHORIZED_PROVIDER_CAPABILITY, execution_kind="external_effect",
         provider_name="bounded-provider", provider_target="tests.test_validated_pipeline:AuthorizedProvider",
         operation="apply", execution_payload=payload, decision_id="DEC-EFFECT", capacity_budget=2,
     ), payload
@@ -122,7 +159,7 @@ def _build_effect_decision():
 def test_executor_rejects_provider_substitution_before_runtime_access(tmp_path):
     decision, _ = _build_effect_decision()
     executor = object.__new__(DurableExecutionEngine)
-    with pytest.raises(PermissionError, match="Provider implementation"):
+    with pytest.raises(PermissionError, match="Provider capability"):
         executor.execute_effect_validated(decision, OtherProvider(), provider_name="bounded-provider", operation="apply", payload={"amount": 42, "target": "bounded"})
 
 
@@ -130,14 +167,14 @@ def test_executor_rejects_operation_substitution_before_runtime_access(tmp_path)
     decision, payload = _build_effect_decision()
     executor = object.__new__(DurableExecutionEngine)
     with pytest.raises(PermissionError, match="Provider or operation"):
-        executor.execute_effect_validated(decision, AuthorizedProvider(), provider_name="bounded-provider", operation="delete", payload=payload)
+        executor.execute_effect_validated(decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider", operation="delete", payload=payload)
 
 
 def test_executor_rejects_payload_substitution_before_runtime_access(tmp_path):
     decision, _ = _build_effect_decision()
     executor = object.__new__(DurableExecutionEngine)
     with pytest.raises(PermissionError, match="payload"):
-        executor.execute_effect_validated(decision, AuthorizedProvider(), provider_name="bounded-provider", operation="apply", payload={"amount": 43, "target": "bounded"})
+        executor.execute_effect_validated(decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider", operation="apply", payload={"amount": 43, "target": "bounded"})
 
 
 def test_payload_fingerprint_is_stable_for_equivalent_mapping_order():
