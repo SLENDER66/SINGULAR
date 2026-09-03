@@ -95,8 +95,8 @@ class OutcomeLedger:
     ) -> OutcomeObservation:
         if not execution_key.strip() or not execution_status.strip():
             raise ValueError("execution key and status are required")
-        if not decision.verify() or not self.attestation_store.verify(decision):
-            raise PermissionError("only an active, durably attested decision can produce an outcome record")
+        if not decision.verify(now=decision.issued_at) or not self.attestation_store.verify_issuance(decision):
+            raise PermissionError("only a durably issued, internally consistent decision can produce an outcome record")
 
         calibration: CalibrationRecord
         if forecast.kind is ForecastKind.BINARY:
