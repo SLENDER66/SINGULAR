@@ -29,10 +29,19 @@ class EmpireAsset:
     def __post_init__(self) -> None:
         if not self.id.strip() or not self.name.strip():
             raise ValueError("asset id and name cannot be empty")
-        for field_name, value in (("value", self.value), ("annual_cash_flow", self.annual_cash_flow), ("growth_rate", self.growth_rate)):
+        for field_name, value in (
+            ("value", self.value),
+            ("annual_cash_flow", self.annual_cash_flow),
+            ("growth_rate", self.growth_rate),
+        ):
             if not isfinite(value) or value < 0:
                 raise ValueError(f"{field_name} must be finite and non-negative")
-        for field_name, value in (("ownership", self.ownership), ("strategic_control", self.strategic_control), ("durability", self.durability), ("concentration", self.concentration)):
+        for field_name, value in (
+            ("ownership", self.ownership),
+            ("strategic_control", self.strategic_control),
+            ("durability", self.durability),
+            ("concentration", self.concentration),
+        ):
             if not 0 <= value <= 1:
                 raise ValueError(f"{field_name} must be between 0 and 1")
 
@@ -63,15 +72,25 @@ class EmpireEngine:
         governance: float | None = None,
         succession: float | None = None,
     ) -> EmpireAssessment:
-        for name, value in (("systemization", systemization), ("governance", governance), ("succession", succession)):
+        for name, value in (
+            ("systemization", systemization),
+            ("governance", governance),
+            ("succession", succession),
+        ):
             if value is not None and not 0 <= value <= 1:
                 raise ValueError(f"{name} must be between 0 and 1")
         if not assets:
-            return EmpireAssessment(EmpireStage.FOUNDATION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ("BUILD_FIRST_PRODUCTIVE_ASSET",), systemization, governance, succession)
+            return EmpireAssessment(
+                EmpireStage.FOUNDATION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ("BUILD_FIRST_PRODUCTIVE_ASSET",), systemization, governance, succession,
+            )
 
         productive_value = sum(asset.value for asset in assets)
         if productive_value == 0:
-            return EmpireAssessment(EmpireStage.FOUNDATION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ("BUILD_FIRST_PRODUCTIVE_ASSET",), systemization, governance, succession)
+            return EmpireAssessment(
+                EmpireStage.FOUNDATION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ("BUILD_FIRST_PRODUCTIVE_ASSET",), systemization, governance, succession,
+            )
         ownership_value = sum(asset.value * asset.ownership for asset in assets)
         cash_flow = sum(asset.annual_cash_flow * asset.ownership for asset in assets)
         weighted_control = sum(asset.value * asset.strategic_control for asset in assets) / productive_value
@@ -79,16 +98,20 @@ class EmpireEngine:
         growth = sum(asset.value * asset.growth_rate for asset in assets) / productive_value
         durability = sum(asset.value * asset.durability for asset in assets) / productive_value
 
-        score = round((ownership_value * (1 + growth) + cash_flow + productive_value * weighted_control * durability) / (1 + productive_value * concentration), 6)
+        score = round(
+            (ownership_value * (1 + growth) + cash_flow + productive_value * weighted_control * durability)
+            / (1 + productive_value * concentration),
+            6,
+        )
         institutional = (
             all(value is not None for value in (systemization, governance, succession))
             and ownership_value / productive_value >= 0.7
             and weighted_control >= 0.7
             and durability >= 0.8
             and concentration <= 0.5
-            and systemization >= 0.7
-            and governance >= 0.7
-            and succession >= 0.7
+            and systemization is not None and systemization >= 0.7
+            and governance is not None and governance >= 0.7
+            and succession is not None and succession >= 0.7
         )
         if institutional:
             stage = EmpireStage.INSTITUTION
