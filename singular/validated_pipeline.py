@@ -1,0 +1,156 @@
+"""Mandatory construction pipeline for executable trajectory decisions."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Any
+
+from .autopilot import ActionRequest, DelegationContract
+from .global_control import GlobalDecisionGate, GlobalDecisionReport
+from .human_optimization import DomainState, HumanOptimizationEngine, HumanOptimizationReport, Intervention
+from .security import PolicyDecision
+from .state import CapacitySnapshot
+from .trajectory import TrajectoryAssessment, TrajectoryEngine, TrajectoryProfile
+from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine, TrajectoryPortfolio
+from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
+from .values import ValueAssessmentResult
+
+
+class ValidatedTrajectoryPipeline:
+    """Build the only artifact accepted by the strict execution boundary.
+
+    The order is intentionally fixed:
+
+        domain state -> human optimization -> trajectory portfolio
+        -> trajectory assessment -> global decision gate -> validated decision
+
+    Any missing, non-executable or inconsistent stage fails closed.
+    """
+
+    @staticmethod
+    def build(
+        *,
+        objective: str,
+        actions: tuple[ActionRequest, ...],
+        action_to_intervention: tuple[tuple[str, str], ...],
+        domain_states: Sequence[DomainState],
+        interventions: Sequence[Intervention],
+        trajectory_profile: TrajectoryProfile,
+        trajectory_dimensions: dict[str, float],
+        contract: DelegationContract,
+        execution_target: str,
+        execution_kind: str = "handler",
+        provider_name: str | None = None,
+        provider_target: str | None = None,
+        operation: str | None = None,
+        execution_payload: Any = None,
+        interactions: tuple[TrajectoryInteraction, ...] = (),
+        value_results: tuple[ValueAssessmentResult, ...] = (),
+        capacity: CapacitySnapshot | None = None,
+        effort: float | None = None,
+        risks: list[Any] | None = None,
+        shared_signals: tuple[Any, ...] = (),
+        calibration: dict[str, float] | None = None,
+        gate: GlobalDecisionGate | None = None,
+        capacity_budget: float | None = None,
+        max_portfolio_candidates: int = 5,
+        decision_id: str = "",
+    ) -> ValidatedTrajectoryDecision:
+        if not objective.strip():
+            raise ValueError("objective cannot be empty")
+        if not actions:
+            raise ValueError("at least one action is required")
+        if not decision_id.strip():
+            raise ValueError("decision_id is required")
+        if contract.objective != objective:
+            raise ValueError("objective must match the execution contract")
+        if execution_kind not in {"handler", "external_effect"}:
+            raise ValueError("execution_kind must be handler or external_effect")
+
+        intervention_map = {item.id: item for item in interventions}
+        if len(intervention_map) != len(interventions):
+            raise ValueError("intervention ids must be unique")
+        budget = capacity_budget if capacity_budget is not None else float("inf")
+
+        human = HumanOptimizationEngine.optimize(tuple(domain_states), tuple(interventions), capacity_budget=budget)
+        portfolio = TrajectoryOptimizationEngine.optimize(
+            human.candidates,
+            intervention_map,
+            interactions,
+            capacity_budget=budget,
+            max_candidates=max_portfolio_candidates,
+        )
+        if not portfolio.candidates:
+            raise PermissionError("No executable trajectory portfolio was produced.")
+
+        assessment = TrajectoryEngine.assess(
+            trajectory_profile,
+            dimensions=trajectory_dimensions,
+            value_results=value_results,
+            capacity=capacity,
+        )
+        global_report: GlobalDecisionReport = (gate or GlobalDecisionGate()).evaluate(
+            objective,
+            actions[0],
+            values=list(value_results),
+            capacity=capacity,
+            effort=effort,
+            risks=risks,
+            mission_id=contract.mission_id,
+            contract=contract,
+            shared_signals=shared_signals,
+            calibration=calibration,
+            trajectory_profile=trajectory_profile,
+            trajectory_dimensions=trajectory_dimensions,
+            human_optimization=human,
+        )
+
+        if global_report.trajectory != assessment:
+            raise PermissionError("Global decision gate trajectory does not match the freshly assessed trajectory.")
+        if global_report.human_optimization != human:
+            raise PermissionError("Global decision gate human optimization does not match the freshly optimized state.")
+        if global_report.decision != "PROCEED":
+            raise PermissionError(f"Global decision gate refused execution: {global_report.decision}.")
+        if assessment.human_review:
+            raise PermissionError("Trajectory requires human review.")
+
+        mapping = dict(action_to_intervention)
+        if len(mapping) != len(action_to_intervention) or set(mapping) != {action.id for action in actions}:
+            raise ValueError("every authorized action must have exactly one intervention mapping")
+        selected_ids = {candidate.intervention_id for candidate in portfolio.candidates}
+        if any(mapping[action.id] not in selected_ids for action in actions):
+            raise PermissionError("An authorized action is outside the selected trajectory portfolio.")
+
+        if execution_kind == "handler":
+            if any(value is not None for value in (provider_name, provider_target, operation, execution_payload)):
+                raise ValueError("handler execution cannot carry external-effect binding fields")
+            payload_hash = None
+        else:
+            if not provider_name or not provider_target or not operation:
+                raise ValueError("external-effect execution requires provider binding")
+            payload_hash = payload_fingerprint(execution_payload)
+
+        policy: PolicyDecision = __import__("singular.security", fromlist=["ActionPolicy"]).ActionPolicy.evaluate(actions[0])
+        # The decision constructor independently recomputes policy, governor and red-team evidence.
+        return ValidatedTrajectoryDecision.create(
+            decision_id=decision_id,
+            actions=actions,
+            action_to_intervention=action_to_intervention,
+            human_optimization=human,
+            trajectory_portfolio=portfolio,
+            trajectory_assessment=assessment,
+            global_report=global_report,
+            contract=contract,
+            policy=policy,
+            red_team_findings=global_report.red_team_findings,
+            governor=__import__("singular.autopilot", fromlist=["Governor"]).Governor.evaluate(actions[0], contract),
+            execution_target=execution_target,
+            execution_kind=execution_kind,
+            provider_name=provider_name,
+            provider_target=provider_target,
+            operation=operation,
+            payload_fingerprint=payload_hash,
+        )
+
+
+__all__ = ["ValidatedTrajectoryPipeline"]
