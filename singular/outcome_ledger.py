@@ -15,6 +15,7 @@ from math import isfinite
 from pathlib import Path
 
 from .decision_attestation import DecisionAttestationStore
+from .durable import DurableStore
 from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine
 from .validated_trajectory_decision import ValidatedTrajectoryDecision
 
@@ -83,6 +84,35 @@ class OutcomeLedger:
             if "forecast_confidence" not in columns:
                 conn.execute("ALTER TABLE outcome_ledger ADD COLUMN forecast_confidence REAL NOT NULL DEFAULT 0.0")
 
+    def _validate_execution_observation(
+        self,
+        decision: ValidatedTrajectoryDecision,
+        execution_key: str,
+        execution_status: str,
+    ) -> None:
+        """Require the learning observation to correspond to a real durable execution.
+
+        This prevents a caller from poisoning calibration by supplying an arbitrary
+        execution key or inventing a terminal status that never occurred. The
+        durable execution row is the source of truth; the supplied values must match
+        it exactly. Recovery-in-progress is deliberately not treated as an outcome.
+        """
+        mission_id = decision.contract.mission_id
+        action_id = decision.global_report.action_id
+        expected_key = DurableStore.idempotency_key("execute", mission_id, action_id)
+        if execution_key != expected_key:
+            raise PermissionError("La clé d'exécution ne correspond pas à l'identité durable de la décision.")
+
+        execution = DurableStore(self.path).get_execution(execution_key)
+        if execution is None:
+            raise PermissionError("Aucune exécution durable correspondante n'existe pour cette observation.")
+        if execution["mission_id"] != mission_id or execution["action_id"] != action_id:
+            raise PermissionError("L'exécution observée n'est pas liée à la mission ou à l'action de la décision.")
+        if execution["status"] != execution_status:
+            raise ValueError("Le statut observé ne correspond pas au statut durable de l'exécution.")
+        if execution_status not in {"COMPLETED", "FAILED"}:
+            raise ValueError("Seules les exécutions terminales peuvent alimenter le ledger de résultats.")
+
     def record(
         self,
         *,
@@ -97,6 +127,7 @@ class OutcomeLedger:
             raise ValueError("execution key and status are required")
         if not decision.verify(now=decision.issued_at) or not self.attestation_store.verify_issuance(decision):
             raise PermissionError("only a durably issued, internally consistent decision can produce an outcome record")
+        self._validate_execution_observation(decision, execution_key, execution_status)
 
         calibration: CalibrationRecord
         if forecast.kind is ForecastKind.BINARY:
