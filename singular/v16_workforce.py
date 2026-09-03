@@ -7,6 +7,7 @@ from .empire import AgentRegistry, AgentSpec, AutopilotSupervisor
 
 
 DEFAULT_WORKFORCE = (
+    ('COMMANDER', 'Focus the objective, choose the best next move and keep the system simple.', ('command', 'prioritization', 'coordination'), 2),
     ('INTELLIGENCE', 'Research, verify and synthesize information.', ('research', 'web', 'files'), 1),
     ('STRATEGY', 'Turn goals into robust strategies.', ('strategy', 'decision'), 2),
     ('CAREER', 'Handle career research and application preparation.', ('career', 'research'), 1),
