@@ -22,6 +22,15 @@ SINGULAR is a personal agentic operating system designed around one principle: m
 - `singular.v16_workforce`: default specialist workforce and capability planner
 - `tests/test_v16.py`: workforce and supervisor tests
 
+### Human-system specialists
+
+The workforce explicitly includes two complementary specialists without creating a new hierarchy:
+
+- `MENTAL`: functional mental state, cognitive load, recovery, self-regulation and sustainable performance. It may adapt workload and plans from observed state, but does not diagnose or replace professional care.
+- `PRESENCE`: physical capacity, posture, presentation, voice, communication and social presence. It develops durable physical and interpersonal capability rather than optimizing appearance alone.
+
+These specialists are advisory inputs to the existing Commander and World Model. They do not bypass governance or gain autonomous authority merely because their domain concerns the user directly.
+
 ## Safety model
 
 Autonomy is permissioned, not assumed. Sensitive, high-risk, irreversible or explicitly human-required operations remain blocked/escalated unless an explicit authorization path exists.
@@ -94,7 +103,7 @@ V3.2 adds a controlled multi-specialist workforce layer with explicit routing, a
 
 Core rule: **no specialist can bypass the Governor, and no system change can silently modify SINGULAR.**
 
-The workforce currently includes Strategy, Intelligence, Finance, Career, Business, Capability and Life. Routing is selective rather than running every specialist on every task.
+The workforce includes Strategy, Intelligence, Finance, Career, Business, Capability, Life, Mental and Presence specialists, plus Red Team and System Architect. Routing is selective rather than running every specialist on every task.
 
 ## V3.3 — Durable Mission Runtime
 
