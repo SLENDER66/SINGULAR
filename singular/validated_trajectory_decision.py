@@ -51,12 +51,7 @@ class ValidatedActionRequest:
 
 @dataclass(frozen=True)
 class ValidatedTrajectoryDecision:
-    """A trajectory-backed decision accepted by the execution boundary.
-
-    The artifact binds source state, optimization inputs/results, trajectory,
-    governance and the exact execution target. External effects additionally
-    bind provider implementation, operation and payload fingerprint.
-    """
+    """A trajectory-backed decision accepted by the execution boundary."""
 
     decision_id: str
     authorized_actions: tuple[ValidatedActionRequest, ...]
@@ -87,7 +82,7 @@ class ValidatedTrajectoryDecision:
     def create(cls, *, decision_id: str, actions: tuple[ActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
                domain_states: tuple[DomainState, ...], interventions: tuple[Intervention, ...],
                human_interactions: tuple[DomainInteraction, ...] = (), trajectory_interactions: tuple[TrajectoryInteraction, ...] = (),
-               portfolio_capacity_budget: float = float("inf"), portfolio_max_candidates: int = 5,
+               portfolio_capacity_budget: float, portfolio_max_candidates: int = 5,
                human_optimization: HumanOptimizationReport | None, trajectory_portfolio: TrajectoryPortfolio | None,
                trajectory_assessment: TrajectoryAssessment | None, global_report: GlobalDecisionReport | None,
                contract: DelegationContract | None, policy: PolicyDecision | None,
@@ -146,8 +141,8 @@ class ValidatedTrajectoryDecision:
                 raise ValueError("handler decisions cannot carry external-effect bindings")
         elif not self.provider_name or not self.provider_target or not self.operation or not self.payload_fingerprint:
             raise ValueError("external-effect decisions require provider, provider target, operation and payload fingerprint")
-        if self.portfolio_capacity_budget < 0 or (not isfinite(self.portfolio_capacity_budget) and self.portfolio_capacity_budget != float("inf")):
-            raise ValueError("portfolio capacity budget must be non-negative or infinity")
+        if not isfinite(self.portfolio_capacity_budget) or self.portfolio_capacity_budget < 0:
+            raise ValueError("portfolio capacity budget must be finite and non-negative")
         if self.portfolio_max_candidates < 1:
             raise ValueError("portfolio max candidates must be positive")
         if self.global_report.decision != "PROCEED":
@@ -186,8 +181,6 @@ class ValidatedTrajectoryDecision:
         intervention_ids = tuple(item.id for item in self.interventions)
         if len(intervention_ids) != len(set(intervention_ids)):
             raise ValueError("validated intervention ids must be unique")
-        if self.human_optimization.capacity_budget != self.portfolio_capacity_budget:
-            raise ValueError("portfolio budget must match human optimization budget")
         expected_human = HumanOptimizationEngine.optimize(self.domain_states, self.interventions, self.human_interactions, capacity_budget=self.portfolio_capacity_budget)
         if expected_human != self.human_optimization:
             raise ValueError("human optimization does not match its validated source state")
