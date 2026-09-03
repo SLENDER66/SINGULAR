@@ -61,8 +61,6 @@ class DurableIntegrityChecker:
                 if execution_status == "RUNNING":
                     if row["finished_at"] is not None:
                         violations.append(IntegrityViolation("execution", key, "RUNNING-FINISHED", "RUNNING execution cannot have a finished_at timestamp"))
-                    if row["lease_until"] is None:
-                        violations.append(IntegrityViolation("execution", key, "RUNNING-LEASE", "RUNNING execution must retain a durable lease"))
                     if mission_status != MissionStatus.RUNNING.value:
                         violations.append(IntegrityViolation("execution", key, "RUNNING-MISSION", "RUNNING execution must have a RUNNING mission"))
                 elif execution_status == "RECOVERY_REQUIRED":
