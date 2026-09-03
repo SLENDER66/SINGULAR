@@ -55,6 +55,7 @@ from .adversarial import AttackClass, AdversarialEngine, AdversarialFinding, Adv
 from .collective_intelligence import CollectiveIntelligence, Deliberation, KnowledgeKind, SharedSignal
 from .enterprise_core import EnterpriseOperatingCore, Initiative, InitiativeStatus, KPI, OperatingAllocation, OperatingDecision, OperatingPlan
 from .portfolio_reallocation import DynamicPortfolioEngine, InitiativePerformance, InitiativeResult, Reallocation, ReallocationAction, ReallocationPlan
+from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryEngine, TrajectoryProfile
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
