@@ -10,7 +10,7 @@ from .models import Action, Risk
 from .security import ActionPolicy
 from .state import CapacityEngine, CapacitySnapshot
 from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryEngine, TrajectoryProfile
-from .values import ValueAssessment, ValueAssessmentResult
+from .values import ValueAssessment, ValueAssessmentResult, ValueMode
 from .world_model import EpistemicType, WorldModel
 from .v32_governed_core import RedTeamFinding, RedTeamGate
 
@@ -72,6 +72,7 @@ class GlobalDecisionGate:
         coherence = None
         deliberation = None
         trajectory = None
+        value_results = values or []
 
         if shared_signals:
             deliberation = self.collective_intelligence.deliberate(action.id, shared_signals, calibration=calibration)
@@ -85,7 +86,7 @@ class GlobalDecisionGate:
                 warnings.append("TRAJECTORY:MISSING_DIMENSIONS")
                 trajectory = TrajectoryAssessment(TrajectoryDecision.REVIEW, 0.0, 0.0, ("INSUFFICIENT_TRAJECTORY_DATA",), True)
             else:
-                trajectory = TrajectoryEngine.assess(trajectory_profile, dimensions=trajectory_dimensions, value_results=tuple(values or ()), capacity=capacity)
+                trajectory = TrajectoryEngine.assess(trajectory_profile, dimensions=trajectory_dimensions, value_results=tuple(value_results), capacity=capacity)
                 if trajectory.decision is TrajectoryDecision.BLOCK:
                     blockers.extend(f"TRAJECTORY:{reason}" for reason in trajectory.rationale)
                 elif trajectory.decision is TrajectoryDecision.REVIEW:
@@ -102,9 +103,12 @@ class GlobalDecisionGate:
             if world_model.objectives and not any(fact.epistemic in {EpistemicType.OBJECTIVE, EpistemicType.FACT, EpistemicType.ESTIMATE} for fact in world_model.objectives.values()):
                 warnings.append("WORLD_MODEL:NO_QUALIFIED_OBJECTIVE")
 
-        value_results = values or []
-        if any(v.assessment is ValueAssessment.VIOLATED for v in value_results):
-            blockers.append("VALUES:VIOLATED")
+        hard_value_violations = [v.value.name for v in value_results if v.assessment is ValueAssessment.VIOLATED and v.value.mode is ValueMode.HARD_CONSTRAINT]
+        tradeoff_violations = [v.value.name for v in value_results if v.assessment is ValueAssessment.VIOLATED and v.value.mode is not ValueMode.HARD_CONSTRAINT]
+        if hard_value_violations:
+            blockers.append("VALUES:HARD_CONSTRAINT_VIOLATED:" + ",".join(hard_value_violations))
+        if tradeoff_violations:
+            warnings.append("VALUES:TRADEOFF_REQUIRES_EXPLICIT_REVIEW:" + ",".join(tradeoff_violations))
         if any(v.assessment is ValueAssessment.UNKNOWN for v in value_results):
             warnings.append("VALUES:UNKNOWN_REQUIRES_HUMAN_REVIEW")
         if any(v.assessment is ValueAssessment.TENSION for v in value_results):
