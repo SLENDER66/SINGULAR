@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import isfinite
 
+from .collective_intelligence import KnowledgeKind, SharedSignal
 from .history_world_model import FutureDisposition, FutureReasoner, TemporalAssessment, TemporalContext
 
 
@@ -47,6 +48,23 @@ class TemporalAdvisory:
         if not self.signals:
             return 1.0
         return round(sum(signal.uncertainty for signal in self.signals) / len(self.signals), 4)
+
+    def as_shared_signals(self, contributor: str = "temporal_advisor") -> tuple[SharedSignal, ...]:
+        """Expose forecasts to collective cognition without granting authority."""
+        if not contributor.strip():
+            raise ValueError("contributor is required")
+        return tuple(
+            SharedSignal(
+                contributor=contributor,
+                kind=KnowledgeKind.FORECAST,
+                subject=signal.scenario_id,
+                claim=f"Temporal scenario {signal.scenario_id}: disposition={signal.disposition.value}",
+                confidence=signal.confidence,
+                evidence_refs=signal.reasons,
+                critical=False,
+            )
+            for signal in self.signals
+        )
 
 
 class TemporalAdvisor:
