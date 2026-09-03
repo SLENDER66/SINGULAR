@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from .provenance import ProvenanceChain, ProvenanceRecord
+
 
 class EpistemicType(str, Enum):
     FACT = "FACT"
@@ -58,6 +60,10 @@ class WorldOpportunity:
     window: str | None = None
     synergies: tuple[str, ...] = ()
     classification: OpportunityClass = OpportunityClass.NORMAL
+    epistemic: EpistemicType = EpistemicType.HYPOTHESIS
+    confidence: float = 0.5
+    source: str | None = None
+    notes: str | None = None
 
     def __post_init__(self) -> None:
         for name, value in (("potential", self.potential), ("probability", self.probability), ("reversibility", self.reversibility)):
@@ -65,6 +71,10 @@ class WorldOpportunity:
                 raise ValueError(f"{name} must be between 0 and 1")
         if self.cost < 0 or self.time < 0 or self.risk < 0:
             raise ValueError("cost, time and risk cannot be negative")
+        if not 0 <= self.confidence <= 1:
+            raise ValueError("confidence must be between 0 and 1")
+        if self.epistemic == EpistemicType.FACT and not self.source:
+            raise ValueError("FACT opportunities require a source")
 
     @property
     def leverage_score(self) -> float:
@@ -86,6 +96,7 @@ class WorldModel:
     opportunities: dict[str, WorldOpportunity] = field(default_factory=dict)
     decisions: dict[str, WorldFact] = field(default_factory=dict)
     results: dict[str, WorldFact] = field(default_factory=dict)
+    provenance: ProvenanceChain = field(default_factory=ProvenanceChain)
 
     def upsert(self, category: str, item: WorldFact) -> None:
         collection = getattr(self, category, None)
@@ -95,6 +106,33 @@ class WorldModel:
 
     def add_opportunity(self, opportunity: WorldOpportunity) -> None:
         self.opportunities[opportunity.name] = opportunity
+
+    def record_provenance(
+        self,
+        *,
+        record_id: str,
+        source: str,
+        recorded_at: str,
+        epistemic_type: EpistemicType | str,
+        confidence: float,
+        payload: Any,
+        transformation: str = "",
+        decision_id: str | None = None,
+    ) -> str:
+        """Explicitly attach evidence lineage; never invent timestamps or provenance."""
+        normalized_type = epistemic_type.value if isinstance(epistemic_type, EpistemicType) else epistemic_type
+        record = ProvenanceRecord.from_payload(
+            record_id=record_id,
+            source=source,
+            recorded_at=recorded_at,
+            epistemic_type=normalized_type,
+            confidence=confidence,
+            payload=payload,
+            transformation=transformation,
+            decision_id=decision_id,
+            previous_digest=self.provenance.head_digest() or "",
+        )
+        return self.provenance.append(record)
 
     def get(self, category: str, key: str) -> WorldFact | WorldOpportunity | None:
         collection = getattr(self, category, None)
@@ -126,4 +164,6 @@ class WorldModel:
             "results": len(self.results),
             "unknowns": len(self.unknowns()),
             "outlier_opportunities": len(self.outlier_opportunities()),
+            "provenance_records": len(self.provenance.records()),
+            "provenance_verified": self.provenance.verify(),
         }

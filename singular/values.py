@@ -11,11 +11,20 @@ class ValueAssessment(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ValueMode(str, Enum):
+    """How strongly a value constrains optimization."""
+
+    HARD_CONSTRAINT = "hard_constraint"
+    GUIDING = "guiding"
+    OVERRIDEABLE = "overrideable"
+
+
 @dataclass(frozen=True)
 class CoreValue:
     name: str
     description: str = ""
     weight: float = 1.0
+    mode: ValueMode = ValueMode.HARD_CONSTRAINT
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -42,11 +51,10 @@ class Vision:
 
 
 class ValuesEngine:
-    """Keep values as strategic constraints, not objectives to game.
+    """Treat personal values as explicit optimization inputs, not sacred axioms.
 
-    A value violation is a governance signal: an otherwise attractive strategy
-    must not silently trade away a core value. The engine does not infer values
-    from behavior and never substitutes for human judgment on value conflicts.
+    HARD_CONSTRAINT values remain fail-closed. GUIDING/OVERRIDEABLE values may
+    be challenged by evidence and tested, but are never silently rewritten.
     """
 
     @staticmethod
@@ -55,11 +63,18 @@ class ValuesEngine:
 
     @staticmethod
     def allows_action(results: list[ValueAssessmentResult]) -> bool:
-        return not any(r.assessment is ValueAssessment.VIOLATED for r in results)
+        return not any(
+            r.assessment is ValueAssessment.VIOLATED and r.value.mode is ValueMode.HARD_CONSTRAINT
+            for r in results
+        )
 
     @staticmethod
     def requires_human_review(results: list[ValueAssessmentResult]) -> bool:
-        return any(r.assessment in (ValueAssessment.VIOLATED, ValueAssessment.UNKNOWN) for r in results)
+        return any(
+            r.assessment is ValueAssessment.UNKNOWN
+            or (r.assessment is ValueAssessment.VIOLATED and r.value.mode is not ValueMode.HARD_CONSTRAINT)
+            for r in results
+        )
 
     @staticmethod
     def summarize(results: list[ValueAssessmentResult]) -> dict[str, object]:
@@ -67,6 +82,8 @@ class ValuesEngine:
             "allowed": ValuesEngine.allows_action(results),
             "human_review": ValuesEngine.requires_human_review(results),
             "violated": [r.value.name for r in results if r.assessment is ValueAssessment.VIOLATED],
+            "hard_violations": [r.value.name for r in results if r.assessment is ValueAssessment.VIOLATED and r.value.mode is ValueMode.HARD_CONSTRAINT],
+            "overrideable_violations": [r.value.name for r in results if r.assessment is ValueAssessment.VIOLATED and r.value.mode is not ValueMode.HARD_CONSTRAINT],
             "unknown": [r.value.name for r in results if r.assessment is ValueAssessment.UNKNOWN],
             "tensions": [r.value.name for r in results if r.assessment is ValueAssessment.TENSION],
         }
