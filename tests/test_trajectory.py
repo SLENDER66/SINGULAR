@@ -45,7 +45,7 @@ def test_low_capacity_confidence_is_visible_and_never_upgrades_to_proceed() -> N
     result = TrajectoryEngine.assess(
         profile(),
         dimensions={name: 0.8 for name in profile().weights},
-        capacity=CapacitySnapshot(0.8, 0.1, confidence=0.4),
+        capacity=CapacitySnapshot(0.8, 0.1, 0.0, 0.4),
     )
     assert result.decision is TrajectoryDecision.REVIEW
     assert "LOW_CAPACITY_CONFIDENCE" in result.rationale
