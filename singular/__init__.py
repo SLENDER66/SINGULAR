@@ -84,6 +84,7 @@ from .history_world_model import (
     WorldStateSnapshot, build_temporal_context,
 )
 from .temporal_advisor import TemporalAdvisory, TemporalAdvisor, TemporalSignal
+from .execution_boundary_audit import BoundaryAuditReport, BoundaryFinding, ExecutionBoundaryAuditor
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
