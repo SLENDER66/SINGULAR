@@ -12,7 +12,7 @@ from .autopilot import ApprovalStatus, Autonomy
 from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
 from .mission_runtime import DurableMissionRuntime
-from .validated_trajectory_decision import ValidatedTrajectoryDecision
+from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,20 @@ class DurableExecutionEngine:
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def _callable_target(handler: Callable[[Any], Any]) -> str:
+        module = getattr(handler, "__module__", None)
+        qualname = getattr(handler, "__qualname__", None)
+        if module and qualname:
+            return f"{module}:{qualname}"
+        handler_type = type(handler)
+        return f"{handler_type.__module__}:{handler_type.__qualname__}.__call__"
+
+    @staticmethod
+    def _provider_target(provider: EffectProvider) -> str:
+        provider_type = type(provider)
+        return f"{provider_type.__module__}:{provider_type.__qualname__}"
+
     def _bind_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any) -> None:
         contract = self.store.load_mission(mission_id)
         fingerprint = self._execution_identity_fingerprint(action, mission_id, governed, contract)
@@ -91,13 +105,15 @@ class DurableExecutionEngine:
         self._bind_execution_identity(key, action, mission_id, governed)
 
     def execute(self, action, mission_id: str, handler: Callable[[Any], Any]) -> ExecutionResult:
-        """Legacy raw entry point: permanently deny execution."""
         raise PermissionError("Raw ActionRequest execution is disabled: a ValidatedTrajectoryDecision is required.")
 
     def execute_validated(self, decision: ValidatedTrajectoryDecision, handler: Callable[[Any], Any]) -> ExecutionResult:
-        """Execute exactly the action authorized by a verified trajectory decision."""
         if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
             raise PermissionError("Validated trajectory decision is missing or invalid.")
+        if decision.execution_kind != "handler":
+            raise PermissionError("Validated decision is bound to an external effect, not a handler.")
+        if decision.execution_target != self._callable_target(handler):
+            raise PermissionError("Handler does not match the execution target authorized by the validated decision.")
         mission_id = decision.contract.mission_id
         action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
         if action is None:
@@ -136,6 +152,14 @@ class DurableExecutionEngine:
     def execute_effect_validated(self, decision: ValidatedTrajectoryDecision, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
         if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
             raise PermissionError("Validated trajectory decision is missing or invalid.")
+        if decision.execution_kind != "external_effect":
+            raise PermissionError("Validated decision is not bound to an external effect.")
+        if decision.execution_target != self._provider_target(provider):
+            raise PermissionError("Provider implementation does not match the execution target authorized by the validated decision.")
+        if decision.provider_name != provider_name or decision.operation != operation:
+            raise PermissionError("Provider or operation does not match the validated decision.")
+        if decision.payload_fingerprint != payload_fingerprint(payload):
+            raise PermissionError("External-effect payload does not match the validated decision.")
         action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
         if action is None:
             raise PermissionError("Validated decision does not authorize an executable action.")
@@ -201,6 +225,14 @@ class DurableExecutionEngine:
     def reconcile_effect_validated(self, decision: ValidatedTrajectoryDecision, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
         if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
             raise PermissionError("Validated trajectory decision is missing or invalid.")
+        if decision.execution_kind != "external_effect":
+            raise PermissionError("Validated decision is not bound to an external effect.")
+        if decision.execution_target != self._provider_target(provider):
+            raise PermissionError("Provider implementation does not match the execution target authorized by the validated decision.")
+        if decision.provider_name != provider_name or decision.operation != operation:
+            raise PermissionError("Provider or operation does not match the validated decision.")
+        if decision.payload_fingerprint != payload_fingerprint(payload):
+            raise PermissionError("External-effect payload does not match the validated decision.")
         action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
         if action is None:
             raise PermissionError("Validated decision does not authorize an executable action.")
