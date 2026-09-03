@@ -104,26 +104,12 @@ class DecisionAttestationStore:
                     raise PermissionError("revoked decision ids cannot be re-issued")
                 return current
             conn.execute(
-                "INSERT INTO decision_attestations(decision_id,context_fingerprint,issued_at,expires_at,status,issuer,created_at) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (
-                    decision.decision_id,
-                    decision.context_fingerprint,
-                    decision.issued_at,
-                    decision.expires_at,
-                    "ISSUED",
-                    issuer,
-                    created_at,
-                ),
+                "INSERT INTO decision_attestations(decision_id,context_fingerprint,issued_at,expires_at,status,issuer,created_at) VALUES(?,?,?,?,?,?,?)",
+                (decision.decision_id, decision.context_fingerprint, decision.issued_at, decision.expires_at, "ISSUED", issuer, created_at),
             )
         return DecisionAttestation(
-            decision.decision_id,
-            decision.context_fingerprint,
-            decision.issued_at,
-            decision.expires_at,
-            "ISSUED",
-            issuer,
-            created_at,
+            decision.decision_id, decision.context_fingerprint, decision.issued_at, decision.expires_at,
+            "ISSUED", issuer, created_at,
         )
 
     def get(self, decision_id: str) -> DecisionAttestation | None:
@@ -136,6 +122,7 @@ class DecisionAttestationStore:
         return self._row(row) if row is not None else None
 
     def verify(self, decision: ValidatedTrajectoryDecision, *, now: float | None = None) -> bool:
+        """Verify a currently executable, non-revoked attestation."""
         if not isinstance(decision, ValidatedTrajectoryDecision):
             return False
         current_time = time() if now is None else now
@@ -144,16 +131,42 @@ class DecisionAttestationStore:
         attestation = self.get(decision.decision_id)
         if attestation is None or attestation.status != "ISSUED":
             return False
-        if attestation.context_fingerprint != decision.context_fingerprint:
+        return (
+            attestation.context_fingerprint == decision.context_fingerprint
+            and attestation.issued_at == decision.issued_at
+            and attestation.expires_at == decision.expires_at
+        )
+
+    def verify_issuance(self, decision: ValidatedTrajectoryDecision) -> bool:
+        """Verify historical issuance even after normal execution TTL expires.
+
+        This deliberately ignores current expiry/revocation because historical
+        outcome learning may need to record a result after an executable decision
+        has expired or been revoked. It still requires an exact durable attestation
+        and a cryptographically self-consistent decision at its original issue time.
+        """
+        if not isinstance(decision, ValidatedTrajectoryDecision):
             return False
-        return attestation.issued_at == decision.issued_at and attestation.expires_at == decision.expires_at
+        try:
+            if not decision.verify(now=decision.issued_at):
+                return False
+        except (TypeError, ValueError):
+            return False
+        attestation = self.get(decision.decision_id)
+        if attestation is None:
+            return False
+        return (
+            attestation.context_fingerprint == decision.context_fingerprint
+            and attestation.issued_at == decision.issued_at
+            and attestation.expires_at == decision.expires_at
+            and attestation.status in {"ISSUED", "REVOKED"}
+        )
 
     def revoke(self, decision_id: str) -> DecisionAttestation:
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             cur = conn.execute(
-                "UPDATE decision_attestations SET status='REVOKED', revoked_at=? "
-                "WHERE decision_id=? AND status='ISSUED'",
+                "UPDATE decision_attestations SET status='REVOKED', revoked_at=? WHERE decision_id=? AND status='ISSUED'",
                 (now, decision_id),
             )
             if cur.rowcount != 1:
@@ -168,14 +181,8 @@ class DecisionAttestationStore:
     @staticmethod
     def _row(row: sqlite3.Row) -> DecisionAttestation:
         return DecisionAttestation(
-            row["decision_id"],
-            row["context_fingerprint"],
-            float(row["issued_at"]),
-            float(row["expires_at"]),
-            row["status"],
-            row["issuer"],
-            row["created_at"],
-            row["revoked_at"],
+            row["decision_id"], row["context_fingerprint"], float(row["issued_at"]), float(row["expires_at"]),
+            row["status"], row["issuer"], row["created_at"], row["revoked_at"],
         )
 
 
@@ -193,6 +200,9 @@ class ValidatedDecisionIssuer:
 
     def verify(self, decision: ValidatedTrajectoryDecision, *, now: float | None = None) -> bool:
         return self.store.verify(decision, now=now)
+
+    def verify_issuance(self, decision: ValidatedTrajectoryDecision) -> bool:
+        return self.store.verify_issuance(decision)
 
 
 __all__ = ["DecisionAttestation", "DecisionAttestationStore", "ValidatedDecisionIssuer"]
