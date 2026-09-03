@@ -79,8 +79,8 @@ class EconomicControlPlane:
         if missing:
             raise ValueError(f"missing generational metrics: {', '.join(missing)}")
         for key in EconomicControlPlane.REQUIRED_GENERATIONAL_METRICS:
-            value = generational_metrics[key]
-            if not isfinite(value) or not 0 <= value <= 1:
+            metric_value = generational_metrics[key]
+            if not isfinite(metric_value) or not 0 <= metric_value <= 1:
                 raise ValueError(
                     f"generational metric {key} must be finite and within [0, 1]"
                 )
@@ -105,7 +105,14 @@ class EconomicControlPlane:
             max_nodes=max_allocation_nodes,
         )
         empire = EmpireEngine.assess(empire_assets)
-        patrimony_assessment = PatrimonyEngine.assess(**patrimony)
+        patrimony_assessment = PatrimonyEngine.assess(
+            generations=int(patrimony["generations"]),
+            ownership_continuity=float(patrimony["ownership_continuity"]),
+            governance=float(patrimony["governance"]),
+            systemization=float(patrimony["systemization"]),
+            succession=float(patrimony["succession"]),
+            resilience=float(patrimony["resilience"]),
+        )
         generational = GenerationalEngine.assess(
             generational_charter,
             capital_protection=generational_metrics["capital_protection"],
@@ -187,8 +194,8 @@ class EconomicControlPlane:
         cash_by_id = {item.id: item for item in cash}
         selected = {item.opportunity_id for item in rapid.selected_opportunities}
         steps: list[EconomicStep] = []
-        for assessment in rapid.selected_opportunities:
-            item = cash_by_id[assessment.opportunity_id]
+        for cash_assessment in rapid.selected_opportunities:
+            item = cash_by_id[cash_assessment.opportunity_id]
             steps.append(
                 EconomicStep(
                     item.id,
@@ -202,11 +209,11 @@ class EconomicControlPlane:
                     compounding_value=10.0 * item.recurrence_score,
                 )
             )
-        by_id = {item.id: item for item in opportunities}
-        for assessment in assessments:
-            if assessment.opportunity_id in selected:
+        wealth_by_id = {item.id: item for item in opportunities}
+        for wealth_assessment in assessments:
+            if wealth_assessment.opportunity_id in selected:
                 continue
-            item = by_id[assessment.opportunity_id]
+            item = wealth_by_id[wealth_assessment.opportunity_id]
             steps.append(
                 EconomicStep(
                     item.id,
