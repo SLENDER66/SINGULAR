@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from math import isfinite
+from time import time
 from typing import Any
 
 from .autopilot import ActionRequest, DelegationContract, Governor
@@ -31,7 +32,8 @@ class ValidatedTrajectoryPipeline:
         capacity: CapacitySnapshot | None = None, effort: float | None = None, risks: list[Any] | None = None,
         shared_signals: tuple[Any, ...] = (), calibration: dict[str, float] | None = None,
         gate: GlobalDecisionGate | None = None, capacity_budget: float | None = None, max_portfolio_candidates: int = 5,
-        decision_id: str = "",
+        decision_id: str = "", issued_at: float | None = None, expires_at: float | None = None,
+        decision_ttl_seconds: float = 300.0,
     ) -> ValidatedTrajectoryDecision:
         if not objective.strip():
             raise ValueError("objective cannot be empty")
@@ -45,6 +47,20 @@ class ValidatedTrajectoryPipeline:
             raise ValueError("execution_kind must be handler or external_effect")
         if not execution_target.startswith("cap_"):
             raise ValueError("executable validation requires an opaque execution capability id")
+        if not isfinite(decision_ttl_seconds) or decision_ttl_seconds <= 0:
+            raise ValueError("decision_ttl_seconds must be finite and positive")
+        now = time()
+        if issued_at is None and expires_at is None:
+            issued_at = now
+            expires_at = now + decision_ttl_seconds
+        elif issued_at is None or expires_at is None:
+            raise ValueError("issued_at and expires_at must be supplied together")
+        if not isfinite(issued_at) or not isfinite(expires_at) or expires_at <= issued_at:
+            raise ValueError("decision validity interval is invalid")
+        if issued_at > now:
+            raise ValueError("issued_at cannot be in the future")
+        if expires_at <= now:
+            raise ValueError("expires_at must be in the future")
         if capacity_budget is None or not isfinite(capacity_budget) or capacity_budget < 0:
             raise ValueError("a finite non-negative capacity_budget is required for executable validation")
         if max_portfolio_candidates < 1:
@@ -101,15 +117,15 @@ class ValidatedTrajectoryPipeline:
             payload_hash = payload_fingerprint(execution_payload)
 
         return ValidatedTrajectoryDecision.create(
-            decision_id=decision_id, actions=actions, action_to_intervention=action_to_intervention,
-            domain_states=tuple(domain_states), interventions=tuple(interventions), human_interactions=human_interactions,
-            trajectory_interactions=trajectory_interactions, portfolio_capacity_budget=capacity_budget,
-            portfolio_max_candidates=max_portfolio_candidates, human_optimization=human,
-            trajectory_portfolio=portfolio, trajectory_assessment=assessment, global_report=global_report,
-            contract=contract, policy=ActionPolicy.evaluate(action), red_team_findings=global_report.red_team_findings,
-            governor=Governor.evaluate(action, contract), execution_target=execution_target,
-            execution_kind=execution_kind, provider_name=provider_name, provider_target=provider_target,
-            operation=operation, payload_fingerprint=payload_hash,
+            decision_id=decision_id, issued_at=issued_at, expires_at=expires_at, actions=actions,
+            action_to_intervention=action_to_intervention, domain_states=tuple(domain_states), interventions=tuple(interventions),
+            human_interactions=human_interactions, trajectory_interactions=trajectory_interactions,
+            portfolio_capacity_budget=capacity_budget, portfolio_max_candidates=max_portfolio_candidates,
+            human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
+            global_report=global_report, contract=contract, policy=ActionPolicy.evaluate(action),
+            red_team_findings=global_report.red_team_findings, governor=Governor.evaluate(action, contract),
+            execution_target=execution_target, execution_kind=execution_kind, provider_name=provider_name,
+            provider_target=provider_target, operation=operation, payload_fingerprint=payload_hash,
         )
 
 
