@@ -5,11 +5,12 @@ from typing import Any
 
 from .engine import SingularEngine
 from .models import Action, Decision, Status
+from .state import CapacityEngine, CapacitySnapshot
 
 
 @dataclass
 class Commander:
-    """SINGULAR's simple decision core: one objective, one priority, one next move."""
+    """SINGULAR's decision core: priority constrained by real capacity."""
 
     name: str = "COMMANDER"
 
@@ -28,17 +29,19 @@ class Commander:
         *,
         blockers: list[str] | None = None,
         state: dict[str, Any] | None = None,
+        capacity: CapacitySnapshot | None = None,
+        effort: float | None = None,
     ) -> dict[str, Any]:
-        """Produce a compact operating brief without executing anything.
+        """Produce an operating brief without executing anything.
 
-        The Commander does four things: focus the objective, select the best
-        next move, expose blockers, and define the human decision gate.
-        Execution remains governed elsewhere.
+        Capacity can veto an otherwise attractive next move by reducing its
+        scope or deferring it. Execution remains governed elsewhere.
         """
         blockers = list(blockers or [])
         state = dict(state or {})
         ranked = SingularEngine.rank_actions(actions)
         best = ranked[0][0] if ranked else None
+        capacity_recommendation = None
 
         if blockers:
             next_move = "Lever le blocage principal avant d'ajouter du travail."
@@ -46,6 +49,10 @@ class Commander:
         elif best is None:
             next_move = "Obtenir les informations minimales nécessaires pour choisir une action."
             mode = "CLARIFY"
+        elif capacity is not None and effort is not None and not CapacityEngine.can_absorb(capacity, effort):
+            capacity_recommendation = CapacityEngine.recommendation(capacity, effort)
+            next_move = "Réduire la portée ou différer l'action selon la capacité disponible."
+            mode = "CAPACITY_LIMIT"
         else:
             next_move = best.name
             mode = "ACT"
@@ -60,8 +67,9 @@ class Commander:
             "next_move": next_move,
             "blockers": blockers,
             "human_gate": human_gate,
+            "capacity_recommendation": capacity_recommendation,
             "state": state,
-            "principle": "Faire moins, mais faire ce qui change réellement la situation.",
+            "principle": "Faire moins, mais faire ce qui change réellement la situation sans dépasser la capacité disponible.",
         }
 
     def decide(self, decision: Decision, consequence: float = 5, reversibility: float = 5) -> dict:
