@@ -25,7 +25,7 @@ from .durable import DurableStore, MissionStatus
 from .effects import EffectInProgress, EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
 from .coherence import CoherenceReport, GlobalCoherenceGuard
 from .authority import AgentPower, AuthorityProfile, AuthorityProtocol, ConflictResolution, ConflictType
-from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldModel, WorldOpportunity
+from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldOpportunity
 from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValuesEngine, Vision
 from .state import CapacityEngine, CapacitySnapshot, StateDimension, StateObservation
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
@@ -33,4 +33,11 @@ from .opportunity_engine import OpportunityAssessment, OpportunityDecision, Oppo
 from .opportunity_adapter import OpportunityAdapter
 from .portfolio import PortfolioAssessment, PortfolioEngine, PortfolioSelection
 from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine as CalibrationLearningEngine, LearningUpdate
-from .decision_engine import DecisionContext, DecisionEngine, DecisionOption, DecisionRecommendation, DecisionStatus
+from .decision_engine import DecisionContext, DecisionOption, DecisionRecommendation, DecisionStatus, DecisionEngine as GovernedDecisionEngine
+from .execution_result import ExecutionIntent, ExecutionResult, ExecutionResultBridge, ExecutionStatus
+from .learning_bridge import ExecutionLearningBridge, LearningResult
+
+# The package historically exported DecisionEngine and WorldModel from legacy
+# modules. Keep those root names backward-compatible; expose the governed
+# replacements explicitly to avoid silently changing public semantics.
+EpistemicWorldModel = WorldModel
