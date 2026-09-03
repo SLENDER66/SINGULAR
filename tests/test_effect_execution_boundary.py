@@ -8,13 +8,15 @@ from singular.effects import EffectRequest, ExternalEffectCoordinator, ProviderR
 class CountingProvider:
     def __init__(self):
         self.execute_calls = 0
+        self.reconcile_calls = 0
 
     def execute(self, request, idempotency_key):
         self.execute_calls += 1
         return ProviderResult("COMPLETED", {"ok": True})
 
     def reconcile(self, request, idempotency_key):
-        return ProviderResult("UNKNOWN")
+        self.reconcile_calls += 1
+        return ProviderResult("COMPLETED", {"remote": True})
 
 
 def _store_with_execution(tmp_path, status):
@@ -78,3 +80,16 @@ def test_missing_execution_cannot_create_external_effect(tmp_path):
         coordinator.execute(_request(), provider)
 
     assert provider.execute_calls == 0
+
+
+def test_running_execution_cannot_reconcile_external_effect(tmp_path):
+    store = _store_with_execution(tmp_path, "RUNNING")
+    coordinator = ExternalEffectCoordinator(store)
+    request = _request()
+    coordinator.prepare(request)
+    provider = CountingProvider()
+
+    with pytest.raises(RuntimeError, match="RECOVERY_REQUIRED"):
+        coordinator.reconcile(request, provider)
+
+    assert provider.reconcile_calls == 0
