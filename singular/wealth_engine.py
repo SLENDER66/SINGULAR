@@ -31,7 +31,7 @@ class WealthObjective:
 
 @dataclass(frozen=True)
 class WealthOpportunity:
-    """Economic opportunity expressed in comparable decision variables."""
+    """Economic opportunity; ``time`` is expressed in years."""
 
     id: str
     expected_wealth_delta: float
@@ -99,9 +99,7 @@ class WealthEngine:
             if objective.preserve_optionality
             else 0.5 * opportunity.optionality
         )
-        horizon_factor = (
-            1.0 if opportunity.time <= objective.horizon_years * 365 else 0.5
-        )
+        horizon_factor = 1.0 if opportunity.time <= objective.horizon_years else 0.5
         score = (
             upside
             * downside_factor
@@ -131,7 +129,7 @@ class WealthEngine:
             reasons.append("HIGH_DOWNSIDE")
         if opportunity.time >= 5:
             reasons.append("SLOW_FEEDBACK")
-        if opportunity.time > objective.horizon_years * 365:
+        if opportunity.time > objective.horizon_years:
             reasons.append("BEYOND_OBJECTIVE_HORIZON")
 
         if (
