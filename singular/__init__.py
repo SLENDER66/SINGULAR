@@ -74,6 +74,7 @@ from .execution_capability import (
     execution_capability_matches,
     register_execution_capability,
 )
+from .decision_attestation import DecisionAttestation, DecisionAttestationStore, ValidatedDecisionIssuer
 from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTrajectoryDecision, payload_fingerprint
 from .validated_execution import ValidatedExecutionBoundary
 from .validated_pipeline import ValidatedTrajectoryPipeline
