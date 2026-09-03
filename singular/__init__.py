@@ -83,6 +83,7 @@ from .history_world_model import (
     HistoricalMode, HistoricalPattern, HistoricalReasoner, TemporalAssessment, TemporalContext,
     WorldStateSnapshot, build_temporal_context,
 )
+from .temporal_advisor import TemporalAdvisory, TemporalAdvisor, TemporalSignal
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
