@@ -39,6 +39,7 @@ from .execution_result import ExecutionIntent, ExecutionResult, ExecutionResultB
 from .durable_execution import DurableExecutionLedger
 from .learning_bridge import ExecutionLearningBridge, LearningResult
 from .economic_learning import EconomicLearningCycle, EconomicLearningEngine
+from .economic_learning_ledger import EconomicLearningLedger
 from .wealth_engine import WealthAction, WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
 from .capital_allocation import AllocationBucket, AllocationCandidate, CapitalAllocation, CapitalAllocationEngine
 from .empire_engine import EmpireAsset, EmpireAssessment, EmpireEngine, EmpireStage
