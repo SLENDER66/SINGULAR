@@ -20,6 +20,10 @@ class ValidatedExecutionBoundary:
         if attestation_store is not None:
             self.attestation_store = attestation_store
         else:
+            inherited = getattr(executor, "attestation_store", None)
+            if inherited is not None:
+                self.attestation_store = inherited
+                return
             store = getattr(executor, "store", None)
             if store is None or not hasattr(store, "path"):
                 raise TypeError("an explicit DecisionAttestationStore is required for this executor")
@@ -67,7 +71,7 @@ class ValidatedExecutionBoundary:
         return action
 
     def execute(self, decision: ValidatedTrajectoryDecision, action_id: str, handler: Callable[[ActionRequest], Any]) -> ExecutionResult:
-        action = self._validated_action(decision, action_id)
+        self._validated_action(decision, action_id)
         if decision.execution_kind != "handler":
             raise PermissionError("La décision validée n'autorise pas un handler.")
         return self.executor.execute_validated(decision, handler)
