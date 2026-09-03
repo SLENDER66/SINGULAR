@@ -86,7 +86,10 @@ class WealthEngine:
         risk_penalty = opportunity.downside * (
             1.25 if opportunity.reversibility < 0.3 else 0.75
         )
-        if not objective.protect_downside:
+        downside_factor = 1.0
+        if objective.protect_downside:
+            downside_factor = max(0.1, 1.0 - opportunity.downside)
+        else:
             risk_penalty *= 0.5
         friction = 1.0 + opportunity.cost + 0.25 * opportunity.time
         ownership_factor = 1.0 + opportunity.ownership
@@ -101,6 +104,7 @@ class WealthEngine:
         )
         score = (
             upside
+            * downside_factor
             * ownership_factor
             * compounding_factor
             * optionality_factor
