@@ -95,7 +95,7 @@ def test_rejects_action_missing_from_portfolio():
 def test_rejects_non_finite_critical_numeric_context(value):
     _, _, _, _, portfolio, _, _, _, _, _, _ = artifacts()
     invalid = TrajectoryPortfolio(portfolio.candidates, value, portfolio.capacity_used, portfolio.capacity_remaining, portfolio.interaction_effect)
-    with pytest.raises(ValueError, match="finite"):
+    with pytest.raises(ValueError, match="trajectory portfolio"):
         build(trajectory_portfolio=invalid)
 
 
