@@ -106,8 +106,6 @@ class ProvenanceChain:
         for record in self._records:
             if record.record_id in seen or record.previous_digest != previous:
                 return False
-            if record.digest() != record.digest():
-                return False
             seen.add(record.record_id)
             previous = record.digest()
         return True
