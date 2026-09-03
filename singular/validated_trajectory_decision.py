@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from hashlib import sha256
 from math import isfinite
+from time import time
 from typing import Any
 
 from .autopilot import ActionRequest, Autonomy, DelegationContract, Governor, GovernorDecision
@@ -54,6 +55,8 @@ class ValidatedTrajectoryDecision:
     """A trajectory-backed decision accepted by the execution boundary."""
 
     decision_id: str
+    issued_at: float
+    expires_at: float
     authorized_actions: tuple[ValidatedActionRequest, ...]
     action_to_intervention: tuple[tuple[str, str], ...]
     domain_states: tuple[DomainState, ...]
@@ -79,7 +82,8 @@ class ValidatedTrajectoryDecision:
     context_fingerprint: str
 
     @classmethod
-    def create(cls, *, decision_id: str, actions: tuple[ActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
+    def create(cls, *, decision_id: str, issued_at: float, expires_at: float,
+               actions: tuple[ActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
                domain_states: tuple[DomainState, ...], interventions: tuple[Intervention, ...],
                human_interactions: tuple[DomainInteraction, ...] = (), trajectory_interactions: tuple[TrajectoryInteraction, ...] = (),
                portfolio_capacity_budget: float, portfolio_max_candidates: int = 5,
@@ -96,44 +100,60 @@ class ValidatedTrajectoryDecision:
         for name, value in required.items():
             if value is None:
                 raise ValueError(f"{name} is required")
+        if not isfinite(issued_at) or not isfinite(expires_at):
+            raise ValueError("decision validity timestamps must be finite")
+        if expires_at <= issued_at:
+            raise ValueError("decision expires_at must be strictly after issued_at")
         snapshots = tuple(ValidatedActionRequest.from_action(action) for action in actions)
-        payload = cls._payload(decision_id, snapshots, action_to_intervention, domain_states, interventions, human_interactions,
-                               trajectory_interactions, portfolio_capacity_budget, portfolio_max_candidates, human_optimization,
-                               trajectory_portfolio, trajectory_assessment, global_report, contract, policy, red_team_findings,
-                               governor, execution_target, execution_kind, provider_name, provider_target, operation, payload_fingerprint)
-        return cls(decision_id, snapshots, action_to_intervention, domain_states, interventions, human_interactions,
-                   trajectory_interactions, portfolio_capacity_budget, portfolio_max_candidates, human_optimization,
+        payload = cls._payload(decision_id, issued_at, expires_at, snapshots, action_to_intervention, domain_states, interventions,
+                               human_interactions, trajectory_interactions, portfolio_capacity_budget, portfolio_max_candidates,
+                               human_optimization, trajectory_portfolio, trajectory_assessment, global_report, contract, policy,
+                               red_team_findings, governor, execution_target, execution_kind, provider_name, provider_target,
+                               operation, payload_fingerprint)
+        return cls(decision_id, issued_at, expires_at, snapshots, action_to_intervention, domain_states, interventions,
+                   human_interactions, trajectory_interactions, portfolio_capacity_budget, portfolio_max_candidates, human_optimization,
                    trajectory_portfolio, trajectory_assessment, global_report, contract, policy, red_team_findings, governor,
                    execution_target, execution_kind, provider_name, provider_target, operation, payload_fingerprint,
                    _fingerprint(payload))
 
     def __post_init__(self) -> None:
-        self._validate()
-        expected = _fingerprint(self._payload(self.decision_id, self.authorized_actions, self.action_to_intervention,
-                                              self.domain_states, self.interventions, self.human_interactions, self.trajectory_interactions,
-                                              self.portfolio_capacity_budget, self.portfolio_max_candidates, self.human_optimization,
-                                              self.trajectory_portfolio, self.trajectory_assessment, self.global_report, self.contract,
-                                              self.policy, self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
+        self._validate(now=time())
+        expected = _fingerprint(self._payload(self.decision_id, self.issued_at, self.expires_at, self.authorized_actions,
+                                              self.action_to_intervention, self.domain_states, self.interventions,
+                                              self.human_interactions, self.trajectory_interactions, self.portfolio_capacity_budget,
+                                              self.portfolio_max_candidates, self.human_optimization, self.trajectory_portfolio,
+                                              self.trajectory_assessment, self.global_report, self.contract, self.policy,
+                                              self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
                                               self.provider_name, self.provider_target, self.operation, self.payload_fingerprint))
         if self.context_fingerprint != expected:
             raise ValueError("validated trajectory decision context fingerprint is invalid")
 
-    def verify(self) -> bool:
+    def verify(self, now: float | None = None) -> bool:
         try:
-            self._validate()
-            expected = _fingerprint(self._payload(self.decision_id, self.authorized_actions, self.action_to_intervention,
-                                                  self.domain_states, self.interventions, self.human_interactions, self.trajectory_interactions,
-                                                  self.portfolio_capacity_budget, self.portfolio_max_candidates, self.human_optimization,
-                                                  self.trajectory_portfolio, self.trajectory_assessment, self.global_report, self.contract,
-                                                  self.policy, self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
+            self._validate(now=time() if now is None else now)
+            expected = _fingerprint(self._payload(self.decision_id, self.issued_at, self.expires_at, self.authorized_actions,
+                                                  self.action_to_intervention, self.domain_states, self.interventions,
+                                                  self.human_interactions, self.trajectory_interactions, self.portfolio_capacity_budget,
+                                                  self.portfolio_max_candidates, self.human_optimization, self.trajectory_portfolio,
+                                                  self.trajectory_assessment, self.global_report, self.contract, self.policy,
+                                                  self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
                                                   self.provider_name, self.provider_target, self.operation, self.payload_fingerprint))
         except (TypeError, ValueError):
             return False
         return self.context_fingerprint == expected
 
-    def _validate(self) -> None:
+    def _validate(self, *, now: float | None = None) -> None:
         if not self.decision_id.strip() or not self.execution_target.strip():
             raise ValueError("decision_id and execution_target cannot be empty")
+        if not isfinite(self.issued_at) or not isfinite(self.expires_at) or self.expires_at <= self.issued_at:
+            raise ValueError("decision validity interval is invalid")
+        if now is not None:
+            if not isfinite(now):
+                raise ValueError("verification time must be finite")
+            if now < self.issued_at:
+                raise ValueError("validated trajectory decision is not active yet")
+            if now >= self.expires_at:
+                raise ValueError("validated trajectory decision has expired")
         if self.execution_kind not in {"handler", "external_effect"}:
             raise ValueError("execution_kind must be handler or external_effect")
         if self.execution_kind == "handler":
@@ -228,14 +248,15 @@ class ValidatedTrajectoryDecision:
             _validate_finite("candidate expected global gain", candidate.expected_global_gain)
 
     @staticmethod
-    def _payload(decision_id: str, actions: tuple[ValidatedActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
+    def _payload(decision_id: str, issued_at: float, expires_at: float, actions: tuple[ValidatedActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
                  domain_states: tuple[DomainState, ...], interventions: tuple[Intervention, ...], human_interactions: tuple[DomainInteraction, ...],
                  trajectory_interactions: tuple[TrajectoryInteraction, ...], portfolio_capacity_budget: float, portfolio_max_candidates: int,
                  human_optimization: HumanOptimizationReport, trajectory_portfolio: TrajectoryPortfolio, trajectory_assessment: TrajectoryAssessment,
                  global_report: GlobalDecisionReport, contract: DelegationContract, policy: PolicyDecision,
                  red_team_findings: tuple[RedTeamFinding, ...], governor: GovernorDecision, execution_target: str, execution_kind: str,
                  provider_name: str | None, provider_target: str | None, operation: str | None, payload_fingerprint: str | None) -> dict[str, Any]:
-        return {"decision_id": decision_id, "authorized_actions": actions, "action_to_intervention": tuple(sorted(action_to_intervention)),
+        return {"decision_id": decision_id, "issued_at": issued_at, "expires_at": expires_at,
+                "authorized_actions": actions, "action_to_intervention": tuple(sorted(action_to_intervention)),
                 "domain_states": domain_states, "interventions": interventions, "human_interactions": human_interactions,
                 "trajectory_interactions": trajectory_interactions, "portfolio_capacity_budget": portfolio_capacity_budget,
                 "portfolio_max_candidates": portfolio_max_candidates, "human_optimization": human_optimization,
