@@ -78,8 +78,8 @@ class CapitalAllocationEngine:
         ):
             if value < 0 or not isfinite(value):
                 raise ValueError(f"{name} must be finite and non-negative")
-        if capacity_budget < 0 or not isfinite(capacity_budget):
-            raise ValueError("capacity_budget must be finite and non-negative")
+        if capacity_budget < 0 or (not isfinite(capacity_budget) and capacity_budget != float("inf")):
+            raise ValueError("capacity_budget must be non-negative and finite, or inf")
         if protected_capital > available_capital:
             raise ValueError("protected_capital cannot exceed available_capital")
         if max_positions < 0:
