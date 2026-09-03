@@ -21,6 +21,35 @@ DomainLearning
 
 Every executable path must preserve the complete context needed to reproduce the authorization decision.
 
+## Canonical production surface
+
+Production callers should prefer `SingularControlPlane` rather than directly sequencing low-level primitives:
+
+```text
+control_plane.construct_and_attest(...)
+          |
+          +--> ValidatedTrajectoryPipeline
+          +--> DecisionAttestationStore
+          |
+          v
+   ControlPlaneDecision
+          |
+     +----+----+
+     |         |
+ execute    observe_outcome
+     |         |
+     v         v
+ durable    OutcomeLedger
+ execution       |
+                 v
+          LearningReviewQueue
+                 |
+                 v
+        human-reviewed proposal
+```
+
+This facade is orchestration, not an extra authorization layer. The actual execution permission remains inside the validated decision plus durable attestation and the durable executor.
+
 ## Authority invariant
 
 The system separates cognition from authority:
@@ -123,6 +152,48 @@ Shared signals are typed as evidence, analysis, forecast, challenge or recommend
 
 Temporal forecasts enter this space as `FORECAST` signals with noncritical authority and therefore cannot silently turn a scenario into an action.
 
+## Learning and self-improvement
+
+SINGULAR now closes the operational loop without granting the learning system authority over itself:
+
+```text
+validated decision
+      |
+      v
+executed outcome + forecast
+      |
+      v
+OutcomeLedger
+      |
+      v
+forecast calibration
+      |
+      v
+LearningReviewQueue
+      |
+      v
+LearningStrategyEngine
+      |
+      v
+reviewable TEST / ADOPT / HOLD proposal
+```
+
+`OutcomeLedger` binds the result to the exact decision context fingerprint, making it possible to distinguish outcomes produced under materially different decisions. Its append-only chain is tamper-evident. `LearningReviewQueue` persists a human review state (`PENDING`, `ACCEPTED`, `REJECTED`). `SelfImprovementEngine` can construct a strategy proposal from measured error, but `mutation_authorized` is structurally false.
+
+A learning result therefore follows this rule:
+
+```text
+measurement -> proposal -> human review -> future implementation
+```
+
+and never:
+
+```text
+measurement -> automatic policy mutation -> automatic new authority
+```
+
+The architecture deliberately separates learning from authorization so that improved predictive performance cannot silently expand SINGULAR's power.
+
 ## Raw paths
 
 These public methods are intentionally deny-by-default:
@@ -142,6 +213,8 @@ The strict boundary also exposes only validated variants for handler execution, 
 `ExecutionBoundaryAuditor` provides a static/dynamic integrity check that:
 
 - scans production Python files for obvious raw-tool, raw-engine and direct-handler bypasses;
+- detects common aliases of `DurableExecutionEngine`;
+- detects direct use of inner validated executor methods outside the canonical adapter/service;
 - parses every checked production file;
 - probes the legacy raw methods and requires `PermissionError`.
 
@@ -150,6 +223,8 @@ This is a guardrail, not a formal proof. It is intentionally conservative and sh
 ## Human review
 
 Sensitive actions and actions requiring human judgment remain non-executable through this artifact. `ValidatedTrajectoryDecision` accepts only executable Governor modes and rejects pending human review.
+
+Learning proposals are likewise non-executable: accepting a learning review does not automatically rewrite policies, capabilities, Governor configuration or authorization rules.
 
 ## Integration rule
 
