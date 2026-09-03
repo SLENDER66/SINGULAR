@@ -23,6 +23,7 @@ from .mission_runtime import DurableMissionRuntime, MissionState
 from .durable import DurableStore, MissionStatus
 from .effects import EffectInProgress, EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
 from .effect_recovery import recover_in_flight as _recover_in_flight_hardening, reconcile as _reconcile_hardening
+from .effect_transition import transition as _effect_transition_hardening
 from .coherence import CoherenceReport, GlobalCoherenceGuard
 from .authority import AgentPower, AuthorityProfile, AuthorityProtocol, ConflictResolution, ConflictType
 from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldOpportunity
