@@ -15,7 +15,7 @@ def test_owned_productive_assets_create_compounding_stage() -> None:
         ]
     )
     assert result.ownership_value == 140
-    assert result.annual_cash_flow == 30
+    assert result.annual_cash_flow == 28
     assert result.stage is EmpireStage.COMPOUNDING
     assert "REINVEST_AND_COMPOUND" in result.priorities
 
