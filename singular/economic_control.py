@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
 
-from .cashflow_engine import CashflowAssessment, CashflowOpportunity, RapidCashEngine, RapidCashObjective
 from .capital_allocation import AllocationCandidate, CapitalAllocation, CapitalAllocationEngine
+from .cashflow_engine import CashflowOpportunity, RapidCashObjective
 from .empire_engine import EmpireAssessment, EmpireAsset, EmpireEngine
 from .generational import GenerationalCharter, GenerationalEngine, GenerationalReadiness
 from .patrimony_engine import FailureConversion, FailureRecord, PatrimonyAssessment, PatrimonyEngine
-from .wealth_engine import WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
 from .rapid_wealth import RapidWealthEngine, RapidWealthSprint
+from .wealth_engine import WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
 
 
 class EconomicPlanStatus(str, Enum):
@@ -39,6 +39,12 @@ class EconomicControlPlan:
 class EconomicControlPlane:
     """Coordinate cash, wealth, ownership, patrimony and succession decisions."""
 
+    REQUIRED_GENERATIONAL_METRICS = (
+        "capital_protection",
+        "founder_independence",
+        "institutional_resilience",
+    )
+
     @staticmethod
     def build(
         *,
@@ -59,9 +65,22 @@ class EconomicControlPlane:
         max_parallel_cash_tests: int = 3,
         max_allocation_positions: int = 3,
     ) -> EconomicControlPlan:
-        EconomicControlPlane._validate_capital(available_capital, protected_capital, risk_budget, capacity_budget)
+        EconomicControlPlane._validate_capital(
+            available_capital, protected_capital, risk_budget, capacity_budget
+        )
         if max_allocation_positions < 0:
             raise ValueError("max_allocation_positions must be non-negative")
+
+        missing_metrics = tuple(
+            key for key in EconomicControlPlane.REQUIRED_GENERATIONAL_METRICS
+            if key not in generational_metrics
+        )
+        if missing_metrics:
+            raise ValueError(f"missing generational metrics: {', '.join(missing_metrics)}")
+        for key in EconomicControlPlane.REQUIRED_GENERATIONAL_METRICS:
+            value = generational_metrics[key]
+            if not isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(f"generational metric {key} must be finite and within [0, 1]")
 
         rapid_cash = RapidWealthEngine.build_sprint(
             cashflow_opportunities,
@@ -91,22 +110,33 @@ class EconomicControlPlane:
         warnings: list[str] = []
         if rapid_cash.target_gap > 0:
             warnings.append("RAPID_CASH_TARGET_GAP")
-        if any(item.action.value == "HUMAN_REVIEW" for item in rapid_cash.selected_opportunities):
-            warnings.append("RAPID_CASH_HUMAN_REVIEW")
         if allocation.unallocated_capital > 0:
             warnings.append("CAPITAL_NOT_FULLY_ALLOCATED")
         if not generational.ready:
             warnings.extend(generational.priorities)
-        if patrimony.priorities:
-            warnings.extend(patrimony.priorities)
+        if patrimony_assessment.priorities:
+            warnings.extend(patrimony_assessment.priorities)
 
         if not cashflow_opportunities and not wealth_opportunities:
             blockers.append("NO_ECONOMIC_OPPORTUNITIES")
         if rapid_cash.target_gap == rapid_cash.target_cash:
             blockers.append("NO_POSITIVE_EXPECTED_CASH_PATH")
 
-        status = EconomicPlanStatus.BLOCKED if blockers else EconomicPlanStatus.REVIEW if warnings else EconomicPlanStatus.READY
-        next_actions = EconomicControlPlane._next_actions(rapid_cash, wealth_assessments, allocation, empire, patrimony_assessment, generational)
+        status = (
+            EconomicPlanStatus.BLOCKED
+            if blockers
+            else EconomicPlanStatus.REVIEW
+            if warnings
+            else EconomicPlanStatus.READY
+        )
+        next_actions = EconomicControlPlane._next_actions(
+            rapid_cash,
+            wealth_assessments,
+            allocation,
+            empire,
+            patrimony_assessment,
+            generational,
+        )
         return EconomicControlPlan(
             status=status,
             rapid_cash=rapid_cash,
@@ -123,7 +153,12 @@ class EconomicControlPlane:
 
     @staticmethod
     def _validate_capital(available: float, protected: float, risk: float, capacity: float) -> None:
-        for name, value in (("available_capital", available), ("protected_capital", protected), ("risk_budget", risk), ("capacity_budget", capacity)):
+        for name, value in (
+            ("available_capital", available),
+            ("protected_capital", protected),
+            ("risk_budget", risk),
+            ("capacity_budget", capacity),
+        ):
             if not isfinite(value) or value < 0:
                 raise ValueError(f"{name} must be finite and non-negative")
         if protected > available:
