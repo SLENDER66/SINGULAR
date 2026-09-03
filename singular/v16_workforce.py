@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from .elite import EliteEngine, EliteReview, EliteScore
 from .empire import AgentRegistry, AgentSpec, AutopilotSupervisor
 
 
@@ -34,13 +35,21 @@ def build_default_registry(handlers: dict[str, Callable[[dict[str, Any]], Any]] 
 class WorkforceResult:
     selected: list[str]
     missing_capabilities: list[str]
+    elite_reviews: list[EliteReview] | None = None
+    challenges: list[dict[str, str]] | None = None
 
 
 class WorkforcePlanner:
     def __init__(self, registry: AgentRegistry):
         self.registry = registry
 
-    def plan(self, capabilities: list[str]) -> WorkforceResult:
+    def plan(
+        self,
+        capabilities: list[str],
+        *,
+        elite_scores: dict[str, EliteScore] | None = None,
+        challenge: bool = False,
+    ) -> WorkforceResult:
         selected, missing = [], []
         for cap in capabilities:
             agents = self.registry.available(cap)
@@ -48,4 +57,9 @@ class WorkforcePlanner:
                 selected.append(min(agents, key=lambda a: a.risk_tier).name)
             else:
                 missing.append(cap)
-        return WorkforceResult(list(dict.fromkeys(selected)), missing)
+
+        selected = list(dict.fromkeys(selected))
+        scores = elite_scores or {}
+        reviews = [EliteEngine.review(name, scores[name]) for name in selected if name in scores]
+        challenges = [EliteEngine.challenge(review.agent, review) for review in reviews] if challenge else []
+        return WorkforceResult(selected, missing, reviews, challenges)
