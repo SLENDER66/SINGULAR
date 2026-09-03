@@ -37,6 +37,7 @@ from .learning_strategy import LearningStrategyEngine, StrategyDisposition, Stra
 from .decision_engine import DecisionContext, DecisionOption, DecisionRecommendation, DecisionStatus, DecisionEngine as GovernedDecisionEngine
 from .execution_result import ExecutionIntent, ExecutionResult, ExecutionResultBridge, ExecutionStatus
 from .learning_bridge import ExecutionLearningBridge, LearningResult
+from .economic_learning import EconomicLearningCycle, EconomicLearningEngine
 from .wealth_engine import WealthAction, WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
 from .capital_allocation import AllocationBucket, AllocationCandidate, CapitalAllocation, CapitalAllocationEngine
 from .empire_engine import EmpireAsset, EmpireAssessment, EmpireEngine, EmpireStage
