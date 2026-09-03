@@ -6,13 +6,13 @@ themselves.
 """
 from __future__ import annotations
 
-import json
 import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import isfinite
 from pathlib import Path
 
-from .learning import CalibrationRecord, ForecastKind, LearningEngine, LearningUpdate
+from .learning import CalibrationRecord, LearningEngine, LearningUpdate
 from .outcome_ledger import OutcomeObservation
 
 
@@ -28,6 +28,14 @@ class LearningReview:
     status: str
     created_at: str
     reviewed_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.review_id.strip() or not self.outcome_record_id.strip() or not self.forecast_id.strip():
+            raise ValueError("learning review identity fields are required")
+        if self.status not in {"PENDING", "ACCEPTED", "REJECTED"}:
+            raise ValueError("learning review status is invalid")
+        if not isfinite(self.evidence_strength) or not 0.0 <= self.evidence_strength <= 1.0:
+            raise ValueError("learning review evidence strength must be between 0 and 1")
 
 
 class LearningReviewQueue:
@@ -69,7 +77,7 @@ class LearningReviewQueue:
             outcome=outcome.actual_value,
             error=outcome.absolute_error,
             brier_score=outcome.brier_score,
-            forecast_confidence=0.0,
+            forecast_confidence=outcome.forecast_confidence,
             lesson=outcome.lesson,
         )
         update: LearningUpdate = LearningEngine.propose_update(calibration, repeated_pattern=repeated_pattern)
