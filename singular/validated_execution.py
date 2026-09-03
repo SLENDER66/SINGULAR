@@ -63,6 +63,11 @@ class ValidatedExecutionBoundary:
                              reversibility=action.reversibility, requires_human=action.requires_human,
                              sensitive=action.sensitive, contract_id=action.contract_id, id=action.id, capability=action.capability)
 
+    @staticmethod
+    def _provider_target(provider: EffectProvider) -> str:
+        provider_type = type(provider)
+        return f"{provider_type.__module__}:{provider_type.__qualname__}"
+
     def _validated_action(self, decision: ValidatedTrajectoryDecision, action_id: str) -> ActionRequest:
         self._validate_common(decision)
         action = self._materialize_action(self._action(decision, action_id))
@@ -76,6 +81,24 @@ class ValidatedExecutionBoundary:
             raise PermissionError("La décision validée n'autorise pas un handler.")
         return self.executor.execute_validated(decision, handler)
 
+    def _validate_effect_binding(
+        self,
+        decision: ValidatedTrajectoryDecision,
+        provider: EffectProvider,
+        *,
+        provider_name: str,
+        operation: str,
+        payload: Any,
+    ) -> None:
+        if decision.execution_kind != "external_effect":
+            raise PermissionError("La décision validée n'autorise pas un effet externe.")
+        if decision.provider_name != provider_name or decision.operation != operation:
+            raise PermissionError("Le fournisseur ou l'opération ne correspondent pas à la décision validée.")
+        expected_target = decision.provider_target
+        actual_target = self._provider_target(provider)
+        if not expected_target or expected_target != actual_target:
+            raise PermissionError("L'implémentation du fournisseur ne correspond pas à la cible validée.")
+
     def execute_effect(
         self,
         decision: ValidatedTrajectoryDecision,
@@ -88,10 +111,13 @@ class ValidatedExecutionBoundary:
     ) -> ExecutionResult:
         """Execute an externally visible effect only through a validated decision."""
         self._validated_action(decision, action_id)
-        if decision.execution_kind != "external_effect":
-            raise PermissionError("La décision validée n'autorise pas un effet externe.")
-        if decision.provider_name != provider_name or decision.operation != operation:
-            raise PermissionError("Le fournisseur ou l'opération ne correspondent pas à la décision validée.")
+        self._validate_effect_binding(
+            decision,
+            provider,
+            provider_name=provider_name,
+            operation=operation,
+            payload=payload,
+        )
         return self.executor.execute_effect_validated(
             decision,
             provider,
@@ -112,10 +138,13 @@ class ValidatedExecutionBoundary:
     ) -> ExecutionResult:
         """Reconcile an ambiguous external effect under the same validated authority."""
         self._validated_action(decision, action_id)
-        if decision.execution_kind != "external_effect":
-            raise PermissionError("La décision validée n'autorise pas la réconciliation d'un effet externe.")
-        if decision.provider_name != provider_name or decision.operation != operation:
-            raise PermissionError("Le fournisseur ou l'opération ne correspondent pas à la décision validée.")
+        self._validate_effect_binding(
+            decision,
+            provider,
+            provider_name=provider_name,
+            operation=operation,
+            payload=payload,
+        )
         return self.executor.reconcile_effect_validated(
             decision,
             provider,
