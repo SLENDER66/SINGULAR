@@ -11,11 +11,15 @@ from time import time
 from typing import Any
 
 from .autopilot import ActionRequest, Autonomy, DelegationContract, Governor, GovernorDecision
-from .global_control import GlobalDecisionReport
+from .collective_intelligence import SharedSignal
+from .global_control import GlobalDecisionGate, GlobalDecisionReport
 from .human_optimization import DomainInteraction, DomainState, HumanOptimizationEngine, HumanOptimizationReport, Intervention
+from .models import Risk
 from .security import ActionPolicy, PolicyDecision
-from .trajectory import TrajectoryAssessment, TrajectoryDecision
+from .state import CapacitySnapshot
+from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryProfile
 from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine, TrajectoryPortfolio
+from .values import ValueAssessmentResult
 from .v32_governed_core import RedTeamFinding, RedTeamGate
 
 
@@ -63,6 +67,14 @@ class ValidatedTrajectoryDecision:
     interventions: tuple[Intervention, ...]
     human_interactions: tuple[DomainInteraction, ...]
     trajectory_interactions: tuple[TrajectoryInteraction, ...]
+    trajectory_profile: TrajectoryProfile
+    trajectory_dimensions: tuple[tuple[str, float], ...]
+    value_results: tuple[ValueAssessmentResult, ...]
+    capacity: CapacitySnapshot | None
+    effort: float | None
+    risks: tuple[Risk, ...]
+    shared_signals: tuple[SharedSignal, ...]
+    calibration: tuple[tuple[str, float], ...]
     portfolio_capacity_budget: float
     portfolio_max_candidates: int
     human_optimization: HumanOptimizationReport
@@ -86,7 +98,10 @@ class ValidatedTrajectoryDecision:
                actions: tuple[ActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
                domain_states: tuple[DomainState, ...], interventions: tuple[Intervention, ...],
                human_interactions: tuple[DomainInteraction, ...] = (), trajectory_interactions: tuple[TrajectoryInteraction, ...] = (),
-               portfolio_capacity_budget: float, portfolio_max_candidates: int = 5,
+               trajectory_profile: TrajectoryProfile, trajectory_dimensions: dict[str, float],
+               value_results: tuple[ValueAssessmentResult, ...] = (), capacity: CapacitySnapshot | None = None,
+               effort: float | None = None, risks: tuple[Risk, ...] = (), shared_signals: tuple[SharedSignal, ...] = (),
+               calibration: dict[str, float] | None = None, portfolio_capacity_budget: float, portfolio_max_candidates: int = 5,
                human_optimization: HumanOptimizationReport | None, trajectory_portfolio: TrajectoryPortfolio | None,
                trajectory_assessment: TrajectoryAssessment | None, global_report: GlobalDecisionReport | None,
                contract: DelegationContract | None, policy: PolicyDecision | None,
@@ -105,39 +120,55 @@ class ValidatedTrajectoryDecision:
         if expires_at <= issued_at:
             raise ValueError("decision expires_at must be strictly after issued_at")
         snapshots = tuple(ValidatedActionRequest.from_action(action) for action in actions)
-        payload = cls._payload(decision_id, issued_at, expires_at, snapshots, action_to_intervention, domain_states, interventions,
-                               human_interactions, trajectory_interactions, portfolio_capacity_budget, portfolio_max_candidates,
-                               human_optimization, trajectory_portfolio, trajectory_assessment, global_report, contract, policy,
-                               red_team_findings, governor, execution_target, execution_kind, provider_name, provider_target,
-                               operation, payload_fingerprint)
-        return cls(decision_id, issued_at, expires_at, snapshots, action_to_intervention, domain_states, interventions,
-                   human_interactions, trajectory_interactions, portfolio_capacity_budget, portfolio_max_candidates, human_optimization,
-                   trajectory_portfolio, trajectory_assessment, global_report, contract, policy, red_team_findings, governor,
-                   execution_target, execution_kind, provider_name, provider_target, operation, payload_fingerprint,
-                   _fingerprint(payload))
+        normalized_dimensions = tuple(sorted((str(key), value) for key, value in trajectory_dimensions.items()))
+        normalized_calibration = tuple(sorted((str(key), value) for key, value in (calibration or {}).items()))
+        payload = cls._payload(
+            decision_id, issued_at, expires_at, snapshots, action_to_intervention, domain_states, interventions,
+            human_interactions, trajectory_interactions, trajectory_profile, normalized_dimensions, value_results,
+            capacity, effort, risks, shared_signals, normalized_calibration, portfolio_capacity_budget, portfolio_max_candidates,
+            human_optimization, trajectory_portfolio, trajectory_assessment, global_report, contract, policy,
+            red_team_findings, governor, execution_target, execution_kind, provider_name, provider_target,
+            operation, payload_fingerprint,
+        )
+        return cls(
+            decision_id, issued_at, expires_at, snapshots, action_to_intervention, domain_states, interventions,
+            human_interactions, trajectory_interactions, trajectory_profile, normalized_dimensions, value_results,
+            capacity, effort, risks, shared_signals, normalized_calibration, portfolio_capacity_budget, portfolio_max_candidates,
+            human_optimization, trajectory_portfolio, trajectory_assessment, global_report, contract, policy,
+            red_team_findings, governor, execution_target, execution_kind, provider_name, provider_target,
+            operation, payload_fingerprint, _fingerprint(payload),
+        )
 
     def __post_init__(self) -> None:
         self._validate(now=time())
-        expected = _fingerprint(self._payload(self.decision_id, self.issued_at, self.expires_at, self.authorized_actions,
-                                              self.action_to_intervention, self.domain_states, self.interventions,
-                                              self.human_interactions, self.trajectory_interactions, self.portfolio_capacity_budget,
-                                              self.portfolio_max_candidates, self.human_optimization, self.trajectory_portfolio,
-                                              self.trajectory_assessment, self.global_report, self.contract, self.policy,
-                                              self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
-                                              self.provider_name, self.provider_target, self.operation, self.payload_fingerprint))
+        expected = _fingerprint(self._payload(
+            self.decision_id, self.issued_at, self.expires_at, self.authorized_actions,
+            self.action_to_intervention, self.domain_states, self.interventions,
+            self.human_interactions, self.trajectory_interactions, self.trajectory_profile,
+            self.trajectory_dimensions, self.value_results, self.capacity, self.effort, self.risks,
+            self.shared_signals, self.calibration, self.portfolio_capacity_budget, self.portfolio_max_candidates,
+            self.human_optimization, self.trajectory_portfolio, self.trajectory_assessment,
+            self.global_report, self.contract, self.policy, self.red_team_findings, self.governor,
+            self.execution_target, self.execution_kind, self.provider_name, self.provider_target,
+            self.operation, self.payload_fingerprint,
+        ))
         if self.context_fingerprint != expected:
             raise ValueError("validated trajectory decision context fingerprint is invalid")
 
     def verify(self, now: float | None = None) -> bool:
         try:
             self._validate(now=time() if now is None else now)
-            expected = _fingerprint(self._payload(self.decision_id, self.issued_at, self.expires_at, self.authorized_actions,
-                                                  self.action_to_intervention, self.domain_states, self.interventions,
-                                                  self.human_interactions, self.trajectory_interactions, self.portfolio_capacity_budget,
-                                                  self.portfolio_max_candidates, self.human_optimization, self.trajectory_portfolio,
-                                                  self.trajectory_assessment, self.global_report, self.contract, self.policy,
-                                                  self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
-                                                  self.provider_name, self.provider_target, self.operation, self.payload_fingerprint))
+            expected = _fingerprint(self._payload(
+                self.decision_id, self.issued_at, self.expires_at, self.authorized_actions,
+                self.action_to_intervention, self.domain_states, self.interventions,
+                self.human_interactions, self.trajectory_interactions, self.trajectory_profile,
+                self.trajectory_dimensions, self.value_results, self.capacity, self.effort, self.risks,
+                self.shared_signals, self.calibration, self.portfolio_capacity_budget, self.portfolio_max_candidates,
+                self.human_optimization, self.trajectory_portfolio, self.trajectory_assessment,
+                self.global_report, self.contract, self.policy, self.red_team_findings, self.governor,
+                self.execution_target, self.execution_kind, self.provider_name, self.provider_target,
+                self.operation, self.payload_fingerprint,
+            ))
         except (TypeError, ValueError):
             return False
         return self.context_fingerprint == expected
@@ -195,13 +226,22 @@ class ValidatedTrajectoryDecision:
         if self.red_team_findings != self.global_report.red_team_findings or any(finding.blocking for finding in self.red_team_findings):
             raise ValueError("red-team findings are inconsistent or blocking")
 
+        if len(self.trajectory_dimensions) != len(dict(self.trajectory_dimensions)):
+            raise ValueError("trajectory dimension names must be unique")
+        if any(not key.strip() or not isfinite(value) for key, value in self.trajectory_dimensions):
+            raise ValueError("trajectory dimensions must contain finite named values")
+        if any(not key.strip() or not isfinite(value) for key, value in self.calibration):
+            raise ValueError("calibration values must be finite and named")
         state_domains = tuple(state.domain for state in self.domain_states)
         if len(state_domains) != len(set(state_domains)):
             raise ValueError("validated domain states must be unique")
         intervention_ids = tuple(item.id for item in self.interventions)
         if len(intervention_ids) != len(set(intervention_ids)):
             raise ValueError("validated intervention ids must be unique")
-        expected_human = HumanOptimizationEngine.optimize(self.domain_states, self.interventions, self.human_interactions, capacity_budget=self.portfolio_capacity_budget)
+        expected_human = HumanOptimizationEngine.optimize(
+            self.domain_states, self.interventions, self.human_interactions,
+            capacity_budget=self.portfolio_capacity_budget,
+        )
         if expected_human != self.human_optimization:
             raise ValueError("human optimization does not match its validated source state")
         expected_portfolio = TrajectoryOptimizationEngine.optimize(
@@ -237,6 +277,25 @@ class ValidatedTrajectoryDecision:
         if self.red_team_findings != RedTeamGate().inspect(materialized, self.contract):
             raise ValueError("validated red-team findings do not match the authorized action and contract")
 
+        expected_global = GlobalDecisionGate().evaluate(
+            self.contract.objective,
+            materialized,
+            values=list(self.value_results),
+            capacity=self.capacity,
+            effort=self.effort,
+            risks=list(self.risks),
+            mission_id=self.contract.mission_id,
+            contract=self.contract,
+            shared_signals=self.shared_signals,
+            calibration=dict(self.calibration),
+            trajectory_profile=self.trajectory_profile,
+            trajectory_dimensions=dict(self.trajectory_dimensions),
+            trajectory_portfolio=self.trajectory_portfolio,
+            human_optimization=self.human_optimization,
+        )
+        if expected_global != self.global_report:
+            raise ValueError("global decision report does not match its validated gate inputs")
+
         for name, value in (("human capacity budget", self.human_optimization.capacity_budget), ("human capacity used", self.human_optimization.capacity_used),
                             ("human capacity remaining", self.human_optimization.capacity_remaining), ("trajectory objective", self.trajectory_portfolio.objective),
                             ("trajectory capacity used", self.trajectory_portfolio.capacity_used), ("trajectory capacity remaining", self.trajectory_portfolio.capacity_remaining),
@@ -248,23 +307,55 @@ class ValidatedTrajectoryDecision:
             _validate_finite("candidate expected global gain", candidate.expected_global_gain)
 
     @staticmethod
-    def _payload(decision_id: str, issued_at: float, expires_at: float, actions: tuple[ValidatedActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
-                 domain_states: tuple[DomainState, ...], interventions: tuple[Intervention, ...], human_interactions: tuple[DomainInteraction, ...],
-                 trajectory_interactions: tuple[TrajectoryInteraction, ...], portfolio_capacity_budget: float, portfolio_max_candidates: int,
-                 human_optimization: HumanOptimizationReport, trajectory_portfolio: TrajectoryPortfolio, trajectory_assessment: TrajectoryAssessment,
-                 global_report: GlobalDecisionReport, contract: DelegationContract, policy: PolicyDecision,
-                 red_team_findings: tuple[RedTeamFinding, ...], governor: GovernorDecision, execution_target: str, execution_kind: str,
-                 provider_name: str | None, provider_target: str | None, operation: str | None, payload_fingerprint: str | None) -> dict[str, Any]:
-        return {"decision_id": decision_id, "issued_at": issued_at, "expires_at": expires_at,
-                "authorized_actions": actions, "action_to_intervention": tuple(sorted(action_to_intervention)),
-                "domain_states": domain_states, "interventions": interventions, "human_interactions": human_interactions,
-                "trajectory_interactions": trajectory_interactions, "portfolio_capacity_budget": portfolio_capacity_budget,
-                "portfolio_max_candidates": portfolio_max_candidates, "human_optimization": human_optimization,
-                "trajectory_portfolio": trajectory_portfolio, "trajectory_assessment": trajectory_assessment,
-                "global_report": global_report, "contract": contract, "policy": policy, "red_team_findings": red_team_findings,
-                "governor": governor, "execution_target": execution_target, "execution_kind": execution_kind,
-                "provider_name": provider_name, "provider_target": provider_target, "operation": operation,
-                "payload_fingerprint": payload_fingerprint}
+    def _payload(
+        decision_id: str, issued_at: float, expires_at: float, actions: tuple[ValidatedActionRequest, ...],
+        action_to_intervention: tuple[tuple[str, str], ...], domain_states: tuple[DomainState, ...],
+        interventions: tuple[Intervention, ...], human_interactions: tuple[DomainInteraction, ...],
+        trajectory_interactions: tuple[TrajectoryInteraction, ...], trajectory_profile: TrajectoryProfile,
+        trajectory_dimensions: tuple[tuple[str, float], ...], value_results: tuple[ValueAssessmentResult, ...],
+        capacity: CapacitySnapshot | None, effort: float | None, risks: tuple[Risk, ...],
+        shared_signals: tuple[SharedSignal, ...], calibration: tuple[tuple[str, float], ...],
+        portfolio_capacity_budget: float, portfolio_max_candidates: int, human_optimization: HumanOptimizationReport,
+        trajectory_portfolio: TrajectoryPortfolio, trajectory_assessment: TrajectoryAssessment, global_report: GlobalDecisionReport,
+        contract: DelegationContract, policy: PolicyDecision, red_team_findings: tuple[RedTeamFinding, ...],
+        governor: GovernorDecision, execution_target: str, execution_kind: str, provider_name: str | None,
+        provider_target: str | None, operation: str | None, payload_fingerprint: str | None,
+    ) -> dict[str, Any]:
+        return {
+            "decision_id": decision_id,
+            "issued_at": issued_at,
+            "expires_at": expires_at,
+            "authorized_actions": actions,
+            "action_to_intervention": tuple(sorted(action_to_intervention)),
+            "domain_states": domain_states,
+            "interventions": interventions,
+            "human_interactions": human_interactions,
+            "trajectory_interactions": trajectory_interactions,
+            "trajectory_profile": trajectory_profile,
+            "trajectory_dimensions": trajectory_dimensions,
+            "value_results": value_results,
+            "capacity": capacity,
+            "effort": effort,
+            "risks": risks,
+            "shared_signals": shared_signals,
+            "calibration": calibration,
+            "portfolio_capacity_budget": portfolio_capacity_budget,
+            "portfolio_max_candidates": portfolio_max_candidates,
+            "human_optimization": human_optimization,
+            "trajectory_portfolio": trajectory_portfolio,
+            "trajectory_assessment": trajectory_assessment,
+            "global_report": global_report,
+            "contract": contract,
+            "policy": policy,
+            "red_team_findings": red_team_findings,
+            "governor": governor,
+            "execution_target": execution_target,
+            "execution_kind": execution_kind,
+            "provider_name": provider_name,
+            "provider_target": provider_target,
+            "operation": operation,
+            "payload_fingerprint": payload_fingerprint,
+        }
 
 
 def _validate_finite(name: str, value: float, *, minimum: float | None = None, maximum: float | None = None) -> None:
@@ -285,7 +376,7 @@ def _normalize(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
     if is_dataclass(value):
-        return {key: _normalize(item) for key, item in asdict(value).items()}  # type: ignore[arg-type]
+        return {key: _normalize(item) for key, item in asdict(value).items()}
     if isinstance(value, dict):
         return {str(key): _normalize(item) for key, item in sorted(value.items(), key=lambda item: str(item[0]))}
     if isinstance(value, (tuple, list)):
