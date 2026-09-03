@@ -9,11 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import isfinite
 from pathlib import Path
-from time import time
 
 from .decision_attestation import DecisionAttestationStore
 from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine
@@ -93,6 +92,7 @@ class OutcomeLedger:
             raise ValueError("execution key and status are required")
         if not decision.verify() or not self.attestation_store.verify(decision):
             raise PermissionError("only an active, durably attested decision can produce an outcome record")
+
         calibration: CalibrationRecord
         if forecast.kind is ForecastKind.BINARY:
             if not isinstance(actual, bool):
@@ -103,10 +103,9 @@ class OutcomeLedger:
         else:
             if isinstance(actual, bool) or not isfinite(float(actual)):
                 raise ValueError("numeric forecast outcomes must be finite numbers")
-            actual_value = float(actual)
-            calibration = LearningEngine.evaluate_numeric(forecast, actual_value)
+            observed = float(actual)
+            calibration = LearningEngine.evaluate_numeric(forecast, observed)
             predicted = float(forecast.expected_value)
-            observed = actual_value
 
         timestamp = observed_at or datetime.now(UTC).isoformat()
         payload = {
@@ -124,20 +123,48 @@ class OutcomeLedger:
             "observed_at": timestamp,
             "lesson": calibration.lesson,
         }
-        record_id = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:24]
+        semantic_id_payload = {
+            "decision_id": payload["decision_id"],
+            "execution_key": payload["execution_key"],
+            "forecast_id": payload["forecast_id"],
+        }
+        record_id = hashlib.sha256(
+            json.dumps(semantic_id_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:24]
+
         with self._connect() as conn:
             existing = conn.execute("SELECT * FROM outcome_ledger WHERE record_id=?", (record_id,)).fetchone()
             if existing is not None:
-                return self._row(existing)
-            rows = conn.execute("SELECT fingerprint FROM outcome_ledger ORDER BY observed_at, record_id").fetchall()
+                current = self._row(existing)
+                comparable = {
+                    "decision_id": current.decision_id,
+                    "context_fingerprint": current.context_fingerprint,
+                    "execution_key": current.execution_key,
+                    "forecast_id": current.forecast_id,
+                    "forecast_kind": current.forecast_kind.value,
+                    "predicted_value": current.predicted_value,
+                    "actual_value": current.actual_value,
+                    "execution_status": current.execution_status,
+                }
+                incoming = {key: payload[key] for key in comparable}
+                if comparable != incoming:
+                    raise ValueError("outcome record already exists with different observed content")
+                return current
+
+            rows = conn.execute("SELECT fingerprint FROM outcome_ledger ORDER BY rowid").fetchall()
             previous = rows[-1]["fingerprint"] if rows else ""
             fingerprint_payload = {**payload, "record_id": record_id, "previous_fingerprint": previous}
             fingerprint = hashlib.sha256(
-                json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode()
+                json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
             ).hexdigest()
             conn.execute(
                 "INSERT INTO outcome_ledger(record_id,decision_id,context_fingerprint,execution_key,forecast_id,forecast_kind,predicted_value,actual_value,absolute_error,signed_error,brier_score,execution_status,observed_at,lesson,previous_fingerprint,fingerprint) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (record_id, payload["decision_id"], payload["context_fingerprint"], payload["execution_key"], payload["forecast_id"], payload["forecast_kind"], payload["predicted_value"], payload["actual_value"], payload["absolute_error"], payload["signed_error"], payload["brier_score"], payload["execution_status"], payload["observed_at"], payload["lesson"], previous, fingerprint),
+                (
+                    record_id, payload["decision_id"], payload["context_fingerprint"], payload["execution_key"],
+                    payload["forecast_id"], payload["forecast_kind"], payload["predicted_value"], payload["actual_value"],
+                    payload["absolute_error"], payload["signed_error"], payload["brier_score"], payload["execution_status"],
+                    payload["observed_at"], payload["lesson"], previous, fingerprint,
+                ),
             )
             return OutcomeObservation(record_id=record_id, previous_fingerprint=previous, fingerprint=fingerprint, **payload)
 
@@ -147,7 +174,7 @@ class OutcomeLedger:
         if decision_id is not None:
             query += " WHERE decision_id=?"
             params = (decision_id,)
-        query += " ORDER BY observed_at, record_id"
+        query += " ORDER BY rowid"
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
         return tuple(self._row(row) for row in rows)
@@ -171,10 +198,20 @@ class OutcomeLedger:
                     "observed_at": row.observed_at,
                     "lesson": row.lesson,
                 }
-                expected_id = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:24]
+                expected_id = hashlib.sha256(
+                    json.dumps(
+                        {"decision_id": row.decision_id, "execution_key": row.execution_key, "forecast_id": row.forecast_id},
+                        sort_keys=True, separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()[:24]
                 if expected_id != row.record_id or row.previous_fingerprint != previous:
                     return False
-                expected = hashlib.sha256(json.dumps({**payload, "record_id": row.record_id, "previous_fingerprint": previous}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+                expected = hashlib.sha256(
+                    json.dumps(
+                        {**payload, "record_id": row.record_id, "previous_fingerprint": previous},
+                        sort_keys=True, separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
                 if expected != row.fingerprint:
                     return False
                 previous = row.fingerprint
