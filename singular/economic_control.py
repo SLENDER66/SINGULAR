@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
-
 from .capital_allocation import AllocationCandidate, CapitalAllocation, CapitalAllocationEngine
 from .cashflow_engine import CashflowOpportunity, RapidCashObjective
 from .economic_sequence import EconomicSequence, EconomicSequenceEngine, EconomicStage, EconomicStep
@@ -13,16 +11,13 @@ from .patrimony_engine import FailureConversion, FailureRecord, PatrimonyAssessm
 from .rapid_wealth import RapidWealthEngine, RapidWealthSprint
 from .wealth_engine import WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
 
-
 class EconomicPlanStatus(str, Enum):
     READY = "READY"
     REVIEW = "REVIEW"
     BLOCKED = "BLOCKED"
 
-
 @dataclass(frozen=True)
 class EconomicControlPlan:
-    """Immutable economic control-plane output: recommendation, never execution."""
     status: EconomicPlanStatus
     rapid_cash: RapidWealthSprint
     wealth_assessments: tuple[WealthAssessment, ...]
@@ -36,22 +31,18 @@ class EconomicControlPlan:
     next_actions: tuple[str, ...]
     economic_sequence: EconomicSequence
 
-
 class EconomicControlPlane:
-    """Coordinate cash, wealth, ownership, patrimony, succession and sequencing."""
     REQUIRED_GENERATIONAL_METRICS = ("capital_protection", "founder_independence", "institutional_resilience")
 
     @staticmethod
-    def build(
-        *, cashflow_opportunities: list[CashflowOpportunity], rapid_cash_objective: RapidCashObjective,
-        wealth_opportunities: list[WealthOpportunity], wealth_objective: WealthObjective,
-        allocation_candidates: list[AllocationCandidate], available_capital: float, protected_capital: float,
-        risk_budget: float, capacity_budget: float, empire_assets: list[EmpireAsset], patrimony: dict[str, float | int],
-        generational_charter: GenerationalCharter, generational_metrics: dict[str, float],
-        failures: list[FailureRecord] | None = None, max_parallel_cash_tests: int = 3,
-        max_allocation_positions: int = 3, economic_sequence_steps: list[EconomicStep] | None = None,
-        completed_economic_stages: tuple[EconomicStage, ...] = (),
-    ) -> EconomicControlPlan:
+    def build(*, cashflow_opportunities: list[CashflowOpportunity], rapid_cash_objective: RapidCashObjective,
+              wealth_opportunities: list[WealthOpportunity], wealth_objective: WealthObjective,
+              allocation_candidates: list[AllocationCandidate], available_capital: float, protected_capital: float,
+              risk_budget: float, capacity_budget: float, empire_assets: list[EmpireAsset], patrimony: dict[str, float | int],
+              generational_charter: GenerationalCharter, generational_metrics: dict[str, float],
+              failures: list[FailureRecord] | None = None, max_parallel_cash_tests: int = 3,
+              max_allocation_positions: int = 3, economic_sequence_steps: list[EconomicStep] | None = None,
+              completed_economic_stages: tuple[EconomicStage, ...] = (), max_allocation_nodes: int = 100_000) -> EconomicControlPlan:
         EconomicControlPlane._validate_capital(available_capital, protected_capital, risk_budget, capacity_budget)
         if max_allocation_positions < 0: raise ValueError("max_allocation_positions must be non-negative")
         missing = tuple(k for k in EconomicControlPlane.REQUIRED_GENERATIONAL_METRICS if k not in generational_metrics)
@@ -59,24 +50,20 @@ class EconomicControlPlane:
         for key in EconomicControlPlane.REQUIRED_GENERATIONAL_METRICS:
             value = generational_metrics[key]
             if not isfinite(value) or not 0 <= value <= 1: raise ValueError(f"generational metric {key} must be finite and within [0, 1]")
-
         conversions = tuple(PatrimonyEngine.convert_failure(item) for item in (failures or []))
         rapid_cash = RapidWealthEngine.build_sprint(cashflow_opportunities, rapid_cash_objective, max_parallel_tests=max_parallel_cash_tests)
-        wealth_assessments = WealthEngine.rank(wealth_opportunities, wealth_objective)
+        wealth_assessments = WealthEngine.rank(wealth_opportunities)
         allocation = CapitalAllocationEngine.optimize(allocation_candidates, available_capital=available_capital,
             protected_capital=protected_capital, risk_budget=risk_budget, capacity_budget=capacity_budget,
-            max_positions=max_allocation_positions)
+            max_positions=max_allocation_positions, objective=wealth_objective, max_nodes=max_allocation_nodes)
         empire = EmpireEngine.assess(empire_assets)
         patrimony_assessment = PatrimonyEngine.assess(**patrimony)
-        generational = GenerationalEngine.assess(generational_charter,
-            capital_protection=generational_metrics["capital_protection"], founder_independence=generational_metrics["founder_independence"],
-            institutional_resilience=generational_metrics["institutional_resilience"])
-        sequence_steps = economic_sequence_steps or EconomicControlPlane._derive_sequence_steps(
-            cashflow_opportunities, rapid_cash, wealth_opportunities, wealth_assessments)
+        generational = GenerationalEngine.assess(generational_charter, capital_protection=generational_metrics["capital_protection"],
+            founder_independence=generational_metrics["founder_independence"], institutional_resilience=generational_metrics["institutional_resilience"])
+        sequence_steps = economic_sequence_steps or EconomicControlPlane._derive_sequence_steps(cashflow_opportunities, rapid_cash, wealth_opportunities, wealth_assessments)
         lesson_ids = tuple(item.failure_id for item in conversions if item.learning_asset)
         economic_sequence = EconomicSequenceEngine.plan(sequence_steps, available_capacity=capacity_budget,
             completed_stages=completed_economic_stages, failure_lesson_ids=lesson_ids)
-
         blockers: list[str] = []
         warnings: list[str] = []
         if rapid_cash.target_gap > 0: warnings.append("RAPID_CASH_TARGET_GAP")
@@ -87,29 +74,28 @@ class EconomicControlPlane:
         if rapid_cash.target_gap == rapid_cash.target_cash: blockers.append("NO_POSITIVE_EXPECTED_CASH_PATH")
         status = EconomicPlanStatus.BLOCKED if blockers else EconomicPlanStatus.REVIEW if warnings else EconomicPlanStatus.READY
         next_actions = EconomicControlPlane._next_actions(rapid_cash, wealth_assessments, allocation, empire, patrimony_assessment, generational, economic_sequence)
-        return EconomicControlPlan(status, rapid_cash, wealth_assessments, allocation, empire, patrimony_assessment,
-            generational, conversions, tuple(dict.fromkeys(blockers)), tuple(dict.fromkeys(warnings)), next_actions, economic_sequence)
+        return EconomicControlPlan(status, rapid_cash, wealth_assessments, allocation, empire, patrimony_assessment, generational, conversions,
+            tuple(dict.fromkeys(blockers)), tuple(dict.fromkeys(warnings)), next_actions, economic_sequence)
 
     @staticmethod
-    def _derive_sequence_steps(cash: list[CashflowOpportunity], rapid: RapidWealthSprint,
-                               opportunities: list[WealthOpportunity], assessments: tuple[WealthAssessment, ...]) -> list[EconomicStep]:
+    def _derive_sequence_steps(cash: list[CashflowOpportunity], rapid: RapidWealthSprint, opportunities: list[WealthOpportunity], assessments: tuple[WealthAssessment, ...]) -> list[EconomicStep]:
         cash_by_id = {item.id: item for item in cash}
         selected = {item.opportunity_id for item in rapid.selected_opportunities}
         steps: list[EconomicStep] = []
         for assessment in rapid.selected_opportunities:
             item = cash_by_id[assessment.opportunity_id]
-            steps.append(EconomicStep(item.id, EconomicStage.CASH, expected_cash=item.expected_cash,
-                probability=item.probability, risk=10.0 * (1.0 - item.reversibility),
-                capacity_required=max(item.time_to_cash_hours / 24.0, 0.0), reversibility=10.0 * item.reversibility,
-                ownership_value=10.0 * item.ownership_score, compounding_value=10.0 * item.recurrence_score))
+            steps.append(EconomicStep(item.id, EconomicStage.CASH, expected_cash=item.expected_cash, probability=item.probability,
+                risk=10.0 * (1.0 - item.reversibility), capacity_required=max(item.time_to_cash_hours / 24.0, 0.0),
+                reversibility=10.0 * item.reversibility, ownership_value=10.0 * item.ownership_score,
+                compounding_value=10.0 * item.recurrence_score))
         by_id = {item.id: item for item in opportunities}
         for assessment in assessments:
             if assessment.opportunity_id in selected: continue
             item = by_id[assessment.opportunity_id]
             steps.append(EconomicStep(item.id, EconomicStage.OWNERSHIP if item.ownership >= 0.5 else EconomicStage.CAPITAL,
-                expected_value=max(item.expected_wealth_delta, 0.0), probability=item.probability,
-                risk=min(item.downside * 10.0, 10.0), capacity_required=item.time, reversibility=10.0 * item.reversibility,
-                ownership_value=10.0 * item.ownership, compounding_value=10.0 * item.compounding))
+                expected_value=max(item.expected_wealth_delta, 0.0), probability=item.probability, risk=min(item.downside * 10.0, 10.0),
+                capacity_required=item.time, reversibility=10.0 * item.reversibility, ownership_value=10.0 * item.ownership,
+                compounding_value=10.0 * item.compounding))
         return steps
 
     @staticmethod
