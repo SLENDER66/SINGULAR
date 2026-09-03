@@ -33,3 +33,4 @@ from .opportunity_engine import OpportunityAssessment, OpportunityDecision, Oppo
 from .opportunity_adapter import OpportunityAdapter
 from .portfolio import PortfolioAssessment, PortfolioEngine, PortfolioSelection
 from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine as CalibrationLearningEngine, LearningUpdate
+from .decision_engine import DecisionContext, DecisionEngine, DecisionOption, DecisionRecommendation, DecisionStatus
