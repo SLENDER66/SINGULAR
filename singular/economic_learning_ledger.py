@@ -8,6 +8,10 @@ from typing import Any
 
 from .durable import DurableStore
 from .economic_learning import EconomicLearningCycle
+from .execution_result import ExecutionResult, ExecutionStatus
+from .learning import CalibrationRecord, ForecastKind, LearningUpdate
+from .learning_bridge import LearningResult
+from .learning_strategy import StrategyDisposition, StrategyProposal
 
 
 def _json_default(value: Any) -> str:
@@ -17,11 +21,48 @@ def _json_default(value: Any) -> str:
 
 
 def _canonical_cycle(cycle: EconomicLearningCycle) -> str:
-    return json.dumps(
-        asdict(cycle),
-        sort_keys=True,
-        separators=(",", ":"),
-        default=_json_default,
+    return json.dumps(asdict(cycle), sort_keys=True, separators=(",", ":"), default=_json_default)
+
+
+def _cycle_from_dict(data: dict[str, Any]) -> EconomicLearningCycle:
+    learning_data = data["learning"]
+    record_data = learning_data["record"]
+    update_data = learning_data["update"]
+    strategy_data = data["strategy"]
+    execution_data = data["execution_status"]
+    result_record = CalibrationRecord(
+        forecast_id=str(record_data["forecast_id"]),
+        kind=ForecastKind(record_data["kind"]),
+        outcome=float(record_data["outcome"]),
+        error=float(record_data["error"]),
+        brier_score=(None if record_data["brier_score"] is None else float(record_data["brier_score"])),
+        forecast_confidence=float(record_data["forecast_confidence"]),
+        lesson=str(record_data["lesson"]),
+    )
+    learning = LearningResult(
+        record=result_record,
+        update=LearningUpdate(
+            forecast_id=str(update_data["forecast_id"]),
+            lesson=str(update_data["lesson"]),
+            hypothesis=str(update_data["hypothesis"]),
+            evidence_strength=float(update_data["evidence_strength"]),
+            recommended_action=str(update_data["recommended_action"]),
+        ),
+    )
+    strategy = StrategyProposal(
+        forecast_id=str(strategy_data["forecast_id"]),
+        disposition=StrategyDisposition(strategy_data["disposition"]),
+        hypothesis=str(strategy_data["hypothesis"]),
+        evidence=str(strategy_data["evidence"]),
+        test_plan=str(strategy_data["test_plan"]),
+        expected_improvement=float(strategy_data["expected_improvement"]),
+        human_review_required=bool(strategy_data["human_review_required"]),
+    )
+    return EconomicLearningCycle(
+        forecast_id=str(data["forecast_id"]),
+        execution_status=ExecutionStatus(execution_data),
+        learning=learning,
+        strategy=strategy,
     )
 
 
@@ -60,4 +101,4 @@ class EconomicLearningLedger:
         actual = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         if expected != actual:
             raise RuntimeError("L'intégrité du cycle d'apprentissage durable est compromise.")
-        raise NotImplementedError("Cycle restoration requires explicit domain deserializers.")
+        return _cycle_from_dict(stored)
