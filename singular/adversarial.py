@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
+from hashlib import sha256
 from pathlib import Path
 from typing import Callable
 
@@ -114,6 +115,8 @@ class AdversarialEngine:
             cls._probe("AUTH-004", AttackSeverity.HIGH, AttackClass.AUTH, "UNKNOWN_AGENT -> EXECUTE", lambda: AuthorityProtocol.require("UNKNOWN", AgentPower.EXECUTE), ValueError, "Unknown identities must fail closed rather than inherit permissions."),
             cls._probe("AUTH-005", AttackSeverity.CRITICAL, AttackClass.AUTH, "COMMANDER -> SYSTEM_CHANGE", lambda: AuthorityProtocol.require("COMMANDER", AgentPower.SYSTEM_CHANGE), PermissionError, "No recommendation role may acquire system-change authority."),
             cls._probe("AUTH-006", AttackSeverity.CRITICAL, AttackClass.AUTH, "SYSTEM_ARCHITECT -> EXECUTE", lambda: AuthorityProtocol.require("SYSTEM_ARCHITECT", AgentPower.EXECUTE), PermissionError, "Architecture authority must never imply execution authority."),
+            cls._probe("AUTH-007", AttackSeverity.MEDIUM, AttackClass.GOVERNANCE, "GOVERNOR -> HUMAN_FINAL", lambda: AuthorityProtocol.require("GOVERNOR", AgentPower.HUMAN_FINAL), PermissionError, "Governance may enforce policy but cannot impersonate final human authority."),
+            cls._probe("AUTH-008", AttackSeverity.MEDIUM, AttackClass.GOVERNANCE, "GOVERNOR -> SYSTEM_CHANGE", lambda: AuthorityProtocol.require("GOVERNOR", AgentPower.SYSTEM_CHANGE), PermissionError, "Authorization authority must not imply authority to alter the system itself."),
         ]
         return AdversarialReport(tuple(findings))
 
@@ -164,6 +167,16 @@ class AdversarialEngine:
                 return ledger.get(forecast.id)
 
             findings.append(cls._probe("LEARN-001", AttackSeverity.CRITICAL, AttackClass.LEARN, "tampered economic learning record", tamper_learning, RuntimeError, "Verify durable learning fingerprints before restoring any cycle."))
+
+            def tamper_learning_fingerprint() -> object:
+                clean = DurableStore(Path(directory) / "fingerprint.db")
+                clean_ledger = EconomicLearningLedger(clean)
+                clean_ledger.record(cycle)
+                with sqlite3.connect(Path(directory) / "fingerprint.db") as conn:
+                    conn.execute("UPDATE idempotency SET fingerprint=? WHERE key=?", (sha256(b"forged").hexdigest(), clean_ledger.key_for(cycle)))
+                return clean_ledger.get(forecast.id)
+
+            findings.append(cls._probe("DATA-001", AttackSeverity.CRITICAL, AttackClass.DATA, "forged learning fingerprint", tamper_learning_fingerprint, RuntimeError, "Treat a fingerprint mismatch as durable-data corruption and fail closed."))
         return AdversarialReport(tuple(findings))
 
     @classmethod
