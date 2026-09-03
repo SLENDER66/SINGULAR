@@ -37,6 +37,7 @@ from .decision_engine import DecisionContext, DecisionOption, DecisionRecommenda
 from .execution_result import ExecutionIntent, ExecutionResult, ExecutionResultBridge, ExecutionStatus
 from .learning_bridge import ExecutionLearningBridge, LearningResult
 from .wealth_engine import WealthAction, WealthAssessment, WealthEngine, WealthObjective, WealthOpportunity
+from .capital_allocation import AllocationBucket, AllocationCandidate, CapitalAllocation, CapitalAllocationEngine
 from .empire_engine import EmpireAsset, EmpireAssessment, EmpireEngine, EmpireStage
 
 # The package historically exported DecisionEngine and WorldModel from legacy
