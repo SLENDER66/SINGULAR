@@ -61,7 +61,8 @@ class ValidatedTrajectoryPipeline:
             raise PermissionError("No executable trajectory portfolio was produced.")
 
         assessment = TrajectoryEngine.assess(
-            trajectory_profile, dimensions=trajectory_dimensions, value_results=value_results, capacity=capacity,
+            trajectory_profile, dimensions=trajectory_dimensions, value_results=value_results,
+            capacity=capacity, portfolio=portfolio,
         )
         action = actions[0]
         global_report: GlobalDecisionReport = (gate or GlobalDecisionGate()).evaluate(
