@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from singular.effects import EffectStatus
+from singular.effects import EffectRequest, EffectStatus
 from singular.execution import DurableExecutionEngine
 
 
@@ -61,27 +61,27 @@ def test_completed_effect_finalizes_recovery_through_durable_proof():
     engine, store = _engine("RECOVERY_REQUIRED")
     action = SimpleNamespace(id="ACT")
     governed = SimpleNamespace(action=action)
-    provider = object()
 
     result = engine._execute_effect_authorized(
         action,
         "MIS",
-        provider,
+        object(),
         provider_name="provider",
         operation="write",
         payload={"value": 1},
         governed=governed,
     )
 
-    assert result.status == "COMPLETED"
-    assert result.result == {"proved": True}
-    assert store.confirm_calls == [("execution-key", result.execution_key and __import__("singular.effects", fromlist=["EffectRequest"]).EffectRequest(
+    expected_key = EffectRequest(
         execution_key="execution-key",
         provider="provider",
         operation="write",
         payload={"value": 1},
         action_fingerprint="action-fp",
-    ).provider_idempotency_key)]
+    ).provider_idempotency_key
+    assert result.status == "COMPLETED"
+    assert result.result == {"proved": True}
+    assert store.confirm_calls == [("execution-key", expected_key)]
 
 
 def test_terminal_execution_is_not_rewritten_by_completed_effect():
