@@ -13,6 +13,7 @@ def test_rapid_wealth_sprint_targets_cash_without_execution() -> None:
     assert sprint.selected_opportunities
     assert sprint.selected_opportunities[0].opportunity_id == "fast"
     assert sprint.expected_cash > 0
+    assert sprint.target_gap < sprint.target_cash
     assert "GENERATE_CASH" in RapidWealthEngine.next_stage()
 
 
