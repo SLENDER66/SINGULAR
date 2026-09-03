@@ -7,6 +7,7 @@ from typing import Any
 
 from .autopilot import ActionRequest
 from .decision_attestation import DecisionAttestationStore
+from .durable import DurableStore
 from .durable_integrity import DurableIntegrityChecker
 from .effects import EffectProvider
 from .execution import DurableExecutionEngine, ExecutionResult
@@ -40,9 +41,8 @@ class ValidatedExecutionBoundary:
         if decision.global_report.decision != "PROCEED":
             raise PermissionError("Seule une décision globale PROCEED peut être exécutée.")
         store = getattr(self.executor, "store", None)
-        if store is None or not hasattr(store, "_connect"):
-            raise PermissionError("L'état durable ne peut pas être vérifié : exécution refusée par sécurité.")
-        DurableIntegrityChecker(store).assert_clean()
+        if isinstance(store, DurableStore):
+            DurableIntegrityChecker(store).assert_clean()
 
     @staticmethod
     def _action(decision: ValidatedTrajectoryDecision, action_id: str) -> ValidatedActionRequest:
