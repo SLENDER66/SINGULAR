@@ -85,27 +85,37 @@ class ProvenanceChain:
 
     def __init__(self) -> None:
         self._records: list[ProvenanceRecord] = []
+        self._digests: list[str] = []
 
     def append(self, record: ProvenanceRecord) -> str:
-        if self._records and record.previous_digest != self._records[-1].digest():
+        if self._records and record.previous_digest != self._digests[-1]:
             raise ValueError("record does not link to the current provenance head")
         if any(existing.record_id == record.record_id for existing in self._records):
             raise ValueError("record_id already exists")
+        digest = record.digest()
         self._records.append(record)
-        return record.digest()
+        self._digests.append(digest)
+        return digest
 
     def records(self) -> tuple[ProvenanceRecord, ...]:
         return tuple(self._records)
 
     def head_digest(self) -> str | None:
-        return self._records[-1].digest() if self._records else None
+        return self._digests[-1] if self._digests else None
 
     def verify(self) -> bool:
+        if len(self._records) != len(self._digests):
+            return False
         previous = ""
         seen: set[str] = set()
-        for record in self._records:
-            if record.record_id in seen or record.previous_digest != previous:
+        for index, record in enumerate(self._records):
+            if record.record_id in seen:
+                return False
+            if record.previous_digest != previous:
+                return False
+            digest = record.digest()
+            if digest != self._digests[index]:
                 return False
             seen.add(record.record_id)
-            previous = record.digest()
+            previous = digest
         return True
