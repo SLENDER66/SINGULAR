@@ -46,7 +46,7 @@ def test_boundary_rejects_tampered_decision():
     executor = FakeDurableExecutor()
     boundary = ValidatedExecutionBoundary(executor)  # type: ignore[arg-type]
     decision = build(execution_target=AUTHORIZED_HANDLER_CAPABILITY)
-    object.__setattr__(decision, "global_report", artifacts(global_decision="BLOCK")[6])
+    object.__setattr__(decision, "global_report", artifacts(global_decision="BLOCK")[8])
     with pytest.raises(PermissionError, match="altérée"):
         boundary.execute(decision, decision.global_report.action_id, authorized_handler)
     assert executor.calls == []
