@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.5.2 — Governed Control Plane & Continuous Improvement
+
+- Added `SingularControlPlane` as the canonical top-level lifecycle surface for build -> attest -> execute -> observe outcome.
+- Added `ControlPlaneDecision` so a validated decision and its durable attestation travel together at the orchestration layer.
+- Added a durable outcome ledger binding forecast, actual result, execution status and exact decision context fingerprint.
+- Added a human-reviewed learning queue and bounded self-improvement engine; observed error can create a test proposal, never silent policy mutation.
+- Added `TemporalAdvisor` forecast signals with explicit non-authorizing semantics.
+- Hardened `DecisionAttestationStore` so `:memory:` instances remain valid across internal SQLite connections.
+- Expanded execution-boundary static auditing to detect aliases of the durable executor and direct calls to its inner validated methods outside the canonical adapter/service.
+- Added regression coverage for the top-level control plane and the learning lifecycle.
+
 ## 3.5.1 — Execution Boundary Hardening
 
 - Made durable execution itself require a valid, active `DecisionAttestationStore` record; the inner executor can no longer bypass durable issuance/revocation checks.
