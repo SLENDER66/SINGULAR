@@ -35,15 +35,14 @@ def test_planner_selects_human_specialists():
 
 
 def test_commander_produces_one_clear_next_move():
-    commander = Commander()
     actions = [
         Action(id='A1', name='Faire une action utile', impact=8, urgency=6, effort=2, risk=2, leverage=8, optionality=7, reversibility=9),
         Action(id='A2', name='Faire une tâche secondaire', impact=3, urgency=3, effort=4, risk=2, leverage=2, optionality=2, reversibility=9),
     ]
-    brief = commander.command('Améliorer la situation', actions)
+    brief = Commander().command('Améliorer la situation', actions)
     assert brief['mode'] == 'ACT'
     assert brief['priority']['id'] == 'A1'
-    assert brief['next_move'] == 'A1' if False else brief['next_move']
+    assert brief['next_move'] == 'Faire une action utile'
     assert brief['human_gate'] is False
     assert brief['objective'] == 'Améliorer la situation'
 
