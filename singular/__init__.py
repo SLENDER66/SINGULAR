@@ -69,6 +69,7 @@ from .human_optimization import (
 from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine, TrajectoryPortfolio
 from .human_optimizer import HumanDomainState, HumanOptimizationPlan, HumanOptimizationPriority, OptimizationAction
 from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTrajectoryDecision
+from .validated_execution import ValidatedExecutionBoundary
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
