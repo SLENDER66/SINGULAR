@@ -9,13 +9,15 @@ from tests.test_validated_pipeline import _build_decision
 
 def test_attestation_is_durable_and_matches_exact_decision(tmp_path):
     decision = _build_decision()
-    store = DecisionAttestationStore(tmp_path / "attestations.db")
-    issuer = ValidatedDecisionIssuer(store, issuer="test-suite")
+    path = tmp_path / "attestations.db"
+    first_store = DecisionAttestationStore(path)
+    issuer = ValidatedDecisionIssuer(first_store, issuer="test-suite")
     attestation = issuer.issue(decision)
 
+    restarted_store = DecisionAttestationStore(path)
     assert attestation.decision_id == decision.decision_id
     assert attestation.context_fingerprint == decision.context_fingerprint
-    assert issuer.verify(decision)
+    assert restarted_store.verify(decision)
 
 
 def test_unissued_decision_is_not_executable_by_attestation_registry(tmp_path):
@@ -42,6 +44,14 @@ def test_reissued_same_decision_is_idempotent_but_reissue_after_revocation_is_fo
     assert store.verify(decision) is False
     with pytest.raises(PermissionError, match="revoked"):
         store.issue(decision)
+
+
+def test_revocation_survives_process_restart(tmp_path):
+    decision = _build_decision()
+    path = tmp_path / "attestations.db"
+    DecisionAttestationStore(path).issue(decision)
+    DecisionAttestationStore(path).revoke(decision.decision_id)
+    assert DecisionAttestationStore(path).verify(decision) is False
 
 
 def test_attestation_obeys_decision_ttl(tmp_path):
