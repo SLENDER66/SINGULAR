@@ -11,7 +11,9 @@ from .tool_fabric import ToolFabric
 
 RAW_METHODS = frozenset({"execute", "execute_effect", "reconcile_effect"})
 RAW_TOOL_METHODS = frozenset({"execute_autonomous", "execute_approved"})
+INNER_VALIDATED_METHODS = frozenset({"execute_validated", "execute_effect_validated", "reconcile_effect_validated"})
 DEFINITION_MODULES = frozenset({"execution.py", "tool_fabric.py"})
+INNER_ALLOWED_MODULES = frozenset({"validated_execution.py", "validated_decision_service.py"})
 
 
 @dataclass(frozen=True)
@@ -34,7 +36,7 @@ class BoundaryAuditReport:
 
 
 class ExecutionBoundaryAuditor:
-    """Detect obvious production call-site bypasses and verify raw API denial."""
+    """Detect production execution bypasses and verify raw API denial."""
 
     def __init__(self, package_dir: Path | None = None) -> None:
         self.package_dir = package_dir or Path(__file__).resolve().parent
@@ -54,12 +56,7 @@ class ExecutionBoundaryAuditor:
             findings.extend(self._scan(path, tree))
         raw_denied = self._raw_api_is_denied()
         if not raw_denied:
-            findings.append(
-                BoundaryFinding(
-                    "runtime", 0, "RAW_API_NOT_DENY_BY_DEFAULT",
-                    "A public raw execution entry point did not raise PermissionError.",
-                )
-            )
+            findings.append(BoundaryFinding("runtime", 0, "RAW_API_NOT_DENY_BY_DEFAULT", "A public raw execution entry point did not raise PermissionError."))
         return BoundaryAuditReport(tuple(findings), checked, raw_denied)
 
     @staticmethod
@@ -74,6 +71,7 @@ class ExecutionBoundaryAuditor:
                         if isinstance(target, ast.Name):
                             durable_engine_receivers.add(target.id)
 
+        inner_allowed = path.name in INNER_ALLOWED_MODULES
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
@@ -83,6 +81,8 @@ class ExecutionBoundaryAuditor:
                 findings.append(BoundaryFinding(str(path), target.lineno, "RAW_TOOL_BYPASS", target.attr))
             if target.attr in {"execute_effect", "reconcile_effect"}:
                 findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", target.attr))
+            if target.attr in INNER_VALIDATED_METHODS and not inner_allowed:
+                findings.append(BoundaryFinding(str(path), target.lineno, "INNER_EXECUTOR_BYPASS", target.attr))
             if target.attr == "execute":
                 if isinstance(receiver, ast.Name) and receiver.id in durable_engine_receivers:
                     findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", "executor.execute"))
