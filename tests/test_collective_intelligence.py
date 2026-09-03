@@ -17,12 +17,12 @@ def test_collective_view_preserves_consensus_and_dissent() -> None:
 def test_no_majority_is_unresolved() -> None:
     signals = (
         SharedSignal("STRATEGY", KnowledgeKind.ANALYSIS, "x", "A", 0.5),
-        SharedSignal("RED_TEAM", KnowledgeKind.CHALLENGE, "x", "B", 0.5),
+        SharedSignal("INTELLIGENCE", KnowledgeKind.EVIDENCE, "x", "B", 0.5),
     )
     view = CollectiveIntelligence.deliberate("x", signals)
     assert view.consensus is None
     assert view.unresolved is True
-    assert view.dissent == ()
+    assert view.dissent == ("B",)
 
 
 def test_empty_subject_is_fail_closed() -> None:
