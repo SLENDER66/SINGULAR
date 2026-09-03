@@ -2,6 +2,7 @@ import pytest
 from dataclasses import replace
 
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
+from singular.decision_attestation import DecisionAttestationStore
 from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
 from singular.execution_capability import register_execution_capability
@@ -47,6 +48,20 @@ def test_pipeline_constructs_decision_only_after_all_required_stages():
     assert decision.verify() is True
     assert decision.global_report.decision == "PROCEED"
     assert decision.trajectory_portfolio.candidates[0].intervention_id == "career"
+
+
+def test_pipeline_can_issue_durable_attestation_as_final_build_stage(tmp_path):
+    contract, action, state, intervention, profile, dimensions = _inputs()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    decision, attestation = ValidatedTrajectoryPipeline.build_and_attest(
+        attestation_store=store, issuer="pipeline-test",
+        objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
+        domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
+        trajectory_dimensions=dimensions, contract=contract,
+        execution_target=AUTHORIZED_HANDLER_CAPABILITY, decision_id="DEC-PIPE-ATTEST", capacity_budget=2,
+    )
+    assert attestation.decision_id == decision.decision_id
+    assert store.verify(decision)
 
 
 def test_pipeline_fails_closed_when_trajectory_requires_review():
