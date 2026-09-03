@@ -18,3 +18,17 @@ def test_boundary_auditor_detects_direct_handler_bypass(tmp_path: Path):
     auditor = ExecutionBoundaryAuditor(package)
     report = auditor.audit()
     assert any(f.rule == "DIRECT_HANDLER_BYPASS" for f in report.findings)
+
+
+def test_boundary_auditor_detects_direct_inner_executor_bypass(tmp_path: Path):
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "unsafe.py").write_text(
+        "from singular.execution import DurableExecutionEngine\n"
+        "executor = DurableExecutionEngine(runtime)\n"
+        "executor.execute_validated(decision, handler)\n",
+        encoding="utf-8",
+    )
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "INNER_EXECUTOR_BYPASS" for f in report.findings)
