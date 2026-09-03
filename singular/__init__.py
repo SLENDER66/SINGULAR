@@ -77,6 +77,11 @@ from .execution_capability import (
 from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTrajectoryDecision, payload_fingerprint
 from .validated_execution import ValidatedExecutionBoundary
 from .validated_pipeline import ValidatedTrajectoryPipeline
+from .history_world_model import (
+    EpistemicLevel, FutureDisposition, FutureReasoner, FutureScenario, HistoricalEvidence,
+    HistoricalMode, HistoricalPattern, HistoricalReasoner, TemporalAssessment, TemporalContext,
+    WorldStateSnapshot, build_temporal_context,
+)
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
