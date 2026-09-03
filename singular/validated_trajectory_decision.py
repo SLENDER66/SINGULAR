@@ -35,18 +35,8 @@ class ValidatedActionRequest:
 
     @classmethod
     def from_action(cls, action: ActionRequest) -> "ValidatedActionRequest":
-        return cls(
-            id=action.id,
-            name=action.name,
-            description=action.description,
-            impact=action.impact,
-            risk=action.risk,
-            reversibility=action.reversibility,
-            requires_human=action.requires_human,
-            sensitive=action.sensitive,
-            contract_id=action.contract_id,
-            capability=action.capability,
-        )
+        return cls(action.id, action.name, action.description, action.impact, action.risk, action.reversibility,
+                   action.requires_human, action.sensitive, action.contract_id, action.capability)
 
     def __post_init__(self) -> None:
         if not self.id.strip() or not self.name.strip() or not self.description.strip():
@@ -56,27 +46,18 @@ class ValidatedActionRequest:
                 raise ValueError(f"validated action {name} must be finite and between 0 and 10")
 
     def to_action(self) -> ActionRequest:
-        return ActionRequest(
-            name=self.name,
-            description=self.description,
-            impact=self.impact,
-            risk=self.risk,
-            reversibility=self.reversibility,
-            requires_human=self.requires_human,
-            sensitive=self.sensitive,
-            contract_id=self.contract_id,
-            id=self.id,
-            capability=self.capability,
-        )
+        return ActionRequest(name=self.name, description=self.description, impact=self.impact, risk=self.risk,
+                             reversibility=self.reversibility, requires_human=self.requires_human,
+                             sensitive=self.sensitive, contract_id=self.contract_id, id=self.id, capability=self.capability)
 
 
 @dataclass(frozen=True)
 class ValidatedTrajectoryDecision:
     """A trajectory-backed decision accepted by the execution boundary.
 
-    The artifact binds not only the decision evidence but also the exact
-    execution target. External-effect calls additionally bind provider,
-    operation and payload fingerprint, preventing TOCTOU substitution.
+    The artifact binds decision evidence to the exact execution target. External
+    effects additionally bind provider implementation, provider name, operation,
+    and payload fingerprint, preventing TOCTOU substitution and replay.
     """
 
     decision_id: str
@@ -93,77 +74,53 @@ class ValidatedTrajectoryDecision:
     execution_target: str
     execution_kind: str
     provider_name: str | None
+    provider_target: str | None
     operation: str | None
     payload_fingerprint: str | None
     context_fingerprint: str
 
     @classmethod
-    def create(
-        cls,
-        *,
-        decision_id: str,
-        actions: tuple[ActionRequest, ...],
-        action_to_intervention: tuple[tuple[str, str], ...],
-        human_optimization: HumanOptimizationReport | None,
-        trajectory_portfolio: TrajectoryPortfolio | None,
-        trajectory_assessment: TrajectoryAssessment | None,
-        global_report: GlobalDecisionReport | None,
-        contract: DelegationContract | None,
-        policy: PolicyDecision | None,
-        red_team_findings: tuple[RedTeamFinding, ...] | None,
-        governor: GovernorDecision | None,
-        execution_target: str,
-        execution_kind: str = "handler",
-        provider_name: str | None = None,
-        operation: str | None = None,
-        payload_fingerprint: str | None = None,
-    ) -> "ValidatedTrajectoryDecision":
-        required = {
-            "human_optimization": human_optimization,
-            "trajectory_portfolio": trajectory_portfolio,
-            "trajectory_assessment": trajectory_assessment,
-            "global_report": global_report,
-            "contract": contract,
-            "policy": policy,
-            "red_team_findings": red_team_findings,
-            "governor": governor,
-        }
+    def create(cls, *, decision_id: str, actions: tuple[ActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
+               human_optimization: HumanOptimizationReport | None, trajectory_portfolio: TrajectoryPortfolio | None,
+               trajectory_assessment: TrajectoryAssessment | None, global_report: GlobalDecisionReport | None,
+               contract: DelegationContract | None, policy: PolicyDecision | None,
+               red_team_findings: tuple[RedTeamFinding, ...] | None, governor: GovernorDecision | None,
+               execution_target: str, execution_kind: str = "handler", provider_name: str | None = None,
+               provider_target: str | None = None, operation: str | None = None,
+               payload_fingerprint: str | None = None) -> "ValidatedTrajectoryDecision":
+        required = {"human_optimization": human_optimization, "trajectory_portfolio": trajectory_portfolio,
+                    "trajectory_assessment": trajectory_assessment, "global_report": global_report,
+                    "contract": contract, "policy": policy, "red_team_findings": red_team_findings, "governor": governor}
         for name, value in required.items():
             if value is None:
                 raise ValueError(f"{name} is required")
         snapshots = tuple(ValidatedActionRequest.from_action(action) for action in actions)
-        payload = cls._payload(
-            decision_id, snapshots, action_to_intervention, human_optimization, trajectory_portfolio,
-            trajectory_assessment, global_report, contract, policy, red_team_findings, governor,
-            execution_target, execution_kind, provider_name, operation, payload_fingerprint,
-        )
-        return cls(
-            decision_id, snapshots, action_to_intervention, human_optimization, trajectory_portfolio,
-            trajectory_assessment, global_report, contract, policy, red_team_findings, governor,
-            execution_target, execution_kind, provider_name, operation, payload_fingerprint,
-            _fingerprint(payload),
-        )
+        payload = cls._payload(decision_id, snapshots, action_to_intervention, human_optimization, trajectory_portfolio,
+                               trajectory_assessment, global_report, contract, policy, red_team_findings, governor,
+                               execution_target, execution_kind, provider_name, provider_target, operation, payload_fingerprint)
+        return cls(decision_id, snapshots, action_to_intervention, human_optimization, trajectory_portfolio,
+                   trajectory_assessment, global_report, contract, policy, red_team_findings, governor,
+                   execution_target, execution_kind, provider_name, provider_target, operation, payload_fingerprint,
+                   _fingerprint(payload))
 
     def __post_init__(self) -> None:
         self._validate()
-        expected = _fingerprint(self._payload(
-            self.decision_id, self.authorized_actions, self.action_to_intervention, self.human_optimization,
-            self.trajectory_portfolio, self.trajectory_assessment, self.global_report, self.contract,
-            self.policy, self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
-            self.provider_name, self.operation, self.payload_fingerprint,
-        ))
+        expected = _fingerprint(self._payload(self.decision_id, self.authorized_actions, self.action_to_intervention,
+                                              self.human_optimization, self.trajectory_portfolio, self.trajectory_assessment,
+                                              self.global_report, self.contract, self.policy, self.red_team_findings,
+                                              self.governor, self.execution_target, self.execution_kind, self.provider_name,
+                                              self.provider_target, self.operation, self.payload_fingerprint))
         if self.context_fingerprint != expected:
             raise ValueError("validated trajectory decision context fingerprint is invalid")
 
     def verify(self) -> bool:
         try:
             self._validate()
-            expected = _fingerprint(self._payload(
-                self.decision_id, self.authorized_actions, self.action_to_intervention, self.human_optimization,
-                self.trajectory_portfolio, self.trajectory_assessment, self.global_report, self.contract,
-                self.policy, self.red_team_findings, self.governor, self.execution_target, self.execution_kind,
-                self.provider_name, self.operation, self.payload_fingerprint,
-            ))
+            expected = _fingerprint(self._payload(self.decision_id, self.authorized_actions, self.action_to_intervention,
+                                                  self.human_optimization, self.trajectory_portfolio, self.trajectory_assessment,
+                                                  self.global_report, self.contract, self.policy, self.red_team_findings,
+                                                  self.governor, self.execution_target, self.execution_kind, self.provider_name,
+                                                  self.provider_target, self.operation, self.payload_fingerprint))
         except (TypeError, ValueError):
             return False
         return self.context_fingerprint == expected
@@ -175,11 +132,12 @@ class ValidatedTrajectoryDecision:
             raise ValueError("execution_target cannot be empty")
         if self.execution_kind not in {"handler", "external_effect"}:
             raise ValueError("execution_kind must be handler or external_effect")
-        if self.execution_kind == "handler" and any(value is not None for value in (self.provider_name, self.operation, self.payload_fingerprint)):
-            raise ValueError("handler decisions cannot carry external-effect bindings")
-        if self.execution_kind == "external_effect":
-            if not self.provider_name or not self.operation or not self.payload_fingerprint:
-                raise ValueError("external-effect decisions require provider, operation and payload fingerprint")
+        if self.execution_kind == "handler":
+            if any(value is not None for value in (self.provider_name, self.provider_target, self.operation, self.payload_fingerprint)):
+                raise ValueError("handler decisions cannot carry external-effect bindings")
+        else:
+            if not self.provider_name or not self.provider_target or not self.operation or not self.payload_fingerprint:
+                raise ValueError("external-effect decisions require provider, provider target, operation and payload fingerprint")
         if self.global_report.decision != "PROCEED":
             raise ValueError("only a PROCEED global report can create a validated trajectory decision")
         if self.global_report.requires_human:
@@ -268,42 +226,18 @@ class ValidatedTrajectoryDecision:
             _validate_finite("candidate expected global gain", candidate.expected_global_gain)
 
     @staticmethod
-    def _payload(
-        decision_id: str,
-        actions: tuple[ValidatedActionRequest, ...],
-        action_to_intervention: tuple[tuple[str, str], ...],
-        human_optimization: HumanOptimizationReport,
-        trajectory_portfolio: TrajectoryPortfolio,
-        trajectory_assessment: TrajectoryAssessment,
-        global_report: GlobalDecisionReport,
-        contract: DelegationContract,
-        policy: PolicyDecision,
-        red_team_findings: tuple[RedTeamFinding, ...],
-        governor: GovernorDecision,
-        execution_target: str,
-        execution_kind: str,
-        provider_name: str | None,
-        operation: str | None,
-        payload_fingerprint: str | None,
-    ) -> dict[str, Any]:
-        return {
-            "decision_id": decision_id,
-            "authorized_actions": actions,
-            "action_to_intervention": tuple(sorted(action_to_intervention)),
-            "human_optimization": human_optimization,
-            "trajectory_portfolio": trajectory_portfolio,
-            "trajectory_assessment": trajectory_assessment,
-            "global_report": global_report,
-            "contract": contract,
-            "policy": policy,
-            "red_team_findings": red_team_findings,
-            "governor": governor,
-            "execution_target": execution_target,
-            "execution_kind": execution_kind,
-            "provider_name": provider_name,
-            "operation": operation,
-            "payload_fingerprint": payload_fingerprint,
-        }
+    def _payload(decision_id: str, actions: tuple[ValidatedActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
+                 human_optimization: HumanOptimizationReport, trajectory_portfolio: TrajectoryPortfolio,
+                 trajectory_assessment: TrajectoryAssessment, global_report: GlobalDecisionReport, contract: DelegationContract,
+                 policy: PolicyDecision, red_team_findings: tuple[RedTeamFinding, ...], governor: GovernorDecision,
+                 execution_target: str, execution_kind: str, provider_name: str | None, provider_target: str | None,
+                 operation: str | None, payload_fingerprint: str | None) -> dict[str, Any]:
+        return {"decision_id": decision_id, "authorized_actions": actions, "action_to_intervention": tuple(sorted(action_to_intervention)),
+                "human_optimization": human_optimization, "trajectory_portfolio": trajectory_portfolio,
+                "trajectory_assessment": trajectory_assessment, "global_report": global_report, "contract": contract,
+                "policy": policy, "red_team_findings": red_team_findings, "governor": governor,
+                "execution_target": execution_target, "execution_kind": execution_kind, "provider_name": provider_name,
+                "provider_target": provider_target, "operation": operation, "payload_fingerprint": payload_fingerprint}
 
 
 def _validate_finite(name: str, value: float, *, minimum: float | None = None, maximum: float | None = None) -> None:
@@ -334,4 +268,10 @@ def _normalize(value: Any) -> Any:
     return value
 
 
-__all__ = ["ValidatedActionRequest", "ValidatedTrajectoryDecision"]
+def payload_fingerprint(payload: Any) -> str:
+    """Canonical fingerprint used to bind an external-effect payload."""
+    canonical = json.dumps(_normalize(payload), sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
+__all__ = ["ValidatedActionRequest", "ValidatedTrajectoryDecision", "payload_fingerprint"]
