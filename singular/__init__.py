@@ -66,6 +66,7 @@ from .human_optimization import (
     OptimizationCandidate,
     OptimizationDisposition,
 )
+from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine, TrajectoryPortfolio
 from .human_optimizer import HumanDomainState, HumanOptimizationPlan, HumanOptimizationPriority, OptimizationAction
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
