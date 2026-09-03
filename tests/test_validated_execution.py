@@ -1,10 +1,8 @@
-from dataclasses import replace
-
 import pytest
 
 from singular.execution import ExecutionResult
 from singular.validated_execution import ValidatedExecutionBoundary
-from tests.test_validated_trajectory_decision import artifacts, build
+from test_validated_trajectory_decision import artifacts, build
 
 
 class FakeDurableExecutor:
