@@ -89,6 +89,7 @@ from .execution_boundary_audit import BoundaryAuditReport, BoundaryFinding, Exec
 from .outcome_ledger import OutcomeLedger, OutcomeObservation
 from .learning_review_queue import LearningReview, LearningReviewQueue
 from .continuous_learning import ContinuousLearningCycle, LearningCycleResult
+from .self_improvement import SelfImprovementEngine, SelfImprovementProposal
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
