@@ -62,7 +62,7 @@ def test_recovery_cannot_be_resolved_twice(tmp_path: Path):
     manager = RecoveryManager(store)
     manager.resolve(key, RecoveryDecision.FAIL)
     with pytest.raises(ValueError, match="RECOVERY_REQUIRED"):
-        manager.resolve(key, RecoveryDecision.CONFIRM, result=True)
+        manager.resolve(key, RecoveryDecision.FAIL, reason="Second resolution attempt.")
 
 
 def test_recovery_transaction_rolls_back_if_mission_cannot_finalize(tmp_path: Path):
