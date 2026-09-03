@@ -56,12 +56,34 @@ def build(**overrides):
         "decision_id": "DEC-1", "issued_at": VALID_FROM, "expires_at": VALID_TO,
         "actions": (action,), "action_to_intervention": ((action.id, "career"),),
         "domain_states": (state,), "interventions": (intervention,), "human_interactions": (), "trajectory_interactions": (),
-        "trajectory_profile": profile, "trajectory_dimensions": dimensions, "value_results": (),
-        "capacity": None, "effort": None, "risks": (), "shared_signals": (), "calibration": {},
-        "portfolio_capacity_budget": 2, "portfolio_max_candidates": 5,
+        "trajectory_profile": profile, "trajectory_dimensions": dimensions, "value_results": (), "capacity": None, "effort": None,
+        "risks": (), "shared_signals": (), "calibration": {}, "portfolio_capacity_budget": 2, "portfolio_max_candidates": 5,
         "human_optimization": human, "trajectory_portfolio": portfolio, "trajectory_assessment": assessment,
         "global_report": report, "contract": contract, "policy": policy, "red_team_findings": findings,
         "governor": governor, "execution_target": HANDLER_CAPABILITY,
+    }
+    values.update(overrides)
+    return ValidatedTrajectoryDecision.create(**values)
+
+
+def recreate(decision, **overrides):
+    values = {
+        "decision_id": decision.decision_id, "issued_at": decision.issued_at, "expires_at": decision.expires_at,
+        "actions": tuple(action.to_action() for action in decision.authorized_actions),
+        "action_to_intervention": decision.action_to_intervention, "domain_states": decision.domain_states,
+        "interventions": decision.interventions, "human_interactions": decision.human_interactions,
+        "trajectory_interactions": decision.trajectory_interactions, "trajectory_profile": decision.trajectory_profile,
+        "trajectory_dimensions": dict(decision.trajectory_dimensions), "value_results": decision.value_results,
+        "capacity": decision.capacity, "effort": decision.effort, "risks": decision.risks,
+        "shared_signals": decision.shared_signals, "calibration": dict(decision.calibration),
+        "portfolio_capacity_budget": decision.portfolio_capacity_budget, "portfolio_max_candidates": decision.portfolio_max_candidates,
+        "human_optimization": decision.human_optimization, "trajectory_portfolio": decision.trajectory_portfolio,
+        "trajectory_assessment": decision.trajectory_assessment, "global_report": decision.global_report,
+        "contract": decision.contract, "policy": decision.policy, "red_team_findings": decision.red_team_findings,
+        "governor": decision.governor, "execution_target": decision.execution_target,
+        "execution_kind": decision.execution_kind, "provider_name": decision.provider_name,
+        "provider_target": decision.provider_target, "operation": decision.operation,
+        "payload_fingerprint": decision.payload_fingerprint,
     }
     values.update(overrides)
     return ValidatedTrajectoryDecision.create(**values)
@@ -147,5 +169,12 @@ def test_temporal_validity_is_part_of_the_fingerprint():
 def test_global_report_cannot_be_forged_without_matching_gate_inputs():
     decision = build()
     forged = replace(decision.global_report, warnings=("FORGED_WARNING",))
-    object.__setattr__(decision, "global_report", forged)
-    assert decision.verify() is False
+    with pytest.raises(ValueError, match="global decision report does not match its validated gate inputs"):
+        recreate(decision, global_report=forged)
+
+
+def test_global_report_tampering_is_rejected_even_when_fingerprint_is_rebuilt():
+    decision = build()
+    forged = replace(decision.global_report, warnings=("FORGED_WARNING",))
+    with pytest.raises(ValueError, match="global decision report does not match its validated gate inputs"):
+        recreate(decision, global_report=forged)
