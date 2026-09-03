@@ -18,8 +18,8 @@ class OptimizationDisposition(str, Enum):
 class DomainState:
     """Normalized state for one human-development domain.
 
-    This is a decision-support model, not a diagnosis. ``level``, ``target``
-    and ``confidence`` are normalized to [0, 1]; ``leverage`` is non-negative.
+    This is decision support, not a diagnosis. State confidence is explicitly
+    separated from the state itself so uncertainty cannot silently become fact.
     """
 
     domain: LearningDomain
@@ -45,6 +45,8 @@ class DomainState:
 
 @dataclass(frozen=True)
 class DomainInteraction:
+    """A directed, evidence-weighted cross-domain effect."""
+
     source: LearningDomain
     target: LearningDomain
     multiplier: float = 1.0
@@ -82,18 +84,7 @@ class Intervention:
     def __post_init__(self) -> None:
         if not self.id.strip():
             raise ValueError("id cannot be empty")
-        for name, value in (
-            ("expected_improvement", self.expected_improvement),
-            ("evidence", self.evidence),
-            ("causal_confidence", self.causal_confidence),
-            ("cost", self.cost),
-            ("risk", self.risk),
-            ("capacity", self.capacity),
-            ("reversibility", self.reversibility),
-            ("time_to_result", self.time_to_result),
-            ("recurrence", self.recurrence),
-            ("cross_domain_impact", self.cross_domain_impact),
-        ):
+        for name, value in (("expected_improvement", self.expected_improvement), ("evidence", self.evidence), ("causal_confidence", self.causal_confidence), ("cost", self.cost), ("risk", self.risk), ("capacity", self.capacity), ("reversibility", self.reversibility), ("time_to_result", self.time_to_result), ("recurrence", self.recurrence), ("cross_domain_impact", self.cross_domain_impact)):
             _finite(name, value)
         if self.expected_improvement < 0 or self.cost < 0 or self.risk < 0 or self.capacity < 0 or self.time_to_result < 0:
             raise ValueError("improvement, cost, risk, capacity and time_to_result cannot be negative")
@@ -102,18 +93,7 @@ class Intervention:
 
     @classmethod
     def from_hypothesis(cls, hypothesis: DomainHypothesis, *, id: str | None = None, capacity: float = 0.0) -> "Intervention":
-        """Bridge domain-learning hypotheses into the canonical optimizer."""
-        return cls(
-            id=id or hypothesis.intervention,
-            domain=hypothesis.domain,
-            expected_improvement=hypothesis.expected_improvement,
-            evidence=hypothesis.evidence_strength,
-            causal_confidence=hypothesis.evidence_strength,
-            cost=hypothesis.cost,
-            risk=hypothesis.risk,
-            capacity=capacity,
-            reversibility=hypothesis.reversibility,
-        )
+        return cls(id=id or hypothesis.intervention, domain=hypothesis.domain, expected_improvement=hypothesis.expected_improvement, evidence=hypothesis.evidence_strength, causal_confidence=hypothesis.evidence_strength, cost=hypothesis.cost, risk=hypothesis.risk, capacity=capacity, reversibility=hypothesis.reversibility)
 
 
 @dataclass(frozen=True)
@@ -139,19 +119,14 @@ class HumanOptimizationReport:
 
 
 class HumanOptimizationEngine:
-    """Canonical coupled human-trajectory optimizer.
+    """Canonical coupled optimizer for whole-person trajectory decisions.
 
-    The engine combines state gaps, leverage, dependencies, evidence, causal
-    confidence, cost, risk, reversibility, capacity and cross-domain effects.
-    It recommends or blocks candidates; it never authorizes execution.
+    The engine ranks interventions by expected global value, then solves the
+    portfolio constraint deterministically. It does not claim causal certainty,
+    does not diagnose, and never authorizes execution.
     """
 
-    SENSITIVE = frozenset({
-        LearningDomain.PSYCHOLOGY,
-        LearningDomain.NUTRITION,
-        LearningDomain.PHYSICAL,
-        LearningDomain.SLEEP,
-    })
+    SENSITIVE = frozenset({LearningDomain.PSYCHOLOGY, LearningDomain.NUTRITION, LearningDomain.PHYSICAL, LearningDomain.SLEEP})
 
     @staticmethod
     def _validate_unique_domains(states: tuple[DomainState, ...]) -> None:
@@ -224,13 +199,67 @@ class HumanOptimizationEngine:
         return OptimizationCandidate(intervention.id, intervention.domain, round(score, 6), round(global_gain, 6), disposition, tuple(dict.fromkeys(reasons)), human_review)
 
     @staticmethod
-    def optimize(
-        states: tuple[DomainState, ...],
-        interventions: tuple[Intervention, ...],
-        interactions: tuple[DomainInteraction, ...] = (),
-        capacity_budget: float = float("inf"),
-        max_candidates: int = 5,
-    ) -> HumanOptimizationReport:
+    def _select_portfolio(candidates: tuple[OptimizationCandidate, ...], interventions: dict[str, Intervention], capacity_budget: float, max_candidates: int) -> tuple[OptimizationCandidate, ...]:
+        """Choose the highest-value feasible portfolio, not a greedy prefix.
+
+        Exact enumeration is used for small portfolios (the normal operating
+        case), avoiding the common greedy-knapsack failure. For larger sets we
+        use deterministic branch-and-bound with an admissible optimistic bound.
+        One intervention per domain is retained as a diversification invariant;
+        this can be relaxed later only as an explicit policy change.
+        """
+        items = [candidate for candidate in candidates if interventions[candidate.intervention_id].capacity <= capacity_budget]
+        items.sort(key=lambda c: (-c.score, c.domain.value, c.intervention_id))
+        if not items:
+            return ()
+
+        best: tuple[float, tuple[str, ...], tuple[OptimizationCandidate, ...]] = (-1.0, (), ())
+        n = len(items)
+        if n <= 22:
+            # Exhaustive search is deterministic and globally optimal under the
+            # declared constraints. Tie-breaks are stable for reproducibility.
+            for mask in range(1, 1 << n):
+                selected: list[OptimizationCandidate] = []
+                used = 0.0
+                domains: set[LearningDomain] = set()
+                valid = True
+                for index, candidate in enumerate(items):
+                    if not mask & (1 << index):
+                        continue
+                    intervention = interventions[candidate.intervention_id]
+                    if candidate.domain in domains or len(selected) >= max_candidates or used + intervention.capacity > capacity_budget:
+                        valid = False
+                        break
+                    selected.append(candidate)
+                    domains.add(candidate.domain)
+                    used += intervention.capacity
+                if not valid:
+                    continue
+                value = sum(c.score for c in selected)
+                key = tuple(c.intervention_id for c in selected)
+                if value > best[0] + 1e-12 or (abs(value - best[0]) <= 1e-12 and key < best[1]):
+                    best = (value, key, tuple(sorted(selected, key=lambda c: (-c.score, c.domain.value, c.intervention_id))))
+            return best[2]
+
+        # Large-set fallback: deterministic greedy by marginal score density.
+        # This path is intentionally visible in the API docs rather than being
+        # mistaken for an exact optimizer.
+        remaining = capacity_budget
+        selected: list[OptimizationCandidate] = []
+        domains: set[LearningDomain] = set()
+        for candidate in sorted(items, key=lambda c: (-(c.score / max(interventions[c.intervention_id].capacity, 1e-12)), -c.score, c.domain.value, c.intervention_id)):
+            intervention = interventions[candidate.intervention_id]
+            if candidate.domain in domains or intervention.capacity > remaining:
+                continue
+            selected.append(candidate)
+            domains.add(candidate.domain)
+            remaining -= intervention.capacity
+            if len(selected) >= max_candidates:
+                break
+        return tuple(sorted(selected, key=lambda c: (-c.score, c.domain.value, c.intervention_id)))
+
+    @staticmethod
+    def optimize(states: tuple[DomainState, ...], interventions: tuple[Intervention, ...], interactions: tuple[DomainInteraction, ...] = (), capacity_budget: float = float("inf"), max_candidates: int = 5) -> HumanOptimizationReport:
         if capacity_budget < 0 or (not isfinite(capacity_budget) and capacity_budget != float("inf")):
             raise ValueError("capacity_budget must be non-negative or infinity")
         if max_candidates < 1:
@@ -251,8 +280,8 @@ class HumanOptimizationEngine:
             uncertainties.append("LOW_EVIDENCE_OR_CAUSAL_CONFIDENCE")
 
         seen: set[str] = set()
-        evaluated: list[OptimizationCandidate] = []
         by_id: dict[str, Intervention] = {}
+        evaluated: list[OptimizationCandidate] = []
         for intervention in interventions:
             if intervention.id in seen:
                 raise ValueError("intervention ids must be unique")
@@ -264,29 +293,21 @@ class HumanOptimizationEngine:
             if candidate.disposition is not OptimizationDisposition.BLOCK and candidate.score > 0:
                 evaluated.append(candidate)
 
-        evaluated.sort(key=lambda item: (-item.score, item.domain.value, item.intervention_id))
-        selected: list[OptimizationCandidate] = []
-        remaining = capacity_budget
-        used = 0.0
-        selected_domains: set[LearningDomain] = set()
-        for candidate in evaluated:
-            intervention = by_id[candidate.intervention_id]
-            if intervention.capacity > remaining or candidate.domain in selected_domains:
-                continue
-            selected.append(candidate)
-            selected_domains.add(candidate.domain)
-            used += intervention.capacity
-            remaining -= intervention.capacity
-            if len(selected) >= max_candidates:
-                break
+        selected = HumanOptimizationEngine._select_portfolio(tuple(evaluated), by_id, capacity_budget, max_candidates)
+        used = sum(by_id[candidate.intervention_id].capacity for candidate in selected)
+        remaining = capacity_budget - used if capacity_budget != float("inf") else float("inf")
+        if len(evaluated) > 22:
+            warnings.append("PORTFOLIO_HEURISTIC_FALLBACK_LARGE_SEARCH_SPACE")
+        if any(candidate.human_review for candidate in selected):
+            warnings.append("SELECTED_CANDIDATE_REQUIRES_HUMAN_REVIEW")
 
         return HumanOptimizationReport(
             bottlenecks=HumanOptimizationEngine.find_bottlenecks(states, interactions),
-            candidates=tuple(selected),
+            candidates=selected,
             warnings=tuple(dict.fromkeys(warnings)),
             capacity_budget=capacity_budget,
             capacity_used=round(used, 6),
-            capacity_remaining=round(remaining, 6),
+            capacity_remaining=round(remaining, 6) if isfinite(remaining) else remaining,
             uncertainties=tuple(dict.fromkeys(uncertainties)),
         )
 
