@@ -70,8 +70,6 @@ class ValidatedTrajectoryPipeline:
         action = actions[0]
         if action.capability not in (None, execution_target):
             raise PermissionError("action capability does not match the validated execution target")
-        # The executable artifact owns the capability binding. A caller may omit it
-        # on the source ActionRequest, but it cannot end up with a different binding.
         action = replace(action, capability=execution_target)
 
         intervention_map = {item.id: item for item in interventions}
@@ -127,7 +125,9 @@ class ValidatedTrajectoryPipeline:
             decision_id=decision_id, issued_at=issued_at, expires_at=expires_at, actions=(action,),
             action_to_intervention=action_to_intervention, domain_states=tuple(domain_states), interventions=tuple(interventions),
             human_interactions=human_interactions, trajectory_interactions=trajectory_interactions,
-            portfolio_capacity_budget=capacity_budget, portfolio_max_candidates=max_portfolio_candidates,
+            trajectory_profile=trajectory_profile, trajectory_dimensions=trajectory_dimensions, value_results=tuple(value_results),
+            capacity=capacity, effort=effort, risks=tuple(risks or ()), shared_signals=tuple(shared_signals),
+            calibration=calibration, portfolio_capacity_budget=capacity_budget, portfolio_max_candidates=max_portfolio_candidates,
             human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
             global_report=global_report, contract=contract, policy=ActionPolicy.evaluate(action),
             red_team_findings=global_report.red_team_findings, governor=Governor.evaluate(action, contract),
