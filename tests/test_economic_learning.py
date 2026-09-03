@@ -14,6 +14,7 @@ def result(action_id: str, observed: bool) -> ExecutionResult:
         status=ExecutionStatus.SUCCEEDED if observed else ExecutionStatus.FAILED,
         success=observed,
         observed_value=observed,
+        error=None if observed else "test failure",
     )
 
 
