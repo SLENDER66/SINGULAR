@@ -58,6 +58,10 @@ class WorldOpportunity:
     window: str | None = None
     synergies: tuple[str, ...] = ()
     classification: OpportunityClass = OpportunityClass.NORMAL
+    epistemic: EpistemicType = EpistemicType.HYPOTHESIS
+    confidence: float = 0.5
+    source: str | None = None
+    notes: str | None = None
 
     def __post_init__(self) -> None:
         for name, value in (("potential", self.potential), ("probability", self.probability), ("reversibility", self.reversibility)):
@@ -65,6 +69,10 @@ class WorldOpportunity:
                 raise ValueError(f"{name} must be between 0 and 1")
         if self.cost < 0 or self.time < 0 or self.risk < 0:
             raise ValueError("cost, time and risk cannot be negative")
+        if not 0 <= self.confidence <= 1:
+            raise ValueError("confidence must be between 0 and 1")
+        if self.epistemic == EpistemicType.FACT and not self.source:
+            raise ValueError("FACT opportunities require a source")
 
     @property
     def leverage_score(self) -> float:

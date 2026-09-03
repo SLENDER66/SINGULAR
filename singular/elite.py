@@ -23,14 +23,14 @@ class EliteScore:
 
     @property
     def weakest(self) -> str:
-        values = {
+        values: dict[str, float] = {
             "expertise": self.expertise,
             "evidence": self.evidence,
             "outcome": self.outcome,
             "calibration": self.calibration,
             "learning": self.learning,
         }
-        return min(values, key=values.get)
+        return min(values, key=lambda key: values[key])
 
 
 @dataclass(frozen=True)
@@ -43,8 +43,6 @@ class EliteReview:
 
 
 class ConflictType(str, Enum):
-    """Kinds of disagreement with an explicit owner for resolution."""
-
     FACTUAL = "FACTUAL"
     FORECAST = "FORECAST"
     STRATEGIC = "STRATEGIC"
@@ -63,12 +61,7 @@ class ConflictResolution:
 
 
 class EliteEngine:
-    """Continuously raise agent quality without creating agent power struggles.
-
-    "Elite" is never a status. It is a measured trajectory. Specialists may
-    disagree, but disagreement is routed by type; no agent wins by assertion,
-    and advice never becomes authorization.
-    """
+    """Continuously raise agent quality without creating agent power struggles."""
 
     _DIRECTIVES = {
         "expertise": "Deepen domain expertise and stay inside the specialty.",
@@ -81,13 +74,7 @@ class EliteEngine:
     @classmethod
     def review(cls, agent: str, score: EliteScore) -> EliteReview:
         weakest = score.weakest
-        return EliteReview(
-            agent=agent,
-            score=score.total,
-            priority=weakest,
-            directive=cls._DIRECTIVES[weakest],
-            wealth_relevance=cls.wealth_relevance(weakest),
-        )
+        return EliteReview(agent, score.total, weakest, cls._DIRECTIVES[weakest], cls.wealth_relevance(weakest))
 
     @staticmethod
     def wealth_relevance(priority: str) -> str:
@@ -105,7 +92,6 @@ class EliteEngine:
 
     @staticmethod
     def challenge(agent: str, review: EliteReview) -> dict[str, str]:
-        """Create a cross-agent challenge without granting execution authority."""
         return {
             "challenger": "RED_TEAM",
             "target": agent,
@@ -117,7 +103,6 @@ class EliteEngine:
 
     @staticmethod
     def resolve_conflict(conflict_type: ConflictType) -> ConflictResolution:
-        """Route disagreement to the correct authority; never resolve by assertion."""
         routes = {
             ConflictType.FACTUAL: ("INTELLIGENCE", "Verify the disputed claim against the strongest available evidence.", False),
             ConflictType.FORECAST: ("STRATEGY", "Compare assumptions, scenarios and calibration against prior outcomes.", False),
