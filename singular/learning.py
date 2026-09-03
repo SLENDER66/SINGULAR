@@ -152,12 +152,14 @@ class LearningEngine:
                 "mean_brier_score": 0.0,
                 "binary_count": 0,
             }
-        binary = [record for record in records if record.brier_score is not None]
+        brier_scores = [
+            record.brier_score for record in records if record.brier_score is not None
+        ]
         return {
             "count": len(records),
-            "mean_absolute_error": round(sum(r.error for r in records) / len(records), 6),
-            "mean_brier_score": round(sum(r.brier_score for r in binary) / len(binary), 6)
-            if binary
+            "mean_absolute_error": round(sum(record.error for record in records) / len(records), 6),
+            "mean_brier_score": round(sum(brier_scores) / len(brier_scores), 6)
+            if brier_scores
             else 0.0,
-            "binary_count": len(binary),
+            "binary_count": len(brier_scores),
         }
