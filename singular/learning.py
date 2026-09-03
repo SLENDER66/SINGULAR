@@ -112,16 +112,28 @@ class LearningEngine:
         strength = min(1.0, record.forecast_confidence + (0.25 if repeated_pattern else 0.0))
         if record.kind == ForecastKind.BINARY:
             if record.brier_score is not None and record.brier_score >= 0.25:
-                hypothesis = "Réduire la confiance accordée à des prévisions similaires jusqu'à nouvelle preuve."
+                hypothesis = (
+                    "Réduire la confiance accordée à des prévisions similaires "
+                    "jusqu'à nouvelle preuve."
+                )
                 action = "REVIEW_FORECAST_METHOD"
             else:
-                hypothesis = "Conserver la méthode et vérifier sa calibration sur davantage de résultats."
+                hypothesis = (
+                    "Conserver la méthode et vérifier sa calibration sur "
+                    "davantage de résultats."
+                )
                 action = "COLLECT_MORE_EVIDENCE"
         elif record.error >= 1:
-            hypothesis = "Réexaminer les hypothèses quantitatives qui ont produit cette estimation."
+            hypothesis = (
+                "Réexaminer les hypothèses quantitatives qui ont produit "
+                "cette estimation."
+            )
             action = "REVIEW_ASSUMPTIONS"
         else:
-            hypothesis = "L'estimation reste compatible avec l'erreur observée; accumuler davantage de données."
+            hypothesis = (
+                "L'estimation reste compatible avec l'erreur observée; "
+                "accumuler davantage de données."
+            )
             action = "COLLECT_MORE_EVIDENCE"
         return LearningUpdate(
             record.forecast_id,
