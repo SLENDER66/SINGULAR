@@ -62,6 +62,7 @@ DEFAULT_INVARIANTS = ArchitectureInvariantRegistry(
     (
         ArchitectureInvariant("AUTH-001", "No side effect occurs without a validated decision and valid durable attestation."),
         ArchitectureInvariant("AUTH-002", "The executed action, contract, capability, provider and payload are bound to the validated decision."),
+        ArchitectureInvariant("AUTH-003", "An approval identity is immutable after creation and a terminal approval cannot be rewritten."),
         ArchitectureInvariant("EXEC-001", "Execution is idempotent for a given execution identity."),
         ArchitectureInvariant("EXEC-002", "A restart cannot manufacture a successful execution result absent durable evidence."),
         ArchitectureInvariant("EXEC-003", "A RECOVERY_REQUIRED execution cannot be replayed, confirmed, or finalized through the normal execution path."),
