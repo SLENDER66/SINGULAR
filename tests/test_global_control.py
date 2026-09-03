@@ -1,4 +1,8 @@
+import sqlite3
+
 from singular.autopilot import ActionRequest
+from singular.coherence import GlobalCoherenceGuard
+from singular.consistency import CrossDomainConsistencyChecker
 from singular.global_control import GlobalDecisionGate
 from singular.models import Risk
 from singular.state import CapacitySnapshot
@@ -60,3 +64,21 @@ def test_global_gate_never_executes_sensitive_action():
     assert report.decision == "BLOCK"
     assert report.policy_tier == "BLACK"
     assert report.governor_mode.value == "ESCALATE"
+
+
+def test_global_gate_fails_closed_on_durable_coherence_violation(tmp_path):
+    db = tmp_path / "state.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE mission_states (mission_id TEXT PRIMARY KEY, status TEXT NOT NULL)")
+        conn.execute("CREATE TABLE executions (execution_key TEXT PRIMARY KEY, mission_id TEXT NOT NULL, action_id TEXT, status TEXT NOT NULL)")
+        conn.execute("CREATE TABLE external_effects (provider_idempotency_key TEXT PRIMARY KEY, execution_key TEXT NOT NULL, status TEXT NOT NULL)")
+        conn.execute("INSERT INTO mission_states VALUES ('M1', 'COMPLETED')")
+        conn.execute("INSERT INTO executions VALUES ('E1', 'M1', 'A1', 'RUNNING')")
+        conn.commit()
+
+    gate = GlobalDecisionGate(
+        coherence_guard=GlobalCoherenceGuard(CrossDomainConsistencyChecker(db))
+    )
+    report = gate.evaluate("objectif", action(), mission_id="M1")
+    assert report.decision == "BLOCK"
+    assert "COHERENCE:MISSION_COMPLETED_WITH_NONTERMINAL_EXECUTION" in report.blockers
