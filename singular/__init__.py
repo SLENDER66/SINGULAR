@@ -19,7 +19,6 @@ from .v32_governed_core import (
     WorkforcePlan,
     WorkforceRouter,
 )
-
 from .mission_runtime import DurableMissionRuntime, MissionState
 from .durable import DurableStore, MissionStatus
 from .effects import EffectInProgress, EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
@@ -56,6 +55,7 @@ from .collective_intelligence import CollectiveIntelligence, Deliberation, Knowl
 from .enterprise_core import EnterpriseOperatingCore, Initiative, InitiativeStatus, KPI, OperatingAllocation, OperatingDecision, OperatingPlan
 from .portfolio_reallocation import DynamicPortfolioEngine, InitiativePerformance, InitiativeResult, Reallocation, ReallocationAction, ReallocationPlan
 from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryEngine, TrajectoryProfile
+from .domain_learning import DomainHypothesis, DomainLearningResult, DomainObservation, LearningDisposition, LearningDomain, UniversalLearningEngine
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
