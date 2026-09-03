@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from math import isfinite
 from typing import Any
 
 from .autopilot import ActionRequest, DelegationContract, Governor
@@ -17,41 +18,19 @@ from .values import ValueAssessmentResult
 
 
 class ValidatedTrajectoryPipeline:
-    """Build the only artifact accepted by the strict execution boundary.
-
-    The order is fixed: domain state -> human optimization -> trajectory
-    portfolio -> trajectory assessment -> global decision gate -> validated
-    decision. Any missing, non-executable or inconsistent stage fails closed.
-    """
+    """Build the only artifact accepted by the strict execution boundary."""
 
     @staticmethod
     def build(
-        *,
-        objective: str,
-        actions: tuple[ActionRequest, ...],
-        action_to_intervention: tuple[tuple[str, str], ...],
-        domain_states: Sequence[DomainState],
-        interventions: Sequence[Intervention],
-        trajectory_profile: TrajectoryProfile,
-        trajectory_dimensions: dict[str, float],
-        contract: DelegationContract,
-        execution_target: str,
-        execution_kind: str = "handler",
-        provider_name: str | None = None,
-        provider_target: str | None = None,
-        operation: str | None = None,
-        execution_payload: Any = None,
-        human_interactions: tuple[DomainInteraction, ...] = (),
-        trajectory_interactions: tuple[TrajectoryInteraction, ...] = (),
-        value_results: tuple[ValueAssessmentResult, ...] = (),
-        capacity: CapacitySnapshot | None = None,
-        effort: float | None = None,
-        risks: list[Any] | None = None,
-        shared_signals: tuple[Any, ...] = (),
-        calibration: dict[str, float] | None = None,
-        gate: GlobalDecisionGate | None = None,
-        capacity_budget: float | None = None,
-        max_portfolio_candidates: int = 5,
+        *, objective: str, actions: tuple[ActionRequest, ...], action_to_intervention: tuple[tuple[str, str], ...],
+        domain_states: Sequence[DomainState], interventions: Sequence[Intervention], trajectory_profile: TrajectoryProfile,
+        trajectory_dimensions: dict[str, float], contract: DelegationContract, execution_target: str,
+        execution_kind: str = "handler", provider_name: str | None = None, provider_target: str | None = None,
+        operation: str | None = None, execution_payload: Any = None, human_interactions: tuple[DomainInteraction, ...] = (),
+        trajectory_interactions: tuple[TrajectoryInteraction, ...] = (), value_results: tuple[ValueAssessmentResult, ...] = (),
+        capacity: CapacitySnapshot | None = None, effort: float | None = None, risks: list[Any] | None = None,
+        shared_signals: tuple[Any, ...] = (), calibration: dict[str, float] | None = None,
+        gate: GlobalDecisionGate | None = None, capacity_budget: float | None = None, max_portfolio_candidates: int = 5,
         decision_id: str = "",
     ) -> ValidatedTrajectoryDecision:
         if not objective.strip():
@@ -64,16 +43,19 @@ class ValidatedTrajectoryPipeline:
             raise ValueError("objective must match the execution contract")
         if execution_kind not in {"handler", "external_effect"}:
             raise ValueError("execution_kind must be handler or external_effect")
+        if capacity_budget is None or not isfinite(capacity_budget) or capacity_budget < 0:
+            raise ValueError("a finite non-negative capacity_budget is required for executable validation")
+        if max_portfolio_candidates < 1:
+            raise ValueError("max_portfolio_candidates must be positive")
 
         intervention_map = {item.id: item for item in interventions}
         if len(intervention_map) != len(interventions):
             raise ValueError("intervention ids must be unique")
-        budget = capacity_budget if capacity_budget is not None else float("inf")
 
-        human = HumanOptimizationEngine.optimize(tuple(domain_states), tuple(interventions), human_interactions, capacity_budget=budget)
+        human = HumanOptimizationEngine.optimize(tuple(domain_states), tuple(interventions), human_interactions, capacity_budget=capacity_budget)
         portfolio = TrajectoryOptimizationEngine.optimize(
             human.candidates, intervention_map, trajectory_interactions,
-            capacity_budget=budget, max_candidates=max_portfolio_candidates,
+            capacity_budget=capacity_budget, max_candidates=max_portfolio_candidates,
         )
         if not portfolio.candidates:
             raise PermissionError("No executable trajectory portfolio was produced.")
@@ -117,7 +99,7 @@ class ValidatedTrajectoryPipeline:
         return ValidatedTrajectoryDecision.create(
             decision_id=decision_id, actions=actions, action_to_intervention=action_to_intervention,
             domain_states=tuple(domain_states), interventions=tuple(interventions), human_interactions=human_interactions,
-            trajectory_interactions=trajectory_interactions, portfolio_capacity_budget=budget,
+            trajectory_interactions=trajectory_interactions, portfolio_capacity_budget=capacity_budget,
             portfolio_max_candidates=max_portfolio_candidates, human_optimization=human,
             trajectory_portfolio=portfolio, trajectory_assessment=assessment, global_report=global_report,
             contract=contract, policy=ActionPolicy.evaluate(action), red_team_findings=global_report.red_team_findings,
