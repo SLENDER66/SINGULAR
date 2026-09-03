@@ -72,6 +72,7 @@ class MetaAuditEngine:
         stale_rule_count: int = 0,
         low_information_decision_count: int = 0,
     ) -> MetaAuditReport:
+        del cls
         for name, value in (
             ("unknown_count", unknown_count),
             ("contradiction_count", contradiction_count),
@@ -84,41 +85,69 @@ class MetaAuditEngine:
         findings: list[MetaAuditFinding] = []
         for calibration in sorted(calibrations, key=lambda item: item.agent_id):
             if calibration.forecast_count >= 5 and calibration.mean_absolute_error >= 0.4:
-                findings.append(MetaAuditFinding(
-                    "MIS_CALIBRATED_AGENT", MetaAuditSeverity.WARNING, calibration.agent_id,
-                    f"MAE={calibration.mean_absolute_error:.3f} over {calibration.forecast_count} forecasts",
-                    "REVIEW_FORECAST_METHOD_AND_ASSUMPTIONS",
-                ))
-            if calibration.mean_brier_score is not None and calibration.forecast_count >= 5 and calibration.mean_brier_score >= 0.25:
-                findings.append(MetaAuditFinding(
-                    "POOR_BINARY_CALIBRATION", MetaAuditSeverity.WARNING, calibration.agent_id,
-                    f"Brier={calibration.mean_brier_score:.3f} over {calibration.forecast_count} forecasts",
-                    "RECALIBRATE_BEFORE_HIGH_CONSEQUENCE_USE",
-                ))
+                findings.append(
+                    MetaAuditFinding(
+                        "MIS_CALIBRATED_AGENT",
+                        MetaAuditSeverity.WARNING,
+                        calibration.agent_id,
+                        f"MAE={calibration.mean_absolute_error:.3f} over {calibration.forecast_count} forecasts",
+                        "REVIEW_FORECAST_METHOD_AND_ASSUMPTIONS",
+                    )
+                )
+            if (
+                calibration.mean_brier_score is not None
+                and calibration.forecast_count >= 5
+                and calibration.mean_brier_score >= 0.25
+            ):
+                findings.append(
+                    MetaAuditFinding(
+                        "POOR_BINARY_CALIBRATION",
+                        MetaAuditSeverity.WARNING,
+                        calibration.agent_id,
+                        f"Brier={calibration.mean_brier_score:.3f} over {calibration.forecast_count} forecasts",
+                        "RECALIBRATE_BEFORE_HIGH_CONSEQUENCE_USE",
+                    )
+                )
         if unknown_count > 0:
-            findings.append(MetaAuditFinding(
-                "UNRESOLVED_UNKNOWNS", MetaAuditSeverity.WARNING, "WORLD_MODEL",
-                f"{unknown_count} unknown inputs remain",
-                "RESOLVE_OR_EXPLICITLY_ACCEPT_UNCERTAINTY",
-            ))
+            findings.append(
+                MetaAuditFinding(
+                    "UNRESOLVED_UNKNOWNS",
+                    MetaAuditSeverity.WARNING,
+                    "WORLD_MODEL",
+                    f"{unknown_count} unknown inputs remain",
+                    "RESOLVE_OR_EXPLICITLY_ACCEPT_UNCERTAINTY",
+                )
+            )
         if contradiction_count > 0:
-            findings.append(MetaAuditFinding(
-                "WORLD_MODEL_CONTRADICTION", MetaAuditSeverity.CRITICAL, "WORLD_MODEL",
-                f"{contradiction_count} contradictions detected",
-                "BLOCK_HIGH_CONSEQUENCE_DECISIONS_UNTIL_RESOLVED",
-            ))
+            findings.append(
+                MetaAuditFinding(
+                    "WORLD_MODEL_CONTRADICTION",
+                    MetaAuditSeverity.CRITICAL,
+                    "WORLD_MODEL",
+                    f"{contradiction_count} contradictions detected",
+                    "BLOCK_HIGH_CONSEQUENCE_DECISIONS_UNTIL_RESOLVED",
+                )
+            )
         if stale_rule_count > 0:
-            findings.append(MetaAuditFinding(
-                "STALE_RULES", MetaAuditSeverity.WARNING, "SYSTEM",
-                f"{stale_rule_count} potentially obsolete rules",
-                "REVIEW_RULES_AGAINST_NEW_EVIDENCE",
-            ))
+            findings.append(
+                MetaAuditFinding(
+                    "STALE_RULES",
+                    MetaAuditSeverity.WARNING,
+                    "SYSTEM",
+                    f"{stale_rule_count} potentially obsolete rules",
+                    "REVIEW_RULES_AGAINST_NEW_EVIDENCE",
+                )
+            )
         if low_information_decision_count > 0:
-            findings.append(MetaAuditFinding(
-                "LOW_INFORMATION_DECISIONS", MetaAuditSeverity.INFO, "DECISION_ENGINE",
-                f"{low_information_decision_count} decisions have weak evidence density",
-                "INCREASE_EVIDENCE_CAPTURE_AND_FORECASTING",
-            ))
+            findings.append(
+                MetaAuditFinding(
+                    "LOW_INFORMATION_DECISIONS",
+                    MetaAuditSeverity.INFO,
+                    "DECISION_ENGINE",
+                    f"{low_information_decision_count} decisions have weak evidence density",
+                    "INCREASE_EVIDENCE_CAPTURE_AND_FORECASTING",
+                )
+            )
         return MetaAuditReport(
             tuple(findings),
             not any(item.severity is MetaAuditSeverity.CRITICAL for item in findings),
