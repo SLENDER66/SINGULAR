@@ -16,8 +16,6 @@ class EmpireStage(str, Enum):
 
 @dataclass(frozen=True)
 class EmpireAsset:
-    """A productive asset evaluated by ownership, cash flow and strategic control."""
-
     id: str
     name: str
     value: float
@@ -49,23 +47,18 @@ class EmpireAssessment:
     concentration_risk: float
     score: float
     priorities: tuple[str, ...]
-    systemization: float = 0.0
-    governance: float = 0.0
-    succession: float = 0.0
+    systemization: float | None = None
+    governance: float | None = None
+    succession: float | None = None
 
 
 class EmpireEngine:
-    """Measure whether wealth is becoming durable productive ownership.
-
-    Institutional maturity is explicit: a large asset base alone is not an
-    institution. Systemization, governance and succession must also be present.
-    The engine is advisory only.
-    """
+    """Measure wealth maturity without treating unknown institutional data as zero."""
 
     @staticmethod
-    def assess(assets: list[EmpireAsset], *, systemization: float = 0.0, governance: float = 0.0, succession: float = 0.0) -> EmpireAssessment:
+    def assess(assets: list[EmpireAsset], *, systemization: float | None = None, governance: float | None = None, succession: float | None = None) -> EmpireAssessment:
         for name, value in (("systemization", systemization), ("governance", governance), ("succession", succession)):
-            if not 0 <= value <= 1:
+            if value is not None and not 0 <= value <= 1:
                 raise ValueError(f"{name} must be between 0 and 1")
         if not assets:
             return EmpireAssessment(EmpireStage.FOUNDATION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ("BUILD_FIRST_PRODUCTIVE_ASSET",), systemization, governance, succession)
@@ -81,7 +74,7 @@ class EmpireEngine:
         durability = sum(asset.value * asset.durability for asset in assets) / productive_value
 
         score = round((ownership_value * (1 + growth) + cash_flow + productive_value * weighted_control * durability) / (1 + productive_value * concentration), 6)
-        institutional = (ownership_value / productive_value >= 0.7 and weighted_control >= 0.7 and durability >= 0.8 and concentration <= 0.5 and systemization >= 0.7 and governance >= 0.7 and succession >= 0.7)
+        institutional = all(value is not None for value in (systemization, governance, succession)) and ownership_value / productive_value >= 0.7 and weighted_control >= 0.7 and durability >= 0.8 and concentration <= 0.5 and systemization >= 0.7 and governance >= 0.7 and succession >= 0.7
         if institutional:
             stage = EmpireStage.INSTITUTION
         elif ownership_value <= 0:
@@ -104,11 +97,11 @@ class EmpireEngine:
             priorities.append("REDUCE_SINGLE_ASSET_CONCENTRATION")
         if durability < 0.6:
             priorities.append("IMPROVE_DURABILITY_AND_SYSTEMIZATION")
-        if systemization < 0.7:
+        if systemization is not None and systemization < 0.7:
             priorities.append("SYSTEMIZE_BEYOND_FOUNDER_TIME")
-        if governance < 0.7:
+        if governance is not None and governance < 0.7:
             priorities.append("BUILD_GOVERNANCE")
-        if succession < 0.7:
+        if succession is not None and succession < 0.7:
             priorities.append("BUILD_SUCCESSION_AND_PATRIMONY_CONTINUITY")
         if not priorities and stage in {EmpireStage.COMPOUNDING, EmpireStage.CONTROL, EmpireStage.INSTITUTION}:
             priorities.append("REINVEST_AND_COMPOUND")
