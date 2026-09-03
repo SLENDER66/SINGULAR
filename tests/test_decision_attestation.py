@@ -5,6 +5,7 @@ import pytest
 
 from singular.decision_attestation import DecisionAttestationStore, ValidatedDecisionIssuer
 from tests.test_validated_pipeline import _build_decision
+from tests.test_validated_trajectory_decision import recreate
 
 
 def test_attestation_is_durable_and_matches_exact_decision(tmp_path):
@@ -30,8 +31,9 @@ def test_different_context_cannot_reuse_same_decision_id(tmp_path):
     decision = _build_decision()
     store = DecisionAttestationStore(tmp_path / "attestations.db")
     store.issue(decision)
-    forged = replace(decision, decision_id="DEC-OTHER")
-    assert store.verify(forged) is False
+    altered = recreate(decision, issued_at=decision.issued_at + 1.0)
+    with pytest.raises(ValueError, match="different context fingerprint"):
+        store.issue(altered)
 
 
 def test_reissued_same_decision_is_idempotent_but_reissue_after_revocation_is_forbidden(tmp_path):
