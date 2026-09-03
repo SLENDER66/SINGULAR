@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
-from typing import Iterable
 
 from .domain_learning import DomainHypothesis, LearningDomain
 
@@ -19,30 +18,29 @@ class OptimizationDisposition(str, Enum):
 class DomainState:
     """Normalized state for one human-development domain.
 
-    This is a decision-support model, not a diagnosis. ``level`` and
-    ``confidence`` are normalized to [0, 1]. ``leverage`` is non-negative.
+    This is a decision-support model, not a diagnosis. ``level``, ``target``
+    and ``confidence`` are normalized to [0, 1]; ``leverage`` is non-negative.
     """
 
     domain: LearningDomain
     level: float
+    target: float = 1.0
     confidence: float = 0.5
     leverage: float = 1.0
     capacity_cost: float = 0.0
     sensitive: bool = False
 
     def __post_init__(self) -> None:
-        _finite("level", self.level)
-        _finite("confidence", self.confidence)
-        _finite("leverage", self.leverage)
-        _finite("capacity_cost", self.capacity_cost)
-        if not 0 <= self.level <= 1 or not 0 <= self.confidence <= 1:
-            raise ValueError("level and confidence must be between 0 and 1")
+        for name, value in (("level", self.level), ("target", self.target), ("confidence", self.confidence), ("leverage", self.leverage), ("capacity_cost", self.capacity_cost)):
+            _finite(name, value)
+        if not 0 <= self.level <= 1 or not 0 <= self.target <= 1 or not 0 <= self.confidence <= 1:
+            raise ValueError("level, target and confidence must be between 0 and 1")
         if self.leverage < 0 or self.capacity_cost < 0:
             raise ValueError("leverage and capacity_cost cannot be negative")
 
     @property
     def gap(self) -> float:
-        return 1.0 - self.level
+        return max(0.0, self.target - self.level)
 
 
 @dataclass(frozen=True)
@@ -162,10 +160,7 @@ class HumanOptimizationEngine:
             raise ValueError("domain states must be unique")
 
     @staticmethod
-    def find_bottlenecks(
-        states: tuple[DomainState, ...],
-        interactions: tuple[DomainInteraction, ...] = (),
-    ) -> tuple[LearningDomain, ...]:
+    def find_bottlenecks(states: tuple[DomainState, ...], interactions: tuple[DomainInteraction, ...] = ()) -> tuple[LearningDomain, ...]:
         HumanOptimizationEngine._validate_unique_domains(states)
         scores: list[tuple[float, LearningDomain]] = []
         for state in states:
@@ -176,11 +171,7 @@ class HumanOptimizationEngine:
         return tuple(domain for _, domain in sorted(scores, key=lambda item: (-item[0], item[1].value)))
 
     @staticmethod
-    def evaluate(
-        intervention: Intervention,
-        states: tuple[DomainState, ...],
-        interactions: tuple[DomainInteraction, ...] = (),
-    ) -> OptimizationCandidate:
+    def evaluate(intervention: Intervention, states: tuple[DomainState, ...], interactions: tuple[DomainInteraction, ...] = ()) -> OptimizationCandidate:
         HumanOptimizationEngine._validate_unique_domains(states)
         state = next((item for item in states if item.domain is intervention.domain), None)
         if state is None:
@@ -218,12 +209,7 @@ class HumanOptimizationEngine:
         if incoming:
             reasons.append("DEPENDENCY_EFFECT")
 
-        human_review = bool(
-            state.sensitive
-            or intervention.domain in HumanOptimizationEngine.SENSITIVE
-            or intervention.reversibility <= 0.2
-            or state.confidence < 0.5
-        )
+        human_review = bool(state.sensitive or intervention.domain in HumanOptimizationEngine.SENSITIVE or intervention.reversibility <= 0.2 or state.confidence < 0.5)
         if human_review:
             reasons.append("SENSITIVE_OR_HIGH_CONSEQUENCE_REVIEW")
 
@@ -235,15 +221,7 @@ class HumanOptimizationEngine:
         else:
             disposition = OptimizationDisposition.PROPOSE
 
-        return OptimizationCandidate(
-            intervention.id,
-            intervention.domain,
-            round(score, 6),
-            round(global_gain, 6),
-            disposition,
-            tuple(dict.fromkeys(reasons)),
-            human_review,
-        )
+        return OptimizationCandidate(intervention.id, intervention.domain, round(score, 6), round(global_gain, 6), disposition, tuple(dict.fromkeys(reasons)), human_review)
 
     @staticmethod
     def optimize(
