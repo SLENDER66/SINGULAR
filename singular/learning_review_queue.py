@@ -2,7 +2,8 @@
 
 Observed forecast errors can create learning proposals, but proposals remain
 explicitly reviewable and cannot mutate execution policy or authorization by
-themselves.
+themselves. A proposal may only be created from an outcome that is already
+persisted and integrity-verified in the outcome ledger.
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from math import isfinite
 from pathlib import Path
 
 from .learning import CalibrationRecord, LearningEngine, LearningUpdate
-from .outcome_ledger import OutcomeObservation
+from .outcome_ledger import OutcomeLedger, OutcomeObservation
 
 
 @dataclass(frozen=True)
@@ -41,9 +42,10 @@ class LearningReview:
 class LearningReviewQueue:
     """Persist reviewable learning proposals without self-modifying execution rules."""
 
-    def __init__(self, path: str | Path = "data/singular.db") -> None:
+    def __init__(self, path: str | Path = "data/singular.db", *, outcome_ledger: OutcomeLedger | None = None) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.outcome_ledger = outcome_ledger or OutcomeLedger(self.path)
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
@@ -70,7 +72,16 @@ class LearningReviewQueue:
                 """
             )
 
+    def _verified_outcome(self, outcome: OutcomeObservation) -> OutcomeObservation:
+        if not self.outcome_ledger.verify():
+            raise PermissionError("outcome ledger integrity is invalid")
+        persisted = next((item for item in self.outcome_ledger.list() if item.record_id == outcome.record_id), None)
+        if persisted is None or persisted != outcome:
+            raise PermissionError("learning proposal must reference the exact persisted outcome record")
+        return persisted
+
     def propose(self, outcome: OutcomeObservation, *, repeated_pattern: bool = False) -> LearningReview:
+        outcome = self._verified_outcome(outcome)
         calibration = CalibrationRecord(
             forecast_id=outcome.forecast_id,
             kind=outcome.forecast_kind,
@@ -89,16 +100,39 @@ class LearningReviewQueue:
                 return self._row(existing)
             conn.execute(
                 "INSERT INTO learning_reviews(review_id,outcome_record_id,forecast_id,lesson,hypothesis,evidence_strength,recommended_action,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
-                (review_id, outcome.record_id, outcome.forecast_id, update.lesson, update.hypothesis, update.evidence_strength, update.recommended_action, "PENDING", created_at),
+                (
+                    review_id,
+                    outcome.record_id,
+                    outcome.forecast_id,
+                    update.lesson,
+                    update.hypothesis,
+                    update.evidence_strength,
+                    update.recommended_action,
+                    "PENDING",
+                    created_at,
+                ),
             )
-        return LearningReview(review_id, outcome.record_id, outcome.forecast_id, update.lesson, update.hypothesis, update.evidence_strength, update.recommended_action, "PENDING", created_at)
+        return LearningReview(
+            review_id,
+            outcome.record_id,
+            outcome.forecast_id,
+            update.lesson,
+            update.hypothesis,
+            update.evidence_strength,
+            update.recommended_action,
+            "PENDING",
+            created_at,
+        )
 
     def review(self, review_id: str, status: str) -> LearningReview:
         if status not in {"ACCEPTED", "REJECTED"}:
             raise ValueError("review status must be ACCEPTED or REJECTED")
         reviewed_at = datetime.now(UTC).isoformat()
         with self._connect() as conn:
-            cur = conn.execute("UPDATE learning_reviews SET status=?, reviewed_at=? WHERE review_id=? AND status='PENDING'", (status, reviewed_at, review_id))
+            cur = conn.execute(
+                "UPDATE learning_reviews SET status=?, reviewed_at=? WHERE review_id=? AND status='PENDING'",
+                (status, reviewed_at, review_id),
+            )
             if cur.rowcount != 1:
                 raise KeyError(review_id)
             row = conn.execute("SELECT * FROM learning_reviews WHERE review_id=?", (review_id,)).fetchone()
@@ -111,8 +145,16 @@ class LearningReviewQueue:
 
     def _row(self, row: sqlite3.Row) -> LearningReview:
         return LearningReview(
-            row["review_id"], row["outcome_record_id"], row["forecast_id"], row["lesson"], row["hypothesis"],
-            float(row["evidence_strength"]), row["recommended_action"], row["status"], row["created_at"], row["reviewed_at"],
+            row["review_id"],
+            row["outcome_record_id"],
+            row["forecast_id"],
+            row["lesson"],
+            row["hypothesis"],
+            float(row["evidence_strength"]),
+            row["recommended_action"],
+            row["status"],
+            row["created_at"],
+            row["reviewed_at"],
         )
 
 
