@@ -29,11 +29,11 @@ class Commander:
         blockers: list[str] | None = None,
         state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Return a compact operating brief without executing anything.
+        """Produce a compact operating brief without executing anything.
 
-        The Commander deliberately does only four things: focus the objective,
-        select the highest-leverage next action, expose blockers, and define the
-        decision gate. Execution remains governed elsewhere.
+        The Commander does four things: focus the objective, select the best
+        next move, expose blockers, and define the human decision gate.
+        Execution remains governed elsewhere.
         """
         blockers = list(blockers or [])
         state = dict(state or {})
@@ -47,11 +47,11 @@ class Commander:
             next_move = "Obtenir les informations minimales nécessaires pour choisir une action."
             mode = "CLARIFY"
         else:
-            next_move = best.description
+            next_move = best.name
             mode = "ACT"
 
-        risk = float(getattr(best, "risk", 0.0)) if best is not None else 0.0
-        human_gate = risk >= 8.0 or (best is not None and getattr(best, "reversibility", 5.0) <= 2.0)
+        risk = float(best.risk) if best is not None else 0.0
+        human_gate = risk >= 8.0 or (best is not None and best.reversibility <= 2.0)
 
         return {
             "objective": objective,
