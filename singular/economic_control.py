@@ -112,11 +112,15 @@ class EconomicControlPlane:
             founder_independence=generational_metrics["founder_independence"],
             institutional_resilience=generational_metrics["institutional_resilience"],
         )
-        sequence_steps = economic_sequence_steps or EconomicControlPlane._derive_sequence_steps(
-            cashflow_opportunities,
-            rapid_cash,
-            wealth_opportunities,
-            wealth_assessments,
+        sequence_steps = (
+            economic_sequence_steps
+            if economic_sequence_steps is not None
+            else EconomicControlPlane._derive_sequence_steps(
+                cashflow_opportunities,
+                rapid_cash,
+                wealth_opportunities,
+                wealth_assessments,
+            )
         )
         lesson_ids = tuple(item.failure_id for item in conversions if item.learning_asset)
         economic_sequence = EconomicSequenceEngine.plan(
