@@ -6,7 +6,6 @@ effect is already COMPLETED and belongs to the same execution.
 """
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -30,7 +29,6 @@ def confirm_execution_recovery_from_effect(
             raise KeyError(execution_key)
         if execution["status"] != "RECOVERY_REQUIRED":
             raise ValueError("Seule une exécution RECOVERY_REQUIRED peut être confirmée par preuve externe.")
-
         mission = conn.execute(
             "SELECT status FROM mission_states WHERE mission_id=?",
             (execution["mission_id"],),
@@ -39,7 +37,6 @@ def confirm_execution_recovery_from_effect(
             raise KeyError(execution["mission_id"])
         if mission["status"] != MissionStatus.RUNNING.value:
             raise ValueError("La mission doit être RUNNING pendant une récupération.")
-
         effect = conn.execute(
             "SELECT provider_idempotency_key,execution_key,status,result,error "
             "FROM external_effects WHERE provider_idempotency_key=?",
@@ -51,7 +48,6 @@ def confirm_execution_recovery_from_effect(
             raise ValueError("La preuve d'effet externe appartient à une autre exécution.")
         if effect["status"] != "COMPLETED":
             raise ValueError("La preuve d'effet externe n'est pas dans un état COMPLETED.")
-
         cur = conn.execute(
             "UPDATE executions SET status='COMPLETED',result=?,error=NULL,finished_at=?,lease_until=NULL "
             "WHERE execution_key=? AND status='RECOVERY_REQUIRED'",
@@ -59,7 +55,6 @@ def confirm_execution_recovery_from_effect(
         )
         if cur.rowcount != 1:
             raise RuntimeError("La finalisation de récupération a échoué à cause d'une concurrence d'état.")
-
         self._transition_mission_status(
             conn,
             execution["mission_id"],
@@ -70,16 +65,13 @@ def confirm_execution_recovery_from_effect(
             f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?",
             (execution_key,),
         ).fetchone()
-
     if final is None:
         raise RuntimeError("Execution record could not be persisted")
     return dict(final)
 
 
-# Keep the canonical DurableStore type as the public owner of the transition while
-# allowing this focused module to remain independently testable.
 if not hasattr(DurableStore, "confirm_execution_recovery_from_effect"):
-    DurableStore.confirm_execution_recovery_from_effect = confirm_execution_recovery_from_effect  # type: ignore[attr-defined]
+    setattr(DurableStore, "confirm_execution_recovery_from_effect", confirm_execution_recovery_from_effect)
 
 
 __all__ = ["confirm_execution_recovery_from_effect"]
