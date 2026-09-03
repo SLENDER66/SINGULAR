@@ -54,6 +54,7 @@ from .provenance import ProvenanceChain, ProvenanceRecord
 from .adversarial import AttackClass, AdversarialEngine, AdversarialFinding, AdversarialReport, AttackSeverity
 from .collective_intelligence import CollectiveIntelligence, Deliberation, KnowledgeKind, SharedSignal
 from .enterprise_core import EnterpriseOperatingCore, Initiative, InitiativeStatus, KPI, OperatingAllocation, OperatingDecision, OperatingPlan
+from .portfolio_reallocation import DynamicPortfolioEngine, InitiativePerformance, InitiativeResult, Reallocation, ReallocationAction, ReallocationPlan
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
