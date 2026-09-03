@@ -1,6 +1,6 @@
 import pytest
 
-from singular.elite import EliteEngine, EliteScore
+from singular.elite import ConflictType, EliteEngine, EliteScore
 
 
 def test_elite_score_total_and_weakest():
@@ -38,3 +38,20 @@ def test_red_team_challenges_specialist_without_execution_authority():
     assert challenge["priority"] == "outcome"
     assert "evidence" in challenge["question"].lower()
     assert challenge["wealth_test"] == review.wealth_relevance
+
+
+def test_conflicts_have_one_explicit_resolver_and_never_grant_execution():
+    expected = {
+        ConflictType.FACTUAL: "INTELLIGENCE",
+        ConflictType.FORECAST: "STRATEGY",
+        ConflictType.STRATEGIC: "COMMANDER",
+        ConflictType.RISK: "RED_TEAM",
+        ConflictType.AUTHORIZATION: "GOVERNOR",
+        ConflictType.OBJECTIVE: "COMMANDER",
+        ConflictType.UNSOLVED: "HUMAN",
+    }
+    for conflict_type, resolver in expected.items():
+        resolution = EliteEngine.resolve_conflict(conflict_type)
+        assert resolution.resolver == resolver
+        assert resolution.action
+        assert resolution.execution_allowed is False
