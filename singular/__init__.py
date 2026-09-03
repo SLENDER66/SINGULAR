@@ -25,7 +25,7 @@ from .effects import EffectInProgress, EffectProvider, EffectRequest, EffectStat
 from .coherence import CoherenceReport, GlobalCoherenceGuard
 from .authority import AgentPower, AuthorityProfile, AuthorityProtocol, ConflictResolution, ConflictType
 from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldOpportunity
-from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValuesEngine, Vision
+from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValueMode, ValuesEngine, Vision
 from .state import CapacityEngine, CapacitySnapshot, StateDimension, StateObservation
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
 from .opportunity_engine import OpportunityAssessment, OpportunityDecision, OpportunityEngine
@@ -56,6 +56,7 @@ from .enterprise_core import EnterpriseOperatingCore, Initiative, InitiativeStat
 from .portfolio_reallocation import DynamicPortfolioEngine, InitiativePerformance, InitiativeResult, Reallocation, ReallocationAction, ReallocationPlan
 from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryEngine, TrajectoryProfile
 from .domain_learning import DomainHypothesis, DomainLearningResult, DomainObservation, LearningDisposition, LearningDomain, UniversalLearningEngine
+from .value_evolution import ValueEvolutionAssessment, ValueEvolutionDisposition, ValueEvolutionEngine, ValueHypothesis
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
