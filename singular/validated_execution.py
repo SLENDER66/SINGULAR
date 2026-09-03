@@ -1,9 +1,4 @@
-"""Strict execution adapter for validated trajectory decisions.
-
-This module provides the only supported adapter from a validated trajectory
-artifact to the existing durable executor.  It performs integrity and identity
-checks before delegating to the durable transaction boundary.
-"""
+"""Strict execution adapter for validated trajectory decisions."""
 
 from __future__ import annotations
 
@@ -37,31 +32,19 @@ class ValidatedExecutionBoundary:
 
     @staticmethod
     def _materialize_action(action: ValidatedActionRequest) -> ActionRequest:
-        return ActionRequest(
-            name=action.name,
-            description=action.description,
-            impact=action.impact,
-            risk=action.risk,
-            reversibility=action.reversibility,
-            requires_human=action.requires_human,
-            sensitive=action.sensitive,
-            contract_id=action.contract_id,
-            id=action.id,
-            capability=action.capability,
-        )
+        return ActionRequest(name=action.name, description=action.description, impact=action.impact, risk=action.risk,
+                             reversibility=action.reversibility, requires_human=action.requires_human,
+                             sensitive=action.sensitive, contract_id=action.contract_id, id=action.id, capability=action.capability)
 
-    def execute(
-        self,
-        decision: ValidatedTrajectoryDecision,
-        action_id: str,
-        handler: Callable[[ActionRequest], Any],
-    ) -> ExecutionResult:
+    def execute(self, decision: ValidatedTrajectoryDecision, action_id: str, handler: Callable[[ActionRequest], Any]) -> ExecutionResult:
         if not isinstance(decision, ValidatedTrajectoryDecision):
             raise TypeError("l'exécution exige une ValidatedTrajectoryDecision")
         if not decision.verify():
             raise PermissionError("La décision validée est invalide ou a été altérée.")
         if decision.global_report.decision != "PROCEED":
             raise PermissionError("Seule une décision globale PROCEED peut être exécutée.")
+        if decision.execution_kind != "handler":
+            raise PermissionError("La décision validée n'autorise pas un handler.")
         action = self._materialize_action(self._action(decision, action_id))
         if action.contract_id != decision.contract.mission_id:
             raise PermissionError("L'action et le contrat de décision ne sont pas liés.")
@@ -69,7 +52,7 @@ class ValidatedExecutionBoundary:
             raise PermissionError("L'action demandée ne correspond pas à l'action globale autorisée.")
         if decision.governor.action_id != action.id:
             raise PermissionError("L'action demandée ne correspond pas au gouverneur validé.")
-        return self.executor.execute(action, decision.contract.mission_id, handler)
+        return self.executor.execute_validated(decision, handler)
 
 
 __all__ = ["ValidatedExecutionBoundary"]
