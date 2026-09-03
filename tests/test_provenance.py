@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from singular.provenance import ProvenanceChain, ProvenanceRecord
@@ -56,6 +58,19 @@ def test_chain_detects_tail_tampering() -> None:
     original = chain.records()[0]
     object.__setattr__(original, "confidence", 0.1)
     assert chain.verify() is False
+
+
+def test_record_rejects_non_finite_confidence() -> None:
+    for confidence in (math.nan, math.inf, -math.inf):
+        with pytest.raises(ValueError, match="between 0 and 1"):
+            record("r1").__class__.from_payload(
+                record_id="r2",
+                source="test",
+                recorded_at="2026-09-03T10:00:00Z",
+                epistemic_type="FACT",
+                confidence=confidence,
+                payload={},
+            )
 
 
 def test_record_requires_payload_digest_and_valid_confidence() -> None:
