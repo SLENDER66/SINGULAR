@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from .autopilot import ActionRequest, DelegationContract
+from .autopilot import ActionRequest, DelegationContract, Governor
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
-from .human_optimization import DomainState, HumanOptimizationEngine, HumanOptimizationReport, Intervention
-from .security import PolicyDecision
+from .human_optimization import DomainState, HumanOptimizationEngine, Intervention
+from .security import ActionPolicy
 from .state import CapacitySnapshot
-from .trajectory import TrajectoryAssessment, TrajectoryEngine, TrajectoryProfile
-from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine, TrajectoryPortfolio
+from .trajectory import TrajectoryEngine, TrajectoryProfile
+from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine
 from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
 from .values import ValueAssessmentResult
 
@@ -19,12 +19,9 @@ from .values import ValueAssessmentResult
 class ValidatedTrajectoryPipeline:
     """Build the only artifact accepted by the strict execution boundary.
 
-    The order is intentionally fixed:
-
-        domain state -> human optimization -> trajectory portfolio
-        -> trajectory assessment -> global decision gate -> validated decision
-
-    Any missing, non-executable or inconsistent stage fails closed.
+    The order is fixed: domain state -> human optimization -> trajectory
+    portfolio -> trajectory assessment -> global decision gate -> validated
+    decision. Any missing, non-executable or inconsistent stage fails closed.
     """
 
     @staticmethod
@@ -58,8 +55,8 @@ class ValidatedTrajectoryPipeline:
     ) -> ValidatedTrajectoryDecision:
         if not objective.strip():
             raise ValueError("objective cannot be empty")
-        if not actions:
-            raise ValueError("at least one action is required")
+        if len(actions) != 1:
+            raise ValueError("the executable validated pipeline currently authorizes exactly one action")
         if not decision_id.strip():
             raise ValueError("decision_id is required")
         if contract.objective != objective:
@@ -74,35 +71,21 @@ class ValidatedTrajectoryPipeline:
 
         human = HumanOptimizationEngine.optimize(tuple(domain_states), tuple(interventions), capacity_budget=budget)
         portfolio = TrajectoryOptimizationEngine.optimize(
-            human.candidates,
-            intervention_map,
-            interactions,
-            capacity_budget=budget,
-            max_candidates=max_portfolio_candidates,
+            human.candidates, intervention_map, interactions,
+            capacity_budget=budget, max_candidates=max_portfolio_candidates,
         )
         if not portfolio.candidates:
             raise PermissionError("No executable trajectory portfolio was produced.")
 
         assessment = TrajectoryEngine.assess(
-            trajectory_profile,
-            dimensions=trajectory_dimensions,
-            value_results=value_results,
-            capacity=capacity,
+            trajectory_profile, dimensions=trajectory_dimensions, value_results=value_results, capacity=capacity,
         )
+        action = actions[0]
         global_report: GlobalDecisionReport = (gate or GlobalDecisionGate()).evaluate(
-            objective,
-            actions[0],
-            values=list(value_results),
-            capacity=capacity,
-            effort=effort,
-            risks=risks,
-            mission_id=contract.mission_id,
-            contract=contract,
-            shared_signals=shared_signals,
-            calibration=calibration,
-            trajectory_profile=trajectory_profile,
-            trajectory_dimensions=trajectory_dimensions,
-            human_optimization=human,
+            objective, action, values=list(value_results), capacity=capacity, effort=effort, risks=risks,
+            mission_id=contract.mission_id, contract=contract, shared_signals=shared_signals,
+            calibration=calibration, trajectory_profile=trajectory_profile,
+            trajectory_dimensions=trajectory_dimensions, human_optimization=human,
         )
 
         if global_report.trajectory != assessment:
@@ -115,11 +98,11 @@ class ValidatedTrajectoryPipeline:
             raise PermissionError("Trajectory requires human review.")
 
         mapping = dict(action_to_intervention)
-        if len(mapping) != len(action_to_intervention) or set(mapping) != {action.id for action in actions}:
-            raise ValueError("every authorized action must have exactly one intervention mapping")
+        if len(mapping) != len(action_to_intervention) or set(mapping) != {action.id}:
+            raise ValueError("the executable action must have exactly one intervention mapping")
         selected_ids = {candidate.intervention_id for candidate in portfolio.candidates}
-        if any(mapping[action.id] not in selected_ids for action in actions):
-            raise PermissionError("An authorized action is outside the selected trajectory portfolio.")
+        if mapping[action.id] not in selected_ids:
+            raise PermissionError("The authorized action is outside the selected trajectory portfolio.")
 
         if execution_kind == "handler":
             if any(value is not None for value in (provider_name, provider_target, operation, execution_payload)):
@@ -130,26 +113,13 @@ class ValidatedTrajectoryPipeline:
                 raise ValueError("external-effect execution requires provider binding")
             payload_hash = payload_fingerprint(execution_payload)
 
-        policy: PolicyDecision = __import__("singular.security", fromlist=["ActionPolicy"]).ActionPolicy.evaluate(actions[0])
-        # The decision constructor independently recomputes policy, governor and red-team evidence.
         return ValidatedTrajectoryDecision.create(
-            decision_id=decision_id,
-            actions=actions,
-            action_to_intervention=action_to_intervention,
-            human_optimization=human,
-            trajectory_portfolio=portfolio,
-            trajectory_assessment=assessment,
-            global_report=global_report,
-            contract=contract,
-            policy=policy,
-            red_team_findings=global_report.red_team_findings,
-            governor=__import__("singular.autopilot", fromlist=["Governor"]).Governor.evaluate(actions[0], contract),
-            execution_target=execution_target,
-            execution_kind=execution_kind,
-            provider_name=provider_name,
-            provider_target=provider_target,
-            operation=operation,
-            payload_fingerprint=payload_hash,
+            decision_id=decision_id, actions=actions, action_to_intervention=action_to_intervention,
+            human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
+            global_report=global_report, contract=contract, policy=ActionPolicy.evaluate(action),
+            red_team_findings=global_report.red_team_findings, governor=Governor.evaluate(action, contract),
+            execution_target=execution_target, execution_kind=execution_kind, provider_name=provider_name,
+            provider_target=provider_target, operation=operation, payload_fingerprint=payload_hash,
         )
 
 
