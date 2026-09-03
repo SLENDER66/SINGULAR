@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.5.1 — Execution Boundary Hardening
+
+- Made durable execution itself require a valid, active `DecisionAttestationStore` record; the inner executor can no longer bypass durable issuance/revocation checks.
+- Bound durable execution identities to the exact `ValidatedTrajectoryDecision.context_fingerprint`, preventing a distinct decision context from reusing the same mission/action execution identity.
+- Routed handler execution, external-effect execution and external-effect reconciliation through the strict validated boundary surface.
+- Added a static/dynamic `ExecutionBoundaryAuditor` for production call-site bypass detection and deny-by-default raw API probes.
+- Strengthened historical reasoning so contested evidence remains counterevidence instead of inflating support.
+- Added explicit temporal forecast signals for collective cognition while preserving a non-authorizing boundary.
+- Expanded adversarial tests for attestation, restart, replay identity, external-effect routing and temporal authority separation.
+
 ## 3.5.0 — Fail-Closed Validated Execution Boundary
 
 - Added an immutable, tamper-evident `ValidatedTrajectoryDecision` as the sole executable authorization artifact.
@@ -11,12 +21,7 @@
 - Added strict `ActionRequest` validation for finite, bounded security-relevant numeric inputs and nonblank identifiers.
 - Added adversarial tests for handler, provider, operation and payload substitution plus direct execution bypasses.
 - Added durable `DecisionAttestationStore` issuance/revocation with TTL and exact context binding.
-- Made the durable executor itself require a valid attestation, so the inner execution API cannot bypass the attestation registry.
-- Bound durable execution identity fingerprints to the exact validated decision context fingerprint, preventing a different decision from silently reusing a completed execution identity.
-- Added a strict execution adapter for external-effect execution and reconciliation, keeping both paths behind the same validated authority.
-- Added a static/dynamic execution-boundary auditor that continuously checks for obvious production bypasses and raw API violations.
-- Added evidence-bounded historical memory and probabilistic future reasoning: canonical facts, contested evidence, explicit mechanisms, long-horizon uncertainty and non-authorizing future scenarios.
-- Added `TemporalAdvisor` to turn future scenarios into auditable PREPARE/WATCH forecast signals without granting authority.
+- Added evidence-bounded historical memory and probabilistic future reasoning, with explicit canonical facts, contested evidence, assumptions, horizon uncertainty and non-authorizing future scenarios.
 - Kept the new execution boundary fail-closed until all production callers are migrated and CI is green.
 
 ## 3.4.3 — Interaction-Aware Trajectory Optimization
