@@ -53,7 +53,13 @@ def test_global_gate_reviews_unknown_values_and_low_confidence_state():
 
 
 def test_global_gate_blocks_high_risk_irreversible_risk():
-    risk = Risk("r1", "critical", probability=1.0, impact=9, reversibility=1)
+    risk = Risk(
+        id="r1",
+        name="critical",
+        probability=1.0,
+        impact=9,
+        reversibility=1,
+    )
     report = GlobalDecisionGate().evaluate("objectif", action(), risks=[risk])
     assert report.decision == "BLOCK"
     assert "RISK:HIGH_EXPOSURE:r1" in report.blockers
