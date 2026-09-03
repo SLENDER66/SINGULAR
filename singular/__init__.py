@@ -53,6 +53,7 @@ from .economic_sequence import EconomicSequence, EconomicSequenceEngine, Economi
 from .provenance import ProvenanceChain, ProvenanceRecord
 from .adversarial import AttackClass, AdversarialEngine, AdversarialFinding, AdversarialReport, AttackSeverity
 from .collective_intelligence import CollectiveIntelligence, Deliberation, KnowledgeKind, SharedSignal
+from .enterprise_core import EnterpriseOperatingCore, Initiative, InitiativeStatus, KPI, OperatingAllocation, OperatingDecision, OperatingPlan
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
