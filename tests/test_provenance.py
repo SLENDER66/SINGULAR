@@ -50,6 +50,14 @@ def test_chain_rejects_broken_link_and_duplicate_id() -> None:
         chain.append(record("r1", first.digest()))
 
 
+def test_chain_detects_tail_tampering() -> None:
+    chain = ProvenanceChain()
+    chain.append(record("r1"))
+    original = chain.records()[0]
+    object.__setattr__(original, "confidence", 0.1)
+    assert chain.verify() is False
+
+
 def test_record_requires_payload_digest_and_valid_confidence() -> None:
     with pytest.raises(ValueError, match="payload_digest"):
         ProvenanceRecord(
