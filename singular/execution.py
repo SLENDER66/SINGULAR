@@ -178,6 +178,8 @@ class DurableExecutionEngine:
                         return self._handle_existing_execution(key, existing)
                     return self._complete(key, mission_id, action.id, effect.get("result"))
                 if status == EffectStatus.FAILED.value:
+                    if existing["status"] == "RECOVERY_REQUIRED":
+                        return self._result_from_row(self.store.resolve_execution_recovery(key, "FAIL", reason=effect.get("error") or "Effet externe échoué."))
                     if existing["status"] in {"COMPLETED", "FAILED"}:
                         return self._handle_existing_execution(key, existing)
                     return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
@@ -202,6 +204,8 @@ class DurableExecutionEngine:
                     return self._handle_existing_execution(key, claimed)
                 return self._complete(key, mission_id, action.id, effect.get("result"))
             if effect is not None and effect["status"] == EffectStatus.FAILED.value:
+                if claimed["status"] == "RECOVERY_REQUIRED":
+                    return self._result_from_row(self.store.resolve_execution_recovery(key, "FAIL", reason=effect.get("error") or "Effet externe échoué."))
                 if claimed["status"] in {"COMPLETED", "FAILED"}:
                     return self._handle_existing_execution(key, claimed)
                 return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
