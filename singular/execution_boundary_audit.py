@@ -12,6 +12,7 @@ from .tool_fabric import ToolFabric
 RAW_METHODS = frozenset({"execute", "execute_effect", "reconcile_effect"})
 RAW_TOOL_METHODS = frozenset({"execute_autonomous", "execute_approved"})
 INNER_VALIDATED_METHODS = frozenset({"execute_validated", "execute_effect_validated", "reconcile_effect_validated"})
+LEGACY_LEDGER_METHODS = frozenset({"record", "record_intent"})
 DEFINITION_MODULES = frozenset({"execution.py", "tool_fabric.py"})
 INNER_ALLOWED_MODULES = frozenset({"validated_execution.py", "validated_decision_service.py"})
 
@@ -78,22 +79,38 @@ class ExecutionBoundaryAuditor:
         findings: list[BoundaryFinding] = []
         executor_type_names = {"DurableExecutionEngine"}
         executor_receivers: set[str] = set()
+        ledger_type_names = {"DurableExecutionLedger"}
+        ledger_receivers: set[str] = set()
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "execution" and node.level >= 1:
-                for alias in node.names:
-                    if alias.name == "DurableExecutionEngine":
-                        executor_type_names.add(alias.asname or alias.name)
+            if isinstance(node, ast.ImportFrom) and node.level >= 1:
+                if node.module == "execution":
+                    for alias in node.names:
+                        if alias.name == "DurableExecutionEngine":
+                            executor_type_names.add(alias.asname or alias.name)
+                elif node.module == "durable_execution":
+                    for alias in node.names:
+                        if alias.name == "DurableExecutionLedger":
+                            ledger_type_names.add(alias.asname or alias.name)
             elif isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.endswith("execution"):
                         executor_type_names.add(alias.asname or alias.name.split(".")[-1])
+                    if alias.name.endswith("durable_execution"):
+                        ledger_type_names.add(alias.asname or alias.name.split(".")[-1])
 
         def is_executor_constructor(expr: ast.AST) -> bool:
             if isinstance(expr, ast.Name):
                 return expr.id in executor_type_names
             if isinstance(expr, ast.Attribute):
                 return expr.attr == "DurableExecutionEngine"
+            return False
+
+        def is_ledger_constructor(expr: ast.AST) -> bool:
+            if isinstance(expr, ast.Name):
+                return expr.id in ledger_type_names
+            if isinstance(expr, ast.Attribute):
+                return expr.attr == "DurableExecutionLedger"
             return False
 
         changed = True
@@ -109,11 +126,22 @@ class ExecutionBoundaryAuditor:
                             if isinstance(target, ast.Name) and target.id not in executor_receivers:
                                 executor_receivers.add(target.id)
                                 changed = True
-                    elif isinstance(value, ast.Name) and value.id in executor_receivers:
+                    elif value is not None and is_ledger_constructor(constructor_expr):
                         for target in targets:
-                            if isinstance(target, ast.Name) and target.id not in executor_receivers:
-                                executor_receivers.add(target.id)
+                            if isinstance(target, ast.Name) and target.id not in ledger_receivers:
+                                ledger_receivers.add(target.id)
                                 changed = True
+                    elif isinstance(value, ast.Name):
+                        if value.id in executor_receivers:
+                            for target in targets:
+                                if isinstance(target, ast.Name) and target.id not in executor_receivers:
+                                    executor_receivers.add(target.id)
+                                    changed = True
+                        if value.id in ledger_receivers:
+                            for target in targets:
+                                if isinstance(target, ast.Name) and target.id not in ledger_receivers:
+                                    ledger_receivers.add(target.id)
+                                    changed = True
 
         inner_allowed = path.name in INNER_ALLOWED_MODULES
         for node in ast.walk(tree):
@@ -141,6 +169,35 @@ class ExecutionBoundaryAuditor:
 
             if target.attr == "handler" and isinstance(receiver, ast.Name):
                 findings.append(BoundaryFinding(str(path), target.lineno, "DIRECT_HANDLER_BYPASS", f"{receiver.id}.handler(...)"))
+
+            if target.attr in LEGACY_LEDGER_METHODS:
+                if isinstance(receiver, ast.Name) and receiver.id in ledger_receivers:
+                    findings.append(
+                        BoundaryFinding(
+                            str(path),
+                            target.lineno,
+                            "NON_AUTHORITATIVE_EXECUTION_LEDGER",
+                            f"legacy execution ledger: {target.attr}",
+                        )
+                    )
+                elif isinstance(receiver, ast.Name) and receiver.id in ledger_type_names:
+                    findings.append(
+                        BoundaryFinding(
+                            str(path),
+                            target.lineno,
+                            "NON_AUTHORITATIVE_EXECUTION_LEDGER",
+                            f"DurableExecutionLedger.{target.attr}",
+                        )
+                    )
+                elif isinstance(receiver, ast.Attribute) and receiver.attr == "DurableExecutionLedger":
+                    findings.append(
+                        BoundaryFinding(
+                            str(path),
+                            target.lineno,
+                            "NON_AUTHORITATIVE_EXECUTION_LEDGER",
+                            f"DurableExecutionLedger.{target.attr}",
+                        )
+                    )
 
         return findings
 
