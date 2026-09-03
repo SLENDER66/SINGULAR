@@ -7,6 +7,7 @@ from typing import Any
 
 from .autopilot import ActionRequest
 from .decision_attestation import DecisionAttestationStore
+from .durable_integrity import DurableIntegrityChecker
 from .effects import EffectProvider
 from .execution import DurableExecutionEngine, ExecutionResult
 from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTrajectoryDecision
@@ -38,6 +39,10 @@ class ValidatedExecutionBoundary:
             raise PermissionError("La décision validée n'est pas durablement attestée, est révoquée ou a expiré.")
         if decision.global_report.decision != "PROCEED":
             raise PermissionError("Seule une décision globale PROCEED peut être exécutée.")
+        store = getattr(self.executor, "store", None)
+        if store is None or not hasattr(store, "_connect"):
+            raise PermissionError("L'état durable ne peut pas être vérifié : exécution refusée par sécurité.")
+        DurableIntegrityChecker(store).assert_clean()
 
     @staticmethod
     def _action(decision: ValidatedTrajectoryDecision, action_id: str) -> ValidatedActionRequest:
