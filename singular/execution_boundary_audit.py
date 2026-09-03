@@ -75,25 +75,23 @@ class ExecutionBoundaryAuditor:
 
     @staticmethod
     def _raw_api_is_denied() -> bool:
-        class _Noop:
-            def __call__(self, *_args, **_kwargs):
-                return None
-
-        for constructor in (DurableExecutionEngine, ToolFabric):
-            # ToolFabric can be instantiated directly; the durable engine needs a runtime,
-            # so only test the methods whose guard can be reached without state.
-            if constructor is ToolFabric:
-                obj = constructor()
-                for args, method in (((), "execute_autonomous"),):
-                    try:
-                        getattr(obj, method)("probe", *_args)
-                    except PermissionError:
-                        continue
-                    except Exception:
-                        return False
-                    return False
-            else:
+        engine = object.__new__(DurableExecutionEngine)
+        fabric = ToolFabric()
+        probes = (
+            (engine, "execute", (None, "MISSION", lambda _: None), {}),
+            (engine, "execute_effect", (None, "MISSION", None), {"provider_name": "probe", "operation": "probe", "payload": None}),
+            (engine, "reconcile_effect", (None, "MISSION", None), {"provider_name": "probe", "operation": "probe", "payload": None}),
+            (fabric, "execute_autonomous", ("probe",), {}),
+            (fabric, "execute_approved", ("APPROVAL", "probe"), {}),
+        )
+        for obj, method, args, kwargs in probes:
+            try:
+                getattr(obj, method)(*args, **kwargs)
+            except PermissionError:
                 continue
+            except Exception:
+                return False
+            return False
         return True
 
 
