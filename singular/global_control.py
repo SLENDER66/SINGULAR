@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .agents import Commander
-from .autopilot import ActionRequest, Autonomy, Governor
+from .autopilot import ActionRequest, Autonomy, DelegationContract, Governor
 from .coherence import CoherenceReport, GlobalCoherenceGuard
 from .collective_intelligence import CollectiveIntelligence, Deliberation, SharedSignal
 from .human_optimization import HumanOptimizationReport
@@ -64,6 +64,7 @@ class GlobalDecisionGate:
         effort: float | None = None,
         risks: list[Risk] | None = None,
         mission_id: str | None = None,
+        contract: DelegationContract | None = None,
         shared_signals: tuple[SharedSignal, ...] = (),
         calibration: dict[str, float] | None = None,
         trajectory_profile: TrajectoryProfile | None = None,
@@ -76,6 +77,16 @@ class GlobalDecisionGate:
         deliberation = None
         trajectory = None
         value_results = values or []
+
+        if contract is not None:
+            if mission_id is not None and mission_id != contract.mission_id:
+                blockers.append("CONTRACT:MISSION_ID_MISMATCH")
+            elif action.contract_id not in (None, contract.mission_id):
+                blockers.append("CONTRACT:ACTION_ID_MISMATCH")
+            elif objective != contract.objective:
+                blockers.append("CONTRACT:OBJECTIVE_MISMATCH")
+        elif mission_id is not None:
+            warnings.append("CONTRACT:MISSING_EXPLICIT_CONTRACT")
 
         if human_optimization is not None:
             if human_optimization.uncertainties:
@@ -141,8 +152,8 @@ class GlobalDecisionGate:
                 warnings.append(f"RISK:ELEVATED:{risk.id}")
 
         policy = ActionPolicy.evaluate(action)
-        governor = Governor.evaluate(action, None)
-        findings = self.red_team.inspect(action, None)
+        governor = Governor.evaluate(action, contract)
+        findings = self.red_team.inspect(action, contract)
         if any(f.blocking for f in findings):
             blockers.extend(f"RED_TEAM:{f.statement}" for f in findings if f.blocking)
 
