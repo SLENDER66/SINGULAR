@@ -85,8 +85,10 @@ class EconomicControlPlane:
                     f"generational metric {key} must be finite and within [0, 1]"
                 )
 
-        conversions = tuple(
-            PatrimonyEngine.convert_failure(item) for item in (failures or [])
+        failure_items: list[FailureRecord] = failures or []
+        conversions: tuple[FailureConversion, ...] = tuple(
+            PatrimonyEngine.convert_failure(failure_item)
+            for failure_item in failure_items
         )
         rapid_cash = RapidWealthEngine.build_sprint(
             cashflow_opportunities,
@@ -191,42 +193,42 @@ class EconomicControlPlane:
         opportunities: list[WealthOpportunity],
         assessments: tuple[WealthAssessment, ...],
     ) -> list[EconomicStep]:
-        cash_by_id = {item.id: item for item in cash}
+        cash_by_id = {cash_item.id: cash_item for cash_item in cash}
         selected = {item.opportunity_id for item in rapid.selected_opportunities}
         steps: list[EconomicStep] = []
         for cash_assessment in rapid.selected_opportunities:
-            item = cash_by_id[cash_assessment.opportunity_id]
+            cash_item = cash_by_id[cash_assessment.opportunity_id]
             steps.append(
                 EconomicStep(
-                    item.id,
+                    cash_item.id,
                     EconomicStage.CASH,
-                    expected_cash=item.expected_cash,
-                    probability=item.probability,
-                    risk=10.0 * (1.0 - item.reversibility),
-                    capacity_required=max(item.time_to_cash_hours / 24.0, 0.0),
-                    reversibility=10.0 * item.reversibility,
-                    ownership_value=10.0 * item.ownership_score,
-                    compounding_value=10.0 * item.recurrence_score,
+                    expected_cash=cash_item.expected_cash,
+                    probability=cash_item.probability,
+                    risk=10.0 * (1.0 - cash_item.reversibility),
+                    capacity_required=max(cash_item.time_to_cash_hours / 24.0, 0.0),
+                    reversibility=10.0 * cash_item.reversibility,
+                    ownership_value=10.0 * cash_item.ownership_score,
+                    compounding_value=10.0 * cash_item.recurrence_score,
                 )
             )
-        wealth_by_id = {item.id: item for item in opportunities}
+        wealth_by_id = {wealth_item.id: wealth_item for wealth_item in opportunities}
         for wealth_assessment in assessments:
             if wealth_assessment.opportunity_id in selected:
                 continue
-            item = wealth_by_id[wealth_assessment.opportunity_id]
+            wealth_item = wealth_by_id[wealth_assessment.opportunity_id]
             steps.append(
                 EconomicStep(
-                    item.id,
+                    wealth_item.id,
                     EconomicStage.OWNERSHIP
-                    if item.ownership >= 0.5
+                    if wealth_item.ownership >= 0.5
                     else EconomicStage.CAPITAL,
-                    expected_value=max(item.expected_wealth_delta, 0.0),
-                    probability=item.probability,
-                    risk=min(item.downside * 10.0, 10.0),
-                    capacity_required=item.time,
-                    reversibility=10.0 * item.reversibility,
-                    ownership_value=10.0 * item.ownership,
-                    compounding_value=10.0 * item.compounding,
+                    expected_value=max(wealth_item.expected_wealth_delta, 0.0),
+                    probability=wealth_item.probability,
+                    risk=min(wealth_item.downside * 10.0, 10.0),
+                    capacity_required=wealth_item.time,
+                    reversibility=10.0 * wealth_item.reversibility,
+                    ownership_value=10.0 * wealth_item.ownership,
+                    compounding_value=10.0 * wealth_item.compounding,
                 )
             )
         return steps
