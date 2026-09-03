@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .autopilot import ActionRequest
+from .decision_attestation import DecisionAttestationStore
 from .execution import DurableExecutionEngine, ExecutionResult
 from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTrajectoryDecision
 
@@ -13,8 +14,15 @@ from .validated_trajectory_decision import ValidatedActionRequest, ValidatedTraj
 class ValidatedExecutionBoundary:
     """Fail-closed adapter from validated decisions to durable execution."""
 
-    def __init__(self, executor: DurableExecutionEngine) -> None:
+    def __init__(self, executor: DurableExecutionEngine, attestation_store: DecisionAttestationStore | None = None) -> None:
         self.executor = executor
+        if attestation_store is not None:
+            self.attestation_store = attestation_store
+        else:
+            store = getattr(executor, "store", None)
+            if store is None or not hasattr(store, "path"):
+                raise TypeError("an explicit DecisionAttestationStore is required for this executor")
+            self.attestation_store = DecisionAttestationStore(store.path)
 
     @staticmethod
     def _action(decision: ValidatedTrajectoryDecision, action_id: str) -> ValidatedActionRequest:
@@ -41,6 +49,8 @@ class ValidatedExecutionBoundary:
             raise TypeError("l'exécution exige une ValidatedTrajectoryDecision")
         if not decision.verify():
             raise PermissionError("La décision validée est invalide ou a été altérée.")
+        if not self.attestation_store.verify(decision):
+            raise PermissionError("La décision validée n'est pas durablement attestée, est révoquée ou a expiré.")
         if decision.global_report.decision != "PROCEED":
             raise PermissionError("Seule une décision globale PROCEED peut être exécutée.")
         if decision.execution_kind != "handler":
