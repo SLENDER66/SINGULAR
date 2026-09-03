@@ -9,6 +9,7 @@ from singular.mission_runtime import DurableMissionRuntime
 from singular.trajectory import TrajectoryProfile
 from singular.validated_pipeline import ValidatedTrajectoryPipeline
 from singular.values import Vision
+from singular.validated_trajectory_decision import payload_fingerprint
 
 
 def _inputs():
@@ -91,3 +92,53 @@ def test_executor_accepts_only_the_bound_handler(tmp_path):
 
     assert result.status == "COMPLETED"
     assert result.result["executed"] is True
+
+
+class AuthorizedProvider:
+    def execute(self, request, idempotency_key):
+        raise AssertionError("provider should not be called by substitution tests")
+
+    def reconcile(self, request, idempotency_key):
+        raise AssertionError("provider should not be called by substitution tests")
+
+
+class OtherProvider(AuthorizedProvider):
+    pass
+
+
+def _build_effect_decision():
+    contract, action, state, intervention, profile, dimensions = _inputs()
+    payload = {"amount": 42, "target": "bounded"}
+    return ValidatedTrajectoryPipeline.build(
+        objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
+        domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
+        trajectory_dimensions=dimensions, contract=contract,
+        execution_target="tests.test_validated_pipeline:AuthorizedProvider", execution_kind="external_effect",
+        provider_name="bounded-provider", provider_target="tests.test_validated_pipeline:AuthorizedProvider",
+        operation="apply", execution_payload=payload, decision_id="DEC-EFFECT", capacity_budget=2,
+    ), payload
+
+
+def test_executor_rejects_provider_substitution_before_runtime_access(tmp_path):
+    decision, _ = _build_effect_decision()
+    executor = object.__new__(DurableExecutionEngine)
+    with pytest.raises(PermissionError, match="Provider implementation"):
+        executor.execute_effect_validated(decision, OtherProvider(), provider_name="bounded-provider", operation="apply", payload={"amount": 42, "target": "bounded"})
+
+
+def test_executor_rejects_operation_substitution_before_runtime_access(tmp_path):
+    decision, payload = _build_effect_decision()
+    executor = object.__new__(DurableExecutionEngine)
+    with pytest.raises(PermissionError, match="Provider or operation"):
+        executor.execute_effect_validated(decision, AuthorizedProvider(), provider_name="bounded-provider", operation="delete", payload=payload)
+
+
+def test_executor_rejects_payload_substitution_before_runtime_access(tmp_path):
+    decision, _ = _build_effect_decision()
+    executor = object.__new__(DurableExecutionEngine)
+    with pytest.raises(PermissionError, match="payload"):
+        executor.execute_effect_validated(decision, AuthorizedProvider(), provider_name="bounded-provider", operation="apply", payload={"amount": 43, "target": "bounded"})
+
+
+def test_payload_fingerprint_is_stable_for_equivalent_mapping_order():
+    assert payload_fingerprint({"b": 2, "a": 1}) == payload_fingerprint({"a": 1, "b": 2})
