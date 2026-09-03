@@ -33,6 +33,7 @@ from .opportunity_engine import OpportunityAssessment, OpportunityDecision, Oppo
 from .opportunity_adapter import OpportunityAdapter
 from .portfolio import PortfolioAssessment, PortfolioEngine, PortfolioSelection
 from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine as CalibrationLearningEngine, LearningUpdate
+from .learning_strategy import LearningStrategyEngine, StrategyDisposition, StrategyProposal
 from .decision_engine import DecisionContext, DecisionOption, DecisionRecommendation, DecisionStatus, DecisionEngine as GovernedDecisionEngine
 from .execution_result import ExecutionIntent, ExecutionResult, ExecutionResultBridge, ExecutionStatus
 from .learning_bridge import ExecutionLearningBridge, LearningResult
