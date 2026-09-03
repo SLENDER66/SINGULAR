@@ -2,7 +2,10 @@ import pytest
 
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
 from singular.domain_learning import LearningDomain
+from singular.durable import DurableStore
+from singular.execution import DurableExecutionEngine
 from singular.human_optimization import DomainState, Intervention
+from singular.mission_runtime import DurableMissionRuntime
 from singular.trajectory import TrajectoryProfile
 from singular.validated_pipeline import ValidatedTrajectoryPipeline
 from singular.values import Vision
@@ -18,24 +21,26 @@ def _inputs():
     return contract, action, state, intervention, profile, dimensions
 
 
-def test_pipeline_constructs_decision_only_after_all_required_stages():
+def _build_decision():
     contract, action, state, intervention, profile, dimensions = _inputs()
-    decision = ValidatedTrajectoryPipeline.build(
-        objective=contract.objective,
-        actions=(action,),
-        action_to_intervention=((action.id, intervention.id),),
-        domain_states=(state,),
-        interventions=(intervention,),
-        trajectory_profile=profile,
-        trajectory_dimensions=dimensions,
-        contract=contract,
-        execution_target="tests.test_validated_pipeline:handler",
-        decision_id="DEC-PIPE",
-        capacity_budget=2,
+    return ValidatedTrajectoryPipeline.build(
+        objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
+        domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
+        trajectory_dimensions=dimensions, contract=contract,
+        execution_target="tests.test_validated_pipeline:authorized_handler",
+        decision_id="DEC-PIPE", capacity_budget=2,
     )
+
+
+def authorized_handler(action):
+    return {"action_id": action.id, "executed": True}
+
+
+def test_pipeline_constructs_decision_only_after_all_required_stages():
+    decision = _build_decision()
     assert decision.verify() is True
     assert decision.global_report.decision == "PROCEED"
-    assert decision.trajectory_portfolio.candidates[0].intervention_id == intervention.id
+    assert decision.trajectory_portfolio.candidates[0].intervention_id == "career"
 
 
 def test_pipeline_fails_closed_when_trajectory_requires_review():
@@ -43,17 +48,11 @@ def test_pipeline_fails_closed_when_trajectory_requires_review():
     dimensions["money"] = -0.2
     with pytest.raises(PermissionError, match="Global decision gate refused|Trajectory requires"):
         ValidatedTrajectoryPipeline.build(
-            objective=contract.objective,
-            actions=(action,),
-            action_to_intervention=((action.id, intervention.id),),
-            domain_states=(state,),
-            interventions=(intervention,),
-            trajectory_profile=profile,
-            trajectory_dimensions=dimensions,
-            contract=contract,
-            execution_target="tests.test_validated_pipeline:handler",
-            decision_id="DEC-PIPE-BLOCK",
-            capacity_budget=2,
+            objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
+            domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
+            trajectory_dimensions=dimensions, contract=contract,
+            execution_target="tests.test_validated_pipeline:authorized_handler",
+            decision_id="DEC-PIPE-BLOCK", capacity_budget=2,
         )
 
 
@@ -61,15 +60,34 @@ def test_pipeline_rejects_action_outside_selected_portfolio():
     contract, action, state, intervention, profile, dimensions = _inputs()
     with pytest.raises(PermissionError, match="outside the selected trajectory portfolio"):
         ValidatedTrajectoryPipeline.build(
-            objective=contract.objective,
-            actions=(action,),
-            action_to_intervention=((action.id, "wrong-intervention"),),
-            domain_states=(state,),
-            interventions=(intervention,),
-            trajectory_profile=profile,
-            trajectory_dimensions=dimensions,
-            contract=contract,
-            execution_target="tests.test_validated_pipeline:handler",
-            decision_id="DEC-PIPE-MISMATCH",
-            capacity_budget=2,
+            objective=contract.objective, actions=(action,), action_to_intervention=((action.id, "wrong-intervention"),),
+            domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
+            trajectory_dimensions=dimensions, contract=contract,
+            execution_target="tests.test_validated_pipeline:authorized_handler",
+            decision_id="DEC-PIPE-MISMATCH", capacity_budget=2,
         )
+
+
+def test_executor_rejects_handler_substitution_before_handler_call(tmp_path):
+    decision = _build_decision()
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    runtime.store.save_mission(decision.contract)
+    executor = DurableExecutionEngine(runtime)
+    calls = []
+
+    with pytest.raises(PermissionError, match="execution target"):
+        executor.execute_validated(decision, lambda action: calls.append("wrong"))
+
+    assert calls == []
+
+
+def test_executor_accepts_only_the_bound_handler(tmp_path):
+    decision = _build_decision()
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    runtime.store.save_mission(decision.contract)
+    executor = DurableExecutionEngine(runtime)
+
+    result = executor.execute_validated(decision, authorized_handler)
+
+    assert result.status == "COMPLETED"
+    assert result.result["executed"] is True
