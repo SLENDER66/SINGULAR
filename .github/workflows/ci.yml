@@ -30,6 +30,8 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -e '.[dev]'
+      - name: Boundary audit
+        run: python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; r=ExecutionBoundaryAuditor().audit(); print(f'checked_files={r.checked_files} clean={r.clean}'); print(*r.findings, sep='\\n'); raise SystemExit(0 if r.clean else 1)"
       - name: Lint (informational)
         continue-on-error: true
         run: ruff check .
