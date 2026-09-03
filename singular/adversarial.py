@@ -7,12 +7,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
-from .audit import AuditTrail
+from .audit import AuditEvent, AuditTrail
 from .authority import AgentPower, AuthorityProtocol
 from .durable import DurableStore
 from .economic_learning import EconomicLearningEngine
 from .economic_learning_ledger import EconomicLearningLedger
-from .execution_result import ExecutionResult, ExecutionStatus
+from .execution_result import ExecutionIntent, ExecutionResult, ExecutionResultBridge, ExecutionStatus
 from .learning import Forecast, ForecastKind
 
 
@@ -105,50 +105,15 @@ class AdversarialEngine:
             "Attack was not rejected.", remediation,
         )
 
-    @staticmethod
-    def _expect_runtime(operation: Callable[[], object]) -> object:
-        operation()
-        raise AssertionError("Expected a runtime integrity failure")
-
     @classmethod
     def authority_suite(cls) -> AdversarialReport:
         findings = [
-            cls._probe(
-                "AUTH-001", AttackSeverity.CRITICAL, AttackClass.AUTH,
-                "COMMANDER -> AUTHORIZE",
-                lambda: AuthorityProtocol.require("COMMANDER", AgentPower.AUTHORIZE),
-                PermissionError, "Keep recommendation and authorization as separate authority domains.",
-            ),
-            cls._probe(
-                "AUTH-002", AttackSeverity.CRITICAL, AttackClass.AUTH,
-                "RED_TEAM -> EXECUTE",
-                lambda: AuthorityProtocol.require("RED_TEAM", AgentPower.EXECUTE),
-                PermissionError, "A challenge must never become an execution override.",
-            ),
-            cls._probe(
-                "AUTH-003", AttackSeverity.CRITICAL, AttackClass.AUTH,
-                "SYSTEM_ARCHITECT -> AUTHORIZE",
-                lambda: AuthorityProtocol.require("SYSTEM_ARCHITECT", AgentPower.AUTHORIZE),
-                PermissionError, "System changes must remain proposals until separately authorized.",
-            ),
-            cls._probe(
-                "AUTH-004", AttackSeverity.HIGH, AttackClass.AUTH,
-                "UNKNOWN_AGENT -> EXECUTE",
-                lambda: AuthorityProtocol.require("UNKNOWN", AgentPower.EXECUTE),
-                ValueError, "Unknown identities must fail closed rather than inherit permissions.",
-            ),
-            cls._probe(
-                "AUTH-005", AttackSeverity.CRITICAL, AttackClass.AUTH,
-                "COMMANDER -> SYSTEM_CHANGE",
-                lambda: AuthorityProtocol.require("COMMANDER", AgentPower.SYSTEM_CHANGE),
-                PermissionError, "No recommendation role may acquire system-change authority.",
-            ),
-            cls._probe(
-                "AUTH-006", AttackSeverity.CRITICAL, AttackClass.AUTH,
-                "SYSTEM_ARCHITECT -> EXECUTE",
-                lambda: AuthorityProtocol.require("SYSTEM_ARCHITECT", AgentPower.EXECUTE),
-                PermissionError, "Architecture authority must never imply execution authority.",
-            ),
+            cls._probe("AUTH-001", AttackSeverity.CRITICAL, AttackClass.AUTH, "COMMANDER -> AUTHORIZE", lambda: AuthorityProtocol.require("COMMANDER", AgentPower.AUTHORIZE), PermissionError, "Keep recommendation and authorization as separate authority domains."),
+            cls._probe("AUTH-002", AttackSeverity.CRITICAL, AttackClass.AUTH, "RED_TEAM -> EXECUTE", lambda: AuthorityProtocol.require("RED_TEAM", AgentPower.EXECUTE), PermissionError, "A challenge must never become an execution override."),
+            cls._probe("AUTH-003", AttackSeverity.CRITICAL, AttackClass.AUTH, "SYSTEM_ARCHITECT -> AUTHORIZE", lambda: AuthorityProtocol.require("SYSTEM_ARCHITECT", AgentPower.AUTHORIZE), PermissionError, "System changes must remain proposals until separately authorized."),
+            cls._probe("AUTH-004", AttackSeverity.HIGH, AttackClass.AUTH, "UNKNOWN_AGENT -> EXECUTE", lambda: AuthorityProtocol.require("UNKNOWN", AgentPower.EXECUTE), ValueError, "Unknown identities must fail closed rather than inherit permissions."),
+            cls._probe("AUTH-005", AttackSeverity.CRITICAL, AttackClass.AUTH, "COMMANDER -> SYSTEM_CHANGE", lambda: AuthorityProtocol.require("COMMANDER", AgentPower.SYSTEM_CHANGE), PermissionError, "No recommendation role may acquire system-change authority."),
+            cls._probe("AUTH-006", AttackSeverity.CRITICAL, AttackClass.AUTH, "SYSTEM_ARCHITECT -> EXECUTE", lambda: AuthorityProtocol.require("SYSTEM_ARCHITECT", AgentPower.EXECUTE), PermissionError, "Architecture authority must never imply execution authority."),
         ]
         return AdversarialReport(tuple(findings))
 
@@ -169,50 +134,23 @@ class AdversarialEngine:
                     conn.execute("UPDATE audit_events SET outcome='TAMPERED' WHERE event_id=?", (first.id,))
                 return store.record_audit(audit.record("TEST", "RED_TEAM", "OK", {"case": "blocked"}))
 
-            findings.append(cls._probe(
-                "AUDIT-001", AttackSeverity.CRITICAL, AttackClass.AUDIT,
-                "tampered durable audit chain",
-                tamper_audit, RuntimeError,
-                "Refuse all new audit writes while the existing chain is compromised.",
-            ))
+            findings.append(cls._probe("AUDIT-001", AttackSeverity.CRITICAL, AttackClass.AUDIT, "tampered durable audit chain", tamper_audit, RuntimeError, "Refuse all new audit writes while the existing chain is compromised."))
 
             def gap_audit() -> object:
                 fresh = DurableStore(Path(directory) / "gap.db")
-                event = audit.record("TEST", "RED_TEAM", "OK", {"case": "gap"})
-                payload = dict(event.payload)
-                payload["audit_sequence"] = 99
-                from .audit import AuditEvent
-                forged = AuditEvent(event.event_type, event.actor, event.outcome, payload, event.timestamp, event.id)
+                event = AuditEvent("TEST", "RED_TEAM", "OK", {"case": "gap"})
+                forged = AuditEvent(event.event_type, event.actor, event.outcome, event.durable_payload(99, ""), event.timestamp, event.id)
                 return fresh.record_audit(forged)
 
-            findings.append(cls._probe(
-                "AUDIT-002", AttackSeverity.HIGH, AttackClass.AUDIT,
-                "audit sequence jump",
-                gap_audit, ValueError,
-                "Require the next durable sequence to equal current length plus one.",
-            ))
+            findings.append(cls._probe("AUDIT-002", AttackSeverity.HIGH, AttackClass.AUDIT, "audit sequence jump", gap_audit, ValueError, "Require the next durable sequence to equal current length plus one."))
 
             def replay_different_result() -> object:
-                from .execution_result import ExecutionResultBridge
                 bridge = ExecutionResultBridge()
-                intent = bridge.prepare.__self__ if False else None
-                del intent
-                key = "replay-key"
-                first_result = ExecutionResult("d1", "a1", key, ExecutionStatus.SUCCEEDED, True, 10.0)
-                bridge._results[key] = first_result
-                return bridge.record(
-                    type("Intent", (), {"decision_id": "d1", "action_id": "a1", "idempotency_key": key, "authorization_id": None})(),
-                    status=ExecutionStatus.SUCCEEDED,
-                    success=True,
-                    observed_value=11.0,
-                )
+                intent = ExecutionIntent("d1", "a1", "replay-key")
+                bridge.record(intent, status=ExecutionStatus.SUCCEEDED, success=True, observed_value=10.0)
+                return bridge.record(intent, status=ExecutionStatus.SUCCEEDED, success=True, observed_value=11.0)
 
-            findings.append(cls._probe(
-                "REPLAY-001", AttackSeverity.CRITICAL, AttackClass.REPLAY,
-                "idempotency key reused with different result",
-                replay_different_result, RuntimeError,
-                "Bind an idempotency key to exactly one deterministic result fingerprint.",
-            ))
+            findings.append(cls._probe("REPLAY-001", AttackSeverity.CRITICAL, AttackClass.REPLAY, "idempotency key reused with different result", replay_different_result, RuntimeError, "Bind an idempotency key to exactly one deterministic result fingerprint."))
 
             forecast = Forecast("f-redteam", ForecastKind.BINARY, probability=0.9, confidence=0.9)
             result = ExecutionResult("d-redteam", forecast.id, "k-redteam", ExecutionStatus.SUCCEEDED, True, True)
@@ -225,12 +163,7 @@ class AdversarialEngine:
                     conn.execute("UPDATE idempotency SET result=? WHERE key=?", ('{"forecast_id":"f-redteam","tampered":true}', ledger.key_for(cycle)))
                 return ledger.get(forecast.id)
 
-            findings.append(cls._probe(
-                "LEARN-001", AttackSeverity.CRITICAL, AttackClass.LEARN,
-                "tampered economic learning record",
-                tamper_learning, RuntimeError,
-                "Verify durable learning fingerprints before restoring any cycle.",
-            ))
+            findings.append(cls._probe("LEARN-001", AttackSeverity.CRITICAL, AttackClass.LEARN, "tampered economic learning record", tamper_learning, RuntimeError, "Verify durable learning fingerprints before restoring any cycle."))
         return AdversarialReport(tuple(findings))
 
     @classmethod
