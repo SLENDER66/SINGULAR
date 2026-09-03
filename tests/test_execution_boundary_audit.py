@@ -63,6 +63,35 @@ def test_boundary_auditor_detects_qualified_executor_bypass(tmp_path: Path):
     assert any(f.rule == "RAW_ENGINE_BYPASS" for f in report.findings)
 
 
+def test_boundary_auditor_detects_legacy_execution_ledger(tmp_path: Path):
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "unsafe.py").write_text(
+        "from singular.durable_execution import DurableExecutionLedger\n"
+        "ledger = DurableExecutionLedger(store)\n"
+        "ledger.record(result)\n",
+        encoding="utf-8",
+    )
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "NON_AUTHORITATIVE_EXECUTION_LEDGER" for f in report.findings)
+
+
+def test_boundary_auditor_detects_legacy_execution_ledger_alias(tmp_path: Path):
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "unsafe.py").write_text(
+        "from singular.durable_execution import DurableExecutionLedger as Ledger\n"
+        "ledger = Ledger(store)\n"
+        "alias = ledger\n"
+        "alias.record_intent(intent, status=status, success=True)\n",
+        encoding="utf-8",
+    )
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "NON_AUTHORITATIVE_EXECUTION_LEDGER" for f in report.findings)
+
+
 def test_boundary_auditor_scans_nested_python_modules(tmp_path: Path):
     package = tmp_path / "singular"
     nested = package / "nested"
