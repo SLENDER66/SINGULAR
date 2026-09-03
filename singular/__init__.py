@@ -30,3 +30,4 @@ from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValuesEng
 from .state import CapacityEngine, CapacitySnapshot, StateDimension, StateObservation
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
 from .opportunity_engine import OpportunityAssessment, OpportunityDecision, OpportunityEngine
+from .portfolio import PortfolioAssessment, PortfolioEngine, PortfolioSelection
