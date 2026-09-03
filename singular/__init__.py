@@ -28,3 +28,4 @@ from .authority import AgentPower, AuthorityProfile, AuthorityProtocol, Conflict
 from .world_model import EpistemicType, OpportunityClass, TemporalState, WorldFact, WorldModel, WorldOpportunity
 from .values import CoreValue, ValueAssessment, ValueAssessmentResult, ValuesEngine, Vision
 from .state import CapacityEngine, CapacitySnapshot, StateDimension, StateObservation
+from .global_control import GlobalDecisionGate, GlobalDecisionReport
