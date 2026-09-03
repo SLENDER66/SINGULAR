@@ -27,9 +27,8 @@ class AgentCalibration:
             raise ValueError("agent_id cannot be empty")
         if self.forecast_count < 0:
             raise ValueError("forecast_count cannot be negative")
-        for name, value in (("mean_absolute_error", self.mean_absolute_error),):
-            if not isfinite(value) or value < 0:
-                raise ValueError(f"{name} must be finite and non-negative")
+        if not isfinite(self.mean_absolute_error) or self.mean_absolute_error < 0:
+            raise ValueError("mean_absolute_error must be finite and non-negative")
         if self.mean_brier_score is not None and not 0 <= self.mean_brier_score <= 1:
             raise ValueError("mean_brier_score must be between 0 and 1")
 
@@ -50,11 +49,7 @@ class MetaAuditReport:
 
 
 class MetaAuditEngine:
-    """Audit the decision system itself without acquiring authority over it.
-
-    Findings are evidence for the System Architect and human governor. This
-    engine cannot rewrite agents, rules, permissions or missions.
-    """
+    """Audit the decision system itself without acquiring authority over it."""
 
     @staticmethod
     def calibration(records: list[CalibrationRecord]) -> dict[str, float | int]:
@@ -71,12 +66,21 @@ class MetaAuditEngine:
     def audit(
         cls,
         *,
-        calibrations: list[AgentCalibration] = [],
+        calibrations: tuple[AgentCalibration, ...] = (),
         unknown_count: int = 0,
         contradiction_count: int = 0,
         stale_rule_count: int = 0,
         low_information_decision_count: int = 0,
     ) -> MetaAuditReport:
+        for name, value in (
+            ("unknown_count", unknown_count),
+            ("contradiction_count", contradiction_count),
+            ("stale_rule_count", stale_rule_count),
+            ("low_information_decision_count", low_information_decision_count),
+        ):
+            if value < 0:
+                raise ValueError(f"{name} cannot be negative")
+
         findings: list[MetaAuditFinding] = []
         for calibration in sorted(calibrations, key=lambda item: item.agent_id):
             if calibration.forecast_count >= 5 and calibration.mean_absolute_error >= 0.4:
@@ -115,4 +119,7 @@ class MetaAuditEngine:
                 f"{low_information_decision_count} decisions have weak evidence density",
                 "INCREASE_EVIDENCE_CAPTURE_AND_FORECASTING",
             ))
-        return MetaAuditReport(tuple(findings), not any(item.severity is MetaAuditSeverity.CRITICAL for item in findings))
+        return MetaAuditReport(
+            tuple(findings),
+            not any(item.severity is MetaAuditSeverity.CRITICAL for item in findings),
+        )
