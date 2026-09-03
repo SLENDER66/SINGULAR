@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from .audit import AuditEvent
+from .audit import AuditEvent, AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, DelegationContract
 
 
@@ -219,13 +219,38 @@ class DurableStore:
         return tuple(ApprovalRequest(r["action_id"], r["reason"], ApprovalStatus(r["status"]), r["approval_id"]) for r in rows)
 
     def record_audit(self, event: AuditEvent) -> None:
+        """Atomically append an already-materialized event to the durable audit chain."""
+        payload = dict(event.payload)
+        sequence = payload.get("audit_sequence")
+        fingerprint = payload.get("audit_fingerprint")
+        previous = payload.get("audit_prev_fingerprint")
+        chain_fingerprint = payload.get("audit_chain_fingerprint")
+        if not isinstance(sequence, int) or sequence < 1:
+            raise ValueError("L'événement d'audit doit porter une séquence positive.")
+        if not all(isinstance(value, str) and value for value in (fingerprint, chain_fingerprint)):
+            raise ValueError("L'événement d'audit doit porter des empreintes valides.")
         with self._connect() as conn:
-            conn.execute("INSERT OR IGNORE INTO audit_events(event_id,event_type,actor,outcome,payload,timestamp) VALUES(?,?,?,?,?,?)", (event.id, event.event_type, event.actor, event.outcome, json.dumps(event.payload, sort_keys=True), event.timestamp))
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute("SELECT event_id,event_type,actor,outcome,payload,timestamp FROM audit_events ORDER BY CAST(json_extract(payload, '$.audit_sequence') AS INTEGER)").fetchall()
+            persisted = tuple({"id": row["event_id"], "event_type": row["event_type"], "actor": row["actor"], "outcome": row["outcome"], "payload": json.loads(row["payload"]), "timestamp": row["timestamp"]} for row in rows)
+            if not AuditTrail.verify_chain(persisted):
+                raise RuntimeError("La chaîne d'audit durable est déjà compromise.")
+            expected_sequence = len(persisted) + 1
+            expected_previous = persisted[-1]["payload"]["audit_fingerprint"] if persisted else ""
+            if sequence != expected_sequence or previous != expected_previous:
+                raise ValueError("L'événement d'audit ne s'insère pas à la tête de la chaîne.")
+            expected_chain = AuditEvent.chain_fingerprint(sequence, fingerprint, expected_previous)
+            if chain_fingerprint != expected_chain or not AuditTrail.verify_persisted_event(asdict(event)):
+                raise ValueError("L'intégrité de l'événement d'audit est invalide.")
+            conn.execute("INSERT INTO audit_events(event_id,event_type,actor,outcome,payload,timestamp) VALUES(?,?,?,?,?,?)", (event.id, event.event_type, event.actor, event.outcome, json.dumps(payload, sort_keys=True), event.timestamp))
 
     def audit_events(self) -> tuple[dict[str, Any], ...]:
         with self._connect() as conn:
-            rows = conn.execute("SELECT event_id,event_type,actor,outcome,payload,timestamp FROM audit_events ORDER BY timestamp,event_id").fetchall()
+            rows = conn.execute("SELECT event_id,event_type,actor,outcome,payload,timestamp FROM audit_events ORDER BY CAST(json_extract(payload, '$.audit_sequence') AS INTEGER)").fetchall()
         return tuple({"id": r["event_id"], "event_type": r["event_type"], "actor": r["actor"], "outcome": r["outcome"], "payload": json.loads(r["payload"]), "timestamp": r["timestamp"]} for r in rows)
+
+    def verify_audit_integrity(self) -> bool:
+        return AuditTrail.verify_chain(self.audit_events())
 
     @staticmethod
     def idempotency_key(*parts: str) -> str:
