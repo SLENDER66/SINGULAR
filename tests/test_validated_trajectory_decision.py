@@ -13,7 +13,7 @@ from singular.human_optimization import (
     OptimizationCandidate,
     OptimizationDisposition,
 )
-from singular.security import ActionPolicy, PolicyDecision
+from singular.security import ActionPolicy
 from singular.trajectory import TrajectoryAssessment, TrajectoryDecision
 from singular.trajectory_optimization import TrajectoryPortfolio
 from singular.validated_trajectory_decision import ValidatedTrajectoryDecision
@@ -30,6 +30,7 @@ def artifacts(*, global_decision: str = "PROCEED"):
     )
     portfolio = TrajectoryPortfolio((candidate,), 1.2, 1.0, 1.0, 0.0)
     assessment = TrajectoryAssessment(TrajectoryDecision.PROCEED, 0.8, 7.2, (), False)
+    governor = GovernorDecision(action.id, Autonomy.EXECUTE_REVERSIBLE, ("Action couverte par le contrat d'autonomie.",))
     report = GlobalDecisionReport(
         objective="Improve career",
         action_id=action.id,
@@ -37,16 +38,15 @@ def artifacts(*, global_decision: str = "PROCEED"):
         blockers=(),
         warnings=(),
         capacity_recommendation=None,
-        policy_tier="GREEN",
+        policy_tier=ActionPolicy.evaluate(action).tier.value,
         policy_requires_human=False,
-        governor_mode=Autonomy.PREPARE,
+        governor_mode=Autonomy.EXECUTE_REVERSIBLE,
         red_team_findings=(),
         coherence=None,
         trajectory=assessment,
         human_optimization=human,
     )
-    policy = PolicyDecision(ActionPolicy.evaluate(action).tier, True, True, False, ("safe",))
-    governor = GovernorDecision(action.id, Autonomy.EXECUTE_REVERSIBLE, ("covered",))
+    policy = ActionPolicy.evaluate(action)
     return action, human, portfolio, assessment, report, contract, policy, (), governor
 
 
