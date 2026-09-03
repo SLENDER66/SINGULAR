@@ -2,7 +2,7 @@ import pytest
 from dataclasses import replace
 
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
-from singular.decision_attestation import DecisionAttestationStore
+from singular.decision_attestation import DecisionAttestationStore, ValidatedDecisionIssuer
 from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
 from singular.execution_capability import register_execution_capability
@@ -41,6 +41,14 @@ def _build_decision():
         execution_target=AUTHORIZED_HANDLER_CAPABILITY,
         decision_id="DEC-PIPE", capacity_budget=2,
     )
+
+
+def _attested_executor(decision, tmp_path):
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    runtime.store.save_mission(decision.contract)
+    executor = DurableExecutionEngine(runtime)
+    ValidatedDecisionIssuer(executor.attestation_store).issue(decision)
+    return executor
 
 
 def test_pipeline_constructs_decision_only_after_all_required_stages():
@@ -117,9 +125,7 @@ def test_decision_expiry_is_fingerprinted():
 
 def test_executor_rejects_handler_substitution_before_handler_call(tmp_path):
     decision = _build_decision()
-    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
-    runtime.store.save_mission(decision.contract)
-    executor = DurableExecutionEngine(runtime)
+    executor = _attested_executor(decision, tmp_path)
     calls = []
 
     def wrong_handler(action):
@@ -131,11 +137,18 @@ def test_executor_rejects_handler_substitution_before_handler_call(tmp_path):
     assert calls == []
 
 
-def test_executor_accepts_only_the_bound_handler(tmp_path):
+def test_executor_rejects_unattested_valid_decision(tmp_path):
     decision = _build_decision()
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
     runtime.store.save_mission(decision.contract)
     executor = DurableExecutionEngine(runtime)
+    with pytest.raises(PermissionError, match="durablement attestée"):
+        executor.execute_validated(decision, authorized_handler)
+
+
+def test_executor_accepts_only_the_bound_handler(tmp_path):
+    decision = _build_decision()
+    executor = _attested_executor(decision, tmp_path)
 
     result = executor.execute_validated(decision, authorized_handler)
 
@@ -145,9 +158,7 @@ def test_executor_accepts_only_the_bound_handler(tmp_path):
 
 def test_executor_rejects_forged_callable_metadata(tmp_path):
     decision = _build_decision()
-    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
-    runtime.store.save_mission(decision.contract)
-    executor = DurableExecutionEngine(runtime)
+    executor = _attested_executor(decision, tmp_path)
 
     def forged_handler(action):
         return {"action_id": action.id, "executed": False}
@@ -189,21 +200,21 @@ def _build_effect_decision():
 
 def test_executor_rejects_provider_substitution_before_runtime_access(tmp_path):
     decision, _ = _build_effect_decision()
-    executor = object.__new__(DurableExecutionEngine)
+    executor = _attested_executor(decision, tmp_path)
     with pytest.raises(PermissionError, match="Provider capability"):
         executor.execute_effect_validated(decision, OtherProvider(), provider_name="bounded-provider", operation="apply", payload={"amount": 42, "target": "bounded"})
 
 
 def test_executor_rejects_operation_substitution_before_runtime_access(tmp_path):
     decision, payload = _build_effect_decision()
-    executor = object.__new__(DurableExecutionEngine)
+    executor = _attested_executor(decision, tmp_path)
     with pytest.raises(PermissionError, match="Provider or operation"):
         executor.execute_effect_validated(decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider", operation="delete", payload=payload)
 
 
 def test_executor_rejects_payload_substitution_before_runtime_access(tmp_path):
     decision, _ = _build_effect_decision()
-    executor = object.__new__(DurableExecutionEngine)
+    executor = _attested_executor(decision, tmp_path)
     with pytest.raises(PermissionError, match="payload"):
         executor.execute_effect_validated(decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider", operation="apply", payload={"amount": 43, "target": "bounded"})
 
