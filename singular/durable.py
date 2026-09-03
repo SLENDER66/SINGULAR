@@ -137,8 +137,13 @@ class DurableStore:
         now = datetime.now(UTC).isoformat()
         payload = json.dumps(asdict(contract), sort_keys=True)
         with self._connect() as conn:
-            conn.execute("INSERT OR REPLACE INTO missions(mission_id,payload,created_at) VALUES(?,?,?)", (contract.mission_id, payload, now))
-            conn.execute("INSERT OR IGNORE INTO mission_states(mission_id,status,updated_at) VALUES(?,?,?)", (contract.mission_id, MissionStatus.CREATED.value, now))
+            existing = conn.execute("SELECT payload FROM missions WHERE mission_id=?", (contract.mission_id,)).fetchone()
+            if existing is not None:
+                if existing["payload"] != payload:
+                    raise ValueError("L'identité d'une mission existante est immuable.")
+                return
+            conn.execute("INSERT INTO missions(mission_id,payload,created_at) VALUES(?,?,?)", (contract.mission_id, payload, now))
+            conn.execute("INSERT INTO mission_states(mission_id,status,updated_at) VALUES(?,?,?)", (contract.mission_id, MissionStatus.CREATED.value, now))
 
     def load_mission(self, mission_id: str) -> DelegationContract | None:
         with self._connect() as conn:
@@ -219,7 +224,6 @@ class DurableStore:
         return tuple(ApprovalRequest(r["action_id"], r["reason"], ApprovalStatus(r["status"]), r["approval_id"]) for r in rows)
 
     def record_audit(self, event: AuditEvent) -> None:
-        """Atomically append an already-materialized event to the durable audit chain."""
         payload = dict(event.payload)
         sequence = payload.get("audit_sequence")
         fingerprint = payload.get("audit_fingerprint")
@@ -317,7 +321,6 @@ class DurableStore:
             current_row = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()
             if current_row is None:
                 raise KeyError(mission_id)
-            current = MissionStatus(current_row["status"])
             self._transition_mission_status(conn, mission_id, MissionStatus.RUNNING, expected_current=MissionStatus.PLANNED)
             conn.execute("INSERT INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)", (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until))
             row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
@@ -361,8 +364,8 @@ class DurableStore:
         return self.mark_execution_recovery_required(execution_key)
 
     def resolve_execution_recovery(self, execution_key: str, decision: str, *, result: Any = None, reason: str | None = None) -> dict[str, Any]:
-        if decision not in {"CONFIRM", "FAIL", "CANCEL"}:
-            raise ValueError(f"Décision de récupération inconnue: {decision}")
+        if decision not in {"FAIL", "CANCEL"}:
+            raise ValueError("Une exécution en récupération ne peut être confirmée comme réussie sans preuve externe.")
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             row = conn.execute("SELECT execution_key,mission_id,action_id,status,result,error FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
@@ -373,10 +376,7 @@ class DurableStore:
             mission = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (row["mission_id"],)).fetchone()
             if mission is None or mission["status"] != MissionStatus.RUNNING.value:
                 raise ValueError("La mission doit être RUNNING pendant une récupération.")
-            if decision == "CONFIRM":
-                execution_status, mission_status = "COMPLETED", MissionStatus.COMPLETED
-                encoded_result, error = json.dumps(result, sort_keys=True, default=str), reason
-            elif decision == "FAIL":
+            if decision == "FAIL":
                 execution_status, mission_status = "FAILED", MissionStatus.FAILED
                 encoded_result, error = None, reason or "Échec confirmé pendant la récupération."
             else:
