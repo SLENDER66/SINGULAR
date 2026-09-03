@@ -30,8 +30,10 @@ class AgentCalibration:
             raise ValueError("forecast_count cannot be negative")
         if not isfinite(self.mean_absolute_error) or self.mean_absolute_error < 0:
             raise ValueError("mean_absolute_error must be finite and non-negative")
-        if self.mean_brier_score is not None and not 0 <= self.mean_brier_score <= 1:
-            raise ValueError("mean_brier_score must be between 0 and 1")
+        if self.mean_brier_score is not None and (
+            not isfinite(self.mean_brier_score) or not 0 <= self.mean_brier_score <= 1
+        ):
+            raise ValueError("mean_brier_score must be finite and between 0 and 1")
 
 
 @dataclass(frozen=True)
@@ -56,11 +58,18 @@ class MetaAuditEngine:
     def calibration(records: Sequence[CalibrationRecord]) -> dict[str, float | int]:
         if not records:
             return {"count": 0, "mean_absolute_error": 0.0, "mean_brier_score": 0.0}
-        brier = [record.brier_score for record in records if record.brier_score is not None]
+        total_error = 0.0
+        brier_total = 0.0
+        brier_count = 0
+        for record in records:
+            total_error += record.error
+            if record.brier_score is not None:
+                brier_total += record.brier_score
+                brier_count += 1
         return {
             "count": len(records),
-            "mean_absolute_error": round(sum(record.error for record in records) / len(records), 6),
-            "mean_brier_score": round(sum(brier) / len(brier), 6) if brier else 0.0,
+            "mean_absolute_error": round(total_error / len(records), 6),
+            "mean_brier_score": round(brier_total / brier_count, 6) if brier_count else 0.0,
         }
 
     @classmethod
@@ -73,20 +82,19 @@ class MetaAuditEngine:
         """Audit raw learning records by agent; emits findings only, never mutations."""
         if minimum_sample < 1:
             raise ValueError("minimum_sample must be positive")
-        calibrations = tuple(
-            AgentCalibration(
-                agent_id=agent_id,
-                forecast_count=len(records),
-                mean_absolute_error=float(cls.calibration(records)["mean_absolute_error"]),
-                mean_brier_score=(
-                    float(cls.calibration(records)["mean_brier_score"])
-                    if any(record.brier_score is not None for record in records)
-                    else None
-                ),
+        calibrations: list[AgentCalibration] = []
+        for agent_id, records in records_by_agent.items():
+            summary = cls.calibration(records)
+            has_brier = any(record.brier_score is not None for record in records)
+            calibrations.append(
+                AgentCalibration(
+                    agent_id=agent_id,
+                    forecast_count=int(summary["count"]),
+                    mean_absolute_error=float(summary["mean_absolute_error"]),
+                    mean_brier_score=(float(summary["mean_brier_score"]) if has_brier else None),
+                )
             )
-            for agent_id, records in records_by_agent.items()
-        )
-        return cls.audit(calibrations=calibrations, minimum_sample=minimum_sample)
+        return cls.audit(calibrations=tuple(calibrations), minimum_sample=minimum_sample)
 
     @classmethod
     def audit(
@@ -138,45 +146,13 @@ class MetaAuditEngine:
                     )
                 )
         if unknown_count > 0:
-            findings.append(
-                MetaAuditFinding(
-                    "UNRESOLVED_UNKNOWNS",
-                    MetaAuditSeverity.WARNING,
-                    "WORLD_MODEL",
-                    f"{unknown_count} unknown inputs remain",
-                    "RESOLVE_OR_EXPLICITLY_ACCEPT_UNCERTAINTY",
-                )
-            )
+            findings.append(MetaAuditFinding("UNRESOLVED_UNKNOWNS", MetaAuditSeverity.WARNING, "WORLD_MODEL", f"{unknown_count} unknown inputs remain", "RESOLVE_OR_EXPLICITLY_ACCEPT_UNCERTAINTY"))
         if contradiction_count > 0:
-            findings.append(
-                MetaAuditFinding(
-                    "WORLD_MODEL_CONTRADICTION",
-                    MetaAuditSeverity.CRITICAL,
-                    "WORLD_MODEL",
-                    f"{contradiction_count} contradictions detected",
-                    "BLOCK_HIGH_CONSEQUENCE_DECISIONS_UNTIL_RESOLVED",
-                )
-            )
+            findings.append(MetaAuditFinding("WORLD_MODEL_CONTRADICTION", MetaAuditSeverity.CRITICAL, "WORLD_MODEL", f"{contradiction_count} contradictions detected", "BLOCK_HIGH_CONSEQUENCE_DECISIONS_UNTIL_RESOLVED"))
         if stale_rule_count > 0:
-            findings.append(
-                MetaAuditFinding(
-                    "STALE_RULES",
-                    MetaAuditSeverity.WARNING,
-                    "SYSTEM",
-                    f"{stale_rule_count} potentially obsolete rules",
-                    "REVIEW_RULES_AGAINST_NEW_EVIDENCE",
-                )
-            )
+            findings.append(MetaAuditFinding("STALE_RULES", MetaAuditSeverity.WARNING, "SYSTEM", f"{stale_rule_count} potentially obsolete rules", "REVIEW_RULES_AGAINST_NEW_EVIDENCE"))
         if low_information_decision_count > 0:
-            findings.append(
-                MetaAuditFinding(
-                    "LOW_INFORMATION_DECISIONS",
-                    MetaAuditSeverity.INFO,
-                    "DECISION_ENGINE",
-                    f"{low_information_decision_count} decisions have weak evidence density",
-                    "INCREASE_EVIDENCE_CAPTURE_AND_FORECASTING",
-                )
-            )
+            findings.append(MetaAuditFinding("LOW_INFORMATION_DECISIONS", MetaAuditSeverity.INFO, "DECISION_ENGINE", f"{low_information_decision_count} decisions have weak evidence density", "INCREASE_EVIDENCE_CAPTURE_AND_FORECASTING"))
         return MetaAuditReport(
             tuple(findings),
             not any(item.severity is MetaAuditSeverity.CRITICAL for item in findings),
