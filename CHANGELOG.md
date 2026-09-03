@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.4.3 — Interaction-Aware Trajectory Optimization
+
+- Added a dedicated trajectory layer that evaluates portfolios rather than only individual interventions.
+- Added explicit pairwise synergy and conflict effects with confidence discounting.
+- Added exact deterministic portfolio evaluation for up to 22 candidates.
+- Added fail-closed rejection beyond the exact search safety limit instead of silently presenting an approximation as optimal.
+- Added regression coverage proving synergy can overturn individual rankings and conflicts can invalidate an otherwise attractive combination.
+- Kept trajectory optimization recommendation-only; it cannot authorize execution or mutate governance.
+
 ## 3.4.2 — Decision Audit Hardening
 
 - Replaced the large-search-space greedy fallback with deterministic branch-and-bound using an admissible optimistic bound and an explicit node budget.
@@ -34,7 +43,6 @@
 - Added restart-safe `DurableMissionRuntime`.
 - Strengthened ORANGE governance: preparation is allowed, execution requires human approval.
 - Kept RED/BLACK fail-closed behavior.
-- Added persistence and adversarial governance tests.
 
 ## 3.2.0
 - Added governed specialist workforce routing.
