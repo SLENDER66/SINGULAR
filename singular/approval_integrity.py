@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .autopilot import ActionRequest, DelegationContract
+from .sqlite_support import SqliteLocation
 
 
 class ApprovalIntegrityStore:
@@ -20,13 +21,12 @@ class ApprovalIntegrityStore:
     }
 
     def __init__(self, path: str | Path) -> None:
-        self.path = Path(path)
+        self._location = SqliteLocation(path)
+        self.path = self._location.reference
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._location.connect()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .learning import CalibrationRecord, LearningEngine, LearningUpdate
 from .outcome_ledger import OutcomeLedger, OutcomeObservation
+from .sqlite_support import SqliteLocation
 
 
 @dataclass(frozen=True)
@@ -43,15 +44,13 @@ class LearningReviewQueue:
     """Persist reviewable learning proposals without self-modifying execution rules."""
 
     def __init__(self, path: str | Path = "data/singular.db", *, outcome_ledger: OutcomeLedger | None = None) -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._location = SqliteLocation(path)
+        self.path = self._location.reference
         self.outcome_ledger = outcome_ledger or OutcomeLedger(self.path)
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._location.connect()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

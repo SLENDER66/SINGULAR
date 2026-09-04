@@ -17,6 +17,7 @@ from pathlib import Path
 from .decision_attestation import DecisionAttestationStore
 from .durable import DurableStore
 from .learning import CalibrationRecord, Forecast, ForecastKind, LearningEngine
+from .sqlite_support import SqliteLocation
 from .validated_trajectory_decision import ValidatedTrajectoryDecision
 
 
@@ -45,15 +46,13 @@ class OutcomeLedger:
     """Append-only SQLite ledger for durable forecast calibration."""
 
     def __init__(self, path: str | Path = "data/singular.db", attestation_store: DecisionAttestationStore | None = None) -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._location = SqliteLocation(path)
+        self.path = self._location.reference
         self.attestation_store = attestation_store or DecisionAttestationStore(self.path)
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._location.connect()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

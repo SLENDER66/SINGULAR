@@ -16,6 +16,8 @@ from enum import Enum
 from math import isfinite
 from pathlib import Path
 
+from .sqlite_support import SqliteLocation
+
 
 class ImprovementKind(str, Enum):
     MODEL = "MODEL"
@@ -77,14 +79,12 @@ class ImprovementRegistry:
     """Persist candidates, evaluations and explicit activations with rollback."""
 
     def __init__(self, path: str | Path = "data/singular.db") -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._location = SqliteLocation(path)
+        self.path = self._location.reference
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._location.connect()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

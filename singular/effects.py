@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, Protocol
 
 from .durable import DurableStore
+from .sqlite_support import SqliteLocation
 
 
 class EffectStatus(str, Enum):
@@ -69,11 +70,7 @@ class ExternalEffectCoordinator:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.store.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=10000")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        return SqliteLocation(self.store.path).connect(foreign_keys=True, busy_timeout=True)
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

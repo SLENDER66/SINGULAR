@@ -3,19 +3,19 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from .sqlite_support import SqliteLocation
+
 
 class ApprovalBindingStore:
     """Durable immutable approval -> exact action identity binding."""
 
     def __init__(self, database_path: str | Path) -> None:
-        self.path = Path(database_path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._location = SqliteLocation(database_path)
+        self.path = self._location.reference
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._location.connect()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

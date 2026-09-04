@@ -4,6 +4,8 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from .sqlite_support import SqliteLocation
+
 
 @dataclass(frozen=True)
 class ConsistencyViolation:
@@ -21,10 +23,11 @@ class CrossDomainConsistencyChecker:
     """Read-only invariant checker for the mission/execution/effect state graph."""
 
     def __init__(self, db_path: str | Path) -> None:
-        self.db_path = Path(db_path)
+        self._location = SqliteLocation(db_path)
+        self.db_path = self._location.reference
 
     def check(self, mission_id: str | None = None) -> tuple[ConsistencyViolation, ...]:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._location.connect() as conn:
             conn.row_factory = sqlite3.Row
             mission_filter = " AND e.mission_id=?" if mission_id is not None else ""
             params = (mission_id,) if mission_id is not None else ()

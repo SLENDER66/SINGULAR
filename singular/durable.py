@@ -11,6 +11,7 @@ from typing import Any
 
 from .audit import AuditEvent, AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, DelegationContract
+from .sqlite_support import SqliteLocation
 
 
 class MissionStatus(str, Enum):
@@ -40,16 +41,14 @@ class DurableStore:
     """SQLite persistence boundary for mission, approval, audit, execution and effect state."""
 
     def __init__(self, path: str | Path = "data/singular.db") -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._location = SqliteLocation(path)
+        #: Derived stores are constructed from this value, so it must be the
+        #: resolved location and not the raw ":memory:" they cannot share.
+        self.path = self._location.reference
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=10000")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        return self._location.connect(foreign_keys=True, busy_timeout=True)
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

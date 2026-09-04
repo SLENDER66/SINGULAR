@@ -14,6 +14,7 @@ from math import isfinite
 from pathlib import Path
 from time import time
 
+from .sqlite_support import SqliteLocation
 from .validated_trajectory_decision import ValidatedTrajectoryDecision
 
 
@@ -40,29 +41,20 @@ class DecisionAttestation:
 class DecisionAttestationStore:
     """SQLite-backed, fail-closed attestation registry.
 
-    `:memory:` is supported as a real in-memory database rather than SQLite's
-    per-connection ephemeral database. A private anchor connection keeps the
-    shared in-memory database alive for the lifetime of this store instance.
+    `:memory:` resolution lives in SqliteLocation, shared with every other store
+    in the package: this class used to carry its own copy, which is why it was
+    the only store where an in-memory database actually worked.
     """
 
     def __init__(self, path: str | Path = "data/singular.db") -> None:
-        raw_path = str(path)
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._sqlite_uri = False
-        self._sqlite_target = raw_path
-        self._anchor: sqlite3.Connection | None = None
-        if raw_path == ":memory:":
-            self._sqlite_uri = True
-            self._sqlite_target = f"file:singular_attestation_{id(self)}?mode=memory&cache=shared"
-            self._anchor = sqlite3.connect(self._sqlite_target, uri=True, timeout=10.0)
-            self._anchor.row_factory = sqlite3.Row
+        self._location = SqliteLocation(path)
+        #: The resolved location, so a store built from this path joins the
+        #: same database rather than minting a private one.
+        self.path = self._location.reference
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._sqlite_target, uri=self._sqlite_uri, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return self._location.connect()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
