@@ -93,6 +93,7 @@ from .outcome_ledger import OutcomeLedger, OutcomeObservation
 from .learning_review_queue import LearningReview, LearningReviewQueue
 from .continuous_learning import ContinuousLearningCycle, LearningCycleResult
 from .self_improvement import SelfImprovementEngine, SelfImprovementProposal
+from .improvement_registry import ImprovementActivation, ImprovementCandidate, ImprovementEvaluation, ImprovementKind, ImprovementRegistry
 from .durable_recovery import confirm_execution_recovery_from_effect
 from .durable_approval import save_approval as _save_approval_hardening, update_approval as _update_approval_hardening
 from .durable_integrity import DurableIntegrityChecker, DurableIntegrityReport, IntegrityViolation
