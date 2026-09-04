@@ -58,6 +58,18 @@ def test_successful_promotion_is_durable_and_visible_after_restart(tmp_path):
     assert restarted.active("forecast.model") == activation
 
 
+def test_rollback_requires_a_previously_activated_version(tmp_path):
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    registry.register(candidate())
+    with pytest.raises(PermissionError, match="previously activated"):
+        registry.rollback("forecast.model", version="v0", candidate_id="IMP-1")
+    registry.review("IMP-1", "ACCEPTED")
+    registry.evaluate(evaluation())
+    registry.promote("IMP-1")
+    rollback = registry.rollback("forecast.model", version="v2", candidate_id="IMP-1")
+    assert registry.active("forecast.model") == rollback
+
+
 def test_safety_critical_policy_cannot_enter_registry(tmp_path):
     registry = ImprovementRegistry(tmp_path / "improvements.db")
     with pytest.raises(PermissionError, match="safety-critical"):
