@@ -195,8 +195,12 @@ class ImprovementRegistry:
 
     def rollback(self, target: str, *, version: str, candidate_id: str) -> ImprovementActivation:
         with self._connect() as conn:
-            if conn.execute("SELECT 1 FROM improvement_candidates WHERE candidate_id=? AND target=?", (candidate_id, target)).fetchone() is None:
-                raise KeyError(candidate_id)
+            history = conn.execute(
+                "SELECT 1 FROM improvement_activation_history WHERE target=? AND version=? AND candidate_id=? LIMIT 1",
+                (target, version, candidate_id),
+            ).fetchone()
+            if history is None:
+                raise PermissionError("rollback target must be a previously activated immutable version")
             now = datetime.now(UTC).isoformat()
             activation = ImprovementActivation(target, version, candidate_id, now)
             conn.execute("INSERT OR REPLACE INTO improvement_activations(target,version,candidate_id,activated_at) VALUES(?,?,?,?)", (target, version, candidate_id, now))
