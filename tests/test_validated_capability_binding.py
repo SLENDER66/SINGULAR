@@ -25,7 +25,10 @@ def test_pipeline_binds_source_action_to_execution_capability():
         capacity_budget=2,
     )
 
-    assert decision.authorized_actions[0].capability == capability
+    assert decision.authorized_actions[0].execution_capability == capability
+    # The governance capability field stays untouched: a cap_ token is not a
+    # CapabilityRegistry name and ActionPolicy would refuse it as tier BLACK.
+    assert decision.authorized_actions[0].capability is None
     assert decision.verify()
 
 
@@ -33,7 +36,7 @@ def test_pipeline_rejects_conflicting_source_action_capability():
     contract, action, state, intervention, profile, dimensions = _inputs()
     first = register_execution_capability(lambda _action: None, "cap_binding_conflict_a")
     second = register_execution_capability(lambda _action: None, "cap_binding_conflict_b")
-    conflicting = replace(action, capability=first)
+    conflicting = replace(action, execution_capability=first)
 
     with pytest.raises(PermissionError, match="action capability"):
         ValidatedTrajectoryPipeline.build(

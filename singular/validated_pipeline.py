@@ -69,9 +69,14 @@ class ValidatedTrajectoryPipeline:
             raise ValueError("max_portfolio_candidates must be positive")
 
         action = actions[0]
-        if action.capability not in (None, execution_target):
+        # The opaque execution token goes in execution_capability, never in
+        # `capability`: the latter is the named governance capability read by
+        # ActionPolicy, which refuses any name absent from CapabilityRegistry.
+        # Writing a cap_ token there made every action tier BLACK, so the gate
+        # answered BLOCK and no decision could ever be built.
+        if action.execution_capability not in (None, execution_target):
             raise PermissionError("action capability does not match the validated execution target")
-        action = replace(action, capability=execution_target)
+        action = replace(action, execution_capability=execution_target)
 
         intervention_map = {item.id: item for item in interventions}
         if len(intervention_map) != len(interventions):

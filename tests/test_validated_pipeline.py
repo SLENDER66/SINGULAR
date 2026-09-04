@@ -73,8 +73,16 @@ def test_pipeline_can_issue_durable_attestation_as_final_build_stage(tmp_path):
 
 
 def test_pipeline_fails_closed_when_trajectory_requires_review():
+    """An incomplete trajectory picture must never be silently optimized over.
+
+    This used to lower one dimension to -0.2. TrajectoryEngine clamps dimensions
+    to [-1, 1] and weights money 1 of 11, so that input scores 0.71 and proceeds:
+    the test only passed because the pipeline was refusing every build for an
+    unrelated reason. Drop the dimension instead, which is what actually raises
+    MISSING_DIMENSION and puts the assessment in REVIEW.
+    """
     contract, action, state, intervention, profile, dimensions = _inputs()
-    dimensions["money"] = -0.2
+    del dimensions["money"]
     with pytest.raises(PermissionError, match="Global decision gate refused|Trajectory requires"):
         ValidatedTrajectoryPipeline.build(
             objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),

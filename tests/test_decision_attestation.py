@@ -41,7 +41,10 @@ def test_different_context_cannot_reuse_same_decision_id(tmp_path):
     decision = _build_decision()
     store = DecisionAttestationStore(tmp_path / "attestations.db")
     store.issue(decision)
-    altered = recreate(decision, issued_at=decision.issued_at + 1.0)
+    # Shift the validity window forward, not backward: issued_at in the future
+    # makes the decision itself invalid ('not active yet') and the store would
+    # never reach the fingerprint comparison this test is about.
+    altered = recreate(decision, expires_at=decision.expires_at + 1.0)
     with pytest.raises(ValueError, match="different context fingerprint"):
         store.issue(altered)
 

@@ -35,11 +35,13 @@ class ValidatedActionRequest:
     sensitive: bool
     contract_id: str | None
     capability: str | None
+    execution_capability: str | None = None
 
     @classmethod
     def from_action(cls, action: ActionRequest) -> "ValidatedActionRequest":
         return cls(action.id, action.name, action.description, action.impact, action.risk, action.reversibility,
-                   action.requires_human, action.sensitive, action.contract_id, action.capability)
+                   action.requires_human, action.sensitive, action.contract_id, action.capability,
+                   action.execution_capability)
 
     def __post_init__(self) -> None:
         if not self.id.strip() or not self.name.strip() or not self.description.strip():
@@ -51,7 +53,8 @@ class ValidatedActionRequest:
     def to_action(self) -> ActionRequest:
         return ActionRequest(name=self.name, description=self.description, impact=self.impact, risk=self.risk,
                              reversibility=self.reversibility, requires_human=self.requires_human,
-                             sensitive=self.sensitive, contract_id=self.contract_id, id=self.id, capability=self.capability)
+                             sensitive=self.sensitive, contract_id=self.contract_id, id=self.id,
+                             capability=self.capability, execution_capability=self.execution_capability)
 
 
 @dataclass(frozen=True)
@@ -269,6 +272,10 @@ class ValidatedTrajectoryDecision:
             if action.contract_id != self.contract.mission_id:
                 raise ValueError("authorized action must be bound to the execution contract")
         selected_action = next(action for action in self.authorized_actions if action.id == self.global_report.action_id)
+        if selected_action.execution_capability != self.execution_target:
+            raise ValueError("the authorized action must carry the validated execution capability")
+        if any(action.execution_capability not in (None, self.execution_target) for action in self.authorized_actions):
+            raise ValueError("authorized actions cannot bind a different execution capability")
         materialized = selected_action.to_action()
         if self.policy != ActionPolicy.evaluate(materialized):
             raise ValueError("validated policy does not match the authorized action")

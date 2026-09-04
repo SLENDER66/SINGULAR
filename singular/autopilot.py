@@ -54,7 +54,16 @@ class ActionRequest:
     sensitive: bool = False
     contract_id: Optional[str] = None
     id: str = field(default_factory=lambda: "ACT-" + uuid4().hex[:8])
+    #: Named governance capability from CapabilityRegistry (e.g. "send_email").
+    #: Read by ActionPolicy, the Governor and approval integrity to decide what
+    #: this action is allowed to be. An unknown name is refused as tier BLACK.
     capability: str | None = None
+    #: Opaque `cap_...` token from ExecutionCapabilityRegistry identifying the
+    #: exact in-process object authorized to run this action. It answers "which
+    #: code", never "is this allowed", and must never be read by policy: these
+    #: are two different questions and a token is by construction not a
+    #: governance capability name.
+    execution_capability: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip() or not self.name.strip() or not self.description.strip():
@@ -66,6 +75,11 @@ class ActionRequest:
             raise ValueError("ActionRequest contract_id cannot be blank")
         if self.capability is not None and not self.capability.strip():
             raise ValueError("ActionRequest capability cannot be blank")
+        if self.execution_capability is not None:
+            if not self.execution_capability.strip():
+                raise ValueError("ActionRequest execution_capability cannot be blank")
+            if not self.execution_capability.startswith("cap_"):
+                raise ValueError("ActionRequest execution_capability must be an opaque cap_ token")
 
 
 @dataclass

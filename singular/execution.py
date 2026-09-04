@@ -14,6 +14,7 @@ from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
 from .execution_capability import execution_capability_matches
 from .mission_runtime import DurableMissionRuntime
+from .security import ActionPolicy
 from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
 
 
@@ -50,7 +51,7 @@ class DurableExecutionEngine:
 
     @staticmethod
     def _execution_identity_fingerprint(action: Any, mission_id: str, governed: Any, contract: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> str:
-        payload = {"mission_id": mission_id, "decision_id": decision_id, "decision_context_fingerprint": decision_fingerprint, "action": {"id": getattr(action, "id", None), "name": getattr(action, "name", None), "payload": getattr(action, "payload", None), "risk": getattr(action, "risk", None), "reversibility": getattr(action, "reversibility", None), "sensitive": getattr(action, "sensitive", None), "capability": getattr(action, "capability", None)}, "governance": {"policy_tier": getattr(governed, "policy_tier", None), "can_prepare": getattr(governed, "can_prepare", None), "can_execute": getattr(governed, "can_execute", None), "requires_human": getattr(governed, "requires_human", None), "reasons": list(getattr(governed, "reasons", ()) or ()), "mode": getattr(getattr(governed, "governor", None), "mode", None), "approval_id": getattr(getattr(governed, "governor", None), "approval_id", None)}, "contract": None if contract is None else str(contract)}
+        payload = {"mission_id": mission_id, "decision_id": decision_id, "decision_context_fingerprint": decision_fingerprint, "action": {"id": getattr(action, "id", None), "name": getattr(action, "name", None), "payload": getattr(action, "payload", None), "risk": getattr(action, "risk", None), "reversibility": getattr(action, "reversibility", None), "sensitive": getattr(action, "sensitive", None), "capability": getattr(action, "capability", None), "execution_capability": getattr(action, "execution_capability", None)}, "governance": {"policy_tier": getattr(governed, "policy_tier", None), "can_prepare": getattr(governed, "can_prepare", None), "can_execute": getattr(governed, "can_execute", None), "requires_human": getattr(governed, "requires_human", None), "reasons": list(getattr(governed, "reasons", ()) or ()), "mode": getattr(getattr(governed, "governor", None), "mode", None), "approval_id": getattr(getattr(governed, "governor", None), "approval_id", None)}, "contract": None if contract is None else str(contract)}
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -107,12 +108,30 @@ class DurableExecutionEngine:
             raise PermissionError("Validated decision does not authorize an executable action.")
         if action.contract_id != mission_id:
             raise PermissionError("Validated action is not bound to the validated contract.")
+        if action.execution_capability != decision.execution_target:
+            raise PermissionError("Validated action is not bound to the authorized execution capability.")
         governed = self._authorize(action, mission_id)
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
-        if getattr(governed, "policy", None) != decision.policy:
-            raise PermissionError("Current policy no longer matches the validated decision.")
+        self._assert_policy_unchanged(action, governed, decision)
         return self._execute_authorized(action, mission_id, handler, governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint)
+
+    @staticmethod
+    def _assert_policy_unchanged(action, governed: Any, decision: ValidatedTrajectoryDecision) -> None:
+        """Recompute the policy and compare it to the one sealed in the decision.
+
+        This used to read `governed.policy`, an attribute GovernedAction does not
+        have, through getattr with a None default: the comparison could never
+        succeed, so every validated execution was refused. Fail-closed, but the
+        check proved nothing -- and the same getattr defaulted to the decision's
+        own value would have been fail-open. Reconstruct the policy instead of
+        reading it off an object that was never asked to carry it.
+        """
+        current = ActionPolicy.evaluate(action)
+        if current != decision.policy:
+            raise PermissionError("Current policy no longer matches the validated decision.")
+        if governed.policy_tier != decision.policy.tier.value:
+            raise PermissionError("Current governance tier no longer matches the validated policy.")
 
     def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any, *, decision_id: str | None = None, decision_fingerprint: str | None = None) -> ExecutionResult:
         action = governed.action
@@ -152,8 +171,9 @@ class DurableExecutionEngine:
         if action is None:
             raise PermissionError("Validated decision does not authorize an executable action.")
         governed = self._authorize(action, decision.contract.mission_id)
-        if governed.governor != decision.governor or getattr(governed, "policy", None) != decision.policy:
-            raise PermissionError("Current governance or policy no longer matches the validated decision.")
+        if governed.governor != decision.governor:
+            raise PermissionError("Current governance no longer matches the validated decision.")
+        self._assert_policy_unchanged(action, governed, decision)
         return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint)
 
     def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> ExecutionResult:

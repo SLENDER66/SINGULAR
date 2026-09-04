@@ -66,7 +66,8 @@ class ValidatedExecutionBoundary:
     def _materialize_action(action: ValidatedActionRequest) -> ActionRequest:
         return ActionRequest(name=action.name, description=action.description, impact=action.impact, risk=action.risk,
                              reversibility=action.reversibility, requires_human=action.requires_human,
-                             sensitive=action.sensitive, contract_id=action.contract_id, id=action.id, capability=action.capability)
+                             sensitive=action.sensitive, contract_id=action.contract_id, id=action.id,
+                             capability=action.capability, execution_capability=action.execution_capability)
 
     @staticmethod
     def _provider_target(provider: EffectProvider) -> str:
@@ -78,6 +79,8 @@ class ValidatedExecutionBoundary:
         action = self._materialize_action(self._action(decision, action_id))
         if action.contract_id != decision.contract.mission_id:
             raise PermissionError("L'action et le contrat de décision ne sont pas liés.")
+        if action.execution_capability != decision.execution_target:
+            raise PermissionError("L'action n'est pas liée à la capacité d'exécution autorisée.")
         return action
 
     def execute(self, decision: ValidatedTrajectoryDecision, action_id: str, handler: Callable[[ActionRequest], Any]) -> ExecutionResult:
