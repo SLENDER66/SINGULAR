@@ -1,37 +1,36 @@
-import ast
-from pathlib import Path
+"""No production module may call a raw execution API.
 
+This used to reimplement its own AST scan, matching on method name alone. That
+made it flag the validated wrappers whose methods legitimately share the raw
+engine's names, so it reported bypasses that did not exist while a receiver-aware
+bypass would still have slipped past it. There is now exactly one implementation
+of the rule — ExecutionBoundaryAuditor — and this file asserts against it, so the
+guard and the CI gate can never drift apart.
+"""
+from singular.execution_boundary_audit import ExecutionBoundaryAuditor
 
-ROOT = Path(__file__).resolve().parents[1] / "singular"
-DEFINING_MODULES = {"execution.py", "tool_fabric.py", "mission_autopilot.py", "empire.py"}
-FORBIDDEN_METHODS = {"execute_approved", "execute_autonomous", "execute_effect", "reconcile_effect"}
-
-
-def _production_python_files():
-    return sorted(path for path in ROOT.rglob("*.py") if path.name not in DEFINING_MODULES)
+BYPASS_RULES = {
+    "RAW_ENGINE_BYPASS",
+    "RAW_TOOL_BYPASS",
+    "INNER_EXECUTOR_BYPASS",
+    "UNRESOLVED_RAW_EXECUTION_RECEIVER",
+    "NON_AUTHORITATIVE_EXECUTION_LEDGER",
+    "PARSE_ERROR",
+}
 
 
 def test_production_has_no_direct_raw_execution_api_calls():
-    violations = []
-    for path in _production_python_files():
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                continue
-            if node.func.attr in FORBIDDEN_METHODS:
-                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: .{node.func.attr}(...)")
-            if node.func.attr == "execute" and isinstance(node.func.value, ast.Name) and node.func.value.id == "DurableExecutionEngine":
-                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: DurableExecutionEngine.execute(...)")
+    report = ExecutionBoundaryAuditor().audit()
+    violations = [f"{f.path}:{f.line}: {f.rule} {f.detail}" for f in report.findings if f.rule in BYPASS_RULES]
     assert not violations, "raw execution APIs must never be called from production modules:\n" + "\n".join(violations)
 
 
 def test_production_never_invokes_an_agent_handler_directly():
-    violations = []
-    for path in _production_python_files():
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                continue
-            if node.func.attr == "handler" and isinstance(node.func.value, ast.Name) and node.func.value.id == "agent":
-                violations.append(f"{path.relative_to(ROOT)}:{node.lineno}: agent.handler(...)")
+    report = ExecutionBoundaryAuditor().audit()
+    violations = [f"{f.path}:{f.line}: {f.detail}" for f in report.findings if f.rule == "DIRECT_HANDLER_BYPASS"]
     assert not violations, "agent handlers must only be reached through the validated execution boundary:\n" + "\n".join(violations)
+
+
+def test_raw_execution_entry_points_deny_by_default_at_runtime():
+    """The static scan is worthless if the raw API stopped refusing at runtime."""
+    assert ExecutionBoundaryAuditor().audit().raw_execution_is_denied is True
