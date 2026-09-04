@@ -1,7 +1,7 @@
 from singular.durable import DurableStore, MissionStatus
 from singular.learning import Forecast, ForecastKind, LearningEngine
 from singular.outcome_ledger import OutcomeLedger
-from test_validated_pipeline import _build_decision
+from tests.test_validated_pipeline import _build_decision
 
 
 def _completed_execution(decision, db_path):

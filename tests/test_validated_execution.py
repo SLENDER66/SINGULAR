@@ -4,7 +4,7 @@ from singular.decision_attestation import DecisionAttestationStore
 from singular.execution import ExecutionResult
 from singular.execution_capability import register_execution_capability
 from singular.validated_execution import ValidatedExecutionBoundary
-from test_validated_trajectory_decision import artifacts, build
+from tests.test_validated_trajectory_decision import artifacts, build
 
 
 def authorized_handler(action):

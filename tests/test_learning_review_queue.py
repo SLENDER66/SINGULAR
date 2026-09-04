@@ -5,7 +5,7 @@ import pytest
 from singular.learning import Forecast, ForecastKind
 from singular.learning_review_queue import LearningReviewQueue
 from singular.outcome_ledger import OutcomeLedger
-from test_validated_pipeline import _build_decision
+from tests.test_validated_pipeline import _build_decision
 
 
 def test_learning_review_is_reviewable_not_automatic_mutation(tmp_path):

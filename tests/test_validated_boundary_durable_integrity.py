@@ -5,7 +5,7 @@ import pytest
 from singular.durable import DurableStore
 from singular.effects import ExternalEffectCoordinator
 from singular.validated_execution import ValidatedExecutionBoundary
-from test_validated_trajectory_decision import build
+from tests.test_validated_trajectory_decision import build
 
 
 class FakeExecutor:

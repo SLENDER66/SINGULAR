@@ -4,7 +4,7 @@ from singular.control_plane import ControlPlaneDecision, SingularControlPlane
 from singular.durable import DurableStore
 from singular.learning import Forecast, ForecastKind
 from singular.mission_runtime import DurableMissionRuntime
-from test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
+from tests.test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
 
 
 def _plane(tmp_path):

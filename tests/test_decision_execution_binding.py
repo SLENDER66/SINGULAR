@@ -7,7 +7,7 @@ from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
 from singular.mission_runtime import DurableMissionRuntime
 from singular.validated_pipeline import ValidatedTrajectoryPipeline
-from test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
+from tests.test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
 
 
 def build_decision(decision_id, dimensions=None, action_id=None):

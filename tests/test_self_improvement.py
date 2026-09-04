@@ -3,7 +3,7 @@ from singular.execution import DurableExecutionEngine
 from singular.learning import Forecast, ForecastKind
 from singular.mission_runtime import DurableMissionRuntime
 from singular.self_improvement import SelfImprovementEngine
-from test_validated_pipeline import _build_decision, authorized_handler
+from tests.test_validated_pipeline import _build_decision, authorized_handler
 
 
 def test_self_improvement_produces_testable_strategy_without_mutation(tmp_path):

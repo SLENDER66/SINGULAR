@@ -4,7 +4,7 @@ from singular.validated_decision_service import ValidatedDecisionService
 from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
 from singular.mission_runtime import DurableMissionRuntime
-from test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
+from tests.test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
 
 
 def _service(tmp_path):

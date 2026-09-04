@@ -3,7 +3,7 @@ from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
 from singular.learning import Forecast, ForecastKind
 from singular.mission_runtime import DurableMissionRuntime
-from test_validated_pipeline import _build_decision, authorized_handler
+from tests.test_validated_pipeline import _build_decision, authorized_handler
 
 
 def _executed_cycle(tmp_path, decision):

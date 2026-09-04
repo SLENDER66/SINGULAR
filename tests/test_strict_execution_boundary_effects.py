@@ -3,7 +3,7 @@ import pytest
 from singular.decision_attestation import DecisionAttestationStore, ValidatedDecisionIssuer
 from singular.execution import ExecutionResult
 from singular.validated_execution import ValidatedExecutionBoundary
-from test_validated_pipeline import _build_effect_decision
+from tests.test_validated_pipeline import _build_effect_decision
 
 
 class FakeExecutor:
