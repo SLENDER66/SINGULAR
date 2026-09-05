@@ -10,9 +10,13 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
 État vérifié (tout est poussé sur la branche de travail, arbre propre) :
-- 612 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
+- 615 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
+- L'installation pip editable (`singular-agentic-os`) pointe sur `C:\Users\Utilisateur\SINGULAR`
+  depuis le 2026-09-05. Elle pointait sur `Documents\SINGULAR`, resté sur une vieille branche :
+  hors du dossier de travail, `import singular` chargeait du code sans les gardes actuelles.
+  `Documents\SINGULAR` est obsolète (65 tests y échouent) — ne pas y travailler.
 - LICENSE MIT en place. Dépôt nettoyé : 9 branches pour 8 commits distincts.
 - 22 modules et 21 fichiers de test hors périmètre sont dans `attic/`.
 - `route()` écrit désormais son verdict de gouvernance dans l'audit durable
@@ -44,9 +48,9 @@ Travaille en autonomie :
      bytecode de sa classe : sa configuration n'est pas couverte (opt-in assumé) ;
    - `ExecutionCapabilityRegistry.attach()` peut lier une partie des tokens puis échouer,
      laissant le registre sans magasin durable ;
-   - `_persist_new_audit_events()` se cale sur la longueur du journal en mémoire : deux
-     runtimes sur la même base ne peuvent pas écrire l'audit tous les deux (échec bruyant,
-     donc fail-closed, mais un second processus ne peut rien auditer).
+   - une écriture d'audit concurrente qui tombe entre la lecture de la tête de chaîne et
+     l'insertion échoue toujours en fermé : c'est une reprise à faire côté appelant, pas
+     encore un réancrage.
 
 Méthode : inspecte → corrige → teste → commits atomiques → pousse → enchaîne.
 Questions sous forme de questionnaire, seulement si une décision humaine est nécessaire.
