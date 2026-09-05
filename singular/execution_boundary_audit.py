@@ -22,6 +22,23 @@ LEDGER_TYPE = "DurableExecutionLedger"
 #: names collide with the raw engine API. A call on one of these is not a bypass.
 SAFE_BOUNDARY_TYPES = frozenset({"ValidatedExecutionBoundary", "ValidatedDecisionService", "SingularControlPlane"})
 
+#: Modules that can put execution within reach of whoever imports them.
+EXECUTION_CAUSING_MODULES = frozenset({
+    "control_plane", "durable_execution", "effect_recovery", "effect_transition", "effects",
+    "execution", "reconciled_execution", "tool_fabric", "validated_decision_service",
+    "validated_execution", "validated_pipeline",
+})
+#: The only modules allowed to import those. An allowlist, so a module added
+#: later is checked by default rather than granted authority by omission: the
+#: orchestration, learning and world-model layers are supposed to propose, and
+#: importing the execution stack is how "propose" quietly becomes "do".
+#: Reading `validated_trajectory_decision` or `decision_attestation` stays open
+#: to everyone -- that is how learning verifies what really happened, and
+#: neither can cause an effect.
+AUTHORITY_MODULES = EXECUTION_CAUSING_MODULES | frozenset({
+    "__init__", "durable_integrity", "execution_boundary_audit", "providers",
+})
+
 
 @dataclass(frozen=True)
 class BoundaryFinding:
@@ -223,6 +240,7 @@ class ExecutionBoundaryAuditor:
             except (OSError, SyntaxError) as exc:
                 findings.append(BoundaryFinding(path.as_posix(), 1, "PARSE_ERROR", str(exc)))
                 continue
+            findings.extend(self._authority_imports(path, tree))
             findings.extend(self._scan(path, tree))
         raw_denied = self._raw_api_is_denied()
         if not raw_denied:
@@ -235,6 +253,30 @@ class ExecutionBoundaryAuditor:
                 )
             )
         return BoundaryAuditReport(tuple(findings), checked, raw_denied)
+
+    @staticmethod
+    def _authority_imports(path: Path, tree: ast.AST) -> list[BoundaryFinding]:
+        """Flag a module reaching for the execution stack when it has no business there.
+
+        The call-site rules can only judge receivers they can resolve; an engine
+        arriving through an unannotated parameter is invisible to them. The
+        import graph is not: whatever a module does with it, it cannot call the
+        execution stack without naming it first.
+        """
+        if path.stem in AUTHORITY_MODULES or path.parent.name in AUTHORITY_MODULES:
+            return []
+        findings: list[BoundaryFinding] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                names = set((node.module or "").split("."))
+            elif isinstance(node, ast.Import):
+                names = {segment for alias in node.names for segment in alias.name.split(".")}
+            else:
+                continue
+            reached = sorted(names & EXECUTION_CAUSING_MODULES)
+            if reached:
+                findings.append(BoundaryFinding(path.as_posix(), node.lineno, "AUTHORITY_IMPORT_LEAK", ", ".join(reached)))
+        return findings
 
     @staticmethod
     def _scan(path: Path, tree: ast.AST) -> list[BoundaryFinding]:

@@ -115,9 +115,13 @@ def test_validated_wrapper_call_is_not_a_bypass(tmp_path: Path):
 
     Matching on the name alone reported a bypass for every safe wrapper call and
     made the audit permanently dirty, so the CI gate could never pass.
+
+    Written as a boundary module: whether a module should hold the front door at
+    all is the question AUTHORITY_IMPORT_LEAK answers, not this one.
     """
-    package = _package(
-        tmp_path,
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "control_plane.py").write_text(
         "from singular.execution import DurableExecutionEngine\n"
         "from singular.validated_execution import ValidatedExecutionBoundary\n"
         "class Service:\n"
@@ -125,10 +129,11 @@ def test_validated_wrapper_call_is_not_a_bypass(tmp_path: Path):
         "        self.boundary = ValidatedExecutionBoundary(executor)\n"
         "    def run(self, decision, action_id, provider):\n"
         "        return self.boundary.execute_effect(decision, action_id, provider)\n",
+        encoding="utf-8",
     )
 
     report = ExecutionBoundaryAuditor(package).audit()
-    assert not [f for f in report.findings if f.path.endswith("unsafe.py")], report.findings
+    assert not report.findings, report.findings
 
 
 def test_boundary_auditor_detects_annotated_executor_parameter_bypass(tmp_path: Path):
@@ -203,3 +208,49 @@ def test_sqlite_execute_is_not_reported_when_no_engine_is_in_scope(tmp_path: Pat
 
     report = ExecutionBoundaryAuditor(package).audit()
     assert not [f for f in report.findings if f.path.endswith("unsafe.py")], report.findings
+
+
+# --- authority isolation -----------------------------------------------------
+
+def test_an_advisory_module_cannot_import_the_execution_stack(tmp_path: Path):
+    """Orchestration and learning propose; importing the execution stack is how that stops being true."""
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "planner.py").write_text("from .execution import DurableExecutionEngine\n", encoding="utf-8")
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    leaks = [f for f in report.findings if f.rule == "AUTHORITY_IMPORT_LEAK"]
+    assert [f.detail for f in leaks] == ["execution"]
+    assert leaks[0].path.endswith("planner.py")
+
+
+def test_an_absolute_import_of_the_execution_stack_is_covered(tmp_path: Path):
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "planner.py").write_text("import singular.validated_execution\n", encoding="utf-8")
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "AUTHORITY_IMPORT_LEAK" for f in report.findings)
+
+
+def test_a_boundary_module_may_import_the_execution_stack(tmp_path: Path):
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "control_plane.py").write_text("from .execution import DurableExecutionEngine\n", encoding="utf-8")
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert not [f for f in report.findings if f.rule == "AUTHORITY_IMPORT_LEAK"]
+
+
+def test_reading_a_decision_is_not_reaching_for_execution(tmp_path: Path):
+    """Learning has to verify what really happened; neither of these can cause an effect."""
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "learning.py").write_text(
+        "from .validated_trajectory_decision import ValidatedTrajectoryDecision\n"
+        "from .decision_attestation import DecisionAttestationStore\n",
+        encoding="utf-8",
+    )
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert not [f for f in report.findings if f.rule == "AUTHORITY_IMPORT_LEAK"]
