@@ -10,7 +10,7 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
 État vérifié (tout est poussé sur la branche de travail, arbre propre) :
-- 638 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
+- 643 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
 - L'installation pip editable (`singular-agentic-os`) pointe sur `C:\Users\Utilisateur\SINGULAR`
@@ -58,9 +58,7 @@ Travaille en autonomie :
      bytecode de sa classe : sa configuration n'est pas couverte (opt-in assumé) ;
    - `ExecutionCapabilityRegistry.attach()` peut lier une partie des tokens puis échouer,
      laissant le registre sans magasin durable ;
-   - une écriture d'audit concurrente qui tombe entre la lecture de la tête de chaîne et
-     l'insertion échoue toujours en fermé : c'est une reprise à faire côté appelant, pas
-     encore un réancrage ;
+   - (fermée) l'écriture d'audit qui perd la course pour la tête de chaîne est rejouée ;
    - l'auditeur de frontière ne voit pas un module à qui l'on **passe** un objet frontière
      déjà construit : il ne nomme rien, ni en import ni en chaîne. Les deux passes statiques
      réduisent les chemins, elles ne prouvent pas l'impossibilité ;
