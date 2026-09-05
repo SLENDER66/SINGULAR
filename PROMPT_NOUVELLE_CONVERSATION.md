@@ -10,7 +10,7 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
 État vérifié (tout est poussé sur la branche de travail, arbre propre) :
-- 603 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
+- 612 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
 - LICENSE MIT en place. Dépôt nettoyé : 9 branches pour 8 commits distincts.
@@ -20,7 +20,10 @@ racine : lis-le, applique-le, ne me le fais pas répéter.
 - Le registre d'amélioration déduit la criticité depuis la cible : plus de drapeau
   auto-déclaré, périmètre adaptatif en liste blanche, revérifié à l'activation.
 - Les deux chemins d'effet externe exigent l'empreinte d'artefact et le registre durable,
-  et l'attestation comme la capability sont relues juste avant l'appel du provider.
+  et l'attestation comme la capability sont relues juste avant l'appel du provider ; un refus
+  tardif libère le lease en FAILED au lieu d'inventer une récupération.
+- Un artefact peut déclarer sa configuration (`artifact_identity()`) : deux providers HTTP
+  visant des endpoints différents ne sont plus le même artefact.
 - L'approbation humaine n'est **pas** un canal d'autorisation via le pipeline validé :
   c'est délibéré (deux gardes explicites). La machinerie d'approbation dans
   `DurableExecutionEngine` est une défense time-of-use contre une gouvernance qui escalade
@@ -36,10 +39,14 @@ Contexte personnel (ne me le redemande pas) :
 
 Travaille en autonomie :
 1. Poursuis l'audit adversarial de la chaîne decision → capability → artefact → exécution.
-   Pistes ouvertes : l'empreinte d'artefact d'un *objet* ne couvre pas ses attributs
-   (deux instances d'un même provider avec des URL différentes ont la même empreinte —
-   limite documentée, pas encore fermée) ; une exécution refusée par une relecture tardive
-   laisse la ligne d'exécution en RUNNING jusqu'à expiration du lease.
+   Pistes ouvertes repérées mais non traitées :
+   - un artefact qui ne déclare pas `artifact_identity()` reste identifié par le seul
+     bytecode de sa classe : sa configuration n'est pas couverte (opt-in assumé) ;
+   - `ExecutionCapabilityRegistry.attach()` peut lier une partie des tokens puis échouer,
+     laissant le registre sans magasin durable ;
+   - `_persist_new_audit_events()` se cale sur la longueur du journal en mémoire : deux
+     runtimes sur la même base ne peuvent pas écrire l'audit tous les deux (échec bruyant,
+     donc fail-closed, mais un second processus ne peut rien auditer).
 
 Méthode : inspecte → corrige → teste → commits atomiques → pousse → enchaîne.
 Questions sous forme de questionnaire, seulement si une décision humaine est nécessaire.
