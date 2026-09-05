@@ -78,7 +78,6 @@ from .continuous_learning import ContinuousLearningCycle, LearningCycleResult
 from .self_improvement import SelfImprovementEngine, SelfImprovementProposal
 from .improvement_registry import ImprovementActivation, ImprovementCandidate, ImprovementEvaluation, ImprovementKind, ImprovementRegistry, artifact_fingerprint
 from .durable_recovery import confirm_execution_recovery_from_effect
-from .durable_approval import save_approval as _save_approval_hardening, update_approval as _update_approval_hardening
 from .durable_integrity import DurableIntegrityChecker, DurableIntegrityReport, IntegrityViolation
 
 # Preserve the historical root API: models.WorldModel remains WorldModel.

@@ -190,9 +190,23 @@ class DurableStore:
         return MissionStatus(row["status"])
 
     def save_approval(self, approval: ApprovalRequest, mission_id: str | None = None) -> None:
+        """Persist an approval identity once; never replace an existing authorization row."""
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
-            conn.execute("INSERT OR REPLACE INTO approvals(approval_id,action_id,mission_id,reason,status,created_at,updated_at) VALUES(?,?,?,?,?,COALESCE((SELECT created_at FROM approvals WHERE approval_id=?),?),?)", (approval.id, approval.action_id, mission_id, approval.reason, approval.status.value, approval.id, now, now))
+            row = conn.execute(
+                "SELECT action_id,mission_id,reason,status,created_at FROM approvals WHERE approval_id=?",
+                (approval.id,),
+            ).fetchone()
+            if row is not None:
+                expected = (approval.action_id, mission_id, approval.reason, approval.status.value)
+                actual = (row["action_id"], row["mission_id"], row["reason"], row["status"])
+                if actual != expected:
+                    raise ValueError("L'identité d'une approbation existante est immuable.")
+                return
+            conn.execute(
+                "INSERT INTO approvals(approval_id,action_id,mission_id,reason,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                (approval.id, approval.action_id, mission_id, approval.reason, approval.status.value, now, now),
+            )
 
     def get_approval(self, approval_id: str) -> ApprovalRequest:
         with self._connect() as conn:
@@ -209,13 +223,28 @@ class DurableStore:
         return row["mission_id"]
 
     def update_approval(self, approval_id: str, status: ApprovalStatus) -> ApprovalRequest:
+        """Allow only one human authorization decision; terminal approvals cannot be rewritten."""
+        status = ApprovalStatus(status)
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
-            cur = conn.execute("UPDATE approvals SET status=?, updated_at=? WHERE approval_id=?", (status.value, now, approval_id))
-            if cur.rowcount != 1:
+            row = conn.execute(
+                "SELECT approval_id,action_id,reason,status FROM approvals WHERE approval_id=?",
+                (approval_id,),
+            ).fetchone()
+            if row is None:
                 raise KeyError(approval_id)
-            row = conn.execute("SELECT approval_id,action_id,reason,status FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
-        return ApprovalRequest(row["action_id"], row["reason"], ApprovalStatus(row["status"]), row["approval_id"])
+            current = ApprovalStatus(row["status"])
+            if current == status:
+                return ApprovalRequest(row["action_id"], row["reason"], current, row["approval_id"])
+            if current is not ApprovalStatus.PENDING:
+                raise ValueError(f"Transition d'approbation interdite : {current.value} -> {status.value}")
+            cur = conn.execute(
+                "UPDATE approvals SET status=?,updated_at=? WHERE approval_id=? AND status=?",
+                (status.value, now, approval_id, ApprovalStatus.PENDING.value),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError("La transition d'approbation a échoué à cause d'une concurrence d'état.")
+            return ApprovalRequest(row["action_id"], row["reason"], status, row["approval_id"])
 
     def pending_approvals(self, mission_id: str | None = None) -> tuple[ApprovalRequest, ...]:
         with self._connect() as conn:
@@ -423,7 +452,7 @@ class DurableStore:
         return dict(row) if row else None
 
 
-def install_store_extension(name: str, function: Any, *, replaces_base: bool = False) -> None:
+def install_store_extension(name: str, function: Any) -> None:
     """Attach a method defined outside this module, refusing a stranger's version.
 
     Several transitions are implemented in their own modules and grafted onto
@@ -435,17 +464,15 @@ def install_store_extension(name: str, function: Any, *, replaces_base: bool = F
     weaker definition winning by import order is precisely the fail-open shape
     the boundary exists to prevent.
 
-    Re-installing the same function stays a no-op, replacing this module's own
-    definition is allowed when the caller says so, and anything else raises
-    rather than picking a winner quietly.
+    Re-installing the same function stays a no-op; anything else raises rather
+    than picking a winner quietly. Nothing may replace a method this module
+    defines: an approval hardening used to arrive that way, leaving a weaker
+    implementation live in the class for any tidy-up to fall back to.
     """
     current = getattr(DurableStore, name, None)
     if current is not None:
         owner = getattr(current, "__module__", "")
-        permitted = {getattr(function, "__module__", "")}
-        if replaces_base:
-            permitted.add(__name__)
-        if owner not in permitted:
+        if owner != getattr(function, "__module__", ""):
             raise RuntimeError(
                 f"DurableStore.{name} is already defined by {owner or 'an unknown module'}: "
                 "refusing to install a second definition"
