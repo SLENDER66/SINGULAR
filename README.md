@@ -112,5 +112,5 @@ docs/                                  authority model, boundary design
 attic/                                 parked: what the boundary does not need
 ```
 
-Licence: see repository. `constitution.md` holds the design principles this is
+Licence: MIT, see `LICENSE`. `constitution.md` holds the design principles this is
 built to satisfy.
