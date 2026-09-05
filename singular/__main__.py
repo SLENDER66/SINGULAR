@@ -12,6 +12,7 @@ A tool that takes more than thirty seconds to use is a tool you stop using, so
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from datetime import datetime
 
@@ -74,6 +75,51 @@ def cmd_add(journal: DecisionJournal, args) -> int:
     due = datetime.fromisoformat(entry.due_at).strftime("%d/%m/%Y")
     print(f"\n  {_colour(entry.entry_id, BOLD)}  verdict attendu le {due}")
     print(_colour(f"  « {entry.predicted} » — tu dis {entry.probability:.0%}\n", DIM))
+    return 0
+
+
+#: A cold application that gets an interview is roughly one in six. Starting
+#: from an honest base rate is the point: it is the first thing your own record
+#: will correct.
+DEFAULT_APPLICATION_ODDS = 0.15
+
+
+def cmd_apply(journal: DecisionJournal, args) -> int:
+    """The fastest path in the tool, because it is the one you use most.
+
+    An application is a decision with a predicted outcome like any other. The
+    outcome recorded is an interview, not a reply: a rejection is an answer, not
+    the result you were after, and scoring yourself on replies would let you feel
+    productive while nothing moves.
+    """
+    entry = journal.add(
+        title=f"{args.company} — {args.role}",
+        action=args.action or "candidature envoyée",
+        predicted=f"entretien décroché sous {args.days} jours",
+        probability=args.probability,
+        tier=Tier(args.tier.upper()),
+        cost_hours=args.hours,
+        horizon_days=args.days,
+    )
+    due = datetime.fromisoformat(entry.due_at).strftime("%d/%m")
+    print(f"  {_colour(entry.entry_id, BOLD)}  {entry.title}   {entry.probability:.0%}  verdict le {due}")
+    return 0
+
+
+def cmd_status(journal: DecisionJournal, args) -> int:
+    """One line, for your shell profile."""
+    print(journal.summary_line())
+    return 0
+
+
+def cmd_export(journal: DecisionJournal, args) -> int:
+    rows = journal.export_rows()
+    if not rows:
+        print("entry_id,created_at,due_at,tier,title,action,predicted,probability,cost_hours,status,resolved_at,brier_score,lesson")
+        return 0
+    writer = csv.DictWriter(sys.stdout, fieldnames=list(rows[0]))
+    writer.writeheader()
+    writer.writerows(rows)
     return 0
 
 
@@ -191,6 +237,21 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--hours", type=float, default=4.0)
     add.add_argument("--days", type=int, default=14)
     add.set_defaults(func=cmd_add)
+
+    apply = sub.add_parser("apply", help="enregistrer une candidature (chemin rapide)")
+    apply.add_argument("company"); apply.add_argument("role")
+    apply.add_argument("--probability", type=float, default=DEFAULT_APPLICATION_ODDS)
+    apply.add_argument("--days", type=int, default=21)
+    apply.add_argument("--hours", type=float, default=1.5)
+    apply.add_argument("--tier", default="STABILITE", choices=[t.value for t in Tier] + [t.value.lower() for t in Tier])
+    apply.add_argument("--action", default="")
+    apply.set_defaults(func=cmd_apply)
+
+    status = sub.add_parser("status", help="une ligne, pour ton shell")
+    status.set_defaults(func=cmd_status)
+
+    export = sub.add_parser("export", help="tout le journal en CSV sur la sortie standard")
+    export.set_defaults(func=cmd_export)
 
     due = sub.add_parser("due", help="décisions dont l'échéance est passée")
     due.set_defaults(func=cmd_due)

@@ -205,3 +205,91 @@ def test_the_cli_refuses_an_ambiguous_verdict(tmp_path, capsys):
     entry_id = DecisionJournal(db).entries()[0].entry_id
     assert main(["--db", db, "resolve", entry_id]) == 2
     assert main(["--db", db, "resolve", entry_id, "--yes", "--no"]) == 2
+
+
+# --- the fast path you will actually use --------------------------------------
+
+def test_apply_records_an_interview_not_a_reply(tmp_path):
+    """A rejection is an answer, not the result you were after.
+
+    Scoring applications on replies would let you feel productive while nothing
+    moves, which is the exact failure the journal exists to catch.
+    """
+    from singular.__main__ import main
+
+    db = str(tmp_path / "journal.db")
+    assert main(["--db", db, "apply", "Anthropic", "Ingénieur agents"]) == 0
+    entry = DecisionJournal(db).entries()[0]
+    assert entry.title == "Anthropic — Ingénieur agents"
+    assert "entretien" in entry.predicted
+    assert entry.tier is Tier.STABILITE
+    assert 0 < entry.probability < 0.5, "the default should be an honest base rate"
+
+
+def test_apply_defaults_are_overridable(tmp_path):
+    from singular.__main__ import main
+
+    db = str(tmp_path / "journal.db")
+    main(["--db", db, "apply", "Mistral", "Infra", "--probability", "0.35", "--days", "10", "--hours", "3"])
+    entry = DecisionJournal(db).entries()[0]
+    assert entry.probability == 0.35
+    assert entry.horizon_days == 10
+    assert entry.cost_hours == 3
+
+
+# --- the line that puts it in front of you ------------------------------------
+
+def test_summary_line_of_an_empty_journal_says_so(tmp_path):
+    assert _journal(tmp_path).summary_line() == "SINGULAR · journal vide"
+
+
+def test_summary_line_counts_what_needs_a_verdict(tmp_path):
+    journal = _journal(tmp_path)
+    _add(journal, days=1, hours=8)
+    line = journal.summary_line(now=NOW + timedelta(days=5))
+    assert "1 à trancher" in line
+    assert "8h sans verdict" in line
+
+
+def test_summary_line_surfaces_calibration_once_it_is_meaningful(tmp_path):
+    journal = _journal(tmp_path)
+    for _ in range(3):
+        entry = _add(journal, probability=0.9)
+        journal.resolve(entry.entry_id, happened=False)
+    assert "calibration +90%" in journal.summary_line()
+
+
+def test_summary_line_stays_quiet_when_calibration_is_fine(tmp_path):
+    """Two coin-flips at 50%, one each way: nothing to report."""
+    journal = _journal(tmp_path)
+    for happened in (True, False):
+        entry = _add(journal, probability=0.5)
+        journal.resolve(entry.entry_id, happened=happened)
+    assert journal.review()["overconfidence"] == 0.0
+    assert "calibration" not in journal.summary_line()
+
+
+# --- export -------------------------------------------------------------------
+
+def test_export_carries_every_entry_and_its_verdict(tmp_path):
+    journal = _journal(tmp_path)
+    settled = _add(journal, title="résolue")
+    _add(journal, title="ouverte")
+    journal.resolve(settled.entry_id, happened=True, lesson="ça a marché")
+
+    rows = journal.export_rows()
+    assert len(rows) == 2
+    done = next(r for r in rows if r["entry_id"] == settled.entry_id)
+    assert done["status"] == "HAPPENED"
+    assert done["lesson"] == "ça a marché"
+    assert done["brier_score"] != ""
+    still_open = next(r for r in rows if r["entry_id"] != settled.entry_id)
+    assert still_open["resolved_at"] == "" and still_open["brier_score"] == ""
+
+
+def test_export_of_an_empty_journal_is_still_valid_csv(tmp_path, capsys):
+    from singular.__main__ import main
+
+    assert main(["--db", str(tmp_path / "journal.db"), "export"]) == 0
+    header = capsys.readouterr().out.strip()
+    assert header.startswith("entry_id,") and "brier_score" in header

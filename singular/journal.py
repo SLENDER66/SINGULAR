@@ -260,6 +260,47 @@ class DecisionJournal:
             previous = entry.fingerprint
         return True
 
+    def summary_line(self, *, now: datetime | None = None) -> str:
+        """One line, short enough for a shell prompt.
+
+        A journal you have to remember to open is a journal you stop opening.
+        This is meant to be printed by your shell profile, so the number of
+        decisions you have not faced is in front of you whether you want it or
+        not.
+        """
+        report = self.review(now=now)
+        if not report["decisions"]:
+            return "SINGULAR · journal vide"
+        parts = []
+        overdue = report["overdue"]
+        parts.append(f"{overdue} à trancher" if overdue else "rien à trancher")
+        if report["hours_unresolved"]:
+            parts.append(f"{report['hours_unresolved']:g}h sans verdict")
+        if report["overconfidence"] is not None and abs(report["overconfidence"]) >= 0.1:
+            parts.append(f"calibration {report['overconfidence']:+.0%}")
+        return "SINGULAR · " + " · ".join(parts)
+
+    def export_rows(self) -> list[dict]:
+        """Every entry, flat, for a spreadsheet or anything else."""
+        return [
+            {
+                "entry_id": e.entry_id,
+                "created_at": e.created_at,
+                "due_at": e.due_at,
+                "tier": e.tier.value,
+                "title": e.title,
+                "action": e.action,
+                "predicted": e.predicted,
+                "probability": e.probability,
+                "cost_hours": e.cost_hours,
+                "status": e.status.value,
+                "resolved_at": e.resolved_at or "",
+                "brier_score": "" if e.brier_score is None else e.brier_score,
+                "lesson": e.lesson or "",
+            }
+            for e in self.entries()
+        ]
+
     # --- the part that tells you something you did not know ------------------
 
     def review(self, *, now: datetime | None = None) -> dict:
