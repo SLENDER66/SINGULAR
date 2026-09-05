@@ -138,3 +138,29 @@ def test_reanchoring_keeps_the_event_identity(tmp_path: Path):
     assert persisted["payload"]["audit_fingerprint"] == original.payload["audit_fingerprint"]
     assert persisted["payload"]["audit_sequence"] == 2
     assert second.store.verify_audit_integrity() is True
+
+
+def test_a_write_landing_between_the_read_and_the_insert_is_retried(tmp_path: Path):
+    """The audit write happens after the operation it documents.
+
+    Giving up on a lost race would leave the mission saved and nothing recorded,
+    which is the gap re-anchoring exists to close -- one moment later.
+    """
+    runtime = _runtime(tmp_path)
+    intruder = _runtime(tmp_path)
+    original = runtime.store.record_audit
+    raced: list[bool] = []
+
+    def racing_record(event):
+        if not raced:
+            raced.append(True)
+            intruder.create_mission("intrus", "prepared", autonomy=Autonomy.PREPARE)
+        return original(event)
+
+    runtime.store.record_audit = racing_record
+    contract = runtime.create_mission("career", "prepared", autonomy=Autonomy.PREPARE)
+
+    assert raced == [True]
+    assert runtime.store.load_mission(contract.mission_id) is not None
+    assert any(event["payload"].get("mission_id") == contract.mission_id for event in runtime.store.audit_events())
+    assert runtime.store.verify_audit_integrity() is True

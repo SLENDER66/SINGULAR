@@ -15,6 +15,16 @@ from .autopilot import ApprovalRequest, ApprovalStatus, DelegationContract
 from .sqlite_support import SqliteLocation
 
 
+class AuditChainOutOfDate(ValueError):
+    """The event offered does not sit at the head of the durable chain any more.
+
+    A distinct type because this one is retryable and the other audit failures
+    are not: the trail simply has not seen a write that landed between reading
+    the head and offering the next event. Re-anchor behind what is really there
+    and try again. Corruption and invalid fingerprints keep raising loudly.
+    """
+
+
 class MissionStatus(str, Enum):
     CREATED = "CREATED"
     PLANNED = "PLANNED"
@@ -273,7 +283,7 @@ class DurableStore:
             expected_sequence = len(persisted) + 1
             expected_previous = persisted[-1]["payload"]["audit_fingerprint"] if persisted else ""
             if sequence != expected_sequence or previous != expected_previous:
-                raise ValueError("L'événement d'audit ne s'insère pas à la tête de la chaîne.")
+                raise AuditChainOutOfDate("L'événement d'audit ne s'insère pas à la tête de la chaîne.")
             expected_chain = AuditEvent.chain_fingerprint(sequence, fingerprint, expected_previous)
             if chain_fingerprint != expected_chain or not AuditTrail.verify_persisted_event(asdict(event)):
                 raise ValueError("L'intégrité de l'événement d'audit est invalide.")

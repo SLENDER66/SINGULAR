@@ -10,8 +10,13 @@ from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
 from .audit import AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, Autonomy, DelegationContract
-from .durable import MISSION_TRANSITIONS, DurableStore, MissionStatus
+from .durable import MISSION_TRANSITIONS, AuditChainOutOfDate, DurableStore, MissionStatus
 from .v32_governed_core import GovernedAction, GovernedMission, GovernorDecision
+
+
+#: How many times a write may lose the race for the head of the audit chain
+#: before the runtime reports it instead of retrying.
+_AUDIT_PERSIST_ATTEMPTS = 5
 
 
 @dataclass(frozen=True)
@@ -247,17 +252,27 @@ class DurableMissionRuntime:
         came first instead: the events keep their ids, timestamps and content and
         take new positions.
 
-        A write that lands between this read and record_audit still fails closed
-        rather than being re-anchored in flight; the caller has to retry.
+        A write landing between this read and record_audit is the same situation
+        one moment later, so it re-anchors and tries again rather than raising:
+        the audit write happens after the operation it documents, so giving up
+        would leave the state advanced and nothing recorded. Bounded, because a
+        chain that never settles is a problem to report, not to spin on.
         """
-        persisted = self.store.audit_events()
-        events = list(self.audit.events())
-        persisted_ids = [event["id"] for event in persisted]
-        if [event.id for event in events[: len(persisted_ids)]] != persisted_ids:
-            known = set(persisted_ids)
-            pending = [event for event in events if event.id not in known]
-            self.audit = AuditTrail.restore(list(persisted))
-            for event in pending:
-                self.audit.append(event)
-        for event in self.audit.events()[len(persisted):]:
-            self.store.record_audit(event)
+        for remaining in reversed(range(_AUDIT_PERSIST_ATTEMPTS)):
+            persisted = self.store.audit_events()
+            events = list(self.audit.events())
+            persisted_ids = [event["id"] for event in persisted]
+            if [event.id for event in events[: len(persisted_ids)]] != persisted_ids:
+                known = set(persisted_ids)
+                pending = [event for event in events if event.id not in known]
+                self.audit = AuditTrail.restore(list(persisted))
+                for event in pending:
+                    self.audit.append(event)
+            try:
+                for event in self.audit.events()[len(persisted):]:
+                    self.store.record_audit(event)
+            except AuditChainOutOfDate:
+                if not remaining:
+                    raise
+                continue
+            return
