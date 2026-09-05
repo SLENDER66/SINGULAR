@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .agents import Commander
 from .autopilot import ActionRequest, Autonomy, DelegationContract, Governor
@@ -178,11 +178,10 @@ class GlobalDecisionGate:
         if governor.mode is Autonomy.BLOCK:
             blockers.extend(f"GOVERNOR:{reason}" for reason in governor.reasons)
 
-        decision = "BLOCK" if blockers else ("REVIEW" if warnings or policy.requires_human else "PROCEED")
-        return GlobalDecisionReport(
+        report = GlobalDecisionReport(
             objective=objective,
             action_id=action.id,
-            decision=decision,
+            decision="BLOCK",
             blockers=tuple(dict.fromkeys(blockers)),
             warnings=tuple(dict.fromkeys(warnings)),
             capacity_recommendation=capacity_decision,
@@ -195,3 +194,10 @@ class GlobalDecisionGate:
             trajectory=trajectory,
             human_optimization=human_optimization,
         )
+        # The verdict is derived from the report itself, never computed in
+        # parallel: a headline that could say PROCEED while requires_human is
+        # True is a fail-open shape waiting for a caller that reads only one of
+        # the two.
+        if report.blockers:
+            return report
+        return replace(report, decision="REVIEW" if report.requires_human else "PROCEED")
