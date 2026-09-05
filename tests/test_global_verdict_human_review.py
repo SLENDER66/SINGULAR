@@ -126,3 +126,31 @@ def test_a_forged_proceed_over_an_escalation_still_does_not_get_through():
     """Rewriting the headline does not remove the escalation underneath it."""
     with pytest.raises((PermissionError, ValueError)):
         _build_with(_SpoofGate(decision="PROCEED", governor_mode=Autonomy.ESCALATE))
+
+
+def test_a_gate_cannot_authorize_by_rewriting_its_own_verdict():
+    """§9: a favourable report must not be enough to make a decision favourable.
+
+    The gate is a parameter of build(), so a caller can supply one that answers
+    honestly and then rewrites the headline. What stops it is that the decision
+    re-derives the governor and the assessment itself instead of reading them
+    off the report.
+    """
+    with pytest.raises(ValueError, match="explicitly authorize execution|human review"):
+        _build_with(_SpoofGate(decision="PROCEED"), action_overrides={"contract_id": "MIS-WRONG"})
+
+
+def test_rewriting_the_governor_mode_as_well_does_not_help():
+    with pytest.raises(ValueError, match="explicitly authorize execution|human review"):
+        _build_with(
+            _SpoofGate(decision="PROCEED", governor_mode=Autonomy.EXECUTE_AUTHORIZED),
+            action_overrides={"requires_human": True},
+        )
+
+
+def test_clearing_the_blockers_does_not_clear_what_produced_them():
+    with pytest.raises(ValueError, match="explicitly authorize execution|human review"):
+        _build_with(
+            _SpoofGate(decision="PROCEED", governor_mode=Autonomy.EXECUTE_AUTHORIZED, blockers=()),
+            action_overrides={"sensitive": True, "risk": 9, "reversibility": 1},
+        )
