@@ -24,9 +24,8 @@ SAFE_BOUNDARY_TYPES = frozenset({"ValidatedExecutionBoundary", "ValidatedDecisio
 
 #: Modules that can put execution within reach of whoever imports them.
 EXECUTION_CAUSING_MODULES = frozenset({
-    "control_plane", "durable_execution", "effect_recovery", "effect_transition", "effects",
-    "execution", "reconciled_execution", "tool_fabric", "validated_decision_service",
-    "validated_execution", "validated_pipeline",
+    "control_plane", "durable_execution", "effects", "execution", "reconciled_execution",
+    "tool_fabric", "validated_decision_service", "validated_execution", "validated_pipeline",
 })
 #: The only modules allowed to import those. An allowlist, so a module added
 #: later is checked by default rather than granted authority by omission: the
