@@ -6,6 +6,7 @@ came back empty, which a durable boundary reads as "no prior execution, no prior
 approval, no prior idempotency record" -- the fail-open direction.
 """
 import ast
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -103,3 +104,48 @@ def test_stores_expose_a_resolved_path_rather_than_the_raw_memory_marker(factory
     store = factory(":memory:")
     assert str(store.path) != ":memory:"
     assert is_shared_memory_target(str(store.path))
+
+
+def test_session_closes_the_connection_even_when_the_body_raises(tmp_path):
+    """A caught exception keeps its frames alive; the connection must not ride along."""
+    location = SqliteLocation(tmp_path / "session.db")
+    escaped = None
+
+    with pytest.raises(RuntimeError):
+        with location.session() as conn:
+            escaped = conn
+            conn.execute("CREATE TABLE t (x INTEGER)")
+            raise RuntimeError("boom")
+
+    with pytest.raises(sqlite3.ProgrammingError):
+        escaped.execute("SELECT 1")
+
+
+def test_session_still_commits_on_success_and_rolls_back_on_failure(tmp_path):
+    """Closing must not cost the transaction semantics `with conn` provided."""
+    location = SqliteLocation(tmp_path / "session.db")
+    with location.session() as conn:
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.execute("INSERT INTO t VALUES (1)")
+
+    with pytest.raises(RuntimeError):
+        with location.session() as conn:
+            conn.execute("INSERT INTO t VALUES (2)")
+            raise RuntimeError("boom")
+
+    with location.session() as conn:
+        assert [row[0] for row in conn.execute("SELECT x FROM t")] == [1]
+
+
+def test_a_store_does_not_hold_the_database_open_through_a_caught_error(tmp_path):
+    """The real symptom: a temporary directory that cannot be cleaned up afterwards."""
+    store = DurableStore(tmp_path / "held.db")
+    store.save_mission(_contract("MIS-HELD"))
+    error = None
+    try:
+        store.set_mission_status("MIS-UNKNOWN", None)
+    except Exception as exc:  # noqa: BLE001 - the point is holding the traceback
+        error = exc
+    assert error is not None
+
+    Path(store.path).unlink()

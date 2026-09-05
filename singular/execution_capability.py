@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import AbstractContextManager
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -187,8 +188,8 @@ class DurableCapabilityStore:
         self.path = self._location.reference
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        return self._location.connect()
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return self._location.session()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

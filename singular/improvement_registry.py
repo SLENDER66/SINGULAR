@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import AbstractContextManager
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -183,8 +184,8 @@ class ImprovementRegistry:
         if namespace not in self.adaptive_namespaces:
             raise PermissionError(f"target '{target}' is outside the declared adaptive perimeter")
 
-    def _connect(self) -> sqlite3.Connection:
-        return self._location.connect(foreign_keys=True)
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return self._location.session(foreign_keys=True)
 
     def _init_schema(self) -> None:
         with self._connect() as conn:

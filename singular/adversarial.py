@@ -138,7 +138,7 @@ class AdversarialEngine:
             store.record_audit(second)
 
             def tamper_audit() -> object:
-                with SqliteLocation(db_path).connect() as conn:
+                with SqliteLocation(db_path).session() as conn:
                     conn.execute("UPDATE audit_events SET outcome='TAMPERED' WHERE event_id=?", (first.id,))
                 return store.record_audit(audit.record("TEST", "RED_TEAM", "OK", {"case": "blocked"}))
 
@@ -167,7 +167,7 @@ class AdversarialEngine:
             ledger.record(cycle)
 
             def tamper_learning() -> object:
-                with SqliteLocation(db_path).connect() as conn:
+                with SqliteLocation(db_path).session() as conn:
                     conn.execute("UPDATE idempotency SET result=? WHERE key=?", ('{"forecast_id":"f-redteam","tampered":true}', ledger.key_for(cycle)))
                 return ledger.get(forecast.id)
 
@@ -177,7 +177,7 @@ class AdversarialEngine:
                 clean = DurableStore(Path(directory) / "fingerprint.db")
                 clean_ledger = EconomicLearningLedger(clean)
                 clean_ledger.record(cycle)
-                with SqliteLocation(Path(directory) / "fingerprint.db").connect() as conn:
+                with SqliteLocation(Path(directory) / "fingerprint.db").session() as conn:
                     conn.execute("UPDATE idempotency SET fingerprint=? WHERE key=?", (sha256(b"forged").hexdigest(), clean_ledger.key_for(cycle)))
                 return clean_ledger.get(forecast.id)
 

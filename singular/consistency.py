@@ -27,7 +27,7 @@ class CrossDomainConsistencyChecker:
         self.db_path = self._location.reference
 
     def check(self, mission_id: str | None = None) -> tuple[ConsistencyViolation, ...]:
-        with self._location.connect() as conn:
+        with self._location.session() as conn:
             conn.row_factory = sqlite3.Row
             mission_filter = " AND e.mission_id=?" if mission_id is not None else ""
             params = (mission_id,) if mission_id is not None else ()

@@ -10,7 +10,7 @@ from .sqlite_support import SqliteLocation
 
 def transition(self: ExternalEffectCoordinator, key: str, status: str, *, result: Any = None, error: str | None = None) -> None:
     """Apply a state transition atomically; repeating the same state preserves evidence."""
-    with SqliteLocation(self.store.path).connect() as conn:
+    with SqliteLocation(self.store.path).session() as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT status FROM external_effects WHERE provider_idempotency_key=?", (key,)).fetchone()
         if row is None:

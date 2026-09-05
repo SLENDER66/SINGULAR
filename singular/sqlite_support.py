@@ -21,6 +21,8 @@ store still referenced it would reintroduce the same empty-read behaviour.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -80,6 +82,25 @@ class SqliteLocation:
         if foreign_keys:
             conn.execute("PRAGMA foreign_keys=ON")
         return conn
+
+    @contextmanager
+    def session(self, *, foreign_keys: bool = False, busy_timeout: bool = False) -> Iterator[sqlite3.Connection]:
+        """One connection: committed or rolled back on the way out, then closed.
+
+        `with sqlite3.connect(...) as conn` manages the transaction and nothing
+        else -- the connection stays open. Refcounting usually closes it soon
+        after, but not while anything still refers to the frame it lives in, and
+        a caught exception keeps its whole traceback alive: precisely the error
+        paths leak the handle. On Windows that holds the database file open, so
+        cleaning up a temporary directory after a failure fails; everywhere else
+        it is a descriptor outliving its use for no reason.
+        """
+        conn = self.connect(foreign_keys=foreign_keys, busy_timeout=busy_timeout)
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
 
 __all__ = ["MEMORY_PATH", "SqliteLocation", "is_shared_memory_target"]
