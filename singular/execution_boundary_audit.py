@@ -40,6 +40,23 @@ AUTHORITY_MODULES = EXECUTION_CAUSING_MODULES | frozenset({
 })
 
 
+def _dynamic_import_names(node: ast.Call) -> set[str]:
+    """Module segments named by importlib.import_module(...) or __import__(...).
+
+    An import statement is not the only way to name a module: a string is
+    enough, and it would otherwise walk straight past a rule that reads only
+    import nodes.
+    """
+    func = node.func
+    called = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
+    if called not in {"import_module", "__import__"}:
+        return set()
+    argument = node.args[0] if node.args else None
+    if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
+        return set()
+    return set(argument.value.split("."))
+
+
 @dataclass(frozen=True)
 class BoundaryFinding:
     #: Always posix-separated, so a report reads the same on every platform and
@@ -259,9 +276,14 @@ class ExecutionBoundaryAuditor:
         """Flag a module reaching for the execution stack when it has no business there.
 
         The call-site rules can only judge receivers they can resolve; an engine
-        arriving through an unannotated parameter is invisible to them. The
-        import graph is not: whatever a module does with it, it cannot call the
-        execution stack without naming it first.
+        arriving through an unannotated parameter is invisible to them. A module
+        that names the execution stack to reach it is not, whether it does so in
+        an import statement or in a string handed to importlib.
+
+        What this still does not see: a module handed an already-constructed
+        boundary object, which names nothing. Both passes together narrow the
+        ways execution can reach code that has no business with it; neither is a
+        proof that it cannot.
         """
         if path.stem in AUTHORITY_MODULES or path.parent.name in AUTHORITY_MODULES:
             return []
@@ -271,6 +293,8 @@ class ExecutionBoundaryAuditor:
                 names = set((node.module or "").split("."))
             elif isinstance(node, ast.Import):
                 names = {segment for alias in node.names for segment in alias.name.split(".")}
+            elif isinstance(node, ast.Call):
+                names = _dynamic_import_names(node)
             else:
                 continue
             reached = sorted(names & EXECUTION_CAUSING_MODULES)

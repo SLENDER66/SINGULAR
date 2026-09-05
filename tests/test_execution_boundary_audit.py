@@ -254,3 +254,17 @@ def test_reading_a_decision_is_not_reaching_for_execution(tmp_path: Path):
 
     report = ExecutionBoundaryAuditor(package).audit()
     assert not [f for f in report.findings if f.rule == "AUTHORITY_IMPORT_LEAK"]
+
+
+def test_a_dynamic_import_cannot_walk_past_the_rule(tmp_path: Path):
+    """Naming a module in a string is still naming it."""
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "planner.py").write_text(
+        "import importlib\n"
+        "engine = importlib.import_module('singular.execution')\n",
+        encoding="utf-8",
+    )
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "AUTHORITY_IMPORT_LEAK" and f.detail == "execution" for f in report.findings)
