@@ -90,12 +90,17 @@ class ReconciledExecutionFinalizer:
             if cur.rowcount != 1:
                 raise RuntimeError("La finalisation de l'exécution a échoué à cause d'une concurrence d'état.")
 
-            mission_cur = conn.execute(
-                "UPDATE mission_states SET status=?,updated_at=? WHERE mission_id=? AND status=?",
-                (MissionStatus.COMPLETED.value, now, execution["mission_id"], MissionStatus.RUNNING.value),
+            # Through the store's own guard rather than a hand-written UPDATE.
+            # This one happens to move RUNNING -> COMPLETED, which is legal, so
+            # the raw statement was correct -- but it is the guard that knows
+            # which transitions are legal, and a copy of this block aimed at a
+            # different status would not have asked it.
+            self.store._transition_mission_status(
+                conn,
+                execution["mission_id"],
+                MissionStatus.COMPLETED,
+                expected_current=MissionStatus.RUNNING,
             )
-            if mission_cur.rowcount != 1:
-                raise RuntimeError("La finalisation de la mission a échoué à cause d'une concurrence d'état.")
 
         return ReconciledExecution(
             execution_key=execution_key,
