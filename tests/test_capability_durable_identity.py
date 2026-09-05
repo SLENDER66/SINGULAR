@@ -33,6 +33,10 @@ def impostor(action):
     return {"action_id": action.id, "executed": "by an impostor"}
 
 
+IDENTICAL_A = lambda action: action  # noqa: E731 - deliberately identical code
+IDENTICAL_B = lambda action: action  # noqa: E731 - deliberately identical code
+
+
 # --- artifact fingerprints ---------------------------------------------------
 
 def test_fingerprint_distinguishes_two_implementations():
@@ -236,3 +240,65 @@ def test_engine_refuses_an_executable_the_decision_did_not_name(tmp_path: Path):
     engine = _engine(tmp_path, decision)
     with pytest.raises(PermissionError, match="artefact exécutable ne correspond pas"):
         engine.execute_validated(decision, support_handler)
+
+
+# --- what the fingerprint covers, and what it does not ------------------------
+
+def _make_handler(captured):
+    def handler(action):
+        return captured
+    return handler
+
+
+def test_two_closures_from_one_factory_are_distinguished():
+    """Bytecode alone cannot tell make(1) from make(2); the captures can."""
+    assert artifact_fingerprint(_make_handler(1)) != artifact_fingerprint(_make_handler(2))
+    assert artifact_fingerprint(_make_handler(1)) == artifact_fingerprint(_make_handler(1))
+
+
+def test_captured_structures_are_canonicalised_deterministically():
+    first = _make_handler({"b": [1, 2], "a": "x"})
+    second = _make_handler({"a": "x", "b": [1, 2]})
+    assert artifact_fingerprint(first) == artifact_fingerprint(second)
+    assert artifact_fingerprint(first) != artifact_fingerprint(_make_handler({"a": "y", "b": [1, 2]}))
+
+
+def test_opaque_captures_are_a_stated_limit_not_a_silent_one():
+    """A capture whose value cannot be canonicalised does not distinguish targets.
+
+    This is the boundary of the guarantee, asserted so it cannot quietly widen or
+    quietly narrow. Two handlers closing over different instances of an ordinary
+    object share a fingerprint: the durable record would accept either after a
+    restart. In-process, object identity still separates them.
+    """
+    class Opaque:
+        pass
+
+    first = _make_handler(Opaque())
+    second = _make_handler(Opaque())
+    assert artifact_fingerprint(first) == artifact_fingerprint(second)
+
+    registry = ExecutionCapabilityRegistry()
+    token = registry.register(first, "cap_opaque_capture")
+    assert registry.matches(token, second) is False, "object identity must still separate them in-process"
+
+
+def test_two_identical_module_level_lambdas_share_a_fingerprint():
+    """The same stated limit for code that is genuinely identical.
+
+    Both carry the same module, the same qualified name `<lambda>` and the same
+    instructions, so they are the same implementation by every property this
+    fingerprint records -- and executing either does the same thing.
+    """
+    assert artifact_fingerprint(IDENTICAL_A) == artifact_fingerprint(IDENTICAL_B)
+
+
+def test_provider_instances_are_identified_by_their_class_not_their_state():
+    class Provider:
+        def __init__(self, endpoint):
+            self.endpoint = endpoint
+
+        def execute(self, request, key):
+            return self.endpoint
+
+    assert artifact_fingerprint(Provider("a")) == artifact_fingerprint(Provider("b"))

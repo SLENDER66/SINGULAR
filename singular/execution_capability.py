@@ -14,10 +14,15 @@ artifact it was first bound to, across restarts, and a re-registration under the
 same token is only accepted when it presents the same artifact.
 
 What a fingerprint covers and what it does not: it identifies the code object
-(module, qualified name, and a hash of its bytecode or its class's), plus the
-interpreter version it was compiled for. It does not cover captured state, the
-values a closure closed over, or what a method's instance holds. It answers
-"is this the same implementation", not "will it behave the same way".
+(module, qualified name, and a hash of its bytecode or its class's), the
+interpreter version it was compiled for, and -- for a closure -- the values it
+captured, so that two handlers built by the same factory with different
+arguments are not mistaken for each other. Captures whose value cannot be
+canonicalised deterministically (a live connection, an arbitrary object) are
+recorded as opaque and therefore do not distinguish those targets; that is a
+stated limit, exercised by a test, rather than a silent one. Nothing here covers
+what a provider instance holds in its attributes. It answers "is this the same
+implementation", not "will it behave the same way".
 """
 from __future__ import annotations
 
@@ -41,14 +46,57 @@ SCHEMA_VERSION = 1
 RUNTIME_VERSION = f"cpython-{sys.version_info.major}.{sys.version_info.minor}"
 
 
-def _code_identity(target: Any) -> tuple[str, str, str, bytes]:
-    """(kind, module, qualname, code bytes) for a callable or a provider object."""
+#: Types whose value can be canonicalised into a fingerprint deterministically.
+#: Anything else is recorded as opaque -- see _closure_identity.
+_CANONICAL_TYPES = (str, int, float, bool, bytes, type(None))
+
+
+def _canonical_value(value: Any) -> Any:
+    if isinstance(value, bool) or value is None or isinstance(value, (str, int, float)):
+        return value
+    if isinstance(value, bytes):
+        return value.hex()
+    if isinstance(value, (tuple, list, frozenset, set)):
+        items = [_canonical_value(item) for item in value]
+        return sorted(items, key=repr) if isinstance(value, (frozenset, set)) else items
+    if isinstance(value, dict):
+        return {str(key): _canonical_value(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
+    return {"__opaque__": type(value).__qualname__}
+
+
+def _closure_identity(func: Any) -> list[Any]:
+    """What a closure captured, when that can be stated deterministically.
+
+    Bytecode alone does not distinguish two closures produced by the same
+    factory: make(1) and make(2) share a module, a qualified name and every
+    instruction, yet do different things. Capturing the values closes that,
+    for captures whose value can be canonicalised. Captures that cannot -- a
+    live connection, an arbitrary object -- are recorded as opaque, which is a
+    stated limit rather than a silent one.
+    """
+    code = getattr(func, "__code__", None)
+    cells = getattr(func, "__closure__", None)
+    if code is None or not cells:
+        return []
+    captured: list[Any] = []
+    for name, cell in zip(getattr(code, "co_freevars", ()), cells, strict=False):
+        try:
+            captured.append([name, _canonical_value(cell.cell_contents)])
+        except ValueError:
+            captured.append([name, {"__empty_cell__": True}])
+    return captured
+
+
+def _code_identity(target: Any) -> tuple[str, str, str, bytes, list[Any]]:
+    """(kind, module, qualname, code bytes, captured state) for a target."""
     code = getattr(target, "__code__", None)
     if code is not None:
-        return ("callable", getattr(target, "__module__", "") or "", getattr(target, "__qualname__", "") or "", bytes(code.co_code))
+        return ("callable", getattr(target, "__module__", "") or "", getattr(target, "__qualname__", "") or "",
+                bytes(code.co_code), _closure_identity(target))
     func = getattr(target, "__func__", None)
     if func is not None and getattr(func, "__code__", None) is not None:
-        return ("method", getattr(func, "__module__", "") or "", getattr(func, "__qualname__", "") or "", bytes(func.__code__.co_code))
+        return ("method", getattr(func, "__module__", "") or "", getattr(func, "__qualname__", "") or "",
+                bytes(func.__code__.co_code), _closure_identity(func))
     kind = type(target)
     parts: list[bytes] = []
     for name in sorted(dir(kind)):
@@ -58,20 +106,21 @@ def _code_identity(target: Any) -> tuple[str, str, str, bytes]:
         member_code = getattr(member, "__code__", None)
         if member_code is not None:
             parts.append(name.encode("utf-8") + b"\x1f" + bytes(member_code.co_code))
-    return ("object", kind.__module__, kind.__qualname__, b"\x1e".join(parts))
+    return ("object", kind.__module__, kind.__qualname__, b"\x1e".join(parts), [])
 
 
 def artifact_fingerprint(target: Any) -> str:
     """A stable identity for the code a capability token stands for."""
     if target is None:
         raise ValueError("an execution target is required")
-    kind, module, qualname, code = _code_identity(target)
+    kind, module, qualname, code, captured = _code_identity(target)
     payload = {
         "kind": kind,
         "module": module,
         "qualname": qualname,
         "runtime": RUNTIME_VERSION,
         "code": hashlib.sha256(code).hexdigest(),
+        "captured": captured,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
@@ -145,7 +194,7 @@ class DurableCapabilityStore:
         rotation issues a new token rather than reviving a retired one.
         """
         fingerprint = artifact_fingerprint(target)
-        kind, module, qualname, _ = _code_identity(target)
+        kind, module, qualname, _, _ = _code_identity(target)
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM execution_capabilities WHERE capability_id=?", (capability_id,)).fetchone()
