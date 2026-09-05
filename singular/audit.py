@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-
 #: Payload keys that describe where an event sits in the chain rather than what
 #: happened. They are excluded from the event's own fingerprint, which is what
 #: lets a trail re-anchor an event behind writes it had not seen without the
