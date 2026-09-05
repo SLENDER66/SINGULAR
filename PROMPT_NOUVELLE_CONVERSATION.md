@@ -9,7 +9,7 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 `claude/singular-mandate-setup-d51s9t`. Le mandat complet est dans `CLAUDE.md` à la
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
-État vérifié (commit 4f0e0a2, poussé, arbre propre) :
+État vérifié (commit d8223ba, poussé, arbre propre) :
 - 585 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
