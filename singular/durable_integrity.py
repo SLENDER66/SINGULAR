@@ -34,13 +34,27 @@ class DurableIntegrityChecker:
         violations: list[IntegrityViolation] = []
         with self.store._connect() as conn:
             executions = conn.execute(
-                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until FROM executions ORDER BY execution_key"
+                "SELECT rowid,execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until "
+                "FROM executions ORDER BY execution_key"
             ).fetchall()
             effects = conn.execute(
                 "SELECT provider_idempotency_key,execution_key,status,action_fingerprint FROM external_effects ORDER BY provider_idempotency_key"
             ).fetchall()
 
             execution_keys = {row["execution_key"] for row in executions}
+            # A mission's terminal executions are history the moment it is
+            # replanned. Only its most recent attempt says anything about where
+            # the mission stands now: an action that failed, then a replanned
+            # mission whose next action succeeded, is an ordinary sequence the
+            # state machine allows on purpose (FAILED -> PLANNED), and reading
+            # the older FAILED row against the mission's current COMPLETED
+            # status called the database broken -- permanently, blocking every
+            # future execution, over nothing.
+            latest_execution = {}
+            for row in executions:
+                current = latest_execution.get(row["mission_id"])
+                if current is None or row["rowid"] > current:
+                    latest_execution[row["mission_id"]] = row["rowid"]
             valid_execution_statuses = {"RUNNING", "RECOVERY_REQUIRED", "COMPLETED", "FAILED"}
             for row in executions:
                 key = row["execution_key"]
@@ -56,6 +70,10 @@ class DurableIntegrityChecker:
                 if execution_status not in valid_execution_statuses:
                     violations.append(IntegrityViolation("execution", key, "EXEC-STATUS", f"unknown execution status: {execution_status}"))
                     continue
+                # A live claim always constrains its mission, latest or not: an
+                # execution still running under a finished mission is wrong
+                # whatever came after it.
+                is_latest = latest_execution.get(row["mission_id"]) == row["rowid"]
                 if not row["started_at"]:
                     violations.append(IntegrityViolation("execution", key, "EXEC-START-TIME", "execution has no durable start timestamp"))
                 if execution_status == "RUNNING":
@@ -75,14 +93,14 @@ class DurableIntegrityChecker:
                         violations.append(IntegrityViolation("execution", key, "COMPLETED-FINISHED", "COMPLETED execution must have a finished_at timestamp"))
                     if row["lease_until"] is not None:
                         violations.append(IntegrityViolation("execution", key, "COMPLETED-LEASE", "COMPLETED execution cannot retain an active lease"))
-                    if mission_status != MissionStatus.COMPLETED.value:
+                    if is_latest and mission_status != MissionStatus.COMPLETED.value:
                         violations.append(IntegrityViolation("execution", key, "COMPLETED-MISSION", "COMPLETED execution must have a COMPLETED mission"))
                 elif execution_status == "FAILED":
                     if row["finished_at"] is None:
                         violations.append(IntegrityViolation("execution", key, "FAILED-FINISHED", "FAILED execution must have a finished_at timestamp"))
                     if row["lease_until"] is not None:
                         violations.append(IntegrityViolation("execution", key, "FAILED-LEASE", "FAILED execution cannot retain an active lease"))
-                    if mission_status not in {MissionStatus.FAILED.value, MissionStatus.CANCELLED.value}:
+                    if is_latest and mission_status not in {MissionStatus.FAILED.value, MissionStatus.CANCELLED.value}:
                         violations.append(IntegrityViolation("execution", key, "FAILED-MISSION", "FAILED execution must have a FAILED or CANCELLED mission"))
 
             valid_effect_statuses = {status.value for status in EffectStatus}
