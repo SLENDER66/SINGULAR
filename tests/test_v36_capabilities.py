@@ -23,8 +23,16 @@ def test_known_low_risk_capability_allows_execution(tmp_path: Path):
 
     decision = ActionPolicy.evaluate(action)
     assert decision.tier == ActionTier.GREEN
-    result = DurableExecutionEngine(runtime).execute(action, contract.mission_id, lambda _: "created")
-    assert result.status == "COMPLETED"
+    assert decision.can_prepare is True
+    assert decision.can_execute is True
+    assert decision.requires_human is False
+    assert runtime.route(action, contract.mission_id).can_execute is True
+
+    # A permissive policy verdict is not an authorization. The raw engine used to
+    # execute straight from it; execution now requires a ValidatedTrajectoryDecision,
+    # which is what test_capability_field_separation exercises end to end.
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
+        DurableExecutionEngine(runtime).execute(action, contract.mission_id, lambda _: "created")
 
 
 def test_human_capability_is_escalated_even_when_action_risk_looks_low():
@@ -111,7 +119,13 @@ def test_capability_is_part_of_approval_identity(tmp_path: Path):
         id=action.id,
     )
 
+    # The capability is part of the durable action identity, so reusing the id
+    # with a different one is refused at routing. The raw engine no longer shows
+    # which control caught it: it refuses everything first.
     with pytest.raises(ValueError, match="contenu différent"):
+        runtime.route(tampered, contract.mission_id)
+
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
         DurableExecutionEngine(runtime).execute(tampered, contract.mission_id, lambda _: "must not run")
 
     assert runtime.store.get_execution(

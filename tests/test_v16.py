@@ -53,11 +53,19 @@ def test_commander_stops_when_blocked():
     assert 'blocage' in brief['next_move'].lower()
 
 
-def test_supervisor_escalates_missing_handler():
+def test_supervisor_blocks_instead_of_invoking_a_handler():
+    """Routing selects an agent; it does not authorize one to act.
+
+    The run used to end WAITING_HUMAN only when no handler existed, which meant
+    a run with a handler was routed straight into it. AutopilotSupervisor.route
+    is now observation only: it selects and records, then blocks pending a
+    ValidatedTrajectoryDecision, whether or not a handler is present.
+    """
     reg = AgentRegistry(); reg.register(AgentSpec('X', 'x', ('research',), 1, None))
     s = AutopilotSupervisor(reg); run = s.create_run('research')
     assert s.route(run, 'research', {}) is None
-    assert run.status == 'WAITING_HUMAN'
+    assert run.status == 'BLOCKED'
+    assert any('ValidatedTrajectoryDecision' in blocker for blocker in run.blockers)
 
 
 def test_event_audit():

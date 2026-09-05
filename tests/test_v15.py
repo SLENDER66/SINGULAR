@@ -3,7 +3,7 @@ from singular.mission_autopilot import MissionAutopilot, Mission, StepStatus
 from singular.evals import evaluate_mission
 
 
-def test_autopilot_executes_authorized_reversible_steps():
+def test_autopilot_plans_but_never_executes_reversible_steps():
     auto = MissionAutopilot()
     contract = auto.bus
     # Use a minimal fake contract via manager.
@@ -17,8 +17,14 @@ def test_autopilot_executes_authorized_reversible_steps():
     m = Mission('X', 'Y', c)
     auto.plan(m, [(a1, ()), (a2, ('prepare',))])
     auto.run(m)
-    assert m.status == StepStatus.DONE
-    assert evaluate_mission(m).completion == 1.0
+    # MissionAutopilot.run no longer executes: orchestration decides what to
+    # do next, never that something may be done. Every step is blocked
+    # pending a ValidatedTrajectoryDecision.
+    assert m.status == StepStatus.BLOCKED
+    assert [step.status for step in m.steps] == [StepStatus.BLOCKED, StepStatus.BLOCKED]
+    assert all("ValidatedTrajectoryDecision" in (step.error or "") for step in m.steps)
+    # Nothing completed, because nothing ran.
+    assert evaluate_mission(m).completion == 0.0
 
 
 def test_autopilot_never_bypasses_governor_for_sensitive_step():

@@ -45,7 +45,14 @@ def test_capability_cannot_be_swapped_after_approval(tmp_path: Path):
         action.name, action.description, action.impact, action.risk, action.reversibility,
         capability="modify_github", id=action.id,
     )
+    # The raw engine refuses everything now, so it can no longer show which
+    # control caught the swap. Route the swapped action instead: the durable
+    # action identity is what the approval was bound to, and reusing that id with
+    # a different capability is what must be refused.
     with pytest.raises(ValueError, match="Identité d'action réutilisée"):
+        runtime.route(swapped, contract.mission_id)
+
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
         DurableExecutionEngine(runtime).execute(swapped, contract.mission_id, lambda _: "must not run")
 
 
@@ -60,5 +67,9 @@ def test_missing_native_binding_cannot_execute(tmp_path: Path):
     with runtime.store._connect() as conn:
         conn.execute("DELETE FROM approval_bindings WHERE approval_id=?", (approval.id,))
 
-    with pytest.raises(PermissionError, match="liaison d'identité"):
+    # Same reason as above: assert the binding control where it is reachable.
+    with pytest.raises(PermissionError, match="identité ou son autorité a changé"):
+        DurableExecutionEngine(runtime)._validate_approval_binding(approval.id, action, contract.mission_id)
+
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
         DurableExecutionEngine(runtime).execute(action, contract.mission_id, lambda _: "must not run")
