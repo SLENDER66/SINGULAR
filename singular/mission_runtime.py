@@ -72,6 +72,8 @@ class DurableMissionRuntime:
                 self.audit.record("governance_drift", "GOVERNOR", "BLOCKED", {"action_id": action.id, "mission_id": contract.mission_id if contract else None})
                 self._persist_new_audit_events()
                 raise PermissionError("La politique de gouvernance a changé depuis la décision persistée : exécution refusée.")
+            self._audit_governance("governance_route_replayed", action, contract, cached, fingerprint, idempotency_key)
+            self._persist_new_audit_events()
             return self._from_cached(action, cached)
 
         result = self.governed.route(action, contract)
@@ -85,8 +87,47 @@ class DurableMissionRuntime:
             if current_status in {MissionStatus.CREATED, MissionStatus.WAITING_APPROVAL} or (current_status == MissionStatus.PLANNED and target != MissionStatus.PLANNED):
                 self._set_status(contract.mission_id, target)
         cached_result = self.store.put_idempotent(idempotency_key, self._cache(result), fingerprint)
+        self._audit_governance("governance_route", action, contract, cached_result, fingerprint, idempotency_key)
         self._persist_new_audit_events()
         return self._from_cached(action, cached_result)
+
+    def _audit_governance(self, event_type: str, action, contract: DelegationContract | None, verdict: dict[str, Any], fingerprint: str, idempotency_key: str) -> None:
+        """Record the governance verdict itself in the durable audit trail.
+
+        GovernedMission records governance_route/governance_block into its own
+        in-memory AuditTrail, which is never persisted and dies with the process.
+        The durable trail therefore only held runtime pre-checks and approvals:
+        the verdict that actually authorizes -- or refuses -- an execution left
+        no trace at all, so no restart could explain why an action had been
+        allowed to cross the boundary.
+
+        The event is built from the persisted idempotency record rather than
+        from the in-memory GovernedAction, so the audit states what a restart
+        would really replay, including when a concurrent writer won the
+        put_idempotent race. It is recorded after the decision is durable: a
+        crash in between leaves a cached verdict whose first replay records
+        governance_route_replayed, which closes the provenance gap rather than
+        claiming an authorization that was never persisted.
+        """
+        mode = str(verdict.get("mode"))
+        self.audit.record(
+            event_type,
+            "GOVERNOR",
+            mode,
+            {
+                "action_id": action.id,
+                "mission_id": contract.mission_id if contract else None,
+                "approval_id": verdict.get("approval_id"),
+                "policy_tier": verdict.get("policy_tier"),
+                "mode": mode,
+                "reasons": list(verdict.get("reasons", ())),
+                "can_prepare": bool(verdict.get("can_prepare", verdict.get("allowed", False))),
+                "can_execute": bool(verdict.get("can_execute", False)),
+                "requires_human": bool(verdict.get("requires_human", mode == Autonomy.ESCALATE.value)),
+                "action_fingerprint": fingerprint,
+                "idempotency_key": idempotency_key,
+            },
+        )
 
     @staticmethod
     def _governance_matches(current: GovernedAction, cached: dict[str, Any]) -> bool:

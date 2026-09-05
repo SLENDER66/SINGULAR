@@ -25,7 +25,7 @@ def _escalating_action(label: str = "send") -> ActionRequest:
 
 
 def _approval_id(runtime: DurableMissionRuntime, mission_id: str, label: str = "send") -> str:
-    """route() itself records nothing on its normal path; approvals do."""
+    """route() records its verdict; approvals add a second audited operation."""
     governed = runtime.route(_escalating_action(label), mission_id)
     assert governed.governor.approval_id
     return governed.governor.approval_id
