@@ -102,3 +102,4 @@ from .durable_integrity import DurableIntegrityChecker, DurableIntegrityReport, 
 # The epistemic model is intentionally exposed under a distinct name.
 from .world_model import WorldModel as EpistemicWorldModel
 from .providers import HttpEffectProvider, HttpProviderError
+from .journal import DecisionJournal, Tier as JournalTier
