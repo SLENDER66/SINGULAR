@@ -184,5 +184,18 @@ class DurableMissionRuntime:
         return GovernedAction(action, cached["policy_tier"], decision, can_prepare, can_execute, requires_human, tuple(cached["reasons"]))
 
     def _persist_new_audit_events(self) -> None:
-        for event in self.audit.events():
+        """Persist only the events that are not durable yet.
+
+        This re-sent the whole in-memory trail on every call, so the second
+        audited operation on a runtime replayed event #1 and DurableStore refused
+        it as not inserting at the head of the chain. create_mission() followed by
+        route() -- the ordinary public sequence -- therefore always raised, and
+        the audit trail could never grow past one event.
+
+        The durable table is the source of truth for how far persistence got
+        rather than an in-memory cursor: a cursor that drifted ahead would skip
+        events and open an audit gap silently, while an authoritative count can
+        only ever re-offer an event, which record_audit refuses loudly.
+        """
+        for event in self.audit.events()[len(self.store.audit_events()):]:
             self.store.record_audit(event)
