@@ -20,9 +20,18 @@ captured, so that two handlers built by the same factory with different
 arguments are not mistaken for each other. Captures whose value cannot be
 canonicalised deterministically (a live connection, an arbitrary object) are
 recorded as opaque and therefore do not distinguish those targets; that is a
-stated limit, exercised by a test, rather than a silent one. Nothing here covers
-what a provider instance holds in its attributes. It answers "is this the same
-implementation", not "will it behave the same way".
+stated limit, exercised by a test, rather than a silent one.
+
+Class bytecode says nothing about what an instance holds, so two providers of
+the same class pointing at different endpoints were the same artifact by this
+measure: after a restart, re-registering the token against a differently
+configured instance satisfied both the durable record and the decision that
+named it. An artifact can close that for itself by exposing
+`artifact_identity()`, whose canonicalised result joins the fingerprint. It
+stays opt-in: an object that declares nothing is fingerprinted exactly as
+before, and what it holds stays uncovered. The fingerprint answers "is this the
+same implementation, configured the way it was authorized", never "will it
+behave the same way".
 """
 from __future__ import annotations
 
@@ -109,6 +118,28 @@ def _code_identity(target: Any) -> tuple[str, str, str, bytes, list[Any]]:
     return ("object", kind.__module__, kind.__qualname__, b"\x1e".join(parts), [])
 
 
+def _declared_identity(target: Any) -> Any:
+    """What an artifact says its configuration is, when it offers to say it.
+
+    Opt-in on purpose. Reading an instance's attributes wholesale would fold
+    mutable working state into the identity, so a counter ticking during a run
+    would revoke the artifact mid-execution; an artifact that declares its own
+    configuration states what is meant to be stable about it. A declaration that
+    cannot be produced is refused rather than skipped: an object that started to
+    answer the question and failed is not the same as one that never claimed to.
+    """
+    declare = getattr(target, "artifact_identity", None)
+    if not callable(declare):
+        return None
+    try:
+        declared = declare()
+    except Exception as exc:
+        raise ValueError(f"artifact identity could not be established: {exc}") from exc
+    if declared is None:
+        raise ValueError("artifact identity declared nothing")
+    return _canonical_value(declared)
+
+
 def artifact_fingerprint(target: Any) -> str:
     """A stable identity for the code a capability token stands for."""
     if target is None:
@@ -122,6 +153,11 @@ def artifact_fingerprint(target: Any) -> str:
         "code": hashlib.sha256(code).hexdigest(),
         "captured": captured,
     }
+    declared = _declared_identity(target)
+    if declared is not None:
+        # Absent when nothing is declared, so every artifact that predates this
+        # keeps the fingerprint it already had: no durable record is invalidated.
+        payload["declared"] = declared
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 

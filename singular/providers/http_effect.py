@@ -68,6 +68,27 @@ class HttpEffectProvider:
         #: ambiguous effect can never be resolved by asking, only by a human.
         self.reconcile_endpoint = reconcile_endpoint
 
+    def artifact_identity(self) -> dict[str, Any]:
+        """What makes this provider the one that was authorized.
+
+        The capability layer fingerprints this class's code, which is identical
+        for every instance: without this, a decision authorizing a request to
+        one endpoint would be satisfied, after a restart, by an instance
+        pointing somewhere else entirely.
+
+        Header names are included but not their values, so rotating a
+        credential does not revoke the artifact -- the endpoint it talks to is
+        what the authorization is about, not the secret it talks with. The
+        timeout is left out for the same reason: it changes how long we wait,
+        not what we do.
+        """
+        return {
+            "endpoint": self.endpoint,
+            "method": self.method,
+            "reconcile_endpoint": self.reconcile_endpoint,
+            "header_names": sorted(self.headers),
+        }
+
     def execute(self, request: EffectRequest, idempotency_key: str) -> ProviderResult:
         return self._call(self.endpoint, self.method, request.payload, idempotency_key, request.operation)
 
