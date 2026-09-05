@@ -21,7 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        # Two versions, not three: the ends of the supported range. If 3.11 and
+        # 3.13 both pass, 3.12 failing would be surprising, and every job costs
+        # runner minutes that a private repository pays for.
+        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
