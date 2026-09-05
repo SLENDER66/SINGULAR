@@ -56,12 +56,13 @@ Travaille en autonomie :
    Pistes ouvertes repérées mais non traitées :
    - un artefact qui ne déclare pas `artifact_identity()` reste identifié par le seul
      bytecode de sa classe : sa configuration n'est pas couverte (opt-in assumé) ;
+   - l'auditeur ne voit pas un module à qui l'on **passe** un objet frontière déjà construit.
+     Vérifié : ça ne permet pas de forger une autorité — exécuter exige toujours une décision
+     validée, attestée, non révoquée et nommant l'artefact exact. C'est de l'hygiène (qui
+     détient la porte d'entrée), pas une escalade ;
    - `ExecutionCapabilityRegistry.attach()` peut lier une partie des tokens puis échouer,
      laissant le registre sans magasin durable ;
    - (fermée) l'écriture d'audit qui perd la course pour la tête de chaîne est rejouée ;
-   - l'auditeur de frontière ne voit pas un module à qui l'on **passe** un objet frontière
-     déjà construit : il ne nomme rien, ni en import ni en chaîne. Les deux passes statiques
-     réduisent les chemins, elles ne prouvent pas l'impossibilité ;
    - `ValidatedExecutionBoundary` lance un scan d'intégrité de toute la base à chaque
      exécution : le coût croît avec l'historique, et si une violation s'y installe (corruption,
      écriture hors API), aucune opération supportée ne la nettoie — la frontière reste fermée
