@@ -10,11 +10,17 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
 État vérifié (tout est poussé sur la branche de travail, arbre propre) :
-- 585 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
+- 603 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
 - LICENSE MIT en place. Dépôt nettoyé : 9 branches pour 8 commits distincts.
 - 22 modules et 21 fichiers de test hors périmètre sont dans `attic/`.
+- `route()` écrit désormais son verdict de gouvernance dans l'audit durable
+  (`governance_route`, `governance_route_replayed`).
+- Le registre d'amélioration déduit la criticité depuis la cible : plus de drapeau
+  auto-déclaré, périmètre adaptatif en liste blanche, revérifié à l'activation.
+- Les deux chemins d'effet externe exigent l'empreinte d'artefact et le registre durable,
+  et l'attestation comme la capability sont relues juste avant l'appel du provider.
 - L'approbation humaine n'est **pas** un canal d'autorisation via le pipeline validé :
   c'est délibéré (deux gardes explicites). La machinerie d'approbation dans
   `DurableExecutionEngine` est une défense time-of-use contre une gouvernance qui escalade
@@ -28,12 +34,12 @@ Contexte personnel (ne me le redemande pas) :
 - Économise mes tokens : droit au but, pas de récapitulatif long, pas de re-vérification de
   ce qui est écrit ci-dessus.
 
-Travaille en autonomie, dans cet ordre :
-1. `route()` (singular/mission_runtime.py) n'écrit aucun événement d'audit sur son chemin
-   normal — trou de provenance.
-2. `ImprovementCandidate.safety_critical` (singular/improvement_registry.py) est un drapeau
-   auto-déclaré : un candidat peut se déclarer non critique et échapper aux contrôles.
-3. Poursuis l'audit adversarial de la chaîne decision → capability → artefact → exécution.
+Travaille en autonomie :
+1. Poursuis l'audit adversarial de la chaîne decision → capability → artefact → exécution.
+   Pistes ouvertes : l'empreinte d'artefact d'un *objet* ne couvre pas ses attributs
+   (deux instances d'un même provider avec des URL différentes ont la même empreinte —
+   limite documentée, pas encore fermée) ; une exécution refusée par une relecture tardive
+   laisse la ligne d'exécution en RUNNING jusqu'à expiration du lease.
 
 Méthode : inspecte → corrige → teste → commits atomiques → pousse → enchaîne.
 Questions sous forme de questionnaire, seulement si une décision humaine est nécessaire.
