@@ -1,5 +1,7 @@
 # SINGULAR
 
+[![CI](https://github.com/SLENDER66/SINGULAR/actions/workflows/ci.yml/badge.svg)](https://github.com/SLENDER66/SINGULAR/actions/workflows/ci.yml)
+
 **A governed execution boundary for autonomous agents.**
 
 An agent decides something. Between that decision and the moment it changes
