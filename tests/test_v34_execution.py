@@ -36,7 +36,7 @@ def test_raw_recovery_takeover_path_is_closed(tmp_path: Path):
     action = ActionRequest("safe_action", "execute", 1, 1, 10)
     runtime._set_status(contract.mission_id, MissionStatus.PLANNED)
     key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
-    runtime.store.begin_execution(key, contract.mission_id, action.id, lease_seconds=1)
+    runtime.store.begin_execution_and_start_mission(key, contract.mission_id, action.id, lease_seconds=1)
 
     with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
         DurableExecutionEngine(runtime, execution_lease_seconds=1).execute(action, contract.mission_id, lambda _: True)
@@ -48,7 +48,7 @@ def test_durable_engine_still_exposes_recovery_state_without_raw_execution(tmp_p
     action = ActionRequest("safe_action", "execute", 1, 1, 10)
     runtime._set_status(contract.mission_id, MissionStatus.PLANNED)
     key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
-    runtime.store.begin_execution(key, contract.mission_id, action.id)
+    runtime.store.begin_execution_and_start_mission(key, contract.mission_id, action.id)
 
     row = runtime.store.get_execution(key)
     assert row is not None

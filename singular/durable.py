@@ -293,22 +293,16 @@ class DurableStore:
     def _execution_fields() -> str:
         return "execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until"
 
-    def begin_execution(self, execution_key: str, mission_id: str, action_id: str, lease_seconds: int = 300) -> dict[str, Any]:
-        if lease_seconds <= 0:
-            raise ValueError("La durée du lease doit être positive.")
-        now = datetime.now(UTC)
-        lease_until = (now + timedelta(seconds=lease_seconds)).isoformat()
-        with self._connect() as conn:
-            cur = conn.execute("INSERT OR IGNORE INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)", (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until))
-            row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
-        if row is None:
-            raise RuntimeError("Execution record could not be persisted")
-        self._validate_execution_identity(row, mission_id, action_id)
-        result = dict(row)
-        result["claimed"] = cur.rowcount == 1
-        return result
-
     def begin_execution_and_start_mission(self, execution_key: str, mission_id: str, action_id: str, lease_seconds: int = 300) -> dict[str, Any]:
+        """The only way an execution is claimed.
+
+        There used to be a second claimer, begin_execution, which inserted a
+        RUNNING execution and left the mission where it was. Nothing called it
+        either: it produced a state the system considers impossible -- a running
+        execution under a mission that never started -- which the integrity
+        checker reports and which blocks the real path from ever claiming that
+        key.
+        """
         if lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         now = datetime.now(UTC)

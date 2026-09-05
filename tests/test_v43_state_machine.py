@@ -115,3 +115,13 @@ def test_there_is_only_one_way_into_a_terminal_execution_state(tmp_path: Path):
     """
     finalizers = [name for name in dir(DurableStore) if name.startswith("finish_execution")]
     assert finalizers == ["finish_execution_and_mission"]
+
+
+def test_there_is_only_one_way_to_claim_an_execution(tmp_path: Path):
+    """begin_execution claimed a key while leaving the mission unstarted.
+
+    That state is one the integrity checker reports as impossible, and the
+    claim it leaves behind blocks the guarded path from ever taking that key.
+    """
+    claimers = [name for name in dir(DurableStore) if name.startswith("begin_execution")]
+    assert claimers == ["begin_execution_and_start_mission"]
