@@ -140,6 +140,22 @@ class DurableExecutionEngine:
         if capability_id is not None:
             self._require_live_capability(capability_id, target)
 
+    def _release_claim_if_refused(self, key: str, mission_id: str, action_id: str, decision: ValidatedTrajectoryDecision | None, capability_id: str | None, target: Any) -> None:
+        """Run the last-moment check while holding the claim, and let it go if it refuses.
+
+        The check happens after the durable claim, so a refusal used to leave the
+        execution RUNNING. Its lease then expired and the next attempt read that
+        as a stale execution needing recovery -- ambiguity invented about an
+        effect that provably never started, on a path where recovery means
+        asking a provider what it did. The claim is released as a refused
+        execution instead, which is also what puts the refusal in the audit.
+        """
+        try:
+            self._require_live_authority(decision, capability_id, target)
+        except PermissionError as exc:
+            self._fail_result(key, mission_id, action_id, f"{type(exc).__name__}: {exc}")
+            raise
+
     def _require_attestation(self, decision: ValidatedTrajectoryDecision) -> None:
         if not self.attestation_store.verify(decision):
             raise PermissionError("La décision validée n'est pas durablement attestée, est révoquée ou a expiré.")
@@ -219,7 +235,7 @@ class DurableExecutionEngine:
         if not claimed["claimed"]:
             self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             return self._handle_existing_execution(key, claimed)
-        self._require_live_authority(decision, capability_id, handler)
+        self._release_claim_if_refused(key, mission_id, action.id, decision, capability_id, handler)
         try:
             value = handler(action)
         except Exception as exc:
@@ -310,7 +326,7 @@ class DurableExecutionEngine:
         # decision's checks and here -- governance, the durable claim -- is a
         # window in which the capability or the decision can be revoked, and
         # this is the path whose effect leaves the process.
-        self._require_live_authority(decision, capability_id, provider)
+        self._release_claim_if_refused(key, mission_id, action.id, decision, capability_id, provider)
         outcome = self.effect_coordinator.execute(request, provider)
         if outcome.status == EffectStatus.UNKNOWN.value:
             self.store.mark_execution_recovery_required(key)

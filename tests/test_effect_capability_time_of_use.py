@@ -229,6 +229,49 @@ def test_authorized_handler_still_executes(tmp_path):
     assert executor.execute_validated(decision, authorized_handler).status == "COMPLETED"
 
 
+def _execution_row(executor: DurableExecutionEngine, decision) -> dict:
+    key = executor.store.idempotency_key("execute", decision.contract.mission_id, decision.global_report.action_id)
+    return executor.store.get_execution(key)
+
+
+def test_a_refused_execution_does_not_invent_recovery(tmp_path):
+    """Nothing was attempted, so the claim is released rather than left RUNNING.
+
+    A RUNNING row whose lease expires is read as a stale execution needing
+    recovery -- and on this path recovery means asking a provider what it did
+    about an effect that provably never started.
+    """
+    decision = _effect_decision("DEC-TOU-CLAIM")
+    executor = _executor(decision, tmp_path)
+    AUTHORIZED_PROVIDER.calls.clear()
+    _revoke_during(executor, decision.execution_target, "_authorize")
+
+    with pytest.raises(PermissionError):
+        executor.execute_effect_validated(decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+                                          operation="apply", payload=PAYLOAD)
+
+    row = _execution_row(executor, decision)
+    assert row["status"] == "FAILED"
+    assert "n'est plus valide" in row["error"]
+    assert AUTHORIZED_PROVIDER.calls == []
+    assert _external_effects(executor) == 0
+
+
+def test_a_refused_execution_is_audited(tmp_path):
+    decision = _handler_decision("DEC-TOU-CLAIM-AUDIT")
+    executor = _executor(decision, tmp_path)
+    _revoke_decision_during(executor, decision, "_authorize")
+
+    with pytest.raises(PermissionError):
+        executor.execute_validated(decision, authorized_handler)
+
+    refusals = [event for event in executor.store.audit_events()
+                if event["event_type"] == "execution" and event["outcome"] == "FAILED"]
+    assert len(refusals) == 1
+    assert "durablement attestée" in refusals[0]["payload"]["error"]
+    assert executor.store.verify_audit_integrity() is True
+
+
 def test_authorized_external_effect_still_executes(tmp_path):
     """The added checks must not close the path they protect."""
     decision = _effect_decision("DEC-TOU-OK")
