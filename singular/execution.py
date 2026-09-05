@@ -12,7 +12,7 @@ from .autopilot import ApprovalStatus, Autonomy
 from .decision_attestation import DecisionAttestationStore
 from .durable import DurableStore, MissionStatus
 from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
-from .execution_capability import execution_capability_matches
+from .execution_capability import DurableCapabilityStore, execution_capability_matches
 from .mission_runtime import DurableMissionRuntime
 from .security import ActionPolicy
 from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
@@ -39,7 +39,7 @@ class ExecutionRecoveryRequired(RuntimeError):
 class DurableExecutionEngine:
     """Durable execution boundary; raw actions and unattested decisions are never executable."""
 
-    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None, attestation_store: DecisionAttestationStore | None = None) -> None:
+    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None, attestation_store: DecisionAttestationStore | None = None, capability_store: DurableCapabilityStore | None = None) -> None:
         if execution_lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         self.runtime = runtime
@@ -47,6 +47,10 @@ class DurableExecutionEngine:
         self.execution_lease_seconds = execution_lease_seconds
         self.effect_coordinator = effect_coordinator
         self.attestation_store = attestation_store or DecisionAttestationStore(self.store.path)
+        #: What a `cap_...` token means here, durably. The in-process registry
+        #: says "this exact object"; this says "this artifact", which is the half
+        #: that survives a restart.
+        self.capability_store = capability_store or DurableCapabilityStore(self.store.path)
         self.store.init_execution_schema()
 
     @staticmethod
@@ -68,6 +72,31 @@ class DurableExecutionEngine:
     def _provider_target(provider: EffectProvider) -> str:
         provider_type = type(provider)
         return f"{provider_type.__module__}:{provider_type.__qualname__}"
+
+    def _require_durable_capability(self, capability_id: str, target: Any) -> None:
+        """Record, then require, what this token durably means.
+
+        The in-process registry is empty after a restart, so a capability token
+        alone proved nothing about which code it stood for: registering an
+        arbitrary object under an old token used to be enough. The durable record
+        is written the first time a token is used against this database and can
+        never afterwards be pointed at a different artifact, nor revived once
+        revoked.
+        """
+        try:
+            self.capability_store.bind(capability_id, target)
+        except PermissionError as exc:
+            raise PermissionError(f"Capability durable identity refused: {exc}") from exc
+
+    def _require_live_capability(self, capability_id: str, target: Any) -> None:
+        """Re-check immediately before handing control to the executable.
+
+        Between validation and execution a capability can be revoked. Checking
+        once at the top of the call would leave that window open, so the check is
+        repeated here, as late as it can be.
+        """
+        if not execution_capability_matches(capability_id, target) or not self.capability_store.verify(capability_id, target):
+            raise PermissionError("La capacité d'exécution n'est plus valide au moment de l'exécution.")
 
     def _require_attestation(self, decision: ValidatedTrajectoryDecision) -> None:
         if not self.attestation_store.verify(decision):
@@ -102,6 +131,7 @@ class DurableExecutionEngine:
             raise PermissionError("Validated decision is bound to an external effect, not a handler.")
         if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, handler):
             raise PermissionError("Handler capability does not match the exact executable target authorized by the validated decision.")
+        self._require_durable_capability(decision.execution_target, handler)
         mission_id = decision.contract.mission_id
         action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
         if action is None:
@@ -114,7 +144,7 @@ class DurableExecutionEngine:
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
         self._assert_policy_unchanged(action, governed, decision)
-        return self._execute_authorized(action, mission_id, handler, governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint)
+        return self._execute_authorized(action, mission_id, handler, governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target)
 
     @staticmethod
     def _assert_policy_unchanged(action, governed: Any, decision: ValidatedTrajectoryDecision) -> None:
@@ -133,7 +163,7 @@ class DurableExecutionEngine:
         if governed.policy_tier != decision.policy.tier.value:
             raise PermissionError("Current governance tier no longer matches the validated policy.")
 
-    def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any, *, decision_id: str | None = None, decision_fingerprint: str | None = None) -> ExecutionResult:
+    def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any, *, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None) -> ExecutionResult:
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
@@ -146,6 +176,8 @@ class DurableExecutionEngine:
         if not claimed["claimed"]:
             self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             return self._handle_existing_execution(key, claimed)
+        if capability_id is not None:
+            self._require_live_capability(capability_id, handler)
         try:
             value = handler(action)
         except Exception as exc:
@@ -163,6 +195,7 @@ class DurableExecutionEngine:
             raise PermissionError("Validated decision is not bound to an external effect.")
         if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
             raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
+        self._require_durable_capability(decision.execution_target, provider)
         if decision.provider_name != provider_name or decision.operation != operation:
             raise PermissionError("Provider or operation does not match the validated decision.")
         if decision.payload_fingerprint != payload_fingerprint(payload):
