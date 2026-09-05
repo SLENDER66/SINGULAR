@@ -70,6 +70,14 @@ def build(**overrides):
         "governor": governor, "execution_target": HANDLER_CAPABILITY,
     }
     values.update(overrides)
+    # Keep the action's execution capability and the decision's execution target
+    # in step when a caller overrides only one of them: a decision whose action
+    # is bound to a different executable is exactly what _validate refuses, and
+    # a builder that silently produces one tests nothing but its own mistake.
+    if "execution_target" in overrides and "actions" not in overrides:
+        values["actions"] = tuple(
+            replace(item, execution_capability=values["execution_target"]) for item in values["actions"]
+        )
     return ValidatedTrajectoryDecision.create(**values)
 
 
