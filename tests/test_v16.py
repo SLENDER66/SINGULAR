@@ -1,6 +1,12 @@
-from singular.empire import AgentRegistry, AgentSpec, AutopilotSupervisor, Event, EventType
-from singular.models import Action
 from singular.agents import Commander
+from singular.empire import (
+    AgentRegistry,
+    AgentSpec,
+    AutopilotSupervisor,
+    Event,
+    EventType,
+)
+from singular.models import Action
 from singular.v16_workforce import WorkforcePlanner, build_default_registry
 
 

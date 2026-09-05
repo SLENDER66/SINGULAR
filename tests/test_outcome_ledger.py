@@ -1,6 +1,7 @@
 from singular.durable import DurableStore, MissionStatus
 from singular.learning import Forecast, ForecastKind, LearningEngine
 from singular.outcome_ledger import OutcomeLedger
+from tests.support import executed_decision
 from tests.test_validated_pipeline import _build_decision
 
 
@@ -49,7 +50,10 @@ def test_outcome_ledger_rejects_unattested_decision(tmp_path):
             execution_status="COMPLETED",
         )
     except PermissionError as exc:
-        assert "attesté" in str(exc)
+        # The refusal message is in English here; the test matched a French
+        # fragment, so an unattested decision would have satisfied it only by
+        # raising some other PermissionError.
+        assert "durably issued" in str(exc)
     else:
         raise AssertionError("unattested decision must be rejected")
 
@@ -116,3 +120,60 @@ def test_repeated_identical_observation_is_idempotent(tmp_path):
     second = ledger.record(decision=decision, forecast=forecast, actual=True, execution_key=execution_key, execution_status="COMPLETED", observed_at=first.observed_at)
     assert first == second
     assert len(ledger.list()) == 1
+
+
+def test_recorded_observation_carries_the_forecast_kind_as_an_enum(tmp_path):
+    """A str that only compares equal is not the enum consumers test with `is`.
+
+    record() built the observation from a payload holding forecast.kind.value,
+    so the object it returned carried "BINARY" rather than ForecastKind.BINARY.
+    Every `record.kind is ForecastKind.BINARY` check downstream was False, and a
+    binary forecast was scored with the continuous formula -- which is how a
+    Brier score of 0.81 produced HOLD with no human review instead of the
+    recalibration branch.
+    """
+    executed = executed_decision(tmp_path / "kinds.db")
+    ledger = OutcomeLedger(tmp_path / "kinds.db", attestation_store=executed.engine.attestation_store)
+    forecast = Forecast("F-KIND", ForecastKind.BINARY, probability=0.9, confidence=0.9)
+    recorded = ledger.record(
+        decision=executed.decision,
+        forecast=forecast,
+        actual=False,
+        execution_key=executed.execution_key,
+        execution_status=executed.execution_status,
+    )
+
+    assert recorded.forecast_kind is ForecastKind.BINARY
+    assert ledger.list()[-1].forecast_kind is ForecastKind.BINARY
+    assert ledger.verify() is True
+
+
+def test_a_confident_binary_forecast_that_was_wrong_reaches_recalibration(tmp_path):
+    """The consequence the type loss hid, asserted end to end."""
+    from singular.learning import CalibrationRecord, LearningEngine
+    from singular.learning_strategy import LearningStrategyEngine, StrategyDisposition
+
+    executed = executed_decision(tmp_path / "recalibrate.db")
+    ledger = OutcomeLedger(tmp_path / "recalibrate.db", attestation_store=executed.engine.attestation_store)
+    forecast = Forecast("F-MISS", ForecastKind.BINARY, probability=0.9, confidence=0.95)
+    outcome = ledger.record(
+        decision=executed.decision,
+        forecast=forecast,
+        actual=False,
+        execution_key=executed.execution_key,
+        execution_status=executed.execution_status,
+    )
+    assert outcome.brier_score >= 0.25
+
+    record = CalibrationRecord(
+        forecast_id=outcome.forecast_id,
+        kind=outcome.forecast_kind,
+        outcome=outcome.actual_value,
+        error=outcome.absolute_error,
+        brier_score=outcome.brier_score,
+        forecast_confidence=outcome.forecast_confidence,
+        lesson=outcome.lesson,
+    )
+    strategy = LearningStrategyEngine.propose(record, LearningEngine.propose_update(record))
+    assert strategy.disposition is StrategyDisposition.TEST
+    assert strategy.human_review_required is True

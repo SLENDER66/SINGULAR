@@ -1,8 +1,8 @@
 import pytest
 
-from singular.tool_fabric import ToolFabric, ToolSpec
-from singular.autopilot import MissionManager, Autonomy
+from singular.autopilot import Autonomy, MissionManager
 from singular.cockpit import Cockpit
+from singular.tool_fabric import ToolFabric, ToolSpec
 
 
 def test_autonomous_tool_requires_contract():

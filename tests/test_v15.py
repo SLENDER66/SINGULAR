@@ -1,6 +1,6 @@
 from singular.autopilot import ActionRequest, Autonomy
-from singular.mission_autopilot import MissionAutopilot, Mission, StepStatus
 from singular.evals import evaluate_mission
+from singular.mission_autopilot import Mission, MissionAutopilot, StepStatus
 
 
 def test_autopilot_plans_but_never_executes_reversible_steps():

@@ -41,6 +41,16 @@ class OutcomeObservation:
     previous_fingerprint: str
     fingerprint: str
 
+    def __post_init__(self) -> None:
+        # record() builds this from a payload holding forecast.kind.value, a
+        # plain string, while _row() rehydrates the enum. Consumers compare with
+        # `is`, so the freshly recorded observation silently failed every
+        # ForecastKind check: a binary forecast was scored with the continuous
+        # formula and never reached the Brier-based branch. Normalise here, at
+        # the one type boundary both paths cross.
+        if not isinstance(self.forecast_kind, ForecastKind):
+            object.__setattr__(self, "forecast_kind", ForecastKind(self.forecast_kind))
+
 
 class OutcomeLedger:
     """Append-only SQLite ledger for durable forecast calibration."""

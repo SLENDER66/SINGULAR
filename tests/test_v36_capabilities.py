@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from singular.autopilot import ActionRequest, Autonomy
-from singular.durable import DurableStore, MissionStatus
+from singular.durable import DurableStore
 from singular.execution import DurableExecutionEngine
 from singular.mission_runtime import DurableMissionRuntime
 from singular.security import ActionPolicy, ActionTier
