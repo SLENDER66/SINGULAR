@@ -1,7 +1,13 @@
 from pathlib import Path
 
 from singular.durable import DurableStore
-from singular.effects import EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
+from singular.effects import (
+    EffectRequest,
+    EffectStatus,
+    ExternalEffectCoordinator,
+    ProviderResult,
+)
+from tests.support import claimed_execution_store
 
 
 class Provider:
@@ -46,7 +52,10 @@ def test_execution_recovery_clears_lease(tmp_path: Path):
 
 
 def test_effect_recovery_and_execution_recovery_cannot_reexecute_provider(tmp_path: Path):
-    store = DurableStore(tmp_path / "effect-recovery.db")
+    # The coordinator only serves an execution that owns a RUNNING row, and only
+    # reconciles a quarantined one: an effect nobody claimed is outside the lease
+    # that makes it exactly-once.
+    store = claimed_execution_store(tmp_path / "effect-recovery.db", execution_key="e1")
     coordinator = ExternalEffectCoordinator(store)
     provider = Provider()
     request = EffectRequest("e1", "fake", "send", {"to": "a"}, "action-1")
@@ -62,6 +71,7 @@ def test_effect_recovery_and_execution_recovery_cannot_reexecute_provider(tmp_pa
     assert recovered["status"] == EffectStatus.UNKNOWN.value
     assert provider.execute_calls == 0
 
+    store.mark_execution_recovery_required("e1")
     result = coordinator.reconcile(request, provider)
     assert result.status == EffectStatus.COMPLETED.value
     assert provider.execute_calls == 0

@@ -91,3 +91,28 @@ def executed_decision(path: Path, **kwargs) -> ExecutedDecision:
     pass the same path it will hand to OutcomeLedger.
     """
     return ExecutedDecision(build_decision(**kwargs), path)
+
+
+def claimed_execution_store(
+    path: Path,
+    *,
+    execution_key: str = "execute-key",
+    mission_id: str = "MIS-EFFECT",
+    action_id: str = "ACT-EFFECT",
+) -> DurableStore:
+    """A store where `execution_key` owns a RUNNING execution.
+
+    ExternalEffectCoordinator refuses a request whose execution_key owns no
+    RUNNING execution row, and reserves reconciliation for RECOVERY_REQUIRED
+    ones: an effect nobody claimed could be produced by any caller, outside the
+    lease that makes it exactly-once. Tests that invent an execution key exercise
+    the coordinator with that ownership check unsatisfied.
+    """
+    from singular.durable import MissionStatus
+
+    store = DurableStore(path)
+    store.save_mission(DelegationContract(mission_id, "objective", "expected", autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.init_execution_schema()
+    store.set_mission_status(mission_id, MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission(execution_key, mission_id, action_id, lease_seconds=300)
+    return store

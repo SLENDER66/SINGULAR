@@ -3,7 +3,13 @@ from pathlib import Path
 import pytest
 
 from singular.durable import DurableStore
-from singular.effects import EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
+from singular.effects import (
+    EffectRequest,
+    EffectStatus,
+    ExternalEffectCoordinator,
+    ProviderResult,
+)
+from tests.support import claimed_execution_store
 
 
 class FakeProvider:
@@ -53,11 +59,13 @@ def test_recovery_race_cannot_recover_completed_effect(tmp_path: Path):
 
 
 def test_unknown_reconciliation_is_idempotent_after_completion(tmp_path: Path):
-    store = DurableStore(tmp_path / "s.db")
+    store = claimed_execution_store(tmp_path / "s.db", execution_key="execution-1")
     coordinator, request = make_request(store)
     coordinator.prepare(request)
     assert coordinator._claim(request.provider_idempotency_key) is True
     coordinator._transition(request.provider_idempotency_key, EffectStatus.UNKNOWN.value, error="ambiguous")
+    # Reconciliation is reserved to quarantined executions.
+    store.mark_execution_recovery_required("execution-1")
 
     provider = FakeProvider()
     first = coordinator.reconcile(request, provider)
