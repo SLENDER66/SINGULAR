@@ -23,7 +23,14 @@ PROVIDER_CAPABILITY = "cap_test_provider"
 
 def artifacts(*, global_decision: str = "PROCEED"):
     contract = DelegationContract("MIS-1", "Improve career", "Completed", autonomy=Autonomy.EXECUTE_REVERSIBLE)
-    action = ActionRequest("career_test", "Run a bounded career test", 4, 1, 9, contract_id=contract.mission_id)
+    # The action must carry the execution capability the decision authorizes:
+    # a decision whose action is bound to no executable authorizes nothing in
+    # particular, which is what ValidatedTrajectoryDecision._validate refuses.
+    # A fixed id: ActionRequest mints a random one per instance, so two builds
+    # of the "identical context" could never produce the same fingerprint.
+    action = ActionRequest("career_test", "Run a bounded career test", 4, 1, 9,
+                           contract_id=contract.mission_id, id="ACT-VTD-FIXED",
+                           execution_capability=HANDLER_CAPABILITY)
     state = DomainState(LearningDomain.CAREER, 0.2, confidence=0.9)
     intervention = Intervention("career", LearningDomain.CAREER, 0.9, evidence=0.9, causal_confidence=0.9, capacity=1)
     human = HumanOptimizationEngine.optimize((state,), (intervention,), capacity_budget=2)
@@ -141,10 +148,33 @@ def test_rejects_action_missing_from_portfolio():
 
 @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
 def test_rejects_non_finite_critical_numeric_context(value):
+    """Construction refuses a non-finite value; the message names the fingerprint.
+
+    create() fingerprints the payload before __post_init__ runs _validate, so the
+    canonical-JSON guard (allow_nan=False) is what rejects here. This test used to
+    demand the portfolio message and so asserted an ordering that has never held.
+    """
     _, _, _, _, portfolio, _, _, _, _, _, _, _, _ = artifacts()
     invalid = TrajectoryPortfolio(portfolio.candidates, value, portfolio.capacity_used, portfolio.capacity_remaining, portfolio.interaction_effect)
-    with pytest.raises(ValueError, match="trajectory portfolio"):
+    with pytest.raises(ValueError, match="must be finite"):
         build(trajectory_portfolio=invalid)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_non_finite_portfolio_injected_after_construction_fails_verification(value):
+    """The other path: a value smuggled past construction must not verify.
+
+    Here _validate runs before the payload is fingerprinted, so the targeted
+    portfolio guard is the one that fires. Both guards are live, on different
+    paths -- asserting only one of them would leave the other unproven.
+    """
+    decision = build()
+    portfolio = decision.trajectory_portfolio
+    invalid = TrajectoryPortfolio(portfolio.candidates, value, portfolio.capacity_used, portfolio.capacity_remaining, portfolio.interaction_effect)
+    object.__setattr__(decision, "trajectory_portfolio", invalid)
+    with pytest.raises(ValueError, match="trajectory portfolio"):
+        decision._validate(now=decision.issued_at)
+    assert decision.verify() is False
 
 
 def test_detects_tampered_context_fingerprint():
@@ -167,14 +197,33 @@ def test_temporal_validity_is_part_of_the_fingerprint():
 
 
 def test_global_report_cannot_be_forged_without_matching_gate_inputs():
+    """Forge a field no targeted guard inspects, so only reconstruction can catch it.
+
+    These tests used to forge `warnings`, which GlobalDecisionReport.requires_human
+    derives from: the decision was refused by the human-review guard before the gate
+    was ever re-evaluated, so they proved that guard rather than reconstruction.
+    capacity_recommendation feeds no other check.
+    """
     decision = build()
-    forged = replace(decision.global_report, warnings=("FORGED_WARNING",))
+    forged = replace(decision.global_report, capacity_recommendation="FORGED_RECOMMENDATION")
+    assert forged.requires_human == decision.global_report.requires_human
+    assert forged.can_prepare == decision.global_report.can_prepare
     with pytest.raises(ValueError, match="global decision report does not match its validated gate inputs"):
         recreate(decision, global_report=forged)
 
 
 def test_global_report_tampering_is_rejected_even_when_fingerprint_is_rebuilt():
+    """recreate() recomputes context_fingerprint, so integrity cannot be the reason."""
+    decision = build()
+    forged = replace(decision.global_report, blockers=("FORGED_BLOCKER",))
+    with pytest.raises(ValueError):
+        recreate(decision, global_report=forged)
+
+
+def test_forged_warning_is_refused_even_though_another_guard_catches_it_first():
+    """Whichever guard fires, a forged report never becomes a validated decision."""
     decision = build()
     forged = replace(decision.global_report, warnings=("FORGED_WARNING",))
-    with pytest.raises(ValueError, match="global decision report does not match its validated gate inputs"):
+    assert forged.requires_human is True
+    with pytest.raises(ValueError):
         recreate(decision, global_report=forged)
