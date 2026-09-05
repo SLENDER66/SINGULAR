@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from .autopilot import ApprovalRequest, ApprovalStatus
-from .durable import DurableStore
+from .durable import DurableStore, install_store_extension
 
 
 def save_approval(self: DurableStore, approval: ApprovalRequest, mission_id: str | None = None) -> None:
@@ -51,7 +51,5 @@ def update_approval(self: DurableStore, approval_id: str, status: ApprovalStatus
         return ApprovalRequest(row["action_id"], row["reason"], status, row["approval_id"])
 
 
-if getattr(DurableStore.save_approval, "__module__", "") != __name__:
-    DurableStore.save_approval = save_approval
-if getattr(DurableStore.update_approval, "__module__", "") != __name__:
-    DurableStore.update_approval = update_approval
+install_store_extension("save_approval", save_approval, replaces_base=True)
+install_store_extension("update_approval", update_approval, replaces_base=True)

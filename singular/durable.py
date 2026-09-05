@@ -432,3 +432,33 @@ class DurableStore:
         with self._connect() as conn:
             row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
         return dict(row) if row else None
+
+
+def install_store_extension(name: str, function: Any, *, replaces_base: bool = False) -> None:
+    """Attach a method defined outside this module, refusing a stranger's version.
+
+    Several transitions are implemented in their own modules and grafted onto
+    DurableStore at import time. The two installers disagreed about conflicts:
+    the recovery one skipped silently if anything was already bound, the
+    approval one overwrote unless the binding was already its own. Both were
+    silent, in opposite directions, about the same question -- and the graft the
+    recovery module installs governs RECOVERY_REQUIRED -> COMPLETED, where a
+    weaker definition winning by import order is precisely the fail-open shape
+    the boundary exists to prevent.
+
+    Re-installing the same function stays a no-op, replacing this module's own
+    definition is allowed when the caller says so, and anything else raises
+    rather than picking a winner quietly.
+    """
+    current = getattr(DurableStore, name, None)
+    if current is not None:
+        owner = getattr(current, "__module__", "")
+        permitted = {getattr(function, "__module__", "")}
+        if replaces_base:
+            permitted.add(__name__)
+        if owner not in permitted:
+            raise RuntimeError(
+                f"DurableStore.{name} is already defined by {owner or 'an unknown module'}: "
+                "refusing to install a second definition"
+            )
+    setattr(DurableStore, name, function)

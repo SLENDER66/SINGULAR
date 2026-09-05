@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from .durable import DurableStore, MissionStatus
+from .durable import DurableStore, MissionStatus, install_store_extension
 
 
 def confirm_execution_recovery_from_effect(
@@ -70,8 +70,7 @@ def confirm_execution_recovery_from_effect(
     return dict(final)
 
 
-if not hasattr(DurableStore, "confirm_execution_recovery_from_effect"):
-    setattr(DurableStore, "confirm_execution_recovery_from_effect", confirm_execution_recovery_from_effect)
+install_store_extension("confirm_execution_recovery_from_effect", confirm_execution_recovery_from_effect)
 
 
 __all__ = ["confirm_execution_recovery_from_effect"]
