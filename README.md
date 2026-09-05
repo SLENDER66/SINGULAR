@@ -72,7 +72,7 @@ Real socket, real SQLite, no mocks. Every refusal is the boundary refusing.
 | **Tamper-evident** | Decisions, approvals, audit events and outcomes are fingerprinted and re-verified from their own fields, not from a stored hash. |
 | **Learning ≠ policy** | Improvements go candidate → artifact → evaluation → human review → activation, each stage bound to the artifact fingerprint. No promotion path touches safety policy. |
 
-Verified by 633 tests, including adversarial cases: forged reports, substituted
+Verified by 572 tests, including adversarial cases: forged reports, substituted
 handlers and providers, tampered identities, replay, restart, revocation races,
 NaN and infinity inputs, and schema version mismatches. The suite passes in
 isolation and in randomised order.
@@ -107,7 +107,9 @@ singular/effects.py                    external-effect coordinator
 singular/providers/                    real providers
 singular/outcome_ledger.py             predictions vs. outcomes
 singular/improvement_registry.py       governed learning lifecycle
+singular/journal.py                    decision journal, the tool its author uses
 docs/                                  authority model, boundary design
+attic/                                 parked: what the boundary does not need
 ```
 
 Licence: see repository. `constitution.md` holds the design principles this is
