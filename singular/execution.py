@@ -94,6 +94,10 @@ class DurableExecutionEngine:
         is written the first time a token is used against this database and can
         never afterwards be pointed at a different artifact, nor revived once
         revoked.
+
+        Called after _require_decision_artifact, never before: this writes, so
+        binding first would let a caller presenting an unauthorized artifact
+        record it against the token and permanently lock out the legitimate one.
         """
         try:
             self.capability_store.bind(capability_id, target)
@@ -154,8 +158,8 @@ class DurableExecutionEngine:
             raise PermissionError("Validated decision is bound to an external effect, not a handler.")
         if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, handler):
             raise PermissionError("Handler capability does not match the exact executable target authorized by the validated decision.")
-        self._require_durable_capability(decision.execution_target, handler)
         self._require_decision_artifact(decision, handler)
+        self._require_durable_capability(decision.execution_target, handler)
         mission_id = decision.contract.mission_id
         action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
         if action is None:
@@ -219,8 +223,8 @@ class DurableExecutionEngine:
             raise PermissionError("Validated decision is not bound to an external effect.")
         if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
             raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
-        self._require_durable_capability(decision.execution_target, provider)
         self._require_decision_artifact(decision, provider)
+        self._require_durable_capability(decision.execution_target, provider)
         if decision.provider_name != provider_name or decision.operation != operation:
             raise PermissionError("Provider or operation does not match the validated decision.")
         if decision.payload_fingerprint != payload_fingerprint(payload):
@@ -232,9 +236,9 @@ class DurableExecutionEngine:
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
         self._assert_policy_unchanged(action, governed, decision)
-        return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint)
+        return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target)
 
-    def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> ExecutionResult:
+    def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         action = governed.action
@@ -288,6 +292,12 @@ class DurableExecutionEngine:
                     return self._handle_existing_execution(key, claimed)
                 return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
             return self._handle_existing_execution(key, claimed)
+        if capability_id is not None:
+            # As late as the handler path checks it: everything between the
+            # decision's capability checks and here -- governance, the durable
+            # claim -- is a window in which the capability can be revoked, and
+            # this is the path whose effect leaves the process.
+            self._require_live_capability(capability_id, provider)
         outcome = self.effect_coordinator.execute(request, provider)
         if outcome.status == EffectStatus.UNKNOWN.value:
             self.store.mark_execution_recovery_required(key)
@@ -312,6 +322,13 @@ class DurableExecutionEngine:
             raise PermissionError("Validated decision is not bound to an external effect.")
         if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
             raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
+        # Reconciliation reaches the same provider and can confirm an execution
+        # as COMPLETED, so it needs the same artifact identity as execution. It
+        # used to require only the in-process registry, which is rebuilt from
+        # scratch after a restart: a substituted provider registered under the
+        # old token could report an effect that never happened.
+        self._require_decision_artifact(decision, provider)
+        self._require_durable_capability(decision.execution_target, provider)
         if decision.provider_name != provider_name or decision.operation != operation:
             raise PermissionError("Provider or operation does not match the validated decision.")
         if decision.payload_fingerprint != payload_fingerprint(payload):
@@ -322,9 +339,9 @@ class DurableExecutionEngine:
         governed = self._authorize_reconciliation(action, decision.contract.mission_id)
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
-        return self._reconcile_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint)
+        return self._reconcile_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target)
 
-    def _reconcile_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> ExecutionResult:
+    def _reconcile_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         action = governed.action
@@ -334,6 +351,8 @@ class DurableExecutionEngine:
             raise ValueError("L'exécution doit être RECOVERY_REQUIRED pour une réconciliation.")
         self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
+        if capability_id is not None:
+            self._require_live_capability(capability_id, provider)
         outcome = self.effect_coordinator.reconcile(request, provider)
         if outcome.status == EffectStatus.COMPLETED.value:
             effect = self.effect_coordinator.peek(request)
