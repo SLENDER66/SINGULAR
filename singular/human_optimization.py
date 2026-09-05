@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
 
-from .domain_learning import DomainHypothesis, LearningDomain
+from .domain_learning import SENSITIVE_DOMAINS, DomainHypothesis, LearningDomain
 
 
 class OptimizationDisposition(str, Enum):
@@ -143,7 +143,9 @@ class HumanOptimizationEngine:
     does not diagnose, and never authorizes execution.
     """
 
-    SENSITIVE = frozenset({LearningDomain.PSYCHOLOGY, LearningDomain.NUTRITION, LearningDomain.PHYSICAL, LearningDomain.SLEEP})
+    #: One authoritative definition, shared with the learning engine: two copies
+    #: of a safety set drift, and the drift is silent.
+    SENSITIVE = SENSITIVE_DOMAINS
     _MAX_BRANCH_AND_BOUND_NODES = 250_000
 
     @staticmethod

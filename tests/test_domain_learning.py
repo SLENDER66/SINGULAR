@@ -1,4 +1,5 @@
 from singular.domain_learning import (
+    SENSITIVE_DOMAINS,
     DomainHypothesis,
     DomainLearningResult,
     DomainObservation,
@@ -86,3 +87,54 @@ def test_improve_evaluates_multiple_domains_as_one_system() -> None:
     )
     results = UniversalLearningEngine.improve(observations, hypotheses)
     assert [item.domain for item in results] == [LearningDomain.FINANCE, LearningDomain.KNOWLEDGE]
+
+
+def test_sensitive_domains_are_not_a_caller_declaration():
+    """A caller may add sensitivity, never remove it.
+
+    human_review used to depend entirely on the `sensitive` argument, so calling
+    evaluate() directly on a health-adjacent hypothesis -- the public
+    single-hypothesis entry point -- skipped the requirement. Only the batch
+    improve() path applied it, and it carried its own copy of the domain set.
+    """
+    for domain in SENSITIVE_DOMAINS:
+        hypothesis = DomainHypothesis(
+            domain,
+            "A reversible change",
+            "Test it",
+            expected_improvement=1.0,
+            evidence_strength=0.8,
+        )
+        result = UniversalLearningEngine.evaluate(hypothesis, sensitive=False)
+        assert result.human_review is True, f"{domain} must require human review"
+        assert "HUMAN_REVIEW_REQUIRED" in result.reasons
+
+
+def test_non_sensitive_domain_still_does_not_require_review_by_default():
+    """The guard must discriminate, not blanket every domain."""
+    hypothesis = DomainHypothesis(
+        LearningDomain.PRODUCTIVITY,
+        "A reversible change",
+        "Test it",
+        expected_improvement=1.0,
+        evidence_strength=0.8,
+    )
+    assert UniversalLearningEngine.evaluate(hypothesis).human_review is False
+    assert UniversalLearningEngine.evaluate(hypothesis, sensitive=True).human_review is True
+
+
+def test_the_sensitive_domain_set_has_one_definition():
+    """Two copies of a safety set drift, and the drift is silent."""
+    from singular.human_optimization import HumanOptimizationEngine
+
+    assert HumanOptimizationEngine.SENSITIVE is SENSITIVE_DOMAINS
+
+
+def test_batch_improve_agrees_with_single_evaluation():
+    hypotheses = tuple(
+        DomainHypothesis(domain, "A reversible change", "Test it", expected_improvement=1.0, evidence_strength=0.8)
+        for domain in (LearningDomain.NUTRITION, LearningDomain.PRODUCTIVITY)
+    )
+    batch = UniversalLearningEngine.improve((), hypotheses)
+    single = tuple(UniversalLearningEngine.evaluate(item) for item in hypotheses)
+    assert [item.human_review for item in batch] == [item.human_review for item in single] == [True, False]

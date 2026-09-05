@@ -30,6 +30,20 @@ class LearningDomain(str, Enum):
     OTHER = "other"
 
 
+#: Domains whose improvements touch a body or a mind, so a proposal in one is
+#: never adopted on the engine's own judgment. Defined once here, next to the
+#: enum it constrains: UniversalLearningEngine.improve and
+#: HumanOptimizationEngine each carried their own copy of this set, and only the
+#: batch path applied it -- calling evaluate() directly on a NUTRITION
+#: hypothesis skipped the requirement entirely.
+SENSITIVE_DOMAINS = frozenset({
+    LearningDomain.PSYCHOLOGY,
+    LearningDomain.NUTRITION,
+    LearningDomain.PHYSICAL,
+    LearningDomain.SLEEP,
+})
+
+
 class LearningDisposition(str, Enum):
     HOLD = "HOLD"
     TEST = "TEST"
@@ -128,6 +142,10 @@ class UniversalLearningEngine:
         observations: tuple[DomainObservation, ...] = (),
         sensitive: bool = False,
     ) -> DomainLearningResult:
+        # The caller's flag may only add sensitivity, never remove it: whether a
+        # domain is health-adjacent is a property of the domain, not something a
+        # caller gets to declare away.
+        sensitive = sensitive or hypothesis.domain in SENSITIVE_DOMAINS
         reasons: list[str] = []
         matching = [item for item in observations if item.domain is hypothesis.domain]
         observed_delta = sum(item.delta for item in matching) / len(matching) if matching else None
@@ -188,8 +206,7 @@ class UniversalLearningEngine:
             UniversalLearningEngine.evaluate(
                 hypothesis,
                 observations=observations,
-                sensitive=hypothesis.domain
-                in {LearningDomain.PSYCHOLOGY, LearningDomain.NUTRITION, LearningDomain.PHYSICAL, LearningDomain.SLEEP},
+                sensitive=hypothesis.domain in SENSITIVE_DOMAINS,
             )
             for hypothesis in hypotheses
         )
