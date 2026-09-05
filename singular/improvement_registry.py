@@ -17,12 +17,20 @@ running through every step, a system can register candidate X, evaluate
 evaluation would attest to an artifact nobody ever ran. Every stage therefore
 carries the artifact fingerprint and refuses to proceed when it does not match
 the one registered with the candidate.
+
+Safety-critical policy is out of scope for this lifecycle, and which targets
+are safety-critical is decided here from the target itself. It used to be a
+`safety_critical` flag carried by the candidate: a proposal declaring itself
+harmless was believed, so a candidate targeting the execution boundary simply
+left the flag false and entered the lifecycle unchallenged. A proposal is
+never a witness about its own blast radius.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -45,6 +53,32 @@ class ImprovementKind(str, Enum):
     PARAMETERS = "PARAMETERS"
 
 
+#: Target namespaces this lifecycle may never touch, whatever a caller declares.
+#: These name the surfaces the mandate keeps outside learning: the execution
+#: boundary, authorization, identity, integrity and the evidence about them.
+SAFETY_CRITICAL_NAMESPACES: frozenset[str] = frozenset(
+    {
+        "approval", "attestation", "audit", "authentication", "authority", "authorization",
+        "boundary", "capability", "constitution", "durable", "effect", "execution",
+        "governance", "governor", "identity", "integrity", "invariant", "lease", "policy",
+        "provenance", "recovery", "red_team", "redteam", "safety", "security", "values",
+    }
+)
+
+#: Namespaces a candidate may target by default. An allowlist rather than a
+#: denylist: with a denylist alone, every target name invented after this list
+#: was written would be adaptive by default, so forgetting to extend it would
+#: fail open on exactly the surface that matters.
+DEFAULT_ADAPTIVE_NAMESPACES: frozenset[str] = frozenset(
+    {"domain", "economic", "forecast", "knowledge", "memory", "model", "parameters", "strategy", "world_model"}
+)
+
+
+def target_namespace(target: str) -> str:
+    """The leading dotted segment of a target, normalized for comparison."""
+    return target.strip().lower().split(".", 1)[0].strip()
+
+
 def artifact_fingerprint(artifact: object) -> str:
     """A stable identity for the thing that would actually run."""
     canonical = json.dumps(artifact, sort_keys=True, separators=(",", ":"), default=str)
@@ -60,7 +94,6 @@ class ImprovementCandidate:
     evidence: str
     artifact_fingerprint: str
     fingerprint: str
-    safety_critical: bool = False
 
     def __post_init__(self) -> None:
         if not self.candidate_id.strip() or not self.target.strip() or not self.hypothesis.strip():
@@ -69,8 +102,6 @@ class ImprovementCandidate:
             raise ValueError("improvement candidate fingerprint is required")
         if not self.artifact_fingerprint.strip():
             raise ValueError("improvement candidate artifact fingerprint is required")
-        if self.safety_critical:
-            raise PermissionError("safety-critical policy cannot be modified by the learning registry")
 
 
 @dataclass(frozen=True)
@@ -125,10 +156,32 @@ class ImprovementActivation:
 class ImprovementRegistry:
     """Persist candidates, evaluations and explicit activations with rollback."""
 
-    def __init__(self, path: str | Path = "data/singular.db") -> None:
+    def __init__(self, path: str | Path = "data/singular.db", *, adaptive_namespaces: Iterable[str] | None = None) -> None:
         self._location = SqliteLocation(path)
         self.path = self._location.reference
+        declared = DEFAULT_ADAPTIVE_NAMESPACES if adaptive_namespaces is None else adaptive_namespaces
+        self.adaptive_namespaces = frozenset(namespace.strip().lower() for namespace in declared)
+        # The deployment may narrow or extend the adaptive perimeter, but it can
+        # never declare a safety-critical namespace adaptive: that would move the
+        # decision back to whoever wants the change made.
+        overlap = sorted(self.adaptive_namespaces & SAFETY_CRITICAL_NAMESPACES)
+        if overlap:
+            raise PermissionError(f"safety-critical namespaces cannot be declared adaptive: {', '.join(overlap)}")
         self._init_schema()
+
+    def _assert_target_is_adaptive(self, target: str) -> None:
+        """Classify a target from its own name, never from what a candidate claims.
+
+        Checked again at activation rather than only at registration: a
+        perimeter that tightens between the two, or a row inserted straight into
+        the database, would otherwise activate against a target this registry
+        would refuse to register today.
+        """
+        namespace = target_namespace(target)
+        if namespace in SAFETY_CRITICAL_NAMESPACES:
+            raise PermissionError(f"safety-critical target '{target}' cannot enter the improvement lifecycle")
+        if namespace not in self.adaptive_namespaces:
+            raise PermissionError(f"target '{target}' is outside the declared adaptive perimeter")
 
     def _connect(self) -> sqlite3.Connection:
         return self._location.connect(foreign_keys=True)
@@ -246,8 +299,7 @@ class ImprovementRegistry:
         return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def register(self, candidate: ImprovementCandidate) -> ImprovementCandidate:
-        if candidate.safety_critical:
-            raise PermissionError("safety-critical policy cannot enter the improvement lifecycle")
+        self._assert_target_is_adaptive(candidate.target)
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             existing = conn.execute("SELECT * FROM improvement_candidates WHERE candidate_id=?", (candidate.candidate_id,)).fetchone()
@@ -260,8 +312,10 @@ class ImprovementRegistry:
             conn.execute(
                 "INSERT INTO improvement_candidates(candidate_id,kind,target,hypothesis,evidence,artifact_fingerprint,fingerprint,safety_critical,created_at)"
                 " VALUES(?,?,?,?,?,?,?,?,?)",
+                # safety_critical is derived, not declared: _assert_target_is_adaptive
+                # has already refused every target that would store a 1 here.
                 (candidate.candidate_id, candidate.kind.value, candidate.target, candidate.hypothesis, candidate.evidence,
-                 candidate.artifact_fingerprint, candidate.fingerprint, int(candidate.safety_critical), now),
+                 candidate.artifact_fingerprint, candidate.fingerprint, 0, now),
             )
         return candidate
 
@@ -405,8 +459,8 @@ class ImprovementRegistry:
             self._activate(conn, activation)
         return activation
 
-    @staticmethod
-    def _activate(conn: sqlite3.Connection, activation: ImprovementActivation) -> None:
+    def _activate(self, conn: sqlite3.Connection, activation: ImprovementActivation) -> None:
+        self._assert_target_is_adaptive(activation.target)
         conn.execute(
             "INSERT OR REPLACE INTO improvement_activations(target,version,candidate_id,artifact_fingerprint,activated_at) VALUES(?,?,?,?,?)",
             (activation.target, activation.version, activation.candidate_id, activation.artifact_fingerprint, activation.activated_at),
@@ -428,6 +482,8 @@ class ImprovementRegistry:
 
 
 __all__ = [
+    "DEFAULT_ADAPTIVE_NAMESPACES",
+    "SAFETY_CRITICAL_NAMESPACES",
     "SCHEMA_VERSION",
     "ImprovementActivation",
     "ImprovementCandidate",
@@ -435,4 +491,5 @@ __all__ = [
     "ImprovementKind",
     "ImprovementRegistry",
     "artifact_fingerprint",
+    "target_namespace",
 ]

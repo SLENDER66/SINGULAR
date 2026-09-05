@@ -80,11 +80,64 @@ def test_successful_promotion_is_durable_and_visible_after_restart(tmp_path):
     assert ImprovementRegistry(path).active("forecast.model") == activation
 
 
-def test_safety_critical_policy_cannot_enter_registry(tmp_path):
+# --- safety perimeter --------------------------------------------------------
+
+def test_safety_critical_target_cannot_enter_registry(tmp_path):
+    """The candidate never declares its own blast radius; the target decides."""
     registry = ImprovementRegistry(tmp_path / "improvements.db")
     with pytest.raises(PermissionError, match="safety-critical"):
-        registry.register(
-            ImprovementCandidate("IMP-SAFE", ImprovementKind.STRATEGY, "policy", "x", "y", "afp", "fp", safety_critical=True)
+        registry.register(candidate(candidate_id="IMP-SAFE", target="execution.boundary"))
+
+
+def test_a_candidate_cannot_claim_to_be_harmless(tmp_path):
+    """The self-declared flag is gone: claiming safety_critical=False was the bypass."""
+    with pytest.raises(TypeError):
+        ImprovementCandidate("IMP-SAFE", ImprovementKind.STRATEGY, "policy", "x", "y", "afp", "fp", safety_critical=False)
+
+
+def test_unknown_namespace_is_refused_rather_than_assumed_adaptive(tmp_path):
+    """An unclassified target fails closed: a denylist alone would let it through."""
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    with pytest.raises(PermissionError, match="outside the declared adaptive perimeter"):
+        registry.register(candidate(candidate_id="IMP-NEW", target="newly.invented.surface"))
+
+
+def test_target_classification_ignores_case_and_padding(tmp_path):
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    with pytest.raises(PermissionError, match="safety-critical"):
+        registry.register(candidate(candidate_id="IMP-CASE", target="  Execution.Boundary  "))
+
+
+def test_perimeter_cannot_declare_a_safety_critical_namespace_adaptive(tmp_path):
+    with pytest.raises(PermissionError, match="cannot be declared adaptive"):
+        ImprovementRegistry(tmp_path / "improvements.db", adaptive_namespaces={"forecast", "security"})
+
+
+def test_activation_rechecks_the_perimeter_at_time_of_use(tmp_path):
+    """A perimeter that tightens after review must block the activation, not follow it."""
+    path = tmp_path / "improvements.db"
+    wide = ImprovementRegistry(path, adaptive_namespaces={"forecast"})
+    _accepted(wide)
+
+    narrowed = ImprovementRegistry(path, adaptive_namespaces={"model"})
+    with pytest.raises(PermissionError, match="outside the declared adaptive perimeter"):
+        narrowed.promote("IMP-1")
+    assert narrowed.active("forecast.model") is None
+
+
+def test_rollback_also_rechecks_the_perimeter(tmp_path):
+    path = tmp_path / "improvements.db"
+    registry = ImprovementRegistry(path, adaptive_namespaces={"forecast"})
+    _accepted(registry)
+    activation = registry.promote("IMP-1")
+
+    narrowed = ImprovementRegistry(path, adaptive_namespaces={"model"})
+    with pytest.raises(PermissionError, match="outside the declared adaptive perimeter"):
+        narrowed.rollback(
+            "forecast.model",
+            version=activation.version,
+            candidate_id=activation.candidate_id,
+            artifact_fingerprint=activation.artifact_fingerprint,
         )
 
 
