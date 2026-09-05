@@ -25,6 +25,8 @@ SAFE_BOUNDARY_TYPES = frozenset({"ValidatedExecutionBoundary", "ValidatedDecisio
 
 @dataclass(frozen=True)
 class BoundaryFinding:
+    #: Always posix-separated, so a report reads the same on every platform and
+    #: can be compared with one produced elsewhere.
     path: str
     line: int
     rule: str
@@ -219,7 +221,7 @@ class ExecutionBoundaryAuditor:
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             except (OSError, SyntaxError) as exc:
-                findings.append(BoundaryFinding(str(path), 1, "PARSE_ERROR", str(exc)))
+                findings.append(BoundaryFinding(path.as_posix(), 1, "PARSE_ERROR", str(exc)))
                 continue
             findings.extend(self._scan(path, tree))
         raw_denied = self._raw_api_is_denied()
@@ -248,22 +250,22 @@ class ExecutionBoundaryAuditor:
             receiver_key = types.key(receiver)
 
             if target.attr in RAW_TOOL_METHODS:
-                findings.append(BoundaryFinding(str(path), target.lineno, "RAW_TOOL_BYPASS", target.attr))
+                findings.append(BoundaryFinding(path.as_posix(), target.lineno, "RAW_TOOL_BYPASS", target.attr))
 
             if target.attr in INNER_VALIDATED_METHODS and not inner_allowed:
-                findings.append(BoundaryFinding(str(path), target.lineno, "INNER_EXECUTOR_BYPASS", target.attr))
+                findings.append(BoundaryFinding(path.as_posix(), target.lineno, "INNER_EXECUTOR_BYPASS", target.attr))
 
             if target.attr in RAW_METHODS:
                 if receiver_key is not None and receiver_key in types.executor:
-                    findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", f"{ast.unparse(receiver)}.{target.attr}"))
+                    findings.append(BoundaryFinding(path.as_posix(), target.lineno, "RAW_ENGINE_BYPASS", f"{ast.unparse(receiver)}.{target.attr}"))
                 elif types.is_executor_class(receiver):
-                    findings.append(BoundaryFinding(str(path), target.lineno, "RAW_ENGINE_BYPASS", f"{EXECUTOR_TYPE}.{target.attr}"))
+                    findings.append(BoundaryFinding(path.as_posix(), target.lineno, "RAW_ENGINE_BYPASS", f"{EXECUTOR_TYPE}.{target.attr}"))
                 elif receiver_key is not None and receiver_key in types.safe:
                     pass
                 elif types.executor_in_scope:
                     findings.append(
                         BoundaryFinding(
-                            str(path),
+                            path.as_posix(),
                             target.lineno,
                             "UNRESOLVED_RAW_EXECUTION_RECEIVER",
                             f"{ast.unparse(receiver)}.{target.attr} while {EXECUTOR_TYPE} is in scope",
@@ -271,13 +273,13 @@ class ExecutionBoundaryAuditor:
                     )
 
             if target.attr == "handler" and isinstance(receiver, ast.Name):
-                findings.append(BoundaryFinding(str(path), target.lineno, "DIRECT_HANDLER_BYPASS", f"{receiver.id}.handler(...)"))
+                findings.append(BoundaryFinding(path.as_posix(), target.lineno, "DIRECT_HANDLER_BYPASS", f"{receiver.id}.handler(...)"))
 
             is_ledger_receiver = (receiver_key is not None and receiver_key in types.ledger) or types.is_ledger_class(receiver)
             if target.attr in LEGACY_LEDGER_METHODS and is_ledger_receiver:
                 findings.append(
                     BoundaryFinding(
-                        str(path),
+                        path.as_posix(),
                         target.lineno,
                         "NON_AUTHORITATIVE_EXECUTION_LEDGER",
                         f"legacy execution ledger: {target.attr}",
