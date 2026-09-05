@@ -1,3 +1,5 @@
+import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -60,20 +62,25 @@ def test_cached_governance_route_still_detects_drift(tmp_path: Path):
     first = runtime.route(action, contract.mission_id)
     assert first.can_execute is True
 
+    # Drift used to be simulated by rewriting the contract in the store. That is
+    # now refused outright -- an existing mission's identity is immutable -- so
+    # the simulation never reached the drift check. Assert that first control,
+    # then reach the drift check the way it can actually trigger: a persisted
+    # governance record that no longer matches what routing produces today.
     contract_data = runtime.store.load_mission(contract.mission_id)
     assert contract_data is not None
-    updated = contract_data.__class__(
-        mission_id=contract_data.mission_id,
-        objective=contract_data.objective,
-        expected_result=contract_data.expected_result,
-        autonomy=Autonomy.PREPARE,
-        budget_limit=contract_data.budget_limit,
-        deadline=contract_data.deadline,
-        forbidden_actions=contract_data.forbidden_actions,
-        escalation_conditions=contract_data.escalation_conditions,
-        success_criteria=contract_data.success_criteria,
-    )
-    runtime.store.save_mission(updated)
+    updated = replace(contract_data, autonomy=Autonomy.PREPARE)
+    with pytest.raises(ValueError, match="immuable"):
+        runtime.store.save_mission(updated)
+
+    idempotency_key = runtime.store.idempotency_key("route", contract.mission_id, action.id)
+    cached = runtime.store.get_idempotent(idempotency_key)
+    assert cached is not None
+    drifted = dict(cached)
+    drifted["policy_tier"] = "BLACK"
+    drifted["can_execute"] = False
+    with runtime.store._connect() as conn:
+        conn.execute("UPDATE idempotency SET result=? WHERE key=?", (json.dumps(drifted), idempotency_key))
 
     with pytest.raises(PermissionError, match="gouvernance a changé"):
         runtime.route(action, contract.mission_id)
