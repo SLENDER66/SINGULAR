@@ -17,8 +17,9 @@ racine : lis-le, applique-le, ne me le fais pas répéter.
 - `A_FAIRE.md` liste les 3 actions que moi seul peux faire sur GitHub.
 
 Contexte personnel (ne me le redemande pas) :
-- Je suis débutant, **je n'ai qu'un téléphone**, pas d'ordinateur. Tout livrable que je
-  dois utiliser doit être un artifact web, pas un CLI.
+- Je suis débutant. J'ai un **PC sous Windows** et un téléphone. Je peux donc exécuter
+  des commandes, mais explique-les-moi pas à pas (PowerShell, chemins Windows) : ne
+  suppose ni Linux, ni Git déjà configuré, ni Python déjà installé.
 - ~30 h/semaine disponibles. Objectif : que SINGULAR devienne utile puis rentable en 1–2 ans.
 - Ne merge jamais dans `main` sans mon autorisation explicite.
 - Fais attention à ma limite d'utilisation : va droit au but, pas de récapitulatif long,
@@ -44,5 +45,5 @@ réellement nécessaire.
 
 - Il ne recopie pas le mandat (≈900 lignes) : il pointe vers `CLAUDE.md`.
 - Il donne l'état déjà vérifié, donc Claude ne refait pas l'inspection complète.
-- Il fixe le contexte personnel une fois pour toutes (téléphone, débutant, limites).
+- Il fixe le contexte personnel une fois pour toutes (Windows, débutant, limites).
 - Il donne un ordre de priorité, donc pas d'aller-retour pour décider quoi faire.
