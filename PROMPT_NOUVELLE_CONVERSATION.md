@@ -10,7 +10,7 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
 État vérifié (tout est poussé sur la branche de travail, arbre propre) :
-- 643 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
+- 646 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
 - L'installation pip editable (`singular-agentic-os`) pointe sur `C:\Users\Utilisateur\SINGULAR`
@@ -66,6 +66,13 @@ Travaille en autonomie :
      exécution : le coût croît avec l'historique, et si une violation s'y installe (corruption,
      écriture hors API), aucune opération supportée ne la nettoie — la frontière reste fermée
      définitivement. Le cas qui l'y amenait par usage normal (retry après échec) est corrigé.
+
+Décision à prendre (je ne l'ai pas tranchée seul, elle change ce que le système accepte) :
+`ActionRequest.capability` (la capacité de gouvernance nommée, pas le token `cap_`) vaut `None`
+par défaut. Une action sans capacité n'est jugée que par les règles génériques de risque et de
+sensibilité, alors qu'une action qui en déclare une reçoit en plus les plafonds de cette capacité.
+Le pipeline validé n'en exige pas. Faut-il rendre la capacité obligatoire pour toute action
+exécutable ? Ce serait plus fail-closed, mais ça refuserait des actions qui passent aujourd'hui.
 
 Méthode : inspecte → corrige → teste → commits atomiques → pousse → enchaîne.
 Questions sous forme de questionnaire, seulement si une décision humaine est nécessaire.
