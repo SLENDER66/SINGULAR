@@ -10,13 +10,16 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
 État vérifié (tout est poussé sur la branche de travail, arbre propre) :
-- 625 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
+- 631 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
 - L'installation pip editable (`singular-agentic-os`) pointe sur `C:\Users\Utilisateur\SINGULAR`
   depuis le 2026-09-05. Elle pointait sur `Documents\SINGULAR`, resté sur une vieille branche :
   hors du dossier de travail, `import singular` chargeait du code sans les gardes actuelles.
   `Documents\SINGULAR` est obsolète (65 tests y échouent) — ne pas y travailler.
+- `DurableStore` n'a plus qu'un seul finaliseur et un seul preneur de lease : les jumeaux
+  non gardés (`finish_execution`, `begin_execution`) sont supprimés. Une greffe de méthode
+  sur le store passe par `install_store_extension`, qui refuse une seconde définition.
 - LICENSE MIT en place. Dépôt nettoyé : 9 branches pour 8 commits distincts.
 - 22 modules et 21 fichiers de test hors périmètre sont dans `attic/`.
 - `route()` écrit désormais son verdict de gouvernance dans l'audit durable
