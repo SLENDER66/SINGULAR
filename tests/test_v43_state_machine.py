@@ -104,3 +104,14 @@ def test_finish_execution_and_mission_rolls_back_execution_if_mission_transition
     assert execution is not None
     assert execution["status"] == "RUNNING"
     assert execution["result"] is None
+
+
+def test_there_is_only_one_way_into_a_terminal_execution_state(tmp_path: Path):
+    """finish_execution wrote COMPLETED without touching the mission, and nothing called it.
+
+    An unused door into the terminal state is still a door: it recorded a
+    successful execution outside the single transition that keeps execution and
+    mission state consistent.
+    """
+    finalizers = [name for name in dir(DurableStore) if name.startswith("finish_execution")]
+    assert finalizers == ["finish_execution_and_mission"]

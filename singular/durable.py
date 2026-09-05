@@ -393,21 +393,16 @@ class DurableStore:
             raise RuntimeError("Execution record could not be persisted")
         return dict(final)
 
-    def finish_execution(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
-        if status not in {"COMPLETED", "FAILED"}:
-            raise ValueError("Un résultat d'exécution doit être COMPLETED ou FAILED.")
-        now = datetime.now(UTC).isoformat()
-        encoded = None if result is None else json.dumps(result, sort_keys=True)
-        with self._connect() as conn:
-            cur = conn.execute("UPDATE executions SET status=?,result=?,error=?,finished_at=?,lease_until=NULL WHERE execution_key=? AND status='RUNNING'", (status, encoded, error, now, execution_key))
-            row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
-        if row is None:
-            raise KeyError(execution_key)
-        if cur.rowcount != 1 and row["status"] not in {"COMPLETED", "FAILED"}:
-            raise RuntimeError("Execution state could not be finalized")
-        return dict(row)
-
     def finish_execution_and_mission(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
+        """The only way an execution reaches a terminal state.
+
+        There used to be a second finalizer, finish_execution, which wrote
+        COMPLETED without touching the mission. Nothing called it -- not the
+        engine, not a test -- but it sat on the public store offering exactly
+        what the boundary forbids: a successful execution result recorded
+        outside the one transition that keeps execution and mission state
+        consistent. An unused door into the terminal state is still a door.
+        """
         if status not in {"COMPLETED", "FAILED"}:
             raise ValueError("Un résultat d'exécution doit être COMPLETED ou FAILED.")
         now = datetime.now(UTC).isoformat()
