@@ -101,3 +101,4 @@ from .durable_integrity import DurableIntegrityChecker, DurableIntegrityReport, 
 # Preserve the historical root API: models.WorldModel remains WorldModel.
 # The epistemic model is intentionally exposed under a distinct name.
 from .world_model import WorldModel as EpistemicWorldModel
+from .providers import HttpEffectProvider, HttpProviderError
