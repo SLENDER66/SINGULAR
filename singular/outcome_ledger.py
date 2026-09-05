@@ -180,6 +180,13 @@ class OutcomeLedger:
         ).hexdigest()[:24]
 
         with self._connect() as conn:
+            # Take the write lock before reading the tail of the chain. Two
+            # writers that both read the same last fingerprint would each link
+            # to it, and verify() -- which walks in rowid order and requires
+            # each row to name the previous one -- would then call an untampered
+            # ledger broken, permanently, because the rows are append-only. The
+            # durable audit trail serialises its own chain the same way.
+            conn.execute("BEGIN IMMEDIATE")
             existing = conn.execute("SELECT * FROM outcome_ledger WHERE record_id=?", (record_id,)).fetchone()
             if existing is not None:
                 current = self._row(existing)

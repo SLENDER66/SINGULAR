@@ -177,3 +177,43 @@ def test_a_confident_binary_forecast_that_was_wrong_reaches_recalibration(tmp_pa
     strategy = LearningStrategyEngine.propose(record, LearningEngine.propose_update(record))
     assert strategy.disposition is StrategyDisposition.TEST
     assert strategy.human_review_required is True
+
+
+def test_concurrent_records_keep_one_unbroken_chain(tmp_path):
+    """Two writers reading the same tail would each link to it, and verify() walks in order.
+
+    A fork needs no tampering to appear and cannot be repaired afterwards: the
+    ledger is append-only, so an honest race would leave it permanently
+    unverifiable.
+    """
+    import threading
+
+    decision = _build_decision()
+    ledger = OutcomeLedger(tmp_path / "outcomes.db")
+    ledger.attestation_store.issue(decision)
+    execution_key = _completed_execution(decision, tmp_path / "outcomes.db")
+    errors: list[Exception] = []
+    barrier = threading.Barrier(6)
+
+    def record(index: int) -> None:
+        try:
+            barrier.wait(timeout=10)
+            ledger.record(
+                decision=decision,
+                forecast=Forecast(f"F{index}", ForecastKind.BINARY, probability=0.8, confidence=0.9),
+                actual=True,
+                execution_key=execution_key,
+                execution_status="COMPLETED",
+            )
+        except Exception as exc:  # noqa: BLE001 - reported through the assertion below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=record, args=(index,)) for index in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert errors == []
+    assert len(ledger.list()) == 6
+    assert ledger.verify()
