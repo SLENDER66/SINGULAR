@@ -1,4 +1,15 @@
-"""Guard the accidental property that keeps the capability registry honest.
+"""Guard the artifact binding a rehydrated decision would depend on.
+
+UPDATE: when this file was written the decision bound no artifact at all, and
+the only thing standing between an old capability token and an arbitrary object
+after a restart was that no serializer existed. Both halves have since been
+built -- the decision carries execution_artifact_fingerprint, and
+DurableCapabilityStore records what a token durably means -- so these tests have
+changed role: they now hold that binding in place. If the artifact field is ever
+dropped while a serializer exists, they fail, which is the state the original
+note below describes.
+
+Original note:
 
 ExecutionCapabilityRegistry is process-local: `cap_...` tokens map to in-memory
 objects and nothing is persisted. A durable decision, by contrast, survives a
@@ -131,3 +142,9 @@ def test_execution_capability_registry_is_still_process_local():
         "registry semantics changed: re-registration under a durable token no longer "
         "binds an arbitrary object, so the restart bypass this file guards may be gone"
     )
+
+
+def test_decision_binds_an_artifact_today():
+    """The condition the guards above are protecting."""
+    assert _binds_an_artifact() is True
+    assert "execution_artifact_fingerprint" in _decision_field_names()

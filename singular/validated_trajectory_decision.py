@@ -10,17 +10,33 @@ from math import isfinite
 from time import time
 from typing import Any
 
-from .autopilot import ActionRequest, Autonomy, DelegationContract, Governor, GovernorDecision
+from .autopilot import (
+    ActionRequest,
+    Autonomy,
+    DelegationContract,
+    Governor,
+    GovernorDecision,
+)
 from .collective_intelligence import SharedSignal
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
-from .human_optimization import DomainInteraction, DomainState, HumanOptimizationEngine, HumanOptimizationReport, Intervention
+from .human_optimization import (
+    DomainInteraction,
+    DomainState,
+    HumanOptimizationEngine,
+    HumanOptimizationReport,
+    Intervention,
+)
 from .models import Risk
 from .security import ActionPolicy, PolicyDecision
 from .state import CapacitySnapshot
 from .trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryProfile
-from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine, TrajectoryPortfolio
-from .values import ValueAssessmentResult
+from .trajectory_optimization import (
+    TrajectoryInteraction,
+    TrajectoryOptimizationEngine,
+    TrajectoryPortfolio,
+)
 from .v32_governed_core import RedTeamFinding, RedTeamGate
+from .values import ValueAssessmentResult
 
 
 @dataclass(frozen=True)
@@ -94,6 +110,12 @@ class ValidatedTrajectoryDecision:
     provider_target: str | None
     operation: str | None
     payload_fingerprint: str | None
+    #: Identity of the code the execution_target token stood for when this
+    #: decision was built. The token alone is an opaque name whose meaning lives
+    #: in a registry; this pins the artifact into the decision itself, so a
+    #: decision issued for one implementation cannot authorize another even if
+    #: the token were re-bound.
+    execution_artifact_fingerprint: str
     context_fingerprint: str
 
     @classmethod
@@ -109,7 +131,8 @@ class ValidatedTrajectoryDecision:
                trajectory_assessment: TrajectoryAssessment | None, global_report: GlobalDecisionReport | None,
                contract: DelegationContract | None, policy: PolicyDecision | None,
                red_team_findings: tuple[RedTeamFinding, ...] | None, governor: GovernorDecision | None,
-               execution_target: str, execution_kind: str = "handler", provider_name: str | None = None,
+               execution_target: str, execution_artifact_fingerprint: str, execution_kind: str = "handler",
+               provider_name: str | None = None,
                provider_target: str | None = None, operation: str | None = None,
                payload_fingerprint: str | None = None) -> "ValidatedTrajectoryDecision":
         required = {"human_optimization": human_optimization, "trajectory_portfolio": trajectory_portfolio,
@@ -131,7 +154,7 @@ class ValidatedTrajectoryDecision:
             capacity, effort, risks, shared_signals, normalized_calibration, portfolio_capacity_budget, portfolio_max_candidates,
             human_optimization, trajectory_portfolio, trajectory_assessment, global_report, contract, policy,
             red_team_findings, governor, execution_target, execution_kind, provider_name, provider_target,
-            operation, payload_fingerprint,
+            operation, payload_fingerprint, execution_artifact_fingerprint,
         )
         return cls(
             decision_id, issued_at, expires_at, snapshots, action_to_intervention, domain_states, interventions,
@@ -139,7 +162,7 @@ class ValidatedTrajectoryDecision:
             capacity, effort, risks, shared_signals, normalized_calibration, portfolio_capacity_budget, portfolio_max_candidates,
             human_optimization, trajectory_portfolio, trajectory_assessment, global_report, contract, policy,
             red_team_findings, governor, execution_target, execution_kind, provider_name, provider_target,
-            operation, payload_fingerprint, _fingerprint(payload),
+            operation, payload_fingerprint, execution_artifact_fingerprint, _fingerprint(payload),
         )
 
     def __post_init__(self) -> None:
@@ -153,7 +176,7 @@ class ValidatedTrajectoryDecision:
             self.human_optimization, self.trajectory_portfolio, self.trajectory_assessment,
             self.global_report, self.contract, self.policy, self.red_team_findings, self.governor,
             self.execution_target, self.execution_kind, self.provider_name, self.provider_target,
-            self.operation, self.payload_fingerprint,
+            self.operation, self.payload_fingerprint, self.execution_artifact_fingerprint,
         ))
         if self.context_fingerprint != expected:
             raise ValueError("validated trajectory decision context fingerprint is invalid")
@@ -170,7 +193,7 @@ class ValidatedTrajectoryDecision:
                 self.human_optimization, self.trajectory_portfolio, self.trajectory_assessment,
                 self.global_report, self.contract, self.policy, self.red_team_findings, self.governor,
                 self.execution_target, self.execution_kind, self.provider_name, self.provider_target,
-                self.operation, self.payload_fingerprint,
+                self.operation, self.payload_fingerprint, self.execution_artifact_fingerprint,
             ))
         except (TypeError, ValueError):
             return False
@@ -179,6 +202,8 @@ class ValidatedTrajectoryDecision:
     def _validate(self, *, now: float | None = None) -> None:
         if not self.decision_id.strip() or not self.execution_target.strip():
             raise ValueError("decision_id and execution_target cannot be empty")
+        if not self.execution_artifact_fingerprint.strip():
+            raise ValueError("a validated decision must name the executable artifact it authorizes")
         if not isfinite(self.issued_at) or not isfinite(self.expires_at) or self.expires_at <= self.issued_at:
             raise ValueError("decision validity interval is invalid")
         if now is not None:
@@ -327,6 +352,7 @@ class ValidatedTrajectoryDecision:
         contract: DelegationContract, policy: PolicyDecision, red_team_findings: tuple[RedTeamFinding, ...],
         governor: GovernorDecision, execution_target: str, execution_kind: str, provider_name: str | None,
         provider_target: str | None, operation: str | None, payload_fingerprint: str | None,
+        execution_artifact_fingerprint: str,
     ) -> dict[str, Any]:
         return {
             "decision_id": decision_id,
@@ -362,6 +388,7 @@ class ValidatedTrajectoryDecision:
             "provider_target": provider_target,
             "operation": operation,
             "payload_fingerprint": payload_fingerprint,
+            "execution_artifact_fingerprint": execution_artifact_fingerprint,
         }
 
 

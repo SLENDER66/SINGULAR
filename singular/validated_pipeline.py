@@ -10,13 +10,22 @@ from typing import Any
 
 from .autopilot import ActionRequest, DelegationContract, Governor
 from .decision_attestation import DecisionAttestation, DecisionAttestationStore
+from .execution_capability import GLOBAL_EXECUTION_CAPABILITIES
 from .global_control import GlobalDecisionGate, GlobalDecisionReport
-from .human_optimization import DomainInteraction, DomainState, HumanOptimizationEngine, Intervention
+from .human_optimization import (
+    DomainInteraction,
+    DomainState,
+    HumanOptimizationEngine,
+    Intervention,
+)
 from .security import ActionPolicy
 from .state import CapacitySnapshot
 from .trajectory import TrajectoryEngine, TrajectoryProfile
 from .trajectory_optimization import TrajectoryInteraction, TrajectoryOptimizationEngine
-from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
+from .validated_trajectory_decision import (
+    ValidatedTrajectoryDecision,
+    payload_fingerprint,
+)
 from .values import ValueAssessmentResult
 
 
@@ -67,6 +76,13 @@ class ValidatedTrajectoryPipeline:
             raise ValueError("a finite non-negative capacity_budget is required for executable validation")
         if max_portfolio_candidates < 1:
             raise ValueError("max_portfolio_candidates must be positive")
+
+        # Resolve what the token means before anything else commits to it: a
+        # decision that names an unregistered capability would authorize a token
+        # whose artifact nobody can state.
+        artifact_identity = GLOBAL_EXECUTION_CAPABILITIES.fingerprint_of(execution_target)
+        if not artifact_identity:
+            raise PermissionError("the execution target is not a registered execution capability")
 
         action = actions[0]
         # The opaque execution token goes in execution_capability, never in
@@ -137,7 +153,8 @@ class ValidatedTrajectoryPipeline:
             human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
             global_report=global_report, contract=contract, policy=ActionPolicy.evaluate(action),
             red_team_findings=global_report.red_team_findings, governor=Governor.evaluate(action, contract),
-            execution_target=execution_target, execution_kind=execution_kind, provider_name=provider_name,
+            execution_target=execution_target, execution_artifact_fingerprint=artifact_identity,
+            execution_kind=execution_kind, provider_name=provider_name,
             provider_target=provider_target, operation=operation, payload_fingerprint=payload_hash,
         )
 

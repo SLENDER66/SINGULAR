@@ -11,11 +11,23 @@ from .approval_integrity import ApprovalIntegrityStore
 from .autopilot import ApprovalStatus, Autonomy
 from .decision_attestation import DecisionAttestationStore
 from .durable import DurableStore, MissionStatus
-from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
-from .execution_capability import DurableCapabilityStore, execution_capability_matches
+from .effects import (
+    EffectProvider,
+    EffectRequest,
+    EffectStatus,
+    ExternalEffectCoordinator,
+)
+from .execution_capability import (
+    DurableCapabilityStore,
+    artifact_fingerprint,
+    execution_capability_matches,
+)
 from .mission_runtime import DurableMissionRuntime
 from .security import ActionPolicy
-from .validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
+from .validated_trajectory_decision import (
+    ValidatedTrajectoryDecision,
+    payload_fingerprint,
+)
 
 
 @dataclass(frozen=True)
@@ -88,6 +100,17 @@ class DurableExecutionEngine:
         except PermissionError as exc:
             raise PermissionError(f"Capability durable identity refused: {exc}") from exc
 
+    @staticmethod
+    def _require_decision_artifact(decision: ValidatedTrajectoryDecision, target: Any) -> None:
+        """The decision names the artifact, not only the token that stands for it.
+
+        A token's meaning lives in a registry; the decision's own fingerprint
+        covers the artifact, so a decision issued for one implementation cannot
+        authorize another even if the token were re-bound.
+        """
+        if decision.execution_artifact_fingerprint != artifact_fingerprint(target):
+            raise PermissionError("L'artefact exécutable ne correspond pas à celui nommé par la décision validée.")
+
     def _require_live_capability(self, capability_id: str, target: Any) -> None:
         """Re-check immediately before handing control to the executable.
 
@@ -132,6 +155,7 @@ class DurableExecutionEngine:
         if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, handler):
             raise PermissionError("Handler capability does not match the exact executable target authorized by the validated decision.")
         self._require_durable_capability(decision.execution_target, handler)
+        self._require_decision_artifact(decision, handler)
         mission_id = decision.contract.mission_id
         action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
         if action is None:
@@ -196,6 +220,7 @@ class DurableExecutionEngine:
         if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
             raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
         self._require_durable_capability(decision.execution_target, provider)
+        self._require_decision_artifact(decision, provider)
         if decision.provider_name != provider_name or decision.operation != operation:
             raise PermissionError("Provider or operation does not match the validated decision.")
         if decision.payload_fingerprint != payload_fingerprint(payload):

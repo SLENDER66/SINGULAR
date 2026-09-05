@@ -170,3 +170,69 @@ def test_capability_schema_version_mismatch_is_refused(tmp_path: Path):
         conn.execute("UPDATE execution_capability_schema SET version=99")
     with pytest.raises(RuntimeError, match="does not match"):
         DurableCapabilityStore(path)
+
+
+# --- the decision names the artifact -----------------------------------------
+
+def test_decision_carries_the_artifact_its_token_stood_for():
+    decision = build_decision(decision_id="DEC-CAP-ART", mission_id="MIS-CAP-ART")
+    assert decision.execution_artifact_fingerprint == artifact_fingerprint(support_handler)
+
+
+def test_decision_artifact_is_inside_the_context_fingerprint():
+    """Otherwise it would be tamperable metadata rather than a binding."""
+    decision = build_decision(decision_id="DEC-CAP-FP", mission_id="MIS-CAP-FP")
+    object.__setattr__(decision, "execution_artifact_fingerprint", artifact_fingerprint(impostor))
+    assert decision.verify() is False
+
+
+def test_pipeline_refuses_an_unregistered_execution_target():
+    from singular.validated_pipeline import ValidatedTrajectoryPipeline
+    from tests.test_validated_pipeline import _inputs
+
+    contract, action, state, intervention, profile, dimensions = _inputs()
+    with pytest.raises(PermissionError, match="not a registered execution capability"):
+        ValidatedTrajectoryPipeline.build(
+            objective=contract.objective, actions=(action,),
+            action_to_intervention=((action.id, intervention.id),),
+            domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
+            trajectory_dimensions=dimensions, contract=contract,
+            execution_target="cap_never_registered", decision_id="DEC-UNREG", capacity_budget=2,
+        )
+
+
+def _reseal(decision):
+    """Recompute context_fingerprint so a forged decision is self-consistent."""
+    from singular.validated_trajectory_decision import (
+        ValidatedTrajectoryDecision,
+        _fingerprint,
+    )
+
+    payload = ValidatedTrajectoryDecision._payload(
+        decision.decision_id, decision.issued_at, decision.expires_at, decision.authorized_actions,
+        decision.action_to_intervention, decision.domain_states, decision.interventions,
+        decision.human_interactions, decision.trajectory_interactions, decision.trajectory_profile,
+        decision.trajectory_dimensions, decision.value_results, decision.capacity, decision.effort,
+        decision.risks, decision.shared_signals, decision.calibration, decision.portfolio_capacity_budget,
+        decision.portfolio_max_candidates, decision.human_optimization, decision.trajectory_portfolio,
+        decision.trajectory_assessment, decision.global_report, decision.contract, decision.policy,
+        decision.red_team_findings, decision.governor, decision.execution_target, decision.execution_kind,
+        decision.provider_name, decision.provider_target, decision.operation, decision.payload_fingerprint,
+        decision.execution_artifact_fingerprint,
+    )
+    object.__setattr__(decision, "context_fingerprint", _fingerprint(payload))
+    return decision
+
+
+def test_engine_refuses_an_executable_the_decision_did_not_name(tmp_path: Path):
+    """Even with a matching token and durable record: the decision pins the artifact."""
+    decision = build_decision(decision_id="DEC-CAP-SWAP", mission_id="MIS-CAP-SWAP")
+    object.__setattr__(decision, "execution_artifact_fingerprint", artifact_fingerprint(impostor))
+    _reseal(decision)
+    assert decision.verify() is True, "the forged decision must be internally consistent"
+
+    # Attested as it stands, so neither the fingerprint nor the attestation is
+    # what refuses -- only the artifact the decision names.
+    engine = _engine(tmp_path, decision)
+    with pytest.raises(PermissionError, match="artefact exécutable ne correspond pas"):
+        engine.execute_validated(decision, support_handler)

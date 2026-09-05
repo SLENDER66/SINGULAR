@@ -4,21 +4,43 @@ from time import time
 
 import pytest
 
-from singular.autopilot import ActionRequest, Autonomy, DelegationContract, GovernorDecision
+from singular.autopilot import (
+    ActionRequest,
+    Autonomy,
+    DelegationContract,
+    GovernorDecision,
+)
 from singular.domain_learning import LearningDomain
+from singular.execution_capability import artifact_fingerprint
 from singular.global_control import GlobalDecisionGate
-from singular.human_optimization import DomainState, HumanOptimizationEngine, Intervention
+from singular.human_optimization import (
+    DomainState,
+    HumanOptimizationEngine,
+    Intervention,
+)
 from singular.security import ActionPolicy
-from singular.trajectory import TrajectoryAssessment, TrajectoryDecision, TrajectoryEngine, TrajectoryProfile
+from singular.trajectory import (
+    TrajectoryEngine,
+    TrajectoryProfile,
+)
 from singular.trajectory_optimization import TrajectoryPortfolio
-from singular.validated_trajectory_decision import ValidatedTrajectoryDecision, payload_fingerprint
+from singular.validated_trajectory_decision import (
+    ValidatedTrajectoryDecision,
+)
 from singular.values import Vision
-
 
 VALID_FROM = time()
 VALID_TO = VALID_FROM + 3600.0
 HANDLER_CAPABILITY = "cap_test_authorized_handler"
 PROVIDER_CAPABILITY = "cap_test_provider"
+
+
+def _handler_artifact(action):
+    """The artifact HANDLER_CAPABILITY stands for in this module."""
+    return {"action_id": action.id}
+
+
+HANDLER_ARTIFACT_FINGERPRINT = artifact_fingerprint(_handler_artifact)
 
 
 def artifacts(*, global_decision: str = "PROCEED"):
@@ -68,6 +90,7 @@ def build(**overrides):
         "human_optimization": human, "trajectory_portfolio": portfolio, "trajectory_assessment": assessment,
         "global_report": report, "contract": contract, "policy": policy, "red_team_findings": findings,
         "governor": governor, "execution_target": HANDLER_CAPABILITY,
+        "execution_artifact_fingerprint": HANDLER_ARTIFACT_FINGERPRINT,
     }
     values.update(overrides)
     # Keep the action's execution capability and the decision's execution target
@@ -99,6 +122,7 @@ def recreate(decision, **overrides):
         "execution_kind": decision.execution_kind, "provider_name": decision.provider_name,
         "provider_target": decision.provider_target, "operation": decision.operation,
         "payload_fingerprint": decision.payload_fingerprint,
+        "execution_artifact_fingerprint": decision.execution_artifact_fingerprint,
     }
     values.update(overrides)
     return ValidatedTrajectoryDecision.create(**values)
@@ -124,7 +148,7 @@ def test_rejects_non_proceed_global_report(status):
             risks=(), shared_signals=(), calibration={}, portfolio_capacity_budget=2, portfolio_max_candidates=5,
             human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
             global_report=report, contract=contract, policy=policy, red_team_findings=findings, governor=governor,
-            execution_target=HANDLER_CAPABILITY,
+            execution_target=HANDLER_CAPABILITY, execution_artifact_fingerprint=HANDLER_ARTIFACT_FINGERPRINT,
         )
 
 
@@ -150,7 +174,7 @@ def test_rejects_action_missing_from_portfolio():
             risks=(), shared_signals=(), calibration={}, portfolio_capacity_budget=2, portfolio_max_candidates=5,
             human_optimization=human, trajectory_portfolio=portfolio, trajectory_assessment=assessment,
             global_report=report, contract=contract, policy=policy, red_team_findings=findings, governor=governor,
-            execution_target=HANDLER_CAPABILITY,
+            execution_target=HANDLER_CAPABILITY, execution_artifact_fingerprint=HANDLER_ARTIFACT_FINGERPRINT,
         )
 
 
