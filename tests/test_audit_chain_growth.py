@@ -6,6 +6,11 @@ DurableStore refused it as not inserting at the head of the chain. The ordinary
 public sequence -- create_mission() then route() -- always raised, and the audit
 trail could never hold more than one event. Existing tests missed it because
 they seeded missions with store.save_mission(), which records nothing.
+
+Counting persisted events was not enough either once two runtimes shared one
+database: each numbered events from its own trail, so the second one to write
+offered an event pointing at a fingerprint that was no longer the head -- after
+the operation it was documenting had already been persisted.
 """
 from pathlib import Path
 
@@ -90,3 +95,46 @@ def test_many_successive_operations_keep_one_unbroken_chain(tmp_path: Path):
     assert sequences == list(range(1, len(persisted) + 1))
     assert len(persisted) == len(runtime.audit.events())
     assert runtime.store.verify_audit_integrity() is True
+
+
+def test_two_runtimes_on_one_database_both_persist(tmp_path: Path):
+    first = _runtime(tmp_path)
+    second = _runtime(tmp_path)
+
+    first.create_mission("career a", "prepared", autonomy=Autonomy.PREPARE)
+    second.create_mission("career b", "prepared", autonomy=Autonomy.PREPARE)
+    first.create_mission("career c", "prepared", autonomy=Autonomy.PREPARE)
+
+    persisted = first.store.audit_events()
+    assert [event["payload"]["audit_sequence"] for event in persisted] == [1, 2, 3]
+    assert len({event["id"] for event in persisted}) == 3
+    assert first.store.verify_audit_integrity() is True
+
+
+def test_a_mission_and_its_audit_event_do_not_diverge(tmp_path: Path):
+    """The audit write must not fail after the state change it documents."""
+    first = _runtime(tmp_path)
+    second = _runtime(tmp_path)
+    first.create_mission("career a", "prepared", autonomy=Autonomy.PREPARE)
+
+    contract = second.create_mission("career b", "prepared", autonomy=Autonomy.PREPARE)
+
+    assert second.store.load_mission(contract.mission_id) is not None
+    assert any(event["payload"].get("mission_id") == contract.mission_id for event in second.store.audit_events())
+
+
+def test_reanchoring_keeps_the_event_identity(tmp_path: Path):
+    """Moving an event behind writes it had not seen must not make it another event."""
+    first = _runtime(tmp_path)
+    second = _runtime(tmp_path)
+    original = second.audit.record("probe", "TEST", "OK", {"mission_id": "MIS-PROBE"})
+    first.create_mission("career a", "prepared", autonomy=Autonomy.PREPARE)
+
+    second._persist_new_audit_events()
+
+    persisted = second.store.audit_events()[-1]
+    assert persisted["id"] == original.id
+    assert persisted["timestamp"] == original.timestamp
+    assert persisted["payload"]["audit_fingerprint"] == original.payload["audit_fingerprint"]
+    assert persisted["payload"]["audit_sequence"] == 2
+    assert second.store.verify_audit_integrity() is True

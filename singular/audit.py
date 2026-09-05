@@ -8,6 +8,13 @@ from typing import Any
 from uuid import uuid4
 
 
+#: Payload keys that describe where an event sits in the chain rather than what
+#: happened. They are excluded from the event's own fingerprint, which is what
+#: lets a trail re-anchor an event behind writes it had not seen without the
+#: event becoming a different one.
+CHAIN_KEYS = ("audit_fingerprint", "audit_sequence", "audit_prev_fingerprint", "audit_chain_fingerprint")
+
+
 @dataclass(frozen=True)
 class AuditEvent:
     event_type: str
@@ -36,14 +43,7 @@ class AuditEvent:
     @property
     def fingerprint(self) -> str:
         payload = dict(self.payload)
-        for key in (
-            "audit_fingerprint",
-            "audit_sequence",
-            "audit_prev_fingerprint",
-            "audit_chain_fingerprint",
-            "related_ids",
-            "correlation_id",
-        ):
+        for key in (*CHAIN_KEYS, "related_ids", "correlation_id"):
             payload.pop(key, None)
         canonical = json.dumps(
             {
@@ -118,6 +118,26 @@ class AuditTrail:
         event = AuditEvent(event_type, actor, outcome, persisted, event.timestamp, event.id)
         self._events.append(event)
         return event
+
+    def append(self, event: AuditEvent) -> AuditEvent:
+        """Re-place an existing event at the head of this trail.
+
+        An event's own fingerprint deliberately excludes its chain position, so
+        an event recorded by a trail that turned out to be behind can be moved
+        behind whatever really came first without becoming a different event:
+        same id, same timestamp, same content, new position. Rebuilding it with
+        record() would mint a new id and timestamp, which would make the trail
+        lie about when the thing happened.
+        """
+        payload = {key: value for key, value in event.payload.items() if key not in CHAIN_KEYS}
+        previous = self._events[-1].payload.get("audit_fingerprint", "") if self._events else ""
+        positioned = AuditEvent(event.event_type, event.actor, event.outcome, payload, event.timestamp, event.id)
+        anchored = AuditEvent(
+            event.event_type, event.actor, event.outcome,
+            positioned.durable_payload(len(self._events) + 1, str(previous)), event.timestamp, event.id,
+        )
+        self._events.append(anchored)
+        return anchored
 
     def events(self) -> tuple[AuditEvent, ...]:
         return tuple(self._events)

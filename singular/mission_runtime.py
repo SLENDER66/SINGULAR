@@ -237,6 +237,27 @@ class DurableMissionRuntime:
         rather than an in-memory cursor: a cursor that drifted ahead would skip
         events and open an audit gap silently, while an authoritative count can
         only ever re-offer an event, which record_audit refuses loudly.
+
+        Counting was not enough once a second runtime shared the database. Ours
+        numbered events from its own trail, so anything the other one wrote left
+        our next event pointing at a fingerprint that was no longer the head, and
+        record_audit refused it -- after the operation it was documenting had
+        already been persisted. Two runtimes on one database is the ordinary
+        case, not an exotic one, so the trail re-anchors behind whatever really
+        came first instead: the events keep their ids, timestamps and content and
+        take new positions.
+
+        A write that lands between this read and record_audit still fails closed
+        rather than being re-anchored in flight; the caller has to retry.
         """
-        for event in self.audit.events()[len(self.store.audit_events()):]:
+        persisted = self.store.audit_events()
+        events = list(self.audit.events())
+        persisted_ids = [event["id"] for event in persisted]
+        if [event.id for event in events[: len(persisted_ids)]] != persisted_ids:
+            known = set(persisted_ids)
+            pending = [event for event in events if event.id not in known]
+            self.audit = AuditTrail.restore(list(persisted))
+            for event in pending:
+                self.audit.append(event)
+        for event in self.audit.events()[len(persisted):]:
             self.store.record_audit(event)
