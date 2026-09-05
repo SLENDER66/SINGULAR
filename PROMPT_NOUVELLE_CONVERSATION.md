@@ -9,11 +9,12 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 `claude/singular-mandate-setup-d51s9t`. Le mandat complet est dans `CLAUDE.md` à la
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
-État vérifié (commit d8223ba, poussé, arbre propre) :
+État vérifié (tout est poussé sur la branche de travail, arbre propre) :
 - 585 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
-- LICENSE MIT en place. 22 modules et 21 fichiers de test hors périmètre sont dans `attic/`.
+- LICENSE MIT en place. Dépôt nettoyé : 9 branches pour 8 commits distincts.
+- 22 modules et 21 fichiers de test hors périmètre sont dans `attic/`.
 - L'approbation humaine n'est **pas** un canal d'autorisation via le pipeline validé :
   c'est délibéré (deux gardes explicites). La machinerie d'approbation dans
   `DurableExecutionEngine` est une défense time-of-use contre une gouvernance qui escalade
@@ -41,17 +42,6 @@ Questions sous forme de questionnaire, seulement si une décision humaine est n�
 
 ## Ce que je dois faire moi-même sur GitHub
 
-Supprimer les 39 branches en doublon (Claude en est empêché par ses permissions).
-`Settings` → `Branches` → `View all branches`, tout supprimer **sauf ces 9** :
-
-    claude/singular-mandate-setup-d51s9t
-    main
-    archive/main-2026-09-03
-    feat/validated-execution-boundary
-    feat/human-trajectory-engine
-    feat/economic-control-plane
-    feat/global-coherence-integration
-    feat/decision-lifecycle-hardening
-    v51-final
-
-Ces 9 couvrent les 8 commits distincts du dépôt : aucun travail n'est perdu.
+Rien pour l'instant. Le nettoyage des branches est fait : 39 branches en doublon
+supprimées le 2026-09-05, il reste 9 branches pour 8 commits distincts, aucun travail
+perdu.
