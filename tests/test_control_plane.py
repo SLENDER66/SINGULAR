@@ -4,7 +4,11 @@ from singular.control_plane import ControlPlaneDecision, SingularControlPlane
 from singular.durable import DurableStore
 from singular.learning import Forecast, ForecastKind
 from singular.mission_runtime import DurableMissionRuntime
-from tests.test_validated_pipeline import AUTHORIZED_HANDLER_CAPABILITY, _inputs, authorized_handler
+from tests.test_validated_pipeline import (
+    AUTHORIZED_HANDLER_CAPABILITY,
+    _inputs,
+    authorized_handler,
+)
 
 
 def _plane(tmp_path):
@@ -48,13 +52,19 @@ def test_control_plane_revoke_prevents_future_execution(tmp_path):
 def test_control_plane_outcome_closes_learning_loop(tmp_path):
     runtime, plane = _plane(tmp_path)
     control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-LEARN"))
+    action_id = control_decision.decision.global_report.action_id
+    # An outcome must observe an execution that really happened: the ledger
+    # derives the expected key from the decision and reads the terminal row from
+    # the durable store. This test used to invent "EXEC-CONTROL" and observe a
+    # decision that had never run.
+    execution = plane.execute(control_decision, action_id, authorized_handler)
     forecast = Forecast("F-CONTROL", ForecastKind.BINARY, probability=0.8, confidence=0.9)
     result = plane.observe_outcome(
         control_decision,
         forecast=forecast,
         actual=True,
-        execution_key="EXEC-CONTROL",
-        execution_status="COMPLETED",
+        execution_key=execution.execution_key,
+        execution_status=execution.status,
         observed_at="2026-09-03T19:30:00+00:00",
     )
     assert result.outcome.context_fingerprint == control_decision.decision.context_fingerprint

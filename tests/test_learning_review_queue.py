@@ -5,20 +5,22 @@ import pytest
 from singular.learning import Forecast, ForecastKind
 from singular.learning_review_queue import LearningReviewQueue
 from singular.outcome_ledger import OutcomeLedger
-from tests.test_validated_pipeline import _build_decision
+from tests.support import executed_decision
 
 
 def test_learning_review_is_reviewable_not_automatic_mutation(tmp_path):
-    decision = _build_decision()
-    outcomes = OutcomeLedger(tmp_path / "learning.db")
-    outcomes.attestation_store.issue(decision)
+    # The ledger reads the execution row from its own database, so the decision
+    # must really have run there: an invented execution key is refused as not
+    # matching the decision's durable identity.
+    executed = executed_decision(tmp_path / "learning.db")
+    outcomes = OutcomeLedger(tmp_path / "learning.db", attestation_store=executed.engine.attestation_store)
     forecast = Forecast("F-QUEUE", ForecastKind.BINARY, probability=0.9, confidence=0.9)
     outcome = outcomes.record(
-        decision=decision,
+        decision=executed.decision,
         forecast=forecast,
         actual=False,
-        execution_key="EXEC-QUEUE",
-        execution_status="COMPLETED",
+        execution_key=executed.execution_key,
+        execution_status=executed.execution_status,
         observed_at="2026-09-03T18:00:00+00:00",
     )
 
@@ -32,16 +34,18 @@ def test_learning_review_is_reviewable_not_automatic_mutation(tmp_path):
 
 
 def test_learning_review_rejects_forged_or_unpersisted_outcome(tmp_path):
-    decision = _build_decision()
-    outcomes = OutcomeLedger(tmp_path / "learning.db")
-    outcomes.attestation_store.issue(decision)
+    # The ledger reads the execution row from its own database, so the decision
+    # must really have run there: an invented execution key is refused as not
+    # matching the decision's durable identity.
+    executed = executed_decision(tmp_path / "learning.db")
+    outcomes = OutcomeLedger(tmp_path / "learning.db", attestation_store=executed.engine.attestation_store)
     forecast = Forecast("F-FORGED", ForecastKind.BINARY, probability=0.8, confidence=0.8)
     outcome = outcomes.record(
-        decision=decision,
+        decision=executed.decision,
         forecast=forecast,
         actual=True,
-        execution_key="EXEC-FORGED",
-        execution_status="COMPLETED",
+        execution_key=executed.execution_key,
+        execution_status=executed.execution_status,
     )
     queue = LearningReviewQueue(tmp_path / "learning.db")
     forged = replace(outcome, actual_value=0.0)
@@ -50,11 +54,13 @@ def test_learning_review_rejects_forged_or_unpersisted_outcome(tmp_path):
 
 
 def test_learning_review_requires_explicit_accept_or_reject(tmp_path):
-    decision = _build_decision()
-    outcomes = OutcomeLedger(tmp_path / "learning.db")
-    outcomes.attestation_store.issue(decision)
+    # The ledger reads the execution row from its own database, so the decision
+    # must really have run there: an invented execution key is refused as not
+    # matching the decision's durable identity.
+    executed = executed_decision(tmp_path / "learning.db")
+    outcomes = OutcomeLedger(tmp_path / "learning.db", attestation_store=executed.engine.attestation_store)
     forecast = Forecast("F-REVIEW", ForecastKind.BINARY, probability=0.9, confidence=0.9)
-    outcome = outcomes.record(decision=decision, forecast=forecast, actual=False, execution_key="EXEC-REVIEW", execution_status="COMPLETED")
+    outcome = outcomes.record(decision=executed.decision, forecast=forecast, actual=False, execution_key=executed.execution_key, execution_status=executed.execution_status)
     queue = LearningReviewQueue(tmp_path / "learning.db")
     review = queue.propose(outcome)
 
@@ -66,11 +72,13 @@ def test_learning_review_requires_explicit_accept_or_reject(tmp_path):
 
 
 def test_learning_review_cannot_be_reprocessed_after_final_decision(tmp_path):
-    decision = _build_decision()
-    outcomes = OutcomeLedger(tmp_path / "learning.db")
-    outcomes.attestation_store.issue(decision)
+    # The ledger reads the execution row from its own database, so the decision
+    # must really have run there: an invented execution key is refused as not
+    # matching the decision's durable identity.
+    executed = executed_decision(tmp_path / "learning.db")
+    outcomes = OutcomeLedger(tmp_path / "learning.db", attestation_store=executed.engine.attestation_store)
     forecast = Forecast("F-IDEM", ForecastKind.BINARY, probability=0.2, confidence=0.7)
-    outcome = outcomes.record(decision=decision, forecast=forecast, actual=True, execution_key="EXEC-IDEM", execution_status="COMPLETED")
+    outcome = outcomes.record(decision=executed.decision, forecast=forecast, actual=True, execution_key=executed.execution_key, execution_status=executed.execution_status)
     queue = LearningReviewQueue(tmp_path / "learning.db")
     review = queue.propose(outcome)
     queue.review(review.review_id, "REJECTED")
