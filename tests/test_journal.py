@@ -293,3 +293,39 @@ def test_export_of_an_empty_journal_is_still_valid_csv(tmp_path, capsys):
     assert main(["--db", str(tmp_path / "journal.db"), "export"]) == 0
     header = capsys.readouterr().out.strip()
     assert header.startswith("entry_id,") and "brier_score" in header
+
+
+def test_concurrent_entries_keep_one_unbroken_chain(tmp_path):
+    """Two writers reading the same head would each link to it, and entries are never rewritten."""
+    import threading
+
+    journal = _journal(tmp_path)
+    errors: list[Exception] = []
+    barrier = threading.Barrier(6)
+
+    def add(index: int) -> None:
+        try:
+            barrier.wait(timeout=10)
+            _add(journal, title=f"Décision {index}", now=NOW + timedelta(seconds=index))
+        except Exception as exc:  # noqa: BLE001 - reported through the assertion below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=add, args=(index,)) for index in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert errors == []
+    assert len(journal.entries()) == 6
+    assert journal.verify()
+
+
+def test_recording_a_decision_after_the_fact_does_not_break_the_chain(tmp_path):
+    """created_at is supplied by the caller; the chain follows insertion, not the clock."""
+    journal = _journal(tmp_path)
+    _add(journal, title="aujourd'hui", now=NOW + timedelta(days=1))
+    _add(journal, title="hier, noté après coup", now=NOW)
+
+    assert journal.verify()
+    assert [entry.title for entry in journal.entries()] == ["hier, noté après coup", "aujourd'hui"]

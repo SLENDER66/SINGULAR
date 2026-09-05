@@ -178,6 +178,12 @@ class DecisionJournal:
             "horizon_days": horizon_days, "created_at": moment.isoformat(),
         }
         with self._connect() as conn:
+            # Same reason as the outcome ledger and the audit trail: reading the
+            # head and inserting behind it has to be one serialised step, or two
+            # writers link to the same entry and verify() reports a journal
+            # nobody touched as broken -- for good, since entries are never
+            # rewritten.
+            conn.execute("BEGIN IMMEDIATE")
             previous = self._head(conn)
             fingerprint = _fingerprint(payload, previous)
             due = (moment + timedelta(days=horizon_days)).isoformat()
@@ -246,10 +252,23 @@ class DecisionJournal:
         return tuple(e for e in self.entries(status=Status.OPEN)
                      if datetime.fromisoformat(e.due_at) <= moment)
 
+    def _chain(self) -> tuple[Entry, ...]:
+        """Entries in the order they were written, which is the order they were chained.
+
+        Not the order they are read in. `entries()` sorts by created_at so the
+        journal reads chronologically, but created_at is supplied by the caller:
+        recording a decision after the fact -- add(now=yesterday) -- put an entry
+        before one it was chained behind, and verify() then called an untouched
+        journal rewritten. A hash chain follows insertion, nothing else.
+        """
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM journal_entries ORDER BY rowid").fetchall()
+        return tuple(self._entry(row) for row in rows)
+
     def verify(self) -> bool:
         """Has any prediction been rewritten since it was made?"""
         previous = ""
-        for entry in self.entries():
+        for entry in self._chain():
             payload = {
                 "entry_id": entry.entry_id, "title": entry.title, "action": entry.action,
                 "predicted": entry.predicted, "probability": entry.probability, "tier": entry.tier.value,
@@ -354,7 +373,7 @@ class DecisionJournal:
 
     @staticmethod
     def _head(conn: sqlite3.Connection) -> str:
-        row = conn.execute("SELECT fingerprint FROM journal_entries ORDER BY created_at DESC LIMIT 1").fetchone()
+        row = conn.execute("SELECT fingerprint FROM journal_entries ORDER BY rowid DESC LIMIT 1").fetchone()
         return "" if row is None else row["fingerprint"]
 
     @staticmethod
