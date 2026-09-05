@@ -12,6 +12,9 @@ consequences -- did neither at the same strength:
   table is rebuilt from scratch after a restart, so a substituted provider
   registered under the old token could report an effect that never happened
   and have it confirmed as COMPLETED.
+
+Neither path re-read the durable attestation either, on any kind of execution:
+revoking a decision while its execution was being set up stopped nothing.
 """
 import pytest
 
@@ -62,11 +65,28 @@ class SubstitutedProvider:
         return ProviderResult("COMPLETED", {"forged": True})
 
 
+def authorized_handler(action):
+    return {"action_id": action.id, "executed": True}
+
+
 AUTHORIZED_PROVIDER = BoundedProvider()
 AUTHORIZED_CAPABILITY = register_execution_capability(AUTHORIZED_PROVIDER, "cap_test_time_of_use_provider")
+HANDLER_CAPABILITY = register_execution_capability(authorized_handler, "cap_test_time_of_use_handler")
+
+
+def _handler_decision(decision_id: str) -> object:
+    return _decision(decision_id, execution_target=HANDLER_CAPABILITY, execution_kind="handler")
 
 
 def _effect_decision(decision_id: str) -> object:
+    return _decision(
+        decision_id, execution_target=AUTHORIZED_CAPABILITY, execution_kind="external_effect",
+        provider_name="bounded-provider", provider_target="tests.test_effect_capability_time_of_use:BoundedProvider",
+        operation="apply", execution_payload=PAYLOAD,
+    )
+
+
+def _decision(decision_id: str, **binding) -> object:
     contract = DelegationContract("MIS-TOU", "Improve career", "Career action completed", autonomy=Autonomy.EXECUTE_REVERSIBLE)
     action = ActionRequest("career_test", "Run bounded career test", 4, 1, 9, contract_id=contract.mission_id)
     state = DomainState(LearningDomain.CAREER, 0.2, confidence=0.9)
@@ -77,10 +97,7 @@ def _effect_decision(decision_id: str) -> object:
     return ValidatedTrajectoryPipeline.build(
         objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
         domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
-        trajectory_dimensions=dimensions, contract=contract, execution_target=AUTHORIZED_CAPABILITY,
-        execution_kind="external_effect", provider_name="bounded-provider",
-        provider_target="tests.test_effect_capability_time_of_use:BoundedProvider",
-        operation="apply", execution_payload=PAYLOAD, decision_id=decision_id, capacity_budget=2,
+        trajectory_dimensions=dimensions, contract=contract, decision_id=decision_id, capacity_budget=2, **binding,
     )
 
 
@@ -103,6 +120,17 @@ def _revoke_during(executor: DurableExecutionEngine, capability_id: str, method:
 
     def revoking(*args, **kwargs):
         executor.capability_store.revoke(capability_id)
+        return original(*args, **kwargs)
+
+    setattr(executor, method, revoking)
+
+
+def _revoke_decision_during(executor: DurableExecutionEngine, decision, method: str) -> None:
+    """Revoke the decision's attestation inside the same window."""
+    original = getattr(executor, method)
+
+    def revoking(*args, **kwargs):
+        executor.attestation_store.revoke(decision.decision_id)
         return original(*args, **kwargs)
 
     setattr(executor, method, revoking)
@@ -168,6 +196,37 @@ def test_reconciliation_refuses_an_artifact_the_durable_record_denies(tmp_path, 
                                             operation="apply", payload=PAYLOAD)
 
     assert substituted.calls == []
+
+
+def test_external_effect_refuses_a_decision_revoked_after_validation(tmp_path):
+    """Revoking a decision mid-flight must stop the effect, not arrive too late."""
+    decision = _effect_decision("DEC-TOU-DECISION-REVOKE")
+    executor = _executor(decision, tmp_path)
+    AUTHORIZED_PROVIDER.calls.clear()
+    _revoke_decision_during(executor, decision, "_authorize")
+
+    with pytest.raises(PermissionError, match="durablement attestée"):
+        executor.execute_effect_validated(decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+                                          operation="apply", payload=PAYLOAD)
+
+    assert AUTHORIZED_PROVIDER.calls == []
+    assert _external_effects(executor) == 0
+
+
+def test_handler_execution_refuses_a_decision_revoked_after_validation(tmp_path):
+    decision = _handler_decision("DEC-TOU-HANDLER-REVOKE")
+    executor = _executor(decision, tmp_path)
+    _revoke_decision_during(executor, decision, "_authorize")
+
+    with pytest.raises(PermissionError, match="durablement attestée"):
+        executor.execute_validated(decision, authorized_handler)
+
+
+def test_authorized_handler_still_executes(tmp_path):
+    decision = _handler_decision("DEC-TOU-HANDLER-OK")
+    executor = _executor(decision, tmp_path)
+
+    assert executor.execute_validated(decision, authorized_handler).status == "COMPLETED"
 
 
 def test_authorized_external_effect_still_executes(tmp_path):

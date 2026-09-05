@@ -125,6 +125,21 @@ class DurableExecutionEngine:
         if not execution_capability_matches(capability_id, target) or not self.capability_store.verify(capability_id, target):
             raise PermissionError("La capacité d'exécution n'est plus valide au moment de l'exécution.")
 
+    def _require_live_authority(self, decision: ValidatedTrajectoryDecision | None, capability_id: str | None, target: Any) -> None:
+        """Everything authorizing this call, re-read at the moment of use.
+
+        The capability was already re-checked here; the attestation was not, so
+        revoking a decision while its execution was being set up -- governance,
+        the durable claim -- stopped nothing: the effect still left the process.
+        Both are revocable, so both are re-read as late as they can be, and the
+        decision's own validity window is enforced at the instant the effect
+        happens rather than only when the call started.
+        """
+        if decision is not None:
+            self._require_attestation(decision)
+        if capability_id is not None:
+            self._require_live_capability(capability_id, target)
+
     def _require_attestation(self, decision: ValidatedTrajectoryDecision) -> None:
         if not self.attestation_store.verify(decision):
             raise PermissionError("La décision validée n'est pas durablement attestée, est révoquée ou a expiré.")
@@ -172,7 +187,7 @@ class DurableExecutionEngine:
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
         self._assert_policy_unchanged(action, governed, decision)
-        return self._execute_authorized(action, mission_id, handler, governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target)
+        return self._execute_authorized(action, mission_id, handler, governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target, decision=decision)
 
     @staticmethod
     def _assert_policy_unchanged(action, governed: Any, decision: ValidatedTrajectoryDecision) -> None:
@@ -191,7 +206,7 @@ class DurableExecutionEngine:
         if governed.policy_tier != decision.policy.tier.value:
             raise PermissionError("Current governance tier no longer matches the validated policy.")
 
-    def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any, *, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None) -> ExecutionResult:
+    def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any, *, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None, decision: ValidatedTrajectoryDecision | None = None) -> ExecutionResult:
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
@@ -204,8 +219,7 @@ class DurableExecutionEngine:
         if not claimed["claimed"]:
             self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             return self._handle_existing_execution(key, claimed)
-        if capability_id is not None:
-            self._require_live_capability(capability_id, handler)
+        self._require_live_authority(decision, capability_id, handler)
         try:
             value = handler(action)
         except Exception as exc:
@@ -236,9 +250,9 @@ class DurableExecutionEngine:
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
         self._assert_policy_unchanged(action, governed, decision)
-        return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target)
+        return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target, decision=decision)
 
-    def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None) -> ExecutionResult:
+    def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None, decision: ValidatedTrajectoryDecision | None = None) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         action = governed.action
@@ -292,12 +306,11 @@ class DurableExecutionEngine:
                     return self._handle_existing_execution(key, claimed)
                 return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
             return self._handle_existing_execution(key, claimed)
-        if capability_id is not None:
-            # As late as the handler path checks it: everything between the
-            # decision's capability checks and here -- governance, the durable
-            # claim -- is a window in which the capability can be revoked, and
-            # this is the path whose effect leaves the process.
-            self._require_live_capability(capability_id, provider)
+        # As late as the handler path checks it: everything between the
+        # decision's checks and here -- governance, the durable claim -- is a
+        # window in which the capability or the decision can be revoked, and
+        # this is the path whose effect leaves the process.
+        self._require_live_authority(decision, capability_id, provider)
         outcome = self.effect_coordinator.execute(request, provider)
         if outcome.status == EffectStatus.UNKNOWN.value:
             self.store.mark_execution_recovery_required(key)
@@ -339,9 +352,9 @@ class DurableExecutionEngine:
         governed = self._authorize_reconciliation(action, decision.contract.mission_id)
         if governed.governor != decision.governor:
             raise PermissionError("Current governance no longer matches the validated decision.")
-        return self._reconcile_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target)
+        return self._reconcile_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target, decision=decision)
 
-    def _reconcile_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None) -> ExecutionResult:
+    def _reconcile_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None, decision: ValidatedTrajectoryDecision | None = None) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
         action = governed.action
@@ -351,8 +364,7 @@ class DurableExecutionEngine:
             raise ValueError("L'exécution doit être RECOVERY_REQUIRED pour une réconciliation.")
         self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
-        if capability_id is not None:
-            self._require_live_capability(capability_id, provider)
+        self._require_live_authority(decision, capability_id, provider)
         outcome = self.effect_coordinator.reconcile(request, provider)
         if outcome.status == EffectStatus.COMPLETED.value:
             effect = self.effect_coordinator.peek(request)
