@@ -19,14 +19,47 @@ from singular.trajectory import TrajectoryProfile
 from singular.values import Vision
 
 
+#: Every invocation of an authorized handler, so a replay that must not execute
+#: can be proved by the counter rather than by a canary the boundary would
+#: reject anyway. These tests used to pass an inline lambda as the "must not
+#: run" handler; once decisions bind an exact executable, such a lambda is
+#: refused for not being the authorized capability, which proves nothing about
+#: replay, idempotency or lease ownership.
+CALLS: list[str] = []
+
+
 def authorized_handler(action):
+    CALLS.append(action.id)
     return {"action_id": action.id, "executed": True}
 
 
 AUTHORIZED_HANDLER_CAPABILITY = register_execution_capability(authorized_handler, "cap_v47_authorized_handler")
 
+BLOCK_UNTIL = Event()
+STARTED = Event()
 
-def _inputs(*, decision_id: str = "DEC-V47"):
+
+def blocking_handler(action):
+    """The authorized executable for the concurrency test; holds the lease open."""
+    CALLS.append(action.id)
+    STARTED.set()
+    assert BLOCK_UNTIL.wait(timeout=5)
+    return "ok"
+
+
+BLOCKING_HANDLER_CAPABILITY = register_execution_capability(blocking_handler, "cap_v47_blocking_handler")
+
+
+@pytest.fixture(autouse=True)
+def _reset_call_log():
+    CALLS.clear()
+    STARTED.clear()
+    BLOCK_UNTIL.clear()
+    yield
+    BLOCK_UNTIL.set()
+
+
+def _inputs(*, decision_id: str = "DEC-V47", execution_target: str = AUTHORIZED_HANDLER_CAPABILITY):
     from singular.autopilot import DelegationContract
 
     contract = DelegationContract("MIS-V47", "Adversarial execution", "completed", autonomy=Autonomy.EXECUTE_REVERSIBLE)
@@ -45,7 +78,7 @@ def _inputs(*, decision_id: str = "DEC-V47"):
         trajectory_profile=profile,
         trajectory_dimensions=dimensions,
         contract=contract,
-        execution_target=AUTHORIZED_HANDLER_CAPABILITY,
+        execution_target=execution_target,
         decision_id=decision_id,
         capacity_budget=2,
     )
@@ -63,15 +96,14 @@ def _runtime_and_engine(tmp_path: Path, decision):
 def test_replay_completed_execution_is_durable_and_does_not_reexecute(tmp_path: Path):
     _, action, decision = _inputs()
     runtime, engine = _runtime_and_engine(tmp_path, decision)
-    calls = []
 
-    first = engine.execute_validated(decision, lambda _: calls.append(1) or "ok")
-    second = engine.execute_validated(decision, lambda _: calls.append(1) or "must-not-run")
+    first = engine.execute_validated(decision, authorized_handler)
+    second = engine.execute_validated(decision, authorized_handler)
 
     assert first.status == "COMPLETED"
     assert second == first
-    assert first.result == "ok"
-    assert calls == [1]
+    assert first.result == {"action_id": action.id, "executed": True}
+    assert CALLS == [action.id]
 
 
 def test_execution_identity_is_durable_and_tamper_evident(tmp_path: Path):
@@ -84,8 +116,10 @@ def test_execution_identity_is_durable_and_tamper_evident(tmp_path: Path):
     with runtime.store._connect() as conn:
         conn.execute("UPDATE idempotency SET fingerprint='tampered' WHERE key=?", (identity_key,))
 
+    executed_before = len(CALLS)
     with pytest.raises(PermissionError, match="Identité|autorité|contenu"):
-        engine.execute_validated(decision, lambda _: pytest.fail("tampered replay must not execute"))
+        engine.execute_validated(decision, authorized_handler)
+    assert len(CALLS) == executed_before, "a tampered identity must not re-run the handler"
 
 
 def test_missing_execution_identity_fails_closed_on_replay(tmp_path: Path):
@@ -98,40 +132,35 @@ def test_missing_execution_identity_fails_closed_on_replay(tmp_path: Path):
     with runtime.store._connect() as conn:
         conn.execute("DELETE FROM idempotency WHERE key=?", (identity_key,))
 
+    executed_before = len(CALLS)
     with pytest.raises(PermissionError, match="Identité d'exécution absente"):
-        engine.execute_validated(decision, lambda _: pytest.fail("missing identity must not replay"))
+        engine.execute_validated(decision, authorized_handler)
+    assert len(CALLS) == executed_before, "a missing identity must not re-run the handler"
 
 
 def test_concurrent_workers_have_one_execution_owner(tmp_path: Path):
-    _, action, decision = _inputs(decision_id="DEC-CONCURRENT")
+    _, action, decision = _inputs(decision_id="DEC-CONCURRENT", execution_target=BLOCKING_HANDLER_CAPABILITY)
     runtime, engine_a = _runtime_and_engine(tmp_path, decision)
     engine_b = DurableExecutionEngine(DurableMissionRuntime(DurableStore(tmp_path / "s.db")))
-    started = Event()
-    release = Event()
-    calls = []
     first_result = []
 
-    def handler(_):
-        calls.append("handler")
-        started.set()
-        assert release.wait(timeout=5)
-        return "ok"
-
     def run_first():
-        first_result.append(engine_a.execute_validated(decision, handler))
+        first_result.append(engine_a.execute_validated(decision, blocking_handler))
 
     worker = Thread(target=run_first)
     worker.start()
-    assert started.wait(timeout=5)
+    assert STARTED.wait(timeout=5)
 
+    # Same decision, same authorized executable, second worker: only the lease
+    # may decide, so this must be refused while the first holds it.
     with pytest.raises(ExecutionInProgress):
-        engine_b.execute_validated(decision, lambda _: pytest.fail("second worker must not execute"))
+        engine_b.execute_validated(decision, blocking_handler)
 
-    release.set()
+    BLOCK_UNTIL.set()
     worker.join(timeout=5)
     assert not worker.is_alive()
     assert [result.status for result in first_result] == ["COMPLETED"]
-    assert calls == ["handler"]
+    assert CALLS == [action.id]
 
 
 def test_stale_execution_cannot_reexecute_after_restart(tmp_path: Path):
@@ -145,12 +174,22 @@ def test_stale_execution_cannot_reexecute_after_restart(tmp_path: Path):
 
     restarted = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
     restarted_engine = DurableExecutionEngine(restarted)
+    executed_before = len(CALLS)
     with pytest.raises(ExecutionRecoveryRequired):
-        restarted_engine.execute_validated(decision, lambda _: pytest.fail("stale execution must not reexecute"))
+        restarted_engine.execute_validated(decision, authorized_handler)
+    assert len(CALLS) == executed_before, "a stale lease must not re-run the handler after restart"
     assert runtime.store.get_execution(execution_key)["status"] == "RECOVERY_REQUIRED"
 
 
-def test_recovery_required_is_quarantined_and_resolved_without_reexecution(tmp_path: Path):
+def test_recovery_required_is_quarantined_and_cannot_be_confirmed_by_fiat(tmp_path: Path):
+    """An operator may abandon an ambiguous execution, never declare it succeeded.
+
+    This test used to assert that RecoveryDecision.CONFIRM produced COMPLETED.
+    RecoveryManager now refuses CONFIRM unconditionally: a successful outcome has
+    to come from provider reconciliation, which has external evidence, rather
+    than from an operator asserting it through a generic API. Asserting the old
+    behaviour would be asserting the absence of that control.
+    """
     _, action, decision = _inputs(decision_id="DEC-RECOVERY")
     runtime, engine = _runtime_and_engine(tmp_path, decision)
     runtime.store.set_mission_status(decision.contract.mission_id, MissionStatus.PLANNED)
@@ -161,9 +200,14 @@ def test_recovery_required_is_quarantined_and_resolved_without_reexecution(tmp_p
     with pytest.raises(ExecutionRecoveryRequired):
         engine._handle_existing_execution(execution_key, runtime.store.get_execution(execution_key))
 
-    result = RecoveryManager(runtime.store).resolve(execution_key, RecoveryDecision.CONFIRM, result={"already": True})
-    assert result.execution_status == "COMPLETED"
-    assert runtime.state(decision.contract.mission_id).status == MissionStatus.COMPLETED
+    manager = RecoveryManager(runtime.store)
+    with pytest.raises(ValueError, match="preuve externe"):
+        manager.resolve(execution_key, RecoveryDecision.CONFIRM, result={"already": True})
+    assert runtime.store.get_execution(execution_key)["status"] == "RECOVERY_REQUIRED"
+
+    resolved = manager.resolve(execution_key, RecoveryDecision.FAIL, reason="outcome unknown")
+    assert resolved.execution_status == "FAILED"
+    assert CALLS == [], "resolving a quarantined execution must never run the handler"
 
 
 def test_raw_execution_api_is_closed(tmp_path: Path):
