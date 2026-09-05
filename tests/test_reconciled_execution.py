@@ -12,14 +12,14 @@ class Provider:
         return ProviderResult(EffectStatus.COMPLETED.value, {"remote_id": "confirmed"})
 
 
-def _setup(tmp_path):
+def _setup(tmp_path, *, execution_status="RECOVERY_REQUIRED"):
     store = DurableStore(tmp_path / "singular.db")
     store.save_mission(DelegationContract("MIS-1", "recover", "done"))
     with store._connect() as conn:
         conn.execute("UPDATE mission_states SET status='RUNNING' WHERE mission_id='MIS-1'")
         conn.execute(
             "INSERT INTO executions(execution_key,mission_id,action_id,status,started_at) VALUES(?,?,?,?,datetime('now'))",
-            ("EXEC-1", "MIS-1", "ACT-1", "RECOVERY_REQUIRED"),
+            ("EXEC-1", "MIS-1", "ACT-1", execution_status),
         )
     request = EffectRequest("EXEC-1", "provider", "send", {"id": "x"}, "action-fp")
     coordinator = ExternalEffectCoordinator(store)
@@ -27,10 +27,17 @@ def _setup(tmp_path):
 
 
 def test_reconciliation_proves_effect_then_finalizer_closes_execution(tmp_path):
-    store, request, coordinator = _setup(tmp_path)
+    # The execution has to be RUNNING for the effect to be attempted at all: a
+    # quarantined execution refuses any new external effect, which is the point
+    # of the quarantine. This test started from RECOVERY_REQUIRED and then asked
+    # the coordinator to send, so it never got past that guard.
+    store, request, coordinator = _setup(tmp_path, execution_status="RUNNING")
     outcome = coordinator.execute(request, Provider())
     assert outcome.status == EffectStatus.UNKNOWN.value
 
+    # An ambiguous provider outcome is what puts the execution in quarantine;
+    # DurableExecutionEngine does this when it sees UNKNOWN.
+    store.mark_execution_recovery_required("EXEC-1")
     outcome = coordinator.reconcile(request, Provider())
     assert outcome.status == EffectStatus.COMPLETED.value
     assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED"

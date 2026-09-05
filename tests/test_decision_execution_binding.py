@@ -52,8 +52,13 @@ def test_execution_identity_is_bound_to_decision_context(tmp_path):
 
 def test_execution_identity_binds_distinct_decision_id_even_with_same_context(tmp_path):
     first = build_decision("DEC-ID-1")
-    second = build_decision("DEC-ID-2")
+    # Same action, so both decisions derive the same execution key and the
+    # identity check is what must refuse the second. Without pinning the id,
+    # ActionRequest mints a fresh one, the keys differ, and the refusal came
+    # from the mission-status guard instead -- a different control entirely.
+    second = build_decision("DEC-ID-2", action_id=first.authorized_actions[0].id)
     assert first.context_fingerprint != second.context_fingerprint
+    assert first.global_report.action_id == second.global_report.action_id
 
     db = tmp_path / "singular.db"
     runtime = DurableMissionRuntime(DurableStore(db))
