@@ -10,7 +10,7 @@ Dépôt : SLENDER66/SINGULAR (public). Branche de travail et branche par défaut
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
 État vérifié (tout est poussé sur la branche de travail, arbre propre) :
-- 634 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
+- 635 tests passent, audit de frontière propre, CI verte (Python 3.11 + 3.13).
 - Frontière fail-closed : ValidatedTrajectoryDecision → attestation durable → capability
   (fingerprint d'artefact) → lease → effet externe → outcome ledger.
 - L'installation pip editable (`singular-agentic-os`) pointe sur `C:\Users\Utilisateur\SINGULAR`
@@ -23,6 +23,10 @@ racine : lis-le, applique-le, ne me le fais pas répéter.
 - Les chaînes de hachage (audit, outcome ledger, journal) prennent le verrou d'écriture
   avant de lire leur tête, et le journal se chaîne sur l'ordre d'insertion, plus sur un
   horodatage fourni par l'appelant.
+- L'intégrité des approbations (immuabilité, transition unique) est implémentée dans
+  `DurableStore` lui-même : le module de durcissement greffé par monkeypatch a disparu,
+  avec les deux greffes équivalentes sur `ExternalEffectCoordinator`. Il ne reste qu'une
+  greffe (`durable_recovery`), qui ajoute une méthode sans équivalent faible.
 - LICENSE MIT en place. Dépôt nettoyé : 9 branches pour 8 commits distincts.
 - 22 modules et 21 fichiers de test hors périmètre sont dans `attic/`.
 - `route()` écrit désormais son verdict de gouvernance dans l'audit durable
