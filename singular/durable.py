@@ -140,6 +140,20 @@ class DurableStore:
                 conn.execute("ALTER TABLE executions ADD COLUMN lease_until TEXT")
             effect_columns = {row[1] for row in conn.execute("PRAGMA table_info(external_effects)")}
             if "action_fingerprint" not in effect_columns:
+                # Adding the column to a table that already holds rows fills them
+                # with '', which the integrity checker reports as
+                # EFFECT-ACTION-BINDING for ever -- and the boundary refuses
+                # every execution while integrity is dirty. The database opened
+                # without a word and the system simply stopped executing, with
+                # nothing naming the migration as the cause. Nobody can
+                # reconstruct which action those effects belonged to, so this
+                # says so here instead.
+                existing = conn.execute("SELECT COUNT(*) AS total FROM external_effects").fetchone()
+                if existing is not None and int(existing["total"]) > 0:
+                    raise RuntimeError(
+                        "external_effects holds rows written before action_fingerprint existed; "
+                        "migrate them explicitly before opening this database"
+                    )
                 conn.execute("ALTER TABLE external_effects ADD COLUMN action_fingerprint TEXT NOT NULL DEFAULT ''")
 
     def init_execution_schema(self) -> None:

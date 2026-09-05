@@ -30,7 +30,19 @@ class EffectRequest:
     provider: str
     operation: str
     payload: Any
-    action_fingerprint: str | None = None
+    action_fingerprint: str
+
+    def __post_init__(self) -> None:
+        """An effect must name the action it belongs to.
+
+        A row without that fingerprint is a permanent integrity violation --
+        EFFECT-ACTION-BINDING -- and the boundary refuses every execution while
+        integrity is dirty, with nothing able to repair the row. The field used
+        to default to None, so forgetting it wrote that state silently instead
+        of reporting it here.
+        """
+        if not str(self.action_fingerprint).strip():
+            raise ValueError("un effet externe doit nommer l'action à laquelle il appartient")
 
     @property
     def payload_fingerprint(self) -> str:
@@ -67,34 +79,15 @@ class ExternalEffectCoordinator:
     }
 
     def __init__(self, store: DurableStore) -> None:
+        #: external_effects belongs to DurableStore, which owns this database.
+        #: This class declared the table too, with action_fingerprint nullable
+        #: where the store makes it NOT NULL DEFAULT '': two definitions of one
+        #: table, settled by whichever ran first, deciding whether a missing
+        #: action identity was even representable.
         self.store = store
-        self._init_schema()
 
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
         return SqliteLocation(self.store.path).session(foreign_keys=True, busy_timeout=True)
-
-    def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS external_effects (
-                    provider_idempotency_key TEXT PRIMARY KEY,
-                    execution_key TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    operation TEXT NOT NULL,
-                    action_fingerprint TEXT,
-                    payload_fingerprint TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    result TEXT,
-                    error TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            columns = {row[1] for row in conn.execute("PRAGMA table_info(external_effects)")}
-            if "action_fingerprint" not in columns:
-                conn.execute("ALTER TABLE external_effects ADD COLUMN action_fingerprint TEXT")
 
     def prepare(self, request: EffectRequest) -> dict[str, Any]:
         key = request.provider_idempotency_key
