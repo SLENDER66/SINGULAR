@@ -33,7 +33,7 @@ def test_cross_domain_multiplier_changes_priority() -> None:
         (interaction,),
     )
     assert report.candidates[0].intervention_id == "career"
-    assert "CROSS_DOMAIN_EFFECT" in report.candidates[0].reasons
+    assert "DEPENDENCY_EFFECT" in report.candidates[0].reasons
 
 
 def test_sensitive_domain_requires_human_review() -> None:
@@ -43,7 +43,11 @@ def test_sensitive_domain_requires_human_review() -> None:
         (Intervention("nutrition", LearningDomain.NUTRITION, 0.8, evidence=0.95, causal_confidence=0.95),),
     )
     candidate = report.candidates[0]
-    assert candidate.disposition is OptimizationDisposition.PROPOSE
+    # TEST, not PROPOSE: a sensitive domain is held for evidence rather than put
+    # forward for action. The test asserted the weaker of the two outcomes.
+    assert candidate.disposition is OptimizationDisposition.TEST
+    assert candidate.disposition is not OptimizationDisposition.PROPOSE
+    assert "SENSITIVE_OR_HIGH_CONSEQUENCE_REVIEW" in candidate.reasons
     assert candidate.human_review is True
 
 

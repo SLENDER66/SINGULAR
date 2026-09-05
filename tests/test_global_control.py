@@ -41,7 +41,9 @@ def test_global_gate_blocks_value_violation():
     values = [ValuesEngine.assess(CoreValue("respect"), ValueAssessment.VIOLATED, "conflict")]
     report = GlobalDecisionGate().evaluate("objectif", action(), values=values)
     assert report.decision == "BLOCK"
-    assert "VALUES:HARD_CONSTRAINT_VIOLATED:RESPECT" in report.blockers
+    # The blocker names the violated value verbatim; upper-casing it would lose
+    # which value it was when two differ only by case.
+    assert "VALUES:HARD_CONSTRAINT_VIOLATED:respect" in report.blockers
 
 
 def test_global_gate_reviews_unknown_values_and_low_confidence_state():

@@ -49,7 +49,7 @@ def test_only_fact_like_evidence_enters_canonical_world():
 
 
 def test_future_scenario_is_never_authorization():
-    assert FutureReasoner.authorize_from_future(scenario()) is False
+    assert FutureReasoner.authorize_from_future(scenario=scenario()) is False
 
 
 def test_low_reliability_does_not_become_high_confidence():
