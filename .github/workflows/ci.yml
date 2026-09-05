@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  # Lets a run be started by hand from the Actions tab, which matters when a
+  # previous failure had nothing to do with the code.
+  workflow_dispatch:
   push:
     paths-ignore:
       - "**/*.md"
