@@ -16,6 +16,12 @@ dernière. Ne me réponds pas que tu l'as bien noté — applique-la.
 `claude/singular-mandate-setup-d51s9t` (branche par défaut, pas à jour).
 Ne merge jamais dans `main` sans mon autorisation.
 
+**Ton conteneur part de la branche par défaut, donc en retard.** Une séance a
+démarré ainsi sans `singular/sage/`, sans `ios/`, et sur un `CLAUDE.md` d'avant
+la section 0 — et aurait travaillé sur une branche morte si elle n'avait pas
+comparé. `python tools/check_repo_state.py` le dit en une commande. Fais-le
+avant de lire quoi que ce soit d'autre.
+
 ## Ce que SINGULAR est
 
 Une **application personnelle** qui doit m'accompagner toute ma vie, façon
@@ -50,6 +56,7 @@ pas ça : **regarde ce qui tourne avant de réparer ce qui ne tourne pas.**
 ## Vérifie l'état en 90 secondes
 
 ```bash
+python tools/check_repo_state.py  # AVANT tout : sur quelle branche ce conteneur est-il parti ?
 pip install -e '.[dev]'          # pytest n'est PAS installé dans un conteneur neuf
 python -m pytest -q              # tout vert, zéro échec
 python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"

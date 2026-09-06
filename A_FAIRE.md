@@ -1,11 +1,35 @@
 # Ce que je dois faire moi-même
 
-Rien sur GitHub. Les trois actions de la version précédente de ce fichier sont
-faites : le dépôt est public, la bonne branche est la branche par défaut, les
-branches mortes sont supprimées.
-
 Le Sage tourne et je m'en sers. Ce qui reste tient en deux gestes par
-semaine, plus une chose qui attend un Mac et ne bloque rien.
+semaine, un clic sur GitHub, plus une chose qui attend un Mac et ne bloque
+rien.
+
+---
+
+## Un clic sur GitHub, qui compte plus qu'il n'en a l'air
+
+La branche par défaut du dépôt est restée en arrière. Ce n'est pas cosmétique :
+chaque nouvelle conversation démarre depuis elle, donc sur un dépôt **sans le
+Sage, sans `ios/`, et sur un `CLAUDE.md` d'avant la section 0** — celle qui
+existe précisément pour ne plus jamais avoir à être réécrite. Ce n'est pas une
+hypothèse : c'est arrivé le 6 septembre au soir, à la séance qui écrit ces
+lignes.
+
+Sur GitHub : **Settings > General > Default branch**, basculer sur la branche
+que `CLAUDE.md` nomme comme branche de travail. Aucun commit n'est perdu.
+
+La version précédente de ce fichier affirmait que c'était fait. Elle avait
+tort, et rien ne pouvait la contredire : l'affirmation portait sur l'état d'un
+serveur, pas sur le contenu du dépôt. D'où une commande plutôt qu'une phrase,
+qui dit l'état réel et ne conclut jamais qu'elle n'a pas pu vérifier :
+
+```powershell
+cd $HOME\Documents\SINGULAR; python tools/check_repo_state.py
+```
+
+Elle liste aussi les branches qui traînent — dont celles que `CLAUDE.md`
+déclare mortes, encore présentes. Les supprimer est ton choix ; ce fichier ne
+prétendra plus qu'elles le sont.
 
 ---
 

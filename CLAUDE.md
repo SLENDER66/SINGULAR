@@ -10,7 +10,8 @@ Branche de travail :
 
 claude/remote-control-feedback-ndpzle
 
-Branche par défaut :
+Branche par défaut, en retard sur le travail — c'est d'elle que part ton
+conteneur, et ce n'est donc pas ce que tu as sous les yeux :
 
 claude/singular-mandate-setup-d51s9t
 
@@ -150,6 +151,8 @@ Ground truth
 
 Inspecte réellement :
 
+* `python tools/check_repo_state.py` — d'où part ce conteneur, et l'écart
+  avec la branche de travail ; à faire avant tout le reste ;
 * branche actuelle ;
 * HEAD ;
 * la branche de travail et la branche par défaut ;
