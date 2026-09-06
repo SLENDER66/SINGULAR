@@ -240,6 +240,15 @@ final class Journal: ObservableObject {
 extension ISO8601DateFormatter {
     /// Un seul formateur, en UTC : deux formats différents dans le même fichier
     /// rendraient les dates incomparables.
+    ///
+    /// `@MainActor` parce qu'un formateur est une classe, donc pas `Sendable` :
+    /// une variable globale qui en contient une est du partage mutable, et le
+    /// compilateur le refuse dès qu'on lui demande de vérifier la concurrence.
+    /// L'isoler dit ce qui est déjà vrai — tous ses appelants sont le journal
+    /// et ses tests, qui vivent sur le fil principal — et le rend vérifiable
+    /// plutôt que promis. Le déclarer `nonisolated(unsafe)` aurait fait taire
+    /// le compilateur sans rien garantir.
+    @MainActor
     static let singular: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

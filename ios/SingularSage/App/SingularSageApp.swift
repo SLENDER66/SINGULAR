@@ -1,6 +1,7 @@
 import SwiftUI
 
 @main
+@MainActor
 struct SingularSageApp: App {
     @StateObject private var journal = Journal()
 

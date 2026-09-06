@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 /// L'écran qu'on ouvre le matin : ce que le Sage a vu, et ce qu'il attend de toi.
+@MainActor
 struct BriefView: View {
     @EnvironmentObject private var journal: Journal
     @State private var addingDecision = false

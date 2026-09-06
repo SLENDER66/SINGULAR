@@ -5,6 +5,7 @@ import SwiftUI
 /// Six champs et rien d'autre. Un outil qui demande plus de trente secondes est
 /// un outil qu'on arrête d'utiliser, et un journal qu'on n'alimente pas
 /// n'apprend rien.
+@MainActor
 struct AddDecisionView: View {
     @EnvironmentObject private var journal: Journal
     @Environment(\.dismiss) private var dismiss

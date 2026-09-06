@@ -5,6 +5,7 @@ import SwiftUI
 /// Deux boutons, parce que c'est une question à deux réponses. Abandonner en
 /// est une troisième, honnête : laisser une décision ouverte pour toujours ne
 /// l'est pas.
+@MainActor
 struct ResolveSheet: View {
     let entry: Entry
 
