@@ -158,7 +158,8 @@ struct BriefView: View {
                     figure("\(Numbers.compact(report.hoursThatWorked))h", "ont produit le résultat attendu",
                            warn: report.hoursThatWorked == 0 && report.resolved > 0)
                     figure("\(Numbers.compact(report.hoursUnresolved))h", "encore sans verdict",
-                           warn: report.hoursUnresolved > report.hoursThatWorked)
+                           warn: report.resolved > 0
+                               && report.hoursUnresolved > report.hoursThatWorked)
                     figure("\(report.overdue)", "à trancher", warn: report.overdue > 0)
                     if let gap = report.overconfidence, report.resolved >= NoticeEngine.calibrationMinimum,
                        let hit = report.hitRate, let mean = report.meanProbability {

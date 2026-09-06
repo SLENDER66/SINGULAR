@@ -93,8 +93,10 @@ function renderFigures(report) {
     figure(`${report.hours_total}h`, "engagées en tout"),
     figure(`${report.hours_that_worked}h`, "ont produit le résultat attendu",
            report.hours_that_worked === 0 && report.resolved > 0),
+    // Même condition que l'observation qui l'accompagne : s'alarmer d'heures
+    // sans verdict n'a de sens qu'une fois qu'un verdict a pu être rendu.
     figure(`${report.hours_unresolved}h`, "encore sans verdict",
-           report.hours_unresolved > report.hours_that_worked),
+           report.resolved > 0 && report.hours_unresolved > report.hours_that_worked),
     figure(String(report.overdue), "à trancher", report.overdue > 0),
   ];
   if (report.overconfidence !== null && report.resolved >= 3) {
