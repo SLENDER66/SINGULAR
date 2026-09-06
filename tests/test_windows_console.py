@@ -45,6 +45,7 @@ SPEAKS_TO_THE_CONSOLE = [
     "singular/__main__.py",
     "singular/sage/server.py",
     "tools/check_xcode_project.py",
+    "tools/check_repo_state.py",
 ]
 
 #: La page de code d'une console française. cp1252 est plus permissive.
