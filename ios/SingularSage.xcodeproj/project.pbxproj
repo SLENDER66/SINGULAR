@@ -1,0 +1,432 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		42AE253622A2A8F7AA90018D /* SingularSageApp.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 9CA9FB7E8E54C58D2C9529FE /* SingularSageApp.swift */; };
+		0760FD4D2F68F352E029560B /* BriefView.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 7CEB6FEB2018FE442787E9EC /* BriefView.swift */; };
+		0B8A3505040B6932C7FE4CF5 /* AddDecisionView.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 3B71F7DF81FE4C85F743AD31 /* AddDecisionView.swift */; };
+		FC3D57E3D73DAF65EE6696A1 /* ResolveSheet.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 286BBCD26974B1B5AAE3D341 /* ResolveSheet.swift */; };
+		8F1483506D5B19A64E6BA2F2 /* DailyNotice.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 837D0061AF6441480D9C27BD /* DailyNotice.swift */; };
+		7EAA8E5D1A2212547ACE3689 /* Theme.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 0837EBE7226EF4DC31315F8F /* Theme.swift */; };
+		B6532D1FB00E64D2956821D6 /* Tier.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 56756BD300949F69E39EADFB /* Tier.swift */; };
+		36BE912927E9D2BDDF0BF13A /* Entry.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 516BECB8398C94FFC340E7A8 /* Entry.swift */; };
+		0B187D27378E5A6C474807F8 /* Journal.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = D329B10874799DA9E6E38C3A /* Journal.swift */; };
+		020A64C80C0F05CCEC83F30D /* Notice.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = F48348A9161067EFE49D7567 /* Notice.swift */; };
+		025FD11F1E63787E0E129782 /* JournalTests.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = B140073371AA9DB9987D6057 /* JournalTests.swift */; };
+		F7F8DF129D4B1EE2614DBB8D /* NoticeVectorTests.swift in Build Phase */ = {isa = PBXBuildFile; fileRef = 1B6A6DD9CFAA176FC5CAC852 /* NoticeVectorTests.swift */; };
+		0FA91C669C2DC7E927B42452 /* notice_vectors.json in Build Phase */ = {isa = PBXBuildFile; fileRef = 8734979B136D7383B11D6B8C /* notice_vectors.json */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		121604C63B002116BE22E83A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3B70D05F7089CAC41CE13AC7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 422BFFFA1386982AD270B0CC;
+			remoteInfo = SingularSage;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		9CA9FB7E8E54C58D2C9529FE /* SingularSageApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingularSageApp.swift; sourceTree = "<group>"; };
+		7CEB6FEB2018FE442787E9EC /* BriefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefView.swift; sourceTree = "<group>"; };
+		3B71F7DF81FE4C85F743AD31 /* AddDecisionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDecisionView.swift; sourceTree = "<group>"; };
+		286BBCD26974B1B5AAE3D341 /* ResolveSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolveSheet.swift; sourceTree = "<group>"; };
+		837D0061AF6441480D9C27BD /* DailyNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyNotice.swift; sourceTree = "<group>"; };
+		0837EBE7226EF4DC31315F8F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		56756BD300949F69E39EADFB /* Tier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tier.swift; sourceTree = "<group>"; };
+		516BECB8398C94FFC340E7A8 /* Entry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entry.swift; sourceTree = "<group>"; };
+		D329B10874799DA9E6E38C3A /* Journal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Journal.swift; sourceTree = "<group>"; };
+		F48348A9161067EFE49D7567 /* Notice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notice.swift; sourceTree = "<group>"; };
+		B140073371AA9DB9987D6057 /* JournalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalTests.swift; sourceTree = "<group>"; };
+		1B6A6DD9CFAA176FC5CAC852 /* NoticeVectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeVectorTests.swift; sourceTree = "<group>"; };
+		8734979B136D7383B11D6B8C /* notice_vectors.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = notice_vectors.json; sourceTree = "<group>"; };
+		5D62545EE09AC8AE9088970F /* SingularSage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SingularSage.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		23802E96768B45EC57C9626F /* SingularSageTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SingularSageTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FC6D46761253D06B4E716453 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3CFEE350DFFA81BA39911E7C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0AAAA7532D337AAE06FDF6CC /* SingularSage */ = {
+			isa = PBXGroup;
+			children = (
+				5985FB1F98F7C64EBC0DEFC4 /* SingularSage */,
+				083740291647BAE74A8330E3 /* Products */,
+			);
+			name = SingularSage;
+			sourceTree = "<group>";
+		};
+		5985FB1F98F7C64EBC0DEFC4 /* SingularSage */ = {
+			isa = PBXGroup;
+			children = (
+				5ECD2A42E529E7C28F651571 /* App */,
+				0AC24E29887FC539A1A20516 /* Core */,
+				C009751834785347B5BBC741 /* Tests */,
+				1703019293F81C9671FB248F /* Resources */,
+			);
+			path = SingularSage;
+			sourceTree = "<group>";
+		};
+		5ECD2A42E529E7C28F651571 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				9CA9FB7E8E54C58D2C9529FE /* SingularSageApp.swift */,
+				7CEB6FEB2018FE442787E9EC /* BriefView.swift */,
+				3B71F7DF81FE4C85F743AD31 /* AddDecisionView.swift */,
+				286BBCD26974B1B5AAE3D341 /* ResolveSheet.swift */,
+				837D0061AF6441480D9C27BD /* DailyNotice.swift */,
+				0837EBE7226EF4DC31315F8F /* Theme.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		0AC24E29887FC539A1A20516 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				56756BD300949F69E39EADFB /* Tier.swift */,
+				516BECB8398C94FFC340E7A8 /* Entry.swift */,
+				D329B10874799DA9E6E38C3A /* Journal.swift */,
+				F48348A9161067EFE49D7567 /* Notice.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		C009751834785347B5BBC741 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				B140073371AA9DB9987D6057 /* JournalTests.swift */,
+				1B6A6DD9CFAA176FC5CAC852 /* NoticeVectorTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		1703019293F81C9671FB248F /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				8734979B136D7383B11D6B8C /* notice_vectors.json */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		083740291647BAE74A8330E3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5D62545EE09AC8AE9088970F /* SingularSage.app */,
+				23802E96768B45EC57C9626F /* SingularSageTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		422BFFFA1386982AD270B0CC /* SingularSage */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 055397FAEAE0458888BE4F59 /* Build configuration list */;
+			buildPhases = (
+				CA191CD25243AC391986A57A /* Sources */,
+				FC6D46761253D06B4E716453 /* Frameworks */,
+				17C64211671C209E4A122CBD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SingularSage;
+			productName = SingularSage;
+			productReference = 5D62545EE09AC8AE9088970F /* SingularSage.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B56656F62FBD1BE532AC18B8 /* SingularSageTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 30FCC019F886D8CF44B57B89 /* Build configuration list */;
+			buildPhases = (
+				5EDC5B9DEA539C938E125C15 /* Sources */,
+				3CFEE350DFFA81BA39911E7C /* Frameworks */,
+				A8CD49E4C65FE34A00C04501 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				03D7A37AE5577F3445414711 /* PBXTargetDependency */,
+			);
+			name = SingularSageTests;
+			productName = SingularSageTests;
+			productReference = 23802E96768B45EC57C9626F /* SingularSageTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3B70D05F7089CAC41CE13AC7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					422BFFFA1386982AD270B0CC = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					B56656F62FBD1BE532AC18B8 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 422BFFFA1386982AD270B0CC;
+					};
+				};
+			};
+			buildConfigurationList = 218B4EA8A5CBA36D6866C863 /* Build configuration list */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = fr;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				fr,
+				Base,
+			);
+			mainGroup = 0AAAA7532D337AAE06FDF6CC;
+			productRefGroup = 083740291647BAE74A8330E3 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				422BFFFA1386982AD270B0CC /* SingularSage */,
+				B56656F62FBD1BE532AC18B8 /* SingularSageTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		17C64211671C209E4A122CBD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A8CD49E4C65FE34A00C04501 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0FA91C669C2DC7E927B42452 /* notice_vectors.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CA191CD25243AC391986A57A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				42AE253622A2A8F7AA90018D /* SingularSageApp.swift in Sources */,
+				0760FD4D2F68F352E029560B /* BriefView.swift in Sources */,
+				0B8A3505040B6932C7FE4CF5 /* AddDecisionView.swift in Sources */,
+				FC3D57E3D73DAF65EE6696A1 /* ResolveSheet.swift in Sources */,
+				8F1483506D5B19A64E6BA2F2 /* DailyNotice.swift in Sources */,
+				7EAA8E5D1A2212547ACE3689 /* Theme.swift in Sources */,
+				B6532D1FB00E64D2956821D6 /* Tier.swift in Sources */,
+				36BE912927E9D2BDDF0BF13A /* Entry.swift in Sources */,
+				0B187D27378E5A6C474807F8 /* Journal.swift in Sources */,
+				020A64C80C0F05CCEC83F30D /* Notice.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5EDC5B9DEA539C938E125C15 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				025FD11F1E63787E0E129782 /* JournalTests.swift in Sources */,
+				F7F8DF129D4B1EE2614DBB8D /* NoticeVectorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		03D7A37AE5577F3445414711 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 422BFFFA1386982AD270B0CC /* SingularSage */;
+			targetProxy = 121604C63B002116BE22E83A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4C8829A22A03C050005F82E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = "DEBUG=1 $(inherited)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		98333412173198372A348748 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		5D82DE47EB62F476D9B9582A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thomas.singularsage;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1";
+			};
+			name = Debug;
+		};
+		D9986644C2A57AA2C8DA3763 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thomas.singularsage;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1";
+			};
+			name = Release;
+		};
+		EB391D8ED02E42128EDB1E2A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thomas.singularsage.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = "1";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SingularSage.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SingularSage";
+			};
+			name = Debug;
+		};
+		F1209D9BC2D3DFD92EA8CE4F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thomas.singularsage.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = "1";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SingularSage.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SingularSage";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		218B4EA8A5CBA36D6866C863 /* Build configuration list for PBXProject "SingularSage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4C8829A22A03C050005F82E4 /* Debug */,
+				98333412173198372A348748 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		055397FAEAE0458888BE4F59 /* Build configuration list for PBXNativeTarget "SingularSage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5D82DE47EB62F476D9B9582A /* Debug */,
+				D9986644C2A57AA2C8DA3763 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		30FCC019F886D8CF44B57B89 /* Build configuration list for PBXNativeTarget "SingularSageTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EB391D8ED02E42128EDB1E2A /* Debug */,
+				F1209D9BC2D3DFD92EA8CE4F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = 3B70D05F7089CAC41CE13AC7 /* Project object */;
+}

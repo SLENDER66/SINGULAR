@@ -5,3 +5,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 data/
+
+# Xcode : réglages propres à la machine de celui qui ouvre le projet.
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
