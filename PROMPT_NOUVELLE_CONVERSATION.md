@@ -8,6 +8,11 @@ il est dans le dépôt et Claude le lit tout seul.
 Dépôt : **SLENDER66/SINGULAR** (public). Mandat complet dans `CLAUDE.md` à la
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
+Sa **section 0** dit pour qui tu travailles. Je l'avais écrit trois fois dans
+trois conversations avant qu'elle existe ; elle est là pour que ce soit la
+dernière. N'attends pas que je le redemande, et ne me réponds pas que tu l'as
+bien noté — applique-le.
+
 **Branche de travail : `claude/remote-control-feedback-ndpzle`**, en avance sur
 `claude/singular-mandate-setup-d51s9t` (branche par défaut, pas à jour).
 Ne merge jamais dans `main` sans mon autorisation.
@@ -135,6 +140,12 @@ Mon abonnement Claude **ne donne pas accès à l'API** — deux facturations
 séparées. La faculté « Analyse » consommera ma propre clé : ~2,5 €/mois
 (Sonnet 5), ~6 €/mois (Opus 5), ~22 €/mois en usage intense. Le moteur
 déterministe (Notice, journal, calibration) tourne sans un token.
+
+Ce n'est pas qu'une question d'argent : quand « Analyse » arrivera, elle devra
+vivre derrière une frontière qu'on peut couper — clé révoquée, service fermé,
+réseau absent — sans emporter le reste. `tests/test_sage_independence.py`
+interdit déjà au cœur d'importer un client de service ou de lire une clé, et
+construit une Notice complète avec les sockets retirés.
 
 ## Contexte personnel (ne me le redemande pas)
 
