@@ -1,6 +1,17 @@
-# Le Sage sur ton iPhone — recette complète
+# L'application native — le Sage hors ligne, partout
 
-Tout le code est écrit. Il reste à le compiler, ce que seul ton Mac peut faire.
+> **Le Sage est déjà sur ton iPhone sans rien de ce document.**
+> `python -m singular sage --lan` sur ton PC, l'adresse ouverte dans Safari,
+> Partager → « Sur l'écran d'accueil » : icône, plein écran, même journal,
+> même Notice. La marche à suivre est dans `A_FAIRE.md`, elle prend dix
+> minutes et ne demande ni Mac, ni compte Apple, ni un euro.
+
+Ce document concerne l'application **native**, qui lève une limite précise et
+une seule : l'app web a besoin que ton PC tourne et que tu sois sur ton wifi.
+L'app native marche hors ligne, partout, PC éteint. C'est le seul avantage, et
+il coûte un Mac.
+
+Tout le code est écrit. Il reste à le compiler, ce que seul un Mac peut faire.
 Compte **une heure la première fois**, dont quarante minutes de téléchargement
 pendant lesquelles tu n'as rien à faire.
 
