@@ -142,3 +142,49 @@ def test_the_other_branches_are_listed_without_being_judged():
     assert "main" not in text.split("autres branches")[-1], (
         "main n'est pas un encombrement à trancher"
     )
+
+
+# --- le mandat lui-même peut être celui d'une autre branche -----------------
+
+def test_a_mandate_from_another_branch_yields_no_verdict_at_all():
+    """Le cas qui rendait l'outil dangereux plutôt qu'inutile.
+
+    Un clone resté sur une branche par défaut en retard porte l'ancien
+    `CLAUDE.md`, qui nomme l'ancienne branche de travail. L'outil calculait
+    alors un écart chiffré, d'apparence sérieuse, et concluait qu'il fallait
+    basculer la branche par défaut sur une branche morte. Reproduit pour de
+    bon avant d'être corrigé : l'ancien mandat nommait
+    `feat/validated-execution-boundary`, et l'outil conseillait de s'y rendre.
+
+    Un avertissement au-dessus du conseil ne suffisait pas. Le conseil ne doit
+    pas être écrit.
+    """
+    text, status = _describe(
+        work_branch="feat/morte",
+        default_branch=DEFAULT,
+        branches={"feat/morte": "c" * 40, DEFAULT: "b" * 40, WORK: "a" * 40},
+        ahead=608,
+        fast_forward=False,
+        mandate_trustworthy=False,
+    )
+    assert status == 1
+    assert "MANDAT SUSPECT" in text
+    assert "Verdict non rendu" in text
+    assert "Default branch" not in text, "conseiller une bascule ici est la panne même"
+    assert "608" not in text, "un ecart chiffre donne au mauvais conseil un air de serieux"
+
+
+def test_an_unverifiable_mandate_is_treated_like_a_wrong_one():
+    """Ne pas avoir pu vérifier n'est pas avoir vérifié : même refus."""
+    text, status = _describe(mandate_trustworthy=None)
+    assert status == 1
+    assert "Verdict non rendu" in text
+    assert "Accord" not in text
+
+
+def test_a_trustworthy_mandate_still_reaches_its_verdict():
+    """La garde ne doit pas rendre l'outil muet dans le cas normal."""
+    text, status = _describe(mandate_trustworthy=True)
+    assert status == 0
+    assert "MANDAT SUSPECT" not in text
+    assert "Accord" in text

@@ -102,14 +102,38 @@ def describe(
     branches: dict[str, str],
     ahead: int | None,
     fast_forward: bool | None,
+    mandate_trustworthy: bool | None = True,
 ) -> tuple[list[str], int]:
     """Rend les lignes à afficher et le code de sortie. Aucun accès réseau.
 
     Séparé de tout le reste pour être testable : c'est ici que se décide ce
     qui compte comme un désaccord, et cette décision doit pouvoir être mise
     en défaut sans dépendre d'un serveur.
+
+    `mandate_trustworthy` vaut faux lorsque le `CLAUDE.md` lu ne vient pas de
+    la branche de travail. Ce cas n'est pas théorique : c'est précisément
+    l'état que l'outil sert à diagnostiquer. Un clone resté sur une branche
+    par défaut en retard porte l'ancien mandat, qui nomme l'ancienne branche
+    de travail -- et l'outil conseillerait alors de basculer la branche par
+    défaut sur une branche morte. Le mandat suspect passe donc avant tout le
+    reste, et suffit à lui seul pour ne pas conclure.
     """
     lines: list[str] = []
+
+    if mandate_trustworthy is not True:
+        lines.append(
+            "MANDAT SUSPECT : ce clone n'a pas la branche de travail dans son "
+            "historique."
+        )
+        lines.append(
+            "Le CLAUDE.md lu ici peut donc etre perime, et la branche qu'il nomme "
+            "avec lui."
+        )
+        lines.append(
+            "Faire `git fetch origin` et se placer sur la branche de travail "
+            "avant de suivre ce qui suit."
+        )
+        lines.append("")
 
     if work_branch is None:
         lines.append("CLAUDE.md ne nomme plus de branche de travail : rien à comparer.")
@@ -120,6 +144,16 @@ def describe(
     lines.append(f"branche par defaut : {default_branch}  {default_sha}")
     lines.append(f"branche de travail : {work_branch}  {work_sha}")
     lines.append("")
+
+    if mandate_trustworthy is not True:
+        # On s'arrete aux faits. Le conseil de bascule est calcule a partir du
+        # mandat, donc il vaut ce que vaut le mandat : sur un clone reste en
+        # arriere, il nommerait la branche morte que l'ancien mandat citait
+        # encore, avec un ecart chiffre qui a toutes les apparences du serieux.
+        # Un avertissement au-dessus ne suffit pas -- il se lit de travers, et
+        # le clic, lui, est definitif.
+        lines.append("Verdict non rendu tant que le mandat lu n'est pas celui du travail.")
+        return lines, 1
 
     status = 0
 
@@ -182,12 +216,19 @@ def main() -> int:
         ahead = _ahead_count(branches[default_branch], branches[work_branch])
         fast_forward = _is_ancestor(branches[default_branch], branches[work_branch])
 
+    # Le CLAUDE.md lu vient-il d'un clone qui connait la branche de travail ?
+    # Indeterminable vaut suspect : c'est le sens de fail-closed ici.
+    trustworthy: bool | None = None
+    if work_branch and work_branch in branches:
+        trustworthy = _is_ancestor(branches[work_branch], "HEAD")
+
     lines, status = describe(
         work_branch=work_branch,
         default_branch=default_branch,
         branches=branches,
         ahead=ahead,
         fast_forward=fast_forward,
+        mandate_trustworthy=trustworthy,
     )
     for line in lines:
         print(line)
