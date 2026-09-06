@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from .durable import DurableStore, MissionStatus
 from .effects import EffectStatus
@@ -33,10 +32,26 @@ class DurableIntegrityChecker:
     def check(self) -> DurableIntegrityReport:
         violations: list[IntegrityViolation] = []
         with self.store._connect() as conn:
+            # One snapshot for every table read here. Without it the executions
+            # were read at one instant and each mission status at another, so a
+            # writer finishing an execution between the two showed this scan a
+            # RUNNING row under an already COMPLETED mission -- a contradiction
+            # that never existed, reported as a broken database, refusing a
+            # legitimate concurrent execution. The store runs in WAL, so a
+            # deferred read transaction pins a consistent view without blocking
+            # the writer.
+            conn.execute("BEGIN")
             executions = conn.execute(
                 "SELECT rowid,execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until "
                 "FROM executions ORDER BY execution_key"
             ).fetchall()
+            # One query rather than one per execution row: this scan runs before
+            # every validated execution, so its cost is paid on the hot path and
+            # grew with the whole history.
+            missions = {
+                row["mission_id"]: row["status"]
+                for row in conn.execute("SELECT mission_id,status FROM mission_states")
+            }
             effects = conn.execute(
                 "SELECT provider_idempotency_key,execution_key,status,action_fingerprint FROM external_effects ORDER BY provider_idempotency_key"
             ).fetchall()
@@ -58,15 +73,12 @@ class DurableIntegrityChecker:
             valid_execution_statuses = {"RUNNING", "RECOVERY_REQUIRED", "COMPLETED", "FAILED"}
             for row in executions:
                 key = row["execution_key"]
-                mission = conn.execute(
-                    "SELECT status FROM mission_states WHERE mission_id=?", (row["mission_id"],)
-                ).fetchone()
-                if mission is None:
+                mission_status = missions.get(row["mission_id"])
+                if mission_status is None:
                     violations.append(IntegrityViolation("execution", key, "EXEC-MISSION", "execution references a missing mission state"))
                     continue
 
                 execution_status = row["status"]
-                mission_status = mission["status"]
                 if execution_status not in valid_execution_statuses:
                     violations.append(IntegrityViolation("execution", key, "EXEC-STATUS", f"unknown execution status: {execution_status}"))
                     continue
