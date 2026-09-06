@@ -47,7 +47,7 @@ def _ask(prompt: str, *, cast=str, default=None, validate=None):
 
 
 def _tier_prompt() -> Tier:
-    print(_colour("\n  Quel rang de la constitution ? (Stabilité → Revenus → … → Liberté)", DIM))
+    print(_colour("\n  Quel rang de la constitution ? (Stabilité > Revenus > ... > Liberté)", DIM))
     for tier in Tier:
         print(f"    {tier.rank}. {tier.value.title()}")
     index = _ask("  Rang", cast=int, default=2, validate=lambda v: None if 1 <= v <= len(Tier) else (_ for _ in ()).throw(ValueError("1 à 6")))
@@ -75,7 +75,7 @@ def cmd_add(journal: DecisionJournal, args) -> int:
 
     due = datetime.fromisoformat(entry.due_at).strftime("%d/%m/%Y")
     print(f"\n  {_colour(entry.entry_id, BOLD)}  verdict attendu le {due}")
-    print(_colour(f"  « {entry.predicted} » — tu dis {entry.probability:.0%}\n", DIM))
+    print(_colour(f"  « {entry.predicted} » - tu dis {entry.probability:.0%}\n", DIM))
     return 0
 
 
@@ -94,7 +94,7 @@ def cmd_apply(journal: DecisionJournal, args) -> int:
     productive while nothing moves.
     """
     entry = journal.add(
-        title=f"{args.company} — {args.role}",
+        title=f"{args.company} - {args.role}",
         action=args.action or "candidature envoyée",
         predicted=f"entretien décroché sous {args.days} jours",
         probability=args.probability,
@@ -154,7 +154,7 @@ def cmd_resolve(journal: DecisionJournal, args) -> int:
 
 def cmd_abandon(journal: DecisionJournal, args) -> int:
     entry = journal.abandon(args.entry_id, reason=args.reason)
-    print(f"\n  {entry.entry_id}  abandonné — {entry.lesson}\n")
+    print(f"\n  {entry.entry_id}  abandonné - {entry.lesson}\n")
     return 0
 
 
@@ -209,9 +209,9 @@ def cmd_review(journal: DecisionJournal, args) -> int:
         if abs(gap) < 0.05:
             print(_colour("  calibration correcte", GREEN))
         elif gap > 0:
-            print(_colour(f"  surconfiance de {gap:+.0%} — tu crois plus que ce qui arrive", RED))
+            print(_colour(f"  surconfiance de {gap:+.0%} - tu crois plus que ce qui arrive", RED))
         else:
-            print(_colour(f"  sous-confiance de {gap:+.0%} — tu réussis plus que tu ne l'oses", YELLOW))
+            print(_colour(f"  sous-confiance de {gap:+.0%} - tu réussis plus que tu ne l'oses", YELLOW))
         print(_colour(f"  Brier moyen {report['mean_brier']:.3f}  (0 = parfait, 0.25 = pile ou face)", DIM))
 
     print(_colour("\n  PAR RANG DE LA CONSTITUTION\n", BOLD))
@@ -219,9 +219,9 @@ def cmd_review(journal: DecisionJournal, args) -> int:
     for tier in Tier:
         stats = report["by_tier"].get(tier.value)
         if not stats:
-            print(_colour(f"  {tier.value.lower():<16}{'—':>10}{'—':>9}{'—':>12}{'—':>14}", DIM))
+            print(_colour(f"  {tier.value.lower():<16}{'-':>10}{'-':>9}{'-':>12}{'-':>14}", DIM))
             continue
-        hit = f"{stats['hit_rate']:.0%}" if stats["hit_rate"] is not None else "—"
+        hit = f"{stats['hit_rate']:.0%}" if stats["hit_rate"] is not None else "-"
         line = (f"  {tier.value.lower():<16}{stats['decisions']:>10}{stats['hours']:>8g}h"
                 f"{stats['hours_that_worked']:>11g}h{stats['hours_unresolved']:>13g}h   {hit}")
         print(line)
@@ -229,10 +229,10 @@ def cmd_review(journal: DecisionJournal, args) -> int:
     empty_high = [t for t in list(Tier)[:2] if t.value not in report["by_tier"]]
     if empty_high:
         names = " et ".join(t.value.lower() for t in empty_high)
-        print(_colour(f"\n  ⚠ Aucune décision sur {names} — les deux premiers rangs de ta hiérarchie.", RED))
+        print(_colour(f"\n  /!\\ Aucune décision sur {names} - les deux premiers rangs de ta hiérarchie.", RED))
 
     if not report["chain_intact"]:
-        print(_colour("\n  ⚠ La chaîne du journal est rompue : une prédiction a été réécrite.", RED))
+        print(_colour("\n  /!\\ La chaîne du journal est rompue : une prédiction a été réécrite.", RED))
     print()
     return 0
 
@@ -294,7 +294,32 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _survive_narrow_consoles() -> None:
+    """Ne jamais planter parce qu'un caractère ne rentre pas dans la console.
+
+    La console de Windows écrit dans la page de code du système -- cp850 en
+    France -- et Python lève `UnicodeEncodeError` sur ce qu'elle ne sait pas
+    représenter. Cela suffit à interrompre une commande au moment d'afficher
+    son résultat.
+
+    Les messages de ce fichier sont tenus dans ce que cp850 accepte, et un
+    test le vérifie. Mais le journal contient tes mots, pas les miens : un
+    titre avec un emoji, une leçon copiée-collée d'ailleurs, et l'affichage
+    casse alors que l'écriture avait réussi. Remplacer un caractère par un
+    point d'interrogation est une gêne ; perdre la commande n'en est pas une.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (OSError, ValueError):  # flux redirigé qui n'accepte pas d'être reconfiguré
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _survive_narrow_consoles()
     args = build_parser().parse_args(argv)
     journal = DecisionJournal(args.db)
     try:

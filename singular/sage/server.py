@@ -372,7 +372,7 @@ def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int =
     print(f"  sur cette machine         http://127.0.0.1:{port}/")
     if exposed:
         print(f"  depuis ton iPhone         http://{local_address()}:{port}/?k={token}")
-        print("\n  Sur l'iPhone : ouvre cette adresse dans Safari, puis Partager →")
+        print("\n  Sur l'iPhone : ouvre cette adresse dans Safari, puis Partager, puis")
         print("  « Sur l'écran d'accueil ». Tu auras une icône, sans barre de navigateur.")
         print("\n  Le jeton dans l'adresse protège ton journal des autres appareils du wifi.")
         print("  Sans lui, toute requête venue d'ailleurs que de cette machine est refusée.")

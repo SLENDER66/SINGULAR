@@ -220,7 +220,9 @@ def test_apply_records_an_interview_not_a_reply(tmp_path):
     db = str(tmp_path / "journal.db")
     assert main(["--db", db, "apply", "Anthropic", "Ingénieur agents"]) == 0
     entry = DecisionJournal(db).entries()[0]
-    assert entry.title == "Anthropic — Ingénieur agents"
+    # Tiret simple, pas cadratin : le titre s'affiche dans une console Windows,
+    # dont la page de code française ne connaît pas le second.
+    assert entry.title == "Anthropic - Ingénieur agents"
     assert "entretien" in entry.predicted
     assert entry.tier is Tier.STABILITE
     assert 0 < entry.probability < 0.5, "the default should be an honest base rate"
