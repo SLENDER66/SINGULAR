@@ -38,6 +38,18 @@ consts (recursing into nested code), names, varnames, freevars, cellvars, the
 argument counts and the flags -- so an implementation differs from another
 whenever anything it would actually do differs.
 
+For a class, every attribute counts, not only the ones carrying `__code__`: a
+`property` holds its code in its getter, a `functools.partial` in its target and
+bound arguments, and a class constant is where an endpoint or an account number
+naturally lives. Attributes that are neither code nor an immutable value are
+recorded by type alone, so a class-level cache cannot revoke a live capability
+by filling up.
+
+What stays uncovered, deliberately: what a global name resolves to. `co_names`
+records that a function calls `post`, never which `post`. Covering the resolved
+values would fold live module state into the identity; rewriting the function
+object, which is the easier tampering, is caught.
+
 Class bytecode says nothing about what an instance holds, so two providers of
 the same class pointing at different endpoints were the same artifact by this
 measure: after a restart, re-registering the token against a differently
@@ -58,6 +70,7 @@ import sys
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from secrets import token_urlsafe
 from threading import RLock
@@ -206,6 +219,75 @@ def _function_state(func: Any) -> dict[str, Any]:
     }
 
 
+#: Class attributes of these types are covered by value. Anything else -- a
+#: dict, a list, an arbitrary object -- is covered by type only, because a class
+#: attribute used as a cache would otherwise change the artifact's identity while
+#: it runs, revoking a live capability over an implementation detail.
+_IMMUTABLE_DATA_TYPES = (str, bytes, bool, int, float, complex, type(None))
+
+
+def _class_data_identity(value: Any) -> Any:
+    """A class attribute that is not code: its value when that is stable."""
+    if isinstance(value, (*_IMMUTABLE_DATA_TYPES, tuple, frozenset)):
+        try:
+            return {"const": _const_identity(value)}
+        except ValueError:
+            pass
+    return {"type": type(value).__qualname__}
+
+
+def _member_identity(member: Any) -> Any:
+    """What one class attribute contributes to the identity of its class.
+
+    Skipping everything without `__code__` -- which is what this did -- left
+    three ways to put the interesting part of a class somewhere unhashed: a
+    `property`, whose getter holds the code; a `functools.partial`, whose target
+    and bound arguments are the behaviour; and a plain class constant, which is
+    where an endpoint or an account number naturally lives. Two classes of the
+    same name differing only in one of those were the same artifact.
+    """
+    code = getattr(member, "__code__", None)
+    if code is not None:
+        return {"code": _code_payload(code), "state": _function_state(member)}
+    func = getattr(member, "__func__", None)
+    if func is not None and getattr(func, "__code__", None) is not None:
+        return {"bound": {"code": _code_payload(func.__code__), "state": _function_state(func)}}
+    if isinstance(member, property):
+        return {"property": [None if part is None else _member_identity(part)
+                             for part in (member.fget, member.fset, member.fdel)]}
+    if isinstance(member, partial):
+        return {"partial": {
+            "func": _member_identity(member.func),
+            "args": [_canonical_value(arg) for arg in member.args],
+            "keywords": {str(name): _canonical_value(value)
+                         for name, value in sorted(member.keywords.items(), key=lambda pair: str(pair[0]))},
+        }}
+    if callable(member):
+        owner = type(member)
+        called = getattr(owner, "__call__", None)
+        call_code = getattr(called, "__code__", None)
+        return {"callable": [getattr(member, "__module__", "") or owner.__module__,
+                             getattr(member, "__qualname__", "") or owner.__qualname__,
+                             None if call_code is None else _code_payload(call_code)]}
+    return {"data": _class_data_identity(member)}
+
+
+def _class_identity(kind: type) -> bytes:
+    parts: list[Any] = []
+    for name in sorted(dir(kind)):
+        if name.startswith("__"):
+            continue
+        try:
+            member = getattr(kind, name)
+        except Exception:
+            # A descriptor that refuses to be read is recorded as such: silence
+            # here would mean an attribute could hide behind raising.
+            parts.append([name, {"unreadable": True}])
+            continue
+        parts.append([name, _member_identity(member)])
+    return json.dumps(parts, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
 def _code_identity(target: Any) -> tuple[str, str, str, bytes, dict[str, Any]]:
     """(kind, module, qualname, code identity bytes, function state) for a target."""
     code = getattr(target, "__code__", None)
@@ -217,15 +299,7 @@ def _code_identity(target: Any) -> tuple[str, str, str, bytes, dict[str, Any]]:
         return ("method", getattr(func, "__module__", "") or "", getattr(func, "__qualname__", "") or "",
                 _code_bytes(func.__code__), _function_state(func))
     kind = type(target)
-    parts: list[bytes] = []
-    for name in sorted(dir(kind)):
-        if name.startswith("__"):
-            continue
-        member = getattr(kind, name, None)
-        member_code = getattr(member, "__code__", None)
-        if member_code is not None:
-            parts.append(name.encode("utf-8") + b"\x1f" + _code_bytes(member_code))
-    return ("object", kind.__module__, kind.__qualname__, b"\x1e".join(parts), {})
+    return ("object", kind.__module__, kind.__qualname__, _class_identity(kind), {})
 
 
 def _declared_identity(target: Any) -> Any:

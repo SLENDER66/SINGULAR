@@ -14,6 +14,7 @@ these tests are written against that scenario rather than against the digest.
 """
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 
 import pytest
@@ -105,6 +106,52 @@ def test_a_provider_class_is_covered_the_same_way():
     assert artifact_fingerprint(provider("bank.example")) != artifact_fingerprint(provider("attacker.example"))
 
 
+def _provider_class(body: str) -> object:
+    namespace: dict[str, object] = {
+        "__name__": PAYMENTS,
+        "functools": functools,
+        "pay_supplier": lambda *args: "supplier",
+        "pay_attacker": lambda *args: "attacker",
+    }
+    exec(compile(f"class Provider:\n{body}\n", "payments.py", "exec"), namespace)  # noqa: S102
+    return namespace["Provider"]()
+
+
+def test_a_class_constant_is_covered():
+    """Where an endpoint or an account number naturally lives."""
+    body = '    ENDPOINT = "https://{host}/pay"\n    def execute(self, request, key):\n        return post(self.ENDPOINT)'
+    supplier = _provider_class(body.format(host="bank.example"))
+    attacker = _provider_class(body.format(host="attacker.example"))
+    assert artifact_fingerprint(supplier) != artifact_fingerprint(attacker)
+    assert artifact_fingerprint(supplier) == artifact_fingerprint(_provider_class(body.format(host="bank.example")))
+
+
+def test_a_property_getter_is_covered():
+    """`getattr(cls, name)` on a property yields the property, which has no __code__."""
+    body = '    @property\n    def endpoint(self):\n        return "https://{host}/pay"'
+    assert artifact_fingerprint(_provider_class(body.format(host="bank.example"))) != artifact_fingerprint(
+        _provider_class(body.format(host="attacker.example"))
+    )
+
+
+def test_a_partial_class_member_is_covered():
+    """A partial's target and bound arguments are its behaviour."""
+    assert artifact_fingerprint(_provider_class("    execute = functools.partial(pay_supplier)")) != artifact_fingerprint(
+        _provider_class("    execute = functools.partial(pay_attacker)")
+    )
+    assert artifact_fingerprint(_provider_class('    execute = functools.partial(pay_supplier, "a")')) != artifact_fingerprint(
+        _provider_class('    execute = functools.partial(pay_supplier, "b")')
+    )
+
+
+def test_a_mutable_class_attribute_does_not_move_the_identity():
+    """The stated limit on the other side: a cache must not revoke a live capability."""
+    provider = _provider_class("    CACHE = {}\n    def execute(self, request, key):\n        return None")
+    before = artifact_fingerprint(provider)
+    type(provider).CACHE["seen"] = 1
+    assert artifact_fingerprint(provider) == before
+
+
 def test_constants_that_json_would_flatten_stay_distinct():
     """1, True and 1.0 are one value to json; they are three constants here."""
     fingerprints = {artifact_fingerprint(_compile(f"    return {literal}")) for literal in ("1", "True", "1.0")}
@@ -127,6 +174,29 @@ def test_a_constant_that_cannot_be_canonicalised_is_refused_not_ignored(tmp_path
     store = DurableCapabilityStore(tmp_path / "capabilities.db")
     store.bind("cap_const", _pays("bank.example"))
     assert store.verify("cap_const", handler) is False
+
+
+def test_what_a_global_resolves_to_is_a_stated_limit(tmp_path: Path):
+    """The boundary of the guarantee, asserted so it cannot quietly move.
+
+    `co_names` records that a function calls `post`; it cannot record which
+    `post`. Covering the resolved values would fold live module state into the
+    identity -- a module-level counter would revoke the capability while it ran
+    -- so a caller who can rewrite a module's globals can change behaviour under
+    a stable fingerprint. Rewriting the function object itself, which is the
+    easier tampering, is caught.
+    """
+    source = "def send(action):\n    return post(action)\n"
+    supplier: dict[str, object] = {"__name__": PAYMENTS, "post": lambda action: "supplier"}
+    attacker: dict[str, object] = {"__name__": PAYMENTS, "post": lambda action: "attacker"}
+    exec(compile(source, "payments.py", "exec"), supplier)  # noqa: S102
+    exec(compile(source, "payments.py", "exec"), attacker)  # noqa: S102
+
+    assert artifact_fingerprint(supplier["send"]) == artifact_fingerprint(attacker["send"])
+
+    store = DurableCapabilityStore(tmp_path / "capabilities.db")
+    store.bind("cap_globals", supplier["send"])
+    assert store.verify("cap_globals", attacker["send"]) is True, "covered by neither half; the limit is real"
 
 
 # --- the restart the durable record exists for -------------------------------
