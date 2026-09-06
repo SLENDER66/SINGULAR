@@ -1,0 +1,16 @@
+{
+  "name": "SINGULAR · le Sage",
+  "short_name": "Sage",
+  "description": "Ce que tu as prédit, ce qui est arrivé, et ce que ça dit de toi.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

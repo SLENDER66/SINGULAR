@@ -5,6 +5,7 @@
     python -m singular resolve    record what actually happened
     python -m singular review     where your hours went, where you are wrong
     python -m singular list       everything
+    python -m singular sage       the same journal as an app, installable on a phone
 
 A tool that takes more than thirty seconds to use is a tool you stop using, so
 `add` asks six questions and nothing else.
@@ -176,6 +177,17 @@ def cmd_list(journal: DecisionJournal, args) -> int:
     return 0
 
 
+def cmd_sage(journal: DecisionJournal, args) -> int:
+    """Le même journal, en app, ouvrable depuis le téléphone.
+
+    Importé ici et pas en tête de fichier : les commandes du terminal ne doivent
+    rien payer pour un serveur qu'elles n'utilisent pas.
+    """
+    from .sage.server import serve
+
+    return serve(db=args.db, host=args.host, port=args.port, lan=args.lan)
+
+
 def cmd_review(journal: DecisionJournal, args) -> int:
     report = journal.review()
     if not report["decisions"]:
@@ -272,6 +284,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     review = sub.add_parser("review", help="où vont tes heures, où ta confiance se trompe")
     review.set_defaults(func=cmd_review)
+
+    sage = sub.add_parser("sage", help="ouvrir le Sage, l'app à installer sur ton téléphone")
+    sage.add_argument("--port", type=int, default=8765)
+    sage.add_argument("--host", default="127.0.0.1", help="ignoré avec --lan")
+    sage.add_argument("--lan", action="store_true",
+                      help="rendre l'app joignable depuis ton téléphone sur le même wifi")
+    sage.set_defaults(func=cmd_sage)
     return parser
 
 

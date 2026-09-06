@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SINGULAR · le Sage</title>
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sage">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main id="app">
+  <header class="brief">
+    <p class="eyebrow">SINGULAR</p>
+    <h1 id="headline">…</h1>
+    <p id="subline" class="subline"></p>
+  </header>
+
+  <section id="items" class="items" aria-live="polite"></section>
+
+  <section id="numbers" class="numbers" hidden>
+    <h2>Où vont tes heures</h2>
+    <div class="grid" id="figures"></div>
+  </section>
+
+  <section id="open-list" class="entries" hidden>
+    <h2>Décisions ouvertes</h2>
+    <ul id="open-entries"></ul>
+  </section>
+
+  <p id="error" class="error" hidden></p>
+</main>
+
+<button id="add-button" class="fab" type="button" aria-label="Enregistrer une décision">+</button>
+
+<dialog id="add-dialog" class="sheet">
+  <form id="add-form" method="dialog">
+    <h2>Une décision, avant de la prendre</h2>
+
+    <label>Décision, en une ligne
+      <input name="title" required maxlength="140" autocomplete="off" placeholder="Postuler chez Anthropic">
+    </label>
+    <label>Ce que tu vas faire
+      <input name="action" required maxlength="280" autocomplete="off" placeholder="candidature + projet joint">
+    </label>
+    <label>Le résultat observable que tu attends
+      <input name="predicted" required maxlength="280" autocomplete="off" placeholder="un entretien décroché">
+      <small>Il doit pouvoir être tranché par oui ou non. « le système sera plus clair » ne peut pas l'être.</small>
+    </label>
+
+    <label>Probabilité que ça arrive : <output id="probability-out">60 %</output>
+      <input name="probability" id="probability" type="range" min="5" max="95" step="5" value="60">
+      <small>La certitude est refusée : elle ne peut pas avoir tort, donc elle n'apprend rien.</small>
+    </label>
+
+    <label>Rang de ta constitution
+      <select name="tier" id="tier"></select>
+    </label>
+
+    <div class="pair">
+      <label>Heures que ça coûte
+        <input name="cost_hours" type="number" min="0" step="0.5" value="4" inputmode="decimal">
+      </label>
+      <label>On vérifie dans
+        <input name="horizon_days" type="number" min="1" step="1" value="14" inputmode="numeric">
+        <small>jours</small>
+      </label>
+    </div>
+
+    <p class="form-error" id="add-error" hidden></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="add-cancel">Annuler</button>
+      <button type="submit" class="primary">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="resolve-dialog" class="sheet">
+  <form id="resolve-form" method="dialog">
+    <h2>Qu'est-ce qui s'est passé ?</h2>
+    <p id="resolve-predicted" class="quote"></p>
+    <label>Ce que tu en retiens (facultatif)
+      <input name="lesson" maxlength="280" autocomplete="off">
+    </label>
+    <p class="form-error" id="resolve-error" hidden></p>
+    <div class="actions three">
+      <button type="button" class="ghost" id="resolve-cancel">Annuler</button>
+      <button type="button" class="no" id="resolve-no">Pas arrivé</button>
+      <button type="button" class="yes" id="resolve-yes">Arrivé</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

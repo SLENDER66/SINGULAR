@@ -1,0 +1,210 @@
+/* Sombre par défaut : cette app s'ouvre le matin et le soir, rarement en plein
+   jour, et elle doit tenir dans un pouce sur un iPhone. */
+:root {
+  --bg: #0b0d10;
+  --raised: #14181d;
+  --line: #232a32;
+  --text: #e7ecf2;
+  --muted: #8c97a5;
+  --gold: #c9a227;
+  --critique: #e5484d;
+  --attention: #d9a441;
+  --info: #4f8cc9;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: calc(var(--safe-top) + 28px) 20px calc(var(--safe-bottom) + 110px);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+h1 {
+  margin: 0;
+  font-size: 27px;
+  line-height: 1.25;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+}
+
+.subline { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+
+h2 {
+  margin: 34px 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* --- les observations --- */
+
+.items { margin-top: 26px; display: grid; gap: 12px; }
+
+.item {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--info);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.item.CRITIQUE { border-left-color: var(--critique); }
+.item.ATTENTION { border-left-color: var(--attention); }
+
+.item h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.item p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+
+.item button {
+  margin-top: 12px;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 15px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.item button:active { background: var(--line); }
+
+/* --- les chiffres --- */
+
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+.figure {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.figure .value { font-size: 24px; font-weight: 620; letter-spacing: -0.02em; }
+.figure .label { margin-top: 3px; font-size: 12px; color: var(--muted); }
+.figure.warn .value { color: var(--attention); }
+
+/* --- la liste --- */
+
+.entries ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.entry {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  cursor: pointer;
+}
+.entry:active { border-color: var(--gold); }
+.entry .title { flex: 1; font-size: 15px; }
+.entry .meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.entry.late .meta { color: var(--critique); }
+
+/* --- le bouton --- */
+
+.fab {
+  position: fixed;
+  right: 20px;
+  bottom: calc(var(--safe-bottom) + 22px);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  background: var(--gold);
+  color: #17130a;
+  font-size: 32px;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+.fab:active { transform: translateY(1px); }
+
+/* --- les formulaires --- */
+
+.sheet {
+  width: min(560px, 100%);
+  margin: auto auto 0;
+  border: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  background: var(--raised);
+  color: var(--text);
+  padding: 22px 20px calc(var(--safe-bottom) + 22px);
+  max-height: 92vh;
+}
+.sheet::backdrop { background: rgba(0, 0, 0, 0.6); }
+.sheet form { display: grid; gap: 15px; }
+.sheet h2 { margin: 0; font-size: 18px; letter-spacing: normal; text-transform: none; color: var(--text); }
+
+label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+label small { color: var(--muted); font-size: 12px; opacity: 0.85; }
+
+input[type="text"], input:not([type]), input[type="number"], select {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 16px; /* en dessous de 16px, Safari zoome à la saisie */
+  width: 100%;
+}
+input:focus, select:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+input[type="range"] { width: 100%; accent-color: var(--gold); }
+output { color: var(--text); font-weight: 600; }
+
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.quote {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 10px 10px 0;
+  font-size: 15px;
+}
+
+.actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+.actions.three { justify-content: space-between; }
+
+.actions button {
+  border-radius: 999px;
+  padding: 12px 20px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 560;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.actions .primary { background: var(--gold); color: #17130a; border-color: var(--gold); }
+.actions .yes { background: #1f7a4d; border-color: #1f7a4d; color: #eafff3; }
+.actions .no { background: none; border-color: var(--critique); color: var(--critique); }
+
+.error, .form-error {
+  margin: 18px 0 0;
+  color: var(--critique);
+  font-size: 14px;
+}
