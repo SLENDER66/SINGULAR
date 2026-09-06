@@ -227,9 +227,19 @@ class SageApp:
 
         Sur la boucle locale il n'y a personne d'autre : demander un jeton pour
         `127.0.0.1` n'ajoute rien et fait échouer le cas où on l'a perdu.
+
+        Ailleurs, l'absence de jeton **refuse**. Elle autorisait, et c'était la
+        faille : la garde dépendait de la façon dont on avait demandé le
+        démarrage -- l'option `--lan`, qui seule créait un jeton -- et non de ce
+        que le serveur exposait réellement. `--host 0.0.0.0` sans `--lan`
+        écoutait donc tout le réseau avec `token = ""`, et servait le journal
+        personnel à qui le demandait. Une propriété de sécurité déduite d'une
+        intention plutôt que d'un fait.
         """
-        if not self.token or client_host in LOOPBACK:
+        if client_host in LOOPBACK:
             return True
+        if not self.token:
+            return False
         supplied = header_token or query.get("k", "")
         return secrets.compare_digest(supplied, self.token)
 
@@ -337,22 +347,35 @@ def build_server(app: SageApp, host: str, port: int) -> ThreadingHTTPServer:
     return ThreadingHTTPServer((host, port), handler)
 
 
+def is_loopback_bind(host: str) -> bool:
+    """L'adresse d'écoute reste-t-elle sur cette machine ?
+
+    C'est le fait dont dépend la sécurité du serveur, et il se lit ici plutôt
+    que dans l'option qu'on a tapée.
+    """
+    return host.strip().lower() in {"127.0.0.1", "::1", "localhost", ""}
+
+
 def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int = 8765, lan: bool = False) -> int:
     """Démarrer le Sage. Affiche l'adresse à ouvrir, y compris depuis le téléphone."""
     journal = DecisionJournal(db)
-    token = read_token() if lan else ""
+    bind = "0.0.0.0" if lan else host  # noqa: S104 - exposition demandée, et protégée par un jeton
+    exposed = not is_loopback_bind(bind)
+    # Le jeton suit l'exposition réelle, pas l'option choisie : `--host 0.0.0.0`
+    # expose autant que `--lan` et doit être protégé pareil.
+    token = read_token() if exposed else ""
     app = SageApp(journal, token=token)
-    bind = "0.0.0.0" if lan else host  # noqa: S104 - demandé explicitement par --lan
     server = build_server(app, bind, port)
     started = datetime.now().strftime("%H:%M")
 
     print(f"\n  SINGULAR · le Sage        démarré à {started}")
-    print(f"  sur ce PC                 http://127.0.0.1:{port}/")
-    if lan:
+    print(f"  sur cette machine         http://127.0.0.1:{port}/")
+    if exposed:
         print(f"  depuis ton iPhone         http://{local_address()}:{port}/?k={token}")
         print("\n  Sur l'iPhone : ouvre cette adresse dans Safari, puis Partager →")
         print("  « Sur l'écran d'accueil ». Tu auras une icône, sans barre de navigateur.")
         print("\n  Le jeton dans l'adresse protège ton journal des autres appareils du wifi.")
+        print("  Sans lui, toute requête venue d'ailleurs que de cette machine est refusée.")
     else:
         print("\n  Pour y accéder depuis ton iPhone : relance avec --lan")
     print("\n  Ctrl+C pour arrêter.\n")
@@ -366,4 +389,5 @@ def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int =
     return 0
 
 
-__all__ = ["SageApp", "SageError", "SageHandler", "build_server", "local_address", "read_token", "serve"]
+__all__ = ["SageApp", "SageError", "SageHandler", "build_server", "is_loopback_bind",
+           "local_address", "read_token", "serve"]
