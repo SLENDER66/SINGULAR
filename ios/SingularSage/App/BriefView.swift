@@ -9,18 +9,26 @@ struct BriefView: View {
     @State private var resolving: Entry?
     @State private var now = Date()
 
+    /// Ce que le Sage voit, calculé une fois par rendu.
+    ///
+    /// `journal.verify()` relit toute la chaîne et refait une empreinte par
+    /// entrée. En propriété calculée, chaque sous-vue qui lisait `notice` le
+    /// refaisait : trois fois par rendu, et SwiftUI rend souvent. Invisible
+    /// sur le journal d'aujourd'hui, insupportable sur celui d'une vie — c'est
+    /// justement l'échelle pour laquelle cette app est écrite.
     private var notice: Notice {
         NoticeEngine.build(entries: journal.entries, at: now, chainIntact: journal.verify())
     }
 
     var body: some View {
-        NavigationStack {
+        let notice = self.notice
+        return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    header
+                    header(notice)
                     storageFailure
-                    observations
-                    figures
+                    observations(notice)
+                    figures(notice.report)
                     openDecisions
                 }
                 .padding(20)
@@ -41,7 +49,7 @@ struct BriefView: View {
 
     // MARK: Morceaux
 
-    private var header: some View {
+    private func header(_ notice: Notice) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("SINGULAR")
                 .font(.system(size: 11, weight: .semibold))
@@ -87,7 +95,7 @@ struct BriefView: View {
         }
     }
 
-    private var observations: some View {
+    private func observations(_ notice: Notice) -> some View {
         VStack(spacing: 12) {
             ForEach(notice.items) { item in
                 observation(item)
@@ -141,16 +149,15 @@ struct BriefView: View {
     }
 
     @ViewBuilder
-    private var figures: some View {
-        let report = notice.report
+    private func figures(_ report: Report) -> some View {
         if report.decisions > 0 {
             VStack(alignment: .leading, spacing: 12) {
                 sectionTitle("Où vont tes heures")
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    figure(Numbers.compact(report.hoursTotal) + "h", "engagées en tout")
-                    figure(Numbers.compact(report.hoursThatWorked) + "h", "ont produit le résultat attendu",
+                    figure("\(Numbers.compact(report.hoursTotal))h", "engagées en tout")
+                    figure("\(Numbers.compact(report.hoursThatWorked))h", "ont produit le résultat attendu",
                            warn: report.hoursThatWorked == 0 && report.resolved > 0)
-                    figure(Numbers.compact(report.hoursUnresolved) + "h", "encore sans verdict",
+                    figure("\(Numbers.compact(report.hoursUnresolved))h", "encore sans verdict",
                            warn: report.hoursUnresolved > report.hoursThatWorked)
                     figure("\(report.overdue)", "à trancher", warn: report.overdue > 0)
                     if let gap = report.overconfidence, report.resolved >= NoticeEngine.calibrationMinimum,
