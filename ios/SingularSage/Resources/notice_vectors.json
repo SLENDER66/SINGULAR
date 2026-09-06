@@ -52,11 +52,6 @@
             "severity": "ATTENTION",
             "title": "Aucune décision sur Stabilité",
             "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
-          },
-          {
-            "severity": "ATTENTION",
-            "title": "4h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
           }
         ]
       }
@@ -92,11 +87,6 @@
             "severity": "ATTENTION",
             "title": "Aucune décision sur Stabilité",
             "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
-          },
-          {
-            "severity": "ATTENTION",
-            "title": "4h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
           }
         ]
       }
@@ -143,11 +133,6 @@
             "severity": "ATTENTION",
             "title": "Aucune décision sur Stabilité",
             "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 8h sont allées ailleurs."
-          },
-          {
-            "severity": "ATTENTION",
-            "title": "8h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
           }
         ]
       }
@@ -178,11 +163,6 @@
             "severity": "ATTENTION",
             "title": "Aucune décision sur Stabilité et Revenus",
             "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ces rangs n’ont reçu aucune décision, alors que 60h sont allées ailleurs."
-          },
-          {
-            "severity": "ATTENTION",
-            "title": "60h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
           },
           {
             "severity": "INFO",
@@ -218,11 +198,6 @@
             "severity": "ATTENTION",
             "title": "Aucune décision sur Revenus",
             "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
-          },
-          {
-            "severity": "ATTENTION",
-            "title": "4h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
           },
           {
             "severity": "INFO",
@@ -501,14 +476,44 @@
             "detail": "1 décision a dépassé son horizon. Elle attend depuis 13 jours. Passé une semaine, un verdict qu'on ne rend pas n'est plus un oubli : c'est le résultat qu'on préfère ne pas voir."
           },
           {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 10 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "premiere_decision_sans_reproche",
+      "why": "Le cas réel du premier matin : une décision ouverte, échéance lointaine, rien de tranché. Le Sage n'a rien à reprocher — un verdict qu'on ne pouvait pas rendre n'est pas une faute.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "Un entretien",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Aucune décision sur Stabilité.",
+        "severity": "ATTENTION",
+        "items": [
+          {
             "severity": "ATTENTION",
-            "title": "8h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
           },
           {
             "severity": "INFO",
             "title": "1 décision ouverte",
-            "detail": "La prochaine échéance tombe dans 10 jours : « le résultat observable », que tu donnes à 60%."
+            "detail": "La prochaine échéance tombe dans 13 jours : « Un entretien », que tu donnes à 75%."
           }
         ]
       }

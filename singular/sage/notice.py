@@ -185,10 +185,22 @@ def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
 
 
 def _unresolved_hours_item(report: dict[str, Any]) -> NoticeItem | None:
-    """De l'activité qui ne s'est jamais transformée en résultat."""
+    """De l'activité qui ne s'est jamais transformée en résultat.
+
+    Le reproche n'a de sens qu'une fois qu'un verdict a été rendu. Sur un
+    journal neuf il se déclenchait dès la première décision : quatre heures
+    engagées, zéro heure qui a produit, donc « tu confonds activité et
+    résultat » — alors que l'échéance tombait dans treize jours et que rien
+    n'aurait pu être tranché. C'était factuellement faux, impossible à éviter,
+    et adressé à quelqu'un qui venait d'écrire sa première ligne.
+
+    « Contre 0h qui ont produit ce que tu attendais » compare à un ensemble
+    vide tant que rien n'a été tranché. On attend donc d'avoir de quoi
+    comparer.
+    """
     unresolved = report["hours_unresolved"]
     worked = report["hours_that_worked"]
-    if not unresolved or unresolved <= worked:
+    if not report["resolved"] or not unresolved or unresolved <= worked:
         return None
     return NoticeItem(
         "ATTENTION" if worked == 0 else "INFO",

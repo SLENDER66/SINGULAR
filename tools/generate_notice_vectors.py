@@ -132,6 +132,17 @@ CASES: list[dict[str, Any]] = [
         ],
     },
     {
+        "name": "premiere_decision_sans_reproche",
+        "why": "Le cas réel du premier matin : une décision ouverte, échéance "
+               "lointaine, rien de tranché. Le Sage n'a rien à reprocher — un "
+               "verdict qu'on ne pouvait pas rendre n'est pas une faute.",
+        "at_offset_days": 1,
+        "entries": [
+            _entry("Postuler", tier=Tier.REVENUS, probability=0.75, hours=4.0, days=14,
+                   predicted="Un entretien"),
+        ],
+    },
+    {
         "name": "tout_va_bien",
         "why": "Le Sage doit savoir se taire, sinon on cesse de le lire.",
         "at_offset_days": 1,

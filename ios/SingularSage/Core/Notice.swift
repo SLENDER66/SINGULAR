@@ -240,10 +240,16 @@ enum NoticeEngine {
     }
 
     /// De l'activité qui ne s'est jamais transformée en résultat.
+    ///
+    /// Le reproche attend qu'un verdict ait été rendu. Sans cette condition il
+    /// tombait dès la première décision — « tu confonds activité et résultat »
+    /// alors que l'échéance était dans treize jours et que rien n'aurait pu
+    /// être tranché. « Contre 0h qui ont produit » compare à un ensemble vide
+    /// tant que rien n'est tranché.
     private static func unresolvedHoursItem(_ report: Report) -> NoticeItem? {
         let unresolved = report.hoursUnresolved
         let worked = report.hoursThatWorked
-        guard unresolved != 0, unresolved > worked else { return nil }
+        guard report.resolved > 0, unresolved != 0, unresolved > worked else { return nil }
         return NoticeItem(
             severity: worked == 0 ? .attention : .info,
             title: "\(Numbers.compact(unresolved))h engagées sans verdict",

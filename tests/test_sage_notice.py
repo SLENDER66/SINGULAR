@@ -169,3 +169,57 @@ def test_the_report_is_serialisable(tmp_path):
     assert payload["severity"] in {"CRITIQUE", "ATTENTION", "INFO"}
     assert isinstance(payload["items"], list)
     assert payload["report"]["decisions"] == 1
+
+
+# --- ce qu'on ne reproche pas à quelqu'un qui commence ------------------------
+
+def test_the_first_decision_is_not_accused_of_confusing_activity_with_results(tmp_path):
+    """Le cas réel du premier soir, et il était faux.
+
+    Une décision enregistrée, quatre heures engagées, échéance dans deux
+    semaines. Le Sage répondait « 4h engagées sans verdict — contre 0h qui ont
+    produit ce que tu attendais. C'est la définition que ta constitution donne
+    de confondre activité et résultat. »
+
+    Rien n'aurait pu être tranché : l'horizon n'était pas atteint. Le reproche
+    était impossible à éviter, il tombait sur la toute première ligne écrite,
+    et il comparait à un ensemble vide. Un rapport qui accuse dès qu'on
+    commence n'est plus lu — et il avait tort.
+    """
+    journal = _journal(tmp_path)
+    _add(journal, tier=Tier.REVENUS, hours=4.0, days=14, probability=0.75)
+    titles = _titles(build_notice(journal, now=NOW + timedelta(days=1)))
+
+    assert not any("engagées sans verdict" in title for title in titles), titles
+    assert titles == ["Aucune décision sur Stabilité", "1 décision ouverte"]
+
+
+def test_hours_without_a_verdict_are_reported_once_a_verdict_exists(tmp_path):
+    """L'autre côté : dès qu'il y a de quoi comparer, l'observation revient.
+
+    Sans ce test, mettre la règle en silence permanent passerait au vert.
+    """
+    journal = _journal(tmp_path)
+    _add(journal, tier=Tier.STABILITE, hours=80.0, days=60, title="Gros chantier")
+    settled = _add(journal, tier=Tier.REVENUS, hours=2.0, days=20, title="Client")
+    journal.resolve(settled.entry_id, happened=True, now=NOW + timedelta(days=1))
+
+    titles = _titles(build_notice(journal, now=NOW + timedelta(days=2)))
+    assert any("engagées sans verdict" in title for title in titles), titles
+
+
+def test_never_settling_anything_is_still_caught_by_the_overdue_rule(tmp_path):
+    """La contre-vérification : le silence ne doit pas laisser passer l'abandon.
+
+    Quelqu'un qui enregistre des décisions et n'en tranche jamais aucune ne
+    doit pas gagner le silence du Sage. Ce n'est plus l'observation sur les
+    heures qui le dit — c'est le retard, qui est plus fort et qui nomme le
+    geste à faire.
+    """
+    journal = _journal(tmp_path)
+    for index in range(3):
+        _add(journal, tier=Tier.STABILITE, hours=30.0, days=7, title=f"Chantier {index}")
+
+    notice = build_notice(journal, now=NOW + timedelta(days=40))
+    assert notice.items[0].title == "À trancher aujourd'hui"
+    assert notice.items[0].severity == "CRITIQUE"
