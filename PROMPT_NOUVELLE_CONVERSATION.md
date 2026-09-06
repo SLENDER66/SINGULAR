@@ -44,6 +44,15 @@ d'exécution.
   exige les mêmes phrases. `tests/test_notice_vectors.py` empêche ces vecteurs
   de vieillir en silence.
 
+## Vérifie l'état en 90 secondes, avant de me croire
+
+```bash
+pip install -e '.[dev]'          # pytest n'est PAS installé dans un conteneur neuf
+python -m pytest -q              # 708 verts attendus
+python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"
+python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer
+```
+
 ## Contraintes d'environnement — ne perds pas de temps à les redécouvrir
 
 - **Aucun compilateur Swift disponible et impossible à installer** : la
@@ -55,6 +64,9 @@ d'exécution.
   vérifié n'aide personne.
 - La CI ignore `**/*.md` et `docs/**` : un commit de documentation ne déclenche
   aucun run, ce n'est pas un échec.
+- Convention de langue : commentaires et docstrings en anglais dans les modules
+  historiques, en français dans `singular/sage/` et `ios/`. Suis celle du
+  fichier que tu touches, ne convertis rien.
 - `attic/` contient 22 modules et 21 tests hors périmètre. N'y travaille pas.
 - `ruff check` sur tout le dépôt sort ~91 erreurs préexistantes dans de vieux
   tests. Vérifie **tes** fichiers, pas le dépôt entier, sinon tu bloques tes
@@ -72,10 +84,20 @@ La version gratuite et la payante donnent la **même app** : seule la durée du
 certificat change. La notification du matin est locale, donc elle marche sans
 compte payant.
 
-**Ce que j'attends de toi à la reprise :** rien sur l'iOS tant que je n'ai pas
-dit « le build est passé ». Si je te signale un test rouge, corrige le portage.
-Si je te donne des retours d'usage, traite-les. Sinon, poursuis l'audit
-adversarial ci-dessous.
+**Ce que j'attends de toi à la reprise**, dans cet ordre de probabilité :
+
+1. **Erreurs de compilation Xcode.** C'est le résultat le plus probable du
+   premier build, puisque ce Swift n'a jamais vu de compilateur. Je te colle le
+   message, tu corriges le fichier. Ne réécris pas l'architecture pour une
+   erreur de syntaxe.
+2. **Tests rouges après compilation.** Là c'est le portage qui diverge du
+   moteur Python : le test nomme le cas et montre les deux textes. Le moteur
+   Python fait foi, c'est le Swift qui a tort.
+3. **Retours d'usage** après ma semaine d'essai.
+4. Si rien de tout ça : poursuis l'audit adversarial ci-dessous.
+
+N'écris **aucune** nouvelle faculté (Mémoire, Analyse, Compétences) avant que le
+premier build soit passé.
 
 ## Coût, pour ne pas le recalculer
 
@@ -146,3 +168,13 @@ métier ou personnelle, sous forme de questionnaire.
 ## Ce que je dois faire moi-même
 
 Rien sur GitHub. Sur le Mac, quand il arrive : suivre `ios/README.md`.
+`A_FAIRE.md` à la racine dit la même chose, en plus court.
+
+## Note sur la documentation du dépôt
+
+`CLAUDE.md`, `docs/VALIDATED_EXECUTION_BOUNDARY.md` et `A_FAIRE.md` annonçaient
+un dépôt privé, une branche de travail abandonnée et une PR fermée comme
+« actuelle ». Corrigés le 2026-09-06 : les faits seulement, aucune règle
+touchée. Si tu trouves une autre affirmation périmée dans un `.md`, corrige-la
+plutôt que de la contourner — c'est déjà la troisième fois qu'une documentation
+obsolète coûte une session.
