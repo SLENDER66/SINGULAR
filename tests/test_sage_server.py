@@ -354,3 +354,39 @@ def test_nothing_served_without_the_token_carries_a_decision(from_the_network, a
         assert marker not in text, (
             f"{asset} contient {marker!r} et se sert sans jeton : le journal fuirait "
             "vers tout le réseau local.")
+
+
+# --- pouvoir donner sa clé, plutôt que buter dessus --------------------------
+
+def test_the_manifest_pins_no_start_url(from_the_network):
+    """Un point d'entrée figé perdait la clé à l'installation.
+
+    « Sur l'écran d'accueil » enregistre l'adresse d'où l'on part. Avec un
+    `start_url` dans le manifeste, iOS l'utilise à la place, et il ne peut pas
+    porter de clé — la mettre là la publierait, puisque le manifeste se sert
+    sans authentification. Sans `start_url`, l'adresse retenue est celle qui
+    est ouverte, jeton compris.
+    """
+    _, body = _fetch(from_the_network, "/manifest.webmanifest")
+    manifest = json.loads(body)
+    assert "start_url" not in manifest
+    assert manifest["display"] == "standalone", "l'app doit rester en plein écran"
+
+
+def test_the_page_offers_a_way_in_when_the_token_is_missing(from_the_network):
+    """Un refus doit laisser un recours.
+
+    L'app ajoutée à l'écran d'accueil a son propre stockage, séparé de Safari :
+    elle démarre sans rien savoir, et n'affichait que « jeton d'accès manquant
+    ou invalide ». Sans champ pour en fournir un, il n'y avait aucun geste
+    possible depuis le téléphone.
+    """
+    _, body = _fetch(from_the_network, "/")
+    page = body.decode("utf-8")
+    for marker in ('id="unlock"', 'id="unlock-form"', 'id="unlock-input"'):
+        assert marker in page, f"{marker} absent : un refus d'accès resterait sans issue"
+
+    _, script = _fetch(from_the_network, "/app.js")
+    code = script.decode("utf-8")
+    assert "askForTheToken" in code
+    assert "error.status === 401" in code, "le refus doit être reconnu par son statut"

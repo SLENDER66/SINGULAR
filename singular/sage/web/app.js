@@ -11,10 +11,21 @@ function token() {
   const fromUrl = new URLSearchParams(location.search).get("k");
   if (fromUrl) {
     try { localStorage.setItem(TOKEN_KEY, fromUrl); } catch (_) { /* mode privé */ }
-    history.replaceState(null, "", location.pathname);
+    // Le jeton reste dans l'adresse. Il en était retiré pour faire propre, et
+    // ça cassait l'installation : « Sur l'écran d'accueil » enregistre
+    // l'adresse affichée, donc une adresse déjà nettoyée de sa clé. L'icône
+    // ouvrait une app qui ne savait plus s'authentifier.
     return fromUrl;
   }
   try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (_) { return ""; }
+}
+
+/// La clé, telle qu'on peut la coller : une adresse entière ou le jeton seul.
+function readSuppliedToken(raw) {
+  const text = raw.trim();
+  if (!text) return "";
+  const match = text.match(/[?&]k=([^&\s]+)/);
+  return match ? decodeURIComponent(match[1]) : text;
 }
 
 async function api(path, options = {}) {
@@ -23,7 +34,11 @@ async function api(path, options = {}) {
   if (key) headers["X-Sage-Token"] = key;
   const response = await fetch(path, { ...options, headers });
   const payload = await response.json().catch(() => ({ message: "réponse illisible" }));
-  if (!response.ok) throw new Error(payload.message || `erreur ${response.status}`);
+  if (!response.ok) {
+    const failure = new Error(payload.message || `erreur ${response.status}`);
+    failure.status = response.status;
+    throw failure;
+  }
   return payload;
 }
 
@@ -127,10 +142,34 @@ async function refresh() {
     renderNotice(notice);
     renderOpen(listing.entries);
     $("error").hidden = true;
+    setLocked(false);
   } catch (error) {
+    if (error.status === 401) {
+      askForTheToken();
+      return;
+    }
     $("error").textContent = error.message;
     $("error").hidden = false;
   }
+}
+
+/// Sans clé, l'app ne peut rien montrer — mais elle peut demander.
+///
+/// Le message brut « jeton d'accès manquant ou invalide » laissait sans
+/// recours : l'app ajoutée à l'écran d'accueil a son propre stockage, séparé
+/// de Safari, et rien dans son interface ne permettait d'en fournir un.
+function askForTheToken() {
+  $("error").hidden = true;
+  setLocked(true);
+}
+
+/// Masquer par une classe, pas en touchant chaque section : `#numbers` et
+/// `#open-list` portent déjà leur propre `hidden`, que le rendu pilote selon
+/// les données. Les rouvrir de force afficherait des cadres vides.
+function setLocked(locked) {
+  $("app").classList.toggle("locked", locked);
+  $("unlock").hidden = !locked;
+  $("add-button").hidden = locked;
 }
 
 function fillTiers(tiers) {
@@ -212,6 +251,16 @@ async function submitResolve(happened) {
 }
 
 // --- démarrage ---------------------------------------------------------------
+
+$("unlock-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const supplied = readSuppliedToken($("unlock-input").value);
+  if (!supplied) return;
+  try { localStorage.setItem(TOKEN_KEY, supplied); } catch (_) { /* mode privé */ }
+  // Repartir de l'adresse propre à cette app, en portant la clé : c'est ce que
+  // « Sur l'écran d'accueil » retiendra si on l'installe depuis ici.
+  location.replace(`${location.pathname}?k=${encodeURIComponent(supplied)}`);
+});
 
 $("add-button").addEventListener("click", openAdd);
 $("add-cancel").addEventListener("click", () => $("add-dialog").close());

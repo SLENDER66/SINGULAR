@@ -208,3 +208,38 @@ output { color: var(--text); font-weight: 600; }
   color: var(--critique);
   font-size: 14px;
 }
+
+/* --- quand la clé manque --- */
+
+/* Masquer par une classe sur le conteneur : les sections gardent leur propre
+   `hidden`, piloté par les données, et le retrouvent intact au déverrouillage. */
+#app.locked > *:not(.unlock) { display: none; }
+
+.unlock h2 { margin: 0 0 10px; font-size: 18px; font-weight: 620; }
+.unlock p { margin: 0 0 14px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.unlock code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--text);
+}
+.unlock form { display: flex; flex-direction: column; gap: 10px; }
+.unlock input {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* en dessous de 16px, iOS zoome sur le champ */
+  padding: 12px 14px;
+}
+.unlock input:focus { outline: none; border-color: var(--gold); }
+.unlock button {
+  background: var(--gold);
+  border: none;
+  border-radius: 10px;
+  color: #17130a;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 620;
+  padding: 12px 14px;
+}

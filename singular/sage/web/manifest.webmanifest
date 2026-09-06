@@ -2,7 +2,6 @@
   "name": "SINGULAR · le Sage",
   "short_name": "Sage",
   "description": "Ce que tu as prédit, ce qui est arrivé, et ce que ça dit de toi.",
-  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

@@ -33,6 +33,23 @@
   </section>
 
   <p id="error" class="error" hidden></p>
+
+  <!-- Quand le jeton manque, un message ne suffit pas : il faut pouvoir en
+       donner un. L'app ajoutée à l'écran d'accueil a son propre stockage,
+       séparé de Safari, donc elle démarre sans rien savoir. -->
+  <section id="unlock" class="unlock" hidden>
+    <h2>Cette app a besoin de ta clé d'accès</h2>
+    <p>Elle protège ton journal des autres appareils du wifi. Colle ici
+       l'adresse complète affichée par <code>python -m singular sage --lan</code>,
+       celle qui contient <code>?k=</code>.</p>
+    <form id="unlock-form">
+      <input id="unlock-input" type="text" inputmode="url" autocapitalize="off"
+             autocorrect="off" spellcheck="false"
+             placeholder="http://192.168.1.71:8765/?k=..." required>
+      <button type="submit">Déverrouiller</button>
+    </form>
+    <p id="unlock-error" class="error" hidden></p>
+  </section>
 </main>
 
 <button id="add-button" class="fab" type="button" aria-label="Enregistrer une décision">+</button>
