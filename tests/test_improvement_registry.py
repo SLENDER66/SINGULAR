@@ -337,3 +337,52 @@ def test_numeric_inputs_must_be_finite(tmp_path):
         evaluation(incumbent_score=float("inf"))
     with pytest.raises(ValueError, match="between 0 and 1"):
         evaluation(confidence=1.5)
+
+
+# --- what an artifact fingerprint is allowed to be ---------------------------
+
+def test_two_equal_artifacts_have_one_fingerprint():
+    """It was json.dumps(default=str): a non-JSON artifact became its address."""
+    assert artifact_fingerprint({"weights": [0.1, 0.2]}) == artifact_fingerprint({"weights": [0.1, 0.2]})
+
+
+def test_types_that_json_would_flatten_stay_distinct():
+    fingerprints = {artifact_fingerprint({"x": value}) for value in (1, 1.0, True)}
+    assert len(fingerprints) == 3
+
+
+def test_a_callable_artifact_is_identified_by_its_code():
+    """Same name, different behaviour: the evaluated one and the activated one."""
+    namespace_a: dict = {"__name__": "singular.strategies"}
+    namespace_b: dict = {"__name__": "singular.strategies"}
+    exec(compile('def score(x):\n    return "safe"\n', "s.py", "exec"), namespace_a)  # noqa: S102
+    exec(compile('def score(x):\n    return "risky"\n', "s.py", "exec"), namespace_b)  # noqa: S102
+
+    assert artifact_fingerprint(namespace_a["score"]) != artifact_fingerprint(namespace_b["score"])
+    assert artifact_fingerprint(namespace_a["score"]) == artifact_fingerprint(namespace_a["score"])
+
+
+def test_an_object_that_cannot_name_itself_is_refused():
+    """A fingerprint derived from an address is worse than no fingerprint."""
+
+    class Model:
+        def __init__(self, weights):
+            self.weights = weights
+
+    with pytest.raises(ValueError, match="must be data, a callable, or declare"):
+        artifact_fingerprint(Model([1.0, 2.0]))
+
+    with pytest.raises(ValueError, match="must be data, a callable, or declare"):
+        artifact_fingerprint({"model": Model([1.0, 2.0])})
+
+
+def test_an_object_that_declares_its_identity_is_accepted():
+    class Declared:
+        def __init__(self, weights):
+            self.weights = tuple(weights)
+
+        def artifact_identity(self):
+            return {"weights": list(self.weights)}
+
+    assert artifact_fingerprint(Declared([1.0, 2.0])) == artifact_fingerprint(Declared([1.0, 2.0]))
+    assert artifact_fingerprint(Declared([1.0, 2.0])) != artifact_fingerprint(Declared([9.0, 9.0]))

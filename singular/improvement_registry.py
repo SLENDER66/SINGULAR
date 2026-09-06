@@ -18,6 +18,21 @@ evaluation would attest to an artifact nobody ever ran. Every stage therefore
 carries the artifact fingerprint and refuses to proceed when it does not match
 the one registered with the candidate.
 
+All of which rests on the fingerprint meaning something. It was
+`json.dumps(artifact, default=str)`, and `default=str` is where an artifact that
+is not JSON becomes its `repr`: `<Model object at 0x7f3c...>`. An address. Two
+equal models fingerprinted differently in one process and the same model
+fingerprinted differently in the next, so nothing evaluated could ever be
+activated after a restart; and any two objects whose `__str__` agrees -- a class
+that prints its version and not its weights -- were one artifact. The chain was
+running on a label again, one level down.
+
+An artifact is now identified as what it is. Data is canonicalised with its
+types, so 1, 1.0 and True stay three artifacts. Code is identified by the code
+identity the execution boundary uses. An object that is neither, and that does
+not declare `artifact_identity()`, is refused: a candidate whose artifact cannot
+be named is exactly what this chain exists to stop.
+
 Safety-critical policy is out of scope for this lifecycle, and which targets
 are safety-critical is decided here from the target itself. It used to be a
 `safety_critical` flag carried by the candidate: a proposal declaring itself
@@ -37,13 +52,15 @@ from datetime import UTC, datetime
 from enum import Enum
 from math import isfinite
 from pathlib import Path
+from typing import Any
 
+from .execution_capability import artifact_fingerprint as code_artifact_fingerprint
 from .sqlite_support import SqliteLocation
 
 #: Bumped whenever the persisted shape changes. `CREATE TABLE IF NOT EXISTS`
 #: silently tolerates a database written by a different version of this module,
 #: which is how a registry ends up reading columns that mean something else.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class ImprovementKind(str, Enum):
@@ -80,10 +97,63 @@ def target_namespace(target: str) -> str:
     return target.strip().lower().split(".", 1)[0].strip()
 
 
+def _data_identity(value: Any) -> Any:
+    """Canonicalise an artifact that is data, keeping its types apart.
+
+    json alone loses distinctions an artifact can turn on: 1 and 1.0 render the
+    same, and a float rendered by repr is not the float. Each value is tagged
+    with its type and floats are exact.
+    """
+    if value is None:
+        return {"none": True}
+    if isinstance(value, bool):
+        return {"bool": value}
+    if isinstance(value, int):
+        return {"int": str(value)}
+    if isinstance(value, float):
+        return {"float": value.hex()}
+    if isinstance(value, str):
+        return {"str": value}
+    if isinstance(value, bytes):
+        return {"bytes": value.hex()}
+    if isinstance(value, (list, tuple)):
+        return {"sequence": [_data_identity(item) for item in value]}
+    if isinstance(value, dict):
+        if any(not isinstance(key, str) for key in value):
+            raise TypeError("an artifact mapping must be keyed by strings")
+        return {"mapping": {key: _data_identity(value[key]) for key in sorted(value)}}
+    if isinstance(value, (set, frozenset)):
+        items = [_data_identity(item) for item in value]
+        return {"set": sorted(items, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))}
+    raise TypeError(f"{type(value).__qualname__} is not artifact data")
+
+
 def artifact_fingerprint(artifact: object) -> str:
-    """A stable identity for the thing that would actually run."""
-    canonical = json.dumps(artifact, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    """A stable identity for the thing that would actually run.
+
+    Three kinds of artifact, and nothing else. Data is canonicalised by value
+    and type. Code -- a strategy, a scoring function -- is identified by the
+    same code identity the execution boundary uses, so a candidate cannot be
+    evaluated as one implementation and activated as another. An object that
+    declares `artifact_identity()` is identified by what it declares.
+
+    Anything else is refused rather than given a fingerprint derived from its
+    address or its `__str__`. A model whose weights live in instance attributes
+    it will not describe cannot be told from another; passing its parameters as
+    data, or declaring them, is the caller saying what makes this artifact the
+    one that was evaluated.
+    """
+    try:
+        payload: Any = {"data": _data_identity(artifact)}
+    except TypeError as exc:
+        if callable(artifact) or callable(getattr(artifact, "artifact_identity", None)):
+            payload = {"code": code_artifact_fingerprint(artifact)}
+        else:
+            raise ValueError(
+                "an improvement artifact must be data, a callable, or declare artifact_identity(); "
+                f"{exc}"
+            ) from None
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
