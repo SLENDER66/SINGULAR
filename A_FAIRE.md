@@ -24,13 +24,24 @@ tout le monde fait.
 
 ```powershell
 cd $HOME\Documents
-git clone https://github.com/SLENDER66/SINGULAR.git
+git clone -b claude/remote-control-feedback-ndpzle https://github.com/SLENDER66/SINGULAR.git
 cd SINGULAR
 ```
 
-Si `git` n'existe pas : va sur la page GitHub du dépôt, bouton vert **Code** →
-**Download ZIP**, décompresse dans `Documents`, puis
-`cd $HOME\Documents\SINGULAR-<nom-de-la-branche>`.
+**Le `-b` compte.** La branche par défaut du dépôt est en retard ; sans lui tu
+récupères une version qui s'arrête net sur la console française de Windows.
+Quand tu auras changé la branche par défaut sur GitHub, il deviendra inutile.
+
+Si `git` n'existe pas : sur la page GitHub, choisis d'abord la branche
+`claude/remote-control-feedback-ndpzle` dans le menu déroulant en haut à
+gauche, **puis** bouton vert **Code** → **Download ZIP**. Décompresse dans
+`Documents` et entre dans le dossier obtenu.
+
+**Pour mettre à jour plus tard**, depuis le dossier `SINGULAR` :
+
+```powershell
+git pull
+```
 
 **Lancer le Sage.** Ton iPhone et le PC doivent être sur le même wifi.
 
