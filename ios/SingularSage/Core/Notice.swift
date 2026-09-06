@@ -277,10 +277,24 @@ enum NoticeEngine {
 enum Numbers {
 
     /// Arrondi au plus proche, moitiés vers le pair — la règle du moteur de
-    /// référence, et celle que la norme IEEE applique par défaut.
+    /// référence.
+    ///
+    /// Passer par le texte plutôt que par `(value * 100).rounded()` n'est pas
+    /// un détour. Multiplier d'abord déplace la valeur : 0,225 n'a pas
+    /// d'écriture binaire exacte, et le produit par 100 tombe du mauvais côté
+    /// de 22,5. La moitié qu'on croyait arrondir n'en est plus une, et le
+    /// résultat bascule. Ce n'est pas théorique — quatre décisions annoncées à
+    /// 5, 5, 5 et 75 % dont aucune n'arrive donnent exactement ce cas : le
+    /// moteur de référence titre « Tu te surestimes de +23 % », et cette
+    /// fonction, écrite avec la multiplication, répondait « +22 % ».
+    ///
+    /// Le formatage décimal arrondit la valeur binaire telle qu'elle est,
+    /// sans étape intermédiaire — c'est ce que fait `round()` côté Python.
+    /// `notice_vectors.json` contient le cas ci-dessus pour que la question
+    /// ne se repose pas.
     static func round(_ value: Double, places: Int) -> Double {
-        let factor = pow(10.0, Double(places))
-        return (value * factor).rounded(.toNearestOrEven) / factor
+        guard value.isFinite else { return value }
+        return Double(String(format: "%.\(places)f", value)) ?? value
     }
 
     /// 60,0 → « 60 » ; 4,5 → « 4.5 ». Pas de zéro inutile derrière une heure.

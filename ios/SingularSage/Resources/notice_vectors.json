@@ -310,6 +310,89 @@
       }
     },
     {
+      "name": "arrondi_sur_une_moitie",
+      "why": "L'écart tombe pile sur une moitié : 0,225 → +23 %, pas +22 %. Un port qui multiplie par 100 avant d'arrondir bascule ici, et se trompe d'un point tous les matins sans rien signaler.",
+      "at": "2026-09-08T09:00:00+00:00",
+      "entries": [
+        {
+          "title": "Petit pari 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.05,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "resolved": false
+        },
+        {
+          "title": "Petit pari 2",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.05,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "resolved": false
+        },
+        {
+          "title": "Petit pari 3",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.05,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "resolved": false
+        },
+        {
+          "title": "Gros pari",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "resolved": false
+        },
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Tu te surestimes de +23%.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Tu te surestimes de +23%",
+            "detail": "Tu annonces 23% en moyenne ; il en arrive 0%. Sur 4 verdicts, ce n'est plus de la malchance. Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+          },
+          {
+            "severity": "ATTENTION",
+            "title": "4h engagées sans verdict",
+            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+          },
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 28 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
       "name": "trop_peu_de_verdicts_pour_juger",
       "why": "Sous le seuil, l'échantillon explique l'écart aussi bien.",
       "at": "2026-09-08T09:00:00+00:00",

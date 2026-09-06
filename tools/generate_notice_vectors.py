@@ -98,6 +98,20 @@ CASES: list[dict[str, Any]] = [
         ] + [_entry("Loyer", tier=Tier.STABILITE, days=30)],
     },
     {
+        "name": "arrondi_sur_une_moitie",
+        "why": "L'écart tombe pile sur une moitié : 0,225 → +23 %, pas +22 %. "
+               "Un port qui multiplie par 100 avant d'arrondir bascule ici, "
+               "et se trompe d'un point tous les matins sans rien signaler.",
+        "at_offset_days": 2,
+        "entries": [
+            _entry("Petit pari 1", tier=Tier.REVENUS, probability=0.05, days=14, resolved=False),
+            _entry("Petit pari 2", tier=Tier.REVENUS, probability=0.05, days=14, resolved=False),
+            _entry("Petit pari 3", tier=Tier.REVENUS, probability=0.05, days=14, resolved=False),
+            _entry("Gros pari", tier=Tier.REVENUS, probability=0.75, days=14, resolved=False),
+            _entry("Loyer", tier=Tier.STABILITE, days=30),
+        ],
+    },
+    {
         "name": "trop_peu_de_verdicts_pour_juger",
         "why": "Sous le seuil, l'échantillon explique l'écart aussi bien.",
         "at_offset_days": 2,
