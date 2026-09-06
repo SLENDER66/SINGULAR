@@ -30,8 +30,21 @@ final class NoticeVectorTests: XCTestCase {
         let name: String
         let why: String
         let at: String
+        /// L'intégrité que le moteur de référence avait sous les yeux.
+        ///
+        /// Le moteur d'observation ne calcule pas l'intégrité, il la reçoit :
+        /// c'est un paramètre de `build`. Le vecteur la transmet donc telle
+        /// quelle, plutôt que de faire casser un fichier au test. Que
+        /// `verify()` détecte réellement une chaîne rompue est une autre
+        /// question, et `JournalTests` la traite sur un vrai fichier retouché.
+        let chainIntact: Bool
         let entries: [VectorEntry]
         let expected: Expectation
+
+        enum CodingKeys: String, CodingKey {
+            case name, why, at, entries, expected
+            case chainIntact = "chain_intact"
+        }
     }
 
     struct VectorEntry: Decodable {
@@ -75,9 +88,13 @@ final class NoticeVectorTests: XCTestCase {
         for testCase in file.cases {
             let journal = try makeJournal(from: testCase, origin: origin)
             let moment = try XCTUnwrap(ISO8601DateFormatter.singular.date(from: testCase.at))
-            let notice = NoticeEngine.build(entries: journal.entries, at: moment, chainIntact: journal.verify())
+            let notice = NoticeEngine.build(entries: journal.entries, at: moment,
+                                            chainIntact: testCase.chainIntact)
 
-            XCTAssertTrue(journal.verify(), "\(testCase.name) : la chaîne devrait être intacte")
+            // Le journal rejoué, lui, est toujours écrit à travers l'API : il
+            // doit se vérifier, quelle que soit l'intégrité que le vecteur
+            // demande de simuler.
+            XCTAssertTrue(journal.verify(), "\(testCase.name) : le journal rejoué doit être cohérent")
             XCTAssertEqual(notice.headline, testCase.expected.headline,
                            "\(testCase.name) — \(testCase.why)")
             XCTAssertEqual(notice.severity.rawValue, testCase.expected.severity, testCase.name)
@@ -97,6 +114,20 @@ final class NoticeVectorTests: XCTestCase {
     func testTheVectorsAreActuallyPresent() throws {
         XCTAssertGreaterThanOrEqual(try loadVectors().cases.count, 8,
                                     "les vecteurs manquent ou ont été tronqués")
+    }
+
+    /// Les deux cas qu'on ne verrait pas manquer.
+    ///
+    /// Le reste des vecteurs échoue bruyamment quand une phrase change. Ces
+    /// deux-là échouent en silence s'ils disparaissent du fichier : la suite
+    /// resterait verte en ayant cessé de couvrir l'observation la plus grave,
+    /// et l'arrondi qui se trompe d'un point sans rien casser.
+    func testTheVectorsStillCoverWhatMattersMost() throws {
+        let names = try Set(loadVectors().cases.map(\.name))
+        XCTAssertTrue(names.contains("chaine_rompue"),
+                      "le cas de la chaîne rompue a disparu des vecteurs")
+        XCTAssertTrue(names.contains("arrondi_sur_une_moitie"),
+                      "le cas d'arrondi a disparu des vecteurs")
     }
 
     // MARK: Outillage

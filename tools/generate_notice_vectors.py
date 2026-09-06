@@ -121,6 +121,17 @@ CASES: list[dict[str, Any]] = [
         ] + [_entry("Loyer", tier=Tier.STABILITE, days=30)],
     },
     {
+        "name": "chaine_rompue",
+        "why": "L'observation la plus grave, et la seule qui invalide toutes les autres. "
+               "Elle passe avant le retard, et elle est CRITIQUE quoi qu'il y ait d'autre.",
+        "at_offset_days": 20,
+        "chain_intact": False,
+        "entries": [
+            _entry("Refonte", tier=Tier.REVENUS, days=7),
+            _entry("Loyer", tier=Tier.STABILITE, days=30),
+        ],
+    },
+    {
         "name": "tout_va_bien",
         "why": "Le Sage doit savoir se taire, sinon on cesse de le lire.",
         "at_offset_days": 1,
@@ -143,6 +154,7 @@ CASES: list[dict[str, Any]] = [
 
 def _build(case: dict[str, Any]) -> tuple[DecisionJournal, datetime]:
     journal = DecisionJournal(":memory:")
+    first = None
     for item in case["entries"]:
         created = ORIGIN + timedelta(days=item["created_offset_days"])
         entry = journal.add(
@@ -153,6 +165,32 @@ def _build(case: dict[str, Any]) -> tuple[DecisionJournal, datetime]:
         if item["resolved"] is not None:
             journal.resolve(entry.entry_id, happened=item["resolved"],
                             now=created + timedelta(days=item["horizon_days"]))
+        first = first or entry
+    if case.get("chain_intact", True) is False:
+        # On écrit sous le journal plutôt qu'à travers lui : rien dans l'API ne
+        # réécrit une entrée, c'est le seul chemin qui existe, et c'est celui
+        # que prendrait quelqu'un qui ouvrirait le fichier.
+        #
+        # Ce qu'on retouche est le maillon, pas la donnée. Une entrée manquante
+        # ou déplacée casse la chaîne exactement ainsi, et surtout : le port
+        # rejouera ces entrées à leurs valeurs déclarées, qui sont celles
+        # d'origine. Retoucher une probabilité ferait calculer le rapport de
+        # référence sur une valeur que le port n'a pas, et les phrases
+        # divergeraient pour une raison qui n'a rien à voir avec la règle.
+        assert first is not None, "un journal vide n'a pas de chaîne à rompre"
+        before = journal.review(now=ORIGIN)
+        with journal._connect() as conn:
+            conn.execute("UPDATE journal_entries SET previous_fingerprint=? WHERE entry_id=?",
+                         ("0" * 64, first.entry_id))
+        assert not journal.verify(), "la chaîne devait être rompue"
+
+        # Et rien d'autre ne doit avoir bougé : si la rupture déplaçait un
+        # chiffre, le vecteur exigerait du port des phrases qu'il ne peut pas
+        # produire à partir des entrées qu'on lui donne.
+        after = journal.review(now=ORIGIN)
+        assert {k: v for k, v in before.items() if k != "chain_intact"} \
+            == {k: v for k, v in after.items() if k != "chain_intact"}, \
+            "rompre la chaîne a changé autre chose que l'intégrité"
     return journal, ORIGIN + timedelta(days=case["at_offset_days"])
 
 
@@ -165,6 +203,7 @@ def build_vectors() -> dict[str, Any]:
             "name": case["name"],
             "why": case["why"],
             "at": moment.isoformat(),
+            "chain_intact": notice.report["chain_intact"],
             "entries": case["entries"],
             "expected": {
                 "headline": notice.headline,

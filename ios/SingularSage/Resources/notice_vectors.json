@@ -7,6 +7,7 @@
       "name": "journal_vide",
       "why": "Sans entrées, on le dit une fois et on ne reproche rien d'autre.",
       "at": "2026-09-06T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [],
       "expected": {
         "headline": "Notice. Le journal est vide.",
@@ -24,6 +25,7 @@
       "name": "une_decision_en_retard",
       "why": "Le retard passe avant tout le reste, et il est écrit au singulier.",
       "at": "2026-09-15T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Refonte",
@@ -63,6 +65,7 @@
       "name": "retard_critique",
       "why": "Au-delà d'une semaine, ce n'est plus un oubli.",
       "at": "2026-09-26T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Refonte",
@@ -102,6 +105,7 @@
       "name": "deux_retards",
       "why": "Le pluriel, et le plus ancien qui donne le compte.",
       "at": "2026-09-18T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Refonte",
@@ -152,6 +156,7 @@
       "name": "rangs_fondateurs_vides",
       "why": "Stabilité et Revenus vides est un défaut même quand tout va bien.",
       "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Patrimoine",
@@ -191,6 +196,7 @@
       "name": "un_seul_rang_fondateur_vide",
       "why": "Le singulier de la même observation.",
       "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Loyer",
@@ -230,6 +236,7 @@
       "name": "surconfiance",
       "why": "Quatre verdicts suffisent à le dire ; deux ne suffiraient pas.",
       "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Pari 0",
@@ -313,6 +320,7 @@
       "name": "arrondi_sur_une_moitie",
       "why": "L'écart tombe pile sur une moitié : 0,225 → +23 %, pas +22 %. Un port qui multiplie par 100 avant d'arrondir bascule ici, et se trompe d'un point tous les matins sans rien signaler.",
       "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Petit pari 1",
@@ -396,6 +404,7 @@
       "name": "trop_peu_de_verdicts_pour_juger",
       "why": "Sous le seuil, l'échantillon explique l'écart aussi bien.",
       "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Pari 0",
@@ -449,9 +458,66 @@
       }
     },
     {
+      "name": "chaine_rompue",
+      "why": "L'observation la plus grave, et la seule qui invalide toutes les autres. Elle passe avant le retard, et elle est CRITIQUE quoi qu'il y ait d'autre.",
+      "at": "2026-09-26T09:00:00+00:00",
+      "chain_intact": false,
+      "entries": [
+        {
+          "title": "Refonte",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 7,
+          "created_offset_days": 0,
+          "resolved": null
+        },
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. La chaîne du journal est rompue.",
+        "severity": "CRITIQUE",
+        "items": [
+          {
+            "severity": "CRITIQUE",
+            "title": "La chaîne du journal est rompue",
+            "detail": "Une prédiction a été modifiée ou supprimée après coup. Tant que c'est vrai, aucune statistique de cette page ne vaut : elles portent sur un passé qui a été réécrit."
+          },
+          {
+            "severity": "CRITIQUE",
+            "title": "À trancher aujourd'hui",
+            "detail": "1 décision a dépassé son horizon. Elle attend depuis 13 jours. Passé une semaine, un verdict qu'on ne rend pas n'est plus un oubli : c'est le résultat qu'on préfère ne pas voir."
+          },
+          {
+            "severity": "ATTENTION",
+            "title": "8h engagées sans verdict",
+            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+          },
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 10 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
       "name": "tout_va_bien",
       "why": "Le Sage doit savoir se taire, sinon on cesse de le lire.",
       "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Loyer",
@@ -492,6 +558,7 @@
       "name": "heures_sans_verdict",
       "why": "L'activité qui n'est jamais devenue un résultat.",
       "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
       "entries": [
         {
           "title": "Gros chantier",
