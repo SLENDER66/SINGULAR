@@ -20,13 +20,14 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import ipaddress
 import socket
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote_plus
+from urllib.parse import unquote_plus, urlsplit
 
 from ..journal import DEFAULT_PATH, DecisionJournal, Status, Tier
 from .icon import render_icon
@@ -41,6 +42,15 @@ MAX_BODY = 64 * 1024
 #: Les seules adresses qui n'ont pas besoin du jeton : elles ne peuvent venir
 #: que de la machine elle-même.
 LOOPBACK = frozenset({"127.0.0.1", "::1"})
+
+#: Le seul type de corps que l'API accepte en écriture.
+#:
+#: Ce n'est pas du pédantisme : un navigateur n'envoie une requête d'une page
+#: vers une autre origine sans autorisation préalable que si le type est
+#: `text/plain`, un formulaire ou du multipart. Exiger du JSON force donc le
+#: navigateur à demander la permission d'abord -- permission que ce serveur ne
+#: donne jamais, puisqu'il n'annonce aucune règle de partage entre origines.
+JSON_BODY = "application/json"
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -311,6 +321,39 @@ class SageHandler(BaseHTTPRequestHandler):
         content_type = CONTENT_TYPES.get(target.suffix, "application/octet-stream")
         self._send(HTTPStatus.OK, target.read_bytes(), content_type)
 
+    def _refuse_another_page(self) -> None:
+        """Le jeton dit qui sait ; il ne dit pas qui demande.
+
+        Une page web ouverte sur cette machine parle depuis `127.0.0.1`, et
+        `authorised` accorde tout à la boucle locale parce qu'il n'y a
+        « personne d'autre » dessus. Il y a le navigateur. N'importe quelle
+        page consultée pendant que le Sage tourne pouvait donc écrire dans le
+        journal, et surtout rendre un verdict -- sans connaître le jeton, sans
+        rien afficher, et en faussant la calibration, qui est tout l'intérêt de
+        l'outil. Reproduit avant d'être corrigé.
+
+        C'est l'invariant du projet pris à revers : le Sage ne décide pas à ta
+        place, mais un site quelconque le faisait.
+
+        Trois faits que la page appelante ne contrôle pas la refusent : le nom
+        par lequel on nous appelle, qui doit être une adresse et non un domaine
+        qu'on aurait fait pointer ici ; l'origine que le navigateur déclare ; et
+        le type du corps, dont le JSON exige une permission préalable que ce
+        serveur ne donne pas.
+        """
+        host = self.headers.get("Host", "")
+        if not host_is_an_address(host):
+            raise SageError(HTTPStatus.FORBIDDEN, "ce serveur ne répond qu'à son adresse")
+        if not same_origin(self.headers.get("Origin", ""), host):
+            raise SageError(HTTPStatus.FORBIDDEN, "requête venue d'une autre page")
+        if self.command == "POST":
+            declared = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if declared != JSON_BODY:
+                raise SageError(
+                    HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                    f"le corps doit être annoncé « {JSON_BODY} »",
+                )
+
     def _handle(self) -> None:
         """Le jeton garde le journal, pas la coquille qui l'affiche.
 
@@ -330,6 +373,7 @@ class SageHandler(BaseHTTPRequestHandler):
         """
         path, query = self._split()
         if path.startswith("/api/"):
+            self._refuse_another_page()
             client = self.client_address[0] if self.client_address else ""
             if not self.app.authorised(client, query, self.headers.get("X-Sage-Token", "")):
                 self._json(HTTPStatus.UNAUTHORIZED, {"message": "jeton d'accès manquant ou invalide"})
@@ -361,6 +405,59 @@ class SageHandler(BaseHTTPRequestHandler):
 def build_server(app: SageApp, host: str, port: int) -> ThreadingHTTPServer:
     handler = type("BoundSageHandler", (SageHandler,), {"app": app})
     return ThreadingHTTPServer((host, port), handler)
+
+
+def same_origin(origin: str, host_header: str) -> bool:
+    """La page qui appelle est-elle celle que ce serveur a servie ?
+
+    `Origin` et `Host` sont tous deux posés par le navigateur et hors d'atteinte
+    de la page qui s'exécute dedans : les comparer dit d'où vient réellement la
+    requête, ce que le jeton ne dit pas.
+
+    Absent vaut oui. Un navigateur omet `Origin` sur les lectures de même
+    origine, et un client qui n'est pas un navigateur -- `curl`, l'app native --
+    n'en envoie jamais : ceux-là ne portent aucune session à détourner, puisque
+    c'est le navigateur, et lui seul, qui joint automatiquement le contexte de
+    la machine à une requête qu'il n'a pas voulue.
+
+    `null` vaut non : c'est ce qu'annonce une page sans origine propre, et il
+    n'y a aucune raison qu'une telle page parle au journal.
+    """
+    if not origin:
+        return True
+    parsed = urlsplit(origin)
+    if parsed.scheme != "http" or not parsed.netloc:
+        return False
+    return parsed.netloc == host_header.strip()
+
+
+def host_is_an_address(host_header: str) -> bool:
+    """Le nom par lequel on nous appelle est-il une adresse, et non un domaine ?
+
+    Sans cette question, comparer `Origin` et `Host` ne suffit pas. Un attaquant
+    qui fait pointer son propre domaine vers cette machine, et qui sert sa page
+    sur le même port, obtient une origine et un hôte identiques : la
+    comparaison dit « même origine » alors que la page est la sienne. Le
+    navigateur, lui, la croit chez elle et lui laisse tout.
+
+    Ce serveur n'a pas de nom : on l'atteint par `127.0.0.1`, par `localhost`,
+    ou par l'adresse de la machine sur le wifi. Un domaine dans `Host` ne peut
+    donc désigner que quelqu'un qui s'est arrangé pour y arriver.
+    """
+    host = host_header.strip()
+    if not host:
+        return False
+    if host.startswith("["):  # IPv6 entre crochets, avec ou sans port
+        host = host.partition("]")[0].removeprefix("[")
+    elif host.count(":") == 1:
+        host = host.partition(":")[0]
+    if host.lower() == "localhost":
+        return True
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 def is_loopback_bind(host: str) -> bool:
@@ -406,4 +503,4 @@ def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int =
 
 
 __all__ = ["SageApp", "SageError", "SageHandler", "build_server", "is_loopback_bind",
-           "local_address", "read_token", "serve"]
+           "host_is_an_address", "local_address", "read_token", "same_origin", "serve"]

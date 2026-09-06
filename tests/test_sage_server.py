@@ -22,14 +22,16 @@ from http import HTTPStatus
 
 import pytest
 
-from singular.journal import DecisionJournal, Tier
+from singular.journal import DecisionJournal, Status, Tier
 from singular.sage.server import (
     MAX_BODY,
     SageApp,
     SageError,
     build_server,
+    host_is_an_address,
     is_loopback_bind,
     read_token,
+    same_origin,
 )
 
 TOKEN = "un-jeton-de-test-suffisamment-long"
@@ -390,3 +392,138 @@ def test_the_page_offers_a_way_in_when_the_token_is_missing(from_the_network):
     code = script.decode("utf-8")
     assert "askForTheToken" in code
     assert "error.status === 401" in code, "le refus doit être reconnu par son statut"
+
+
+# --- ce qu'une autre page peut demander en ton nom ---------------------------
+
+def _post_as_a_page(base: str, path: str, payload: dict, **headers) -> int:
+    """Poster comme le fait un navigateur pour le compte d'une page web.
+
+    Aucun jeton : c'est le sujet. Une page n'en a pas besoin pour que le
+    navigateur joigne à sa requête tout ce que la machine porte déjà.
+    """
+    request = urllib.request.Request(
+        base + path, data=json.dumps(payload).encode(), method="POST",
+        headers={"Content-Type": "application/json", **headers},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status
+    except urllib.error.HTTPError as refused:
+        return refused.code
+
+
+A_DECISION = {"title": "écrit sans toi", "action": "rien", "predicted": "rien",
+              "probability": 0.5, "cost_hours": 1, "tier": "REVENUS", "horizon_days": 7}
+
+
+def test_another_page_cannot_write_to_the_journal(running, journal):
+    """La faille telle qu'elle a été reproduite avant d'être corrigée.
+
+    Le jeton dit qui sait ; il ne dit pas qui demande. Une page web ouverte sur
+    cette machine parle depuis `127.0.0.1`, à qui la garde accordait tout parce
+    qu'il n'y a « personne d'autre » sur la boucle locale. Il y a le navigateur.
+    """
+    assert _post_as_a_page(running, "/api/entries", A_DECISION,
+                           Origin="https://site-malveillant.example") == HTTPStatus.FORBIDDEN
+    assert not journal.entries(), "une page quelconque a écrit dans le journal"
+
+
+def test_another_page_cannot_deliver_a_verdict_in_your_place(journal, running):
+    """Le pire des deux : pas l'écriture, le verdict.
+
+    Une décision tranchée par quelqu'un d'autre fausse le score de Brier, donc
+    la calibration, qui est tout l'intérêt de l'outil. Et c'est l'invariant du
+    projet pris à revers : le Sage ne décide pas à ta place, mais un site
+    quelconque le faisait.
+    """
+    entry = journal.add(title="Postuler", action="envoyer", predicted="un entretien",
+                        probability=0.75, tier=Tier.REVENUS, cost_hours=4, horizon_days=14)
+    status = _post_as_a_page(running, f"/api/entries/{entry.entry_id}/resolve",
+                             {"happened": False}, Origin="https://site-malveillant.example")
+    assert status == HTTPStatus.FORBIDDEN
+    assert journal.entries()[0].status is not Status.DID_NOT_HAPPEN, (
+        "un verdict a été rendu à ta place"
+    )
+
+
+def test_a_page_without_an_origin_of_its_own_is_refused(running):
+    """`null` est ce qu'annonce une page sandboxée ou ouverte depuis un fichier."""
+    assert _post_as_a_page(running, "/api/entries", A_DECISION,
+                           Origin="null") == HTTPStatus.FORBIDDEN
+
+
+def test_a_body_a_page_could_send_without_asking_first_is_refused(running):
+    """Le type du corps est la seconde barrière, indépendante de l'origine.
+
+    Un navigateur n'envoie une requête vers une autre origine sans permission
+    préalable que pour `text/plain`, un formulaire ou du multipart. Un
+    formulaire HTML ne peut rien poster d'autre : le refus tient même si
+    l'origine venait à manquer.
+    """
+    request = urllib.request.Request(
+        running + "/api/entries", data=json.dumps(A_DECISION).encode(), method="POST",
+        headers={"Content-Type": "text/plain;charset=UTF-8"})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            code = response.status
+    except urllib.error.HTTPError as refused:
+        code = refused.code
+    assert code == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
+
+
+def test_a_domain_pointed_at_this_machine_is_refused(running):
+    """Comparer l'origine à l'hôte ne suffit pas : il faut que l'hôte soit une adresse.
+
+    Un attaquant qui fait pointer son domaine vers cette machine et sert sa page
+    sur le même port obtient une origine et un hôte identiques. La comparaison
+    dirait « même origine » pour une page qui est la sienne.
+    """
+    port = running.rsplit(":", 1)[1]
+    assert _post_as_a_page(running, "/api/entries", A_DECISION,
+                           Host=f"evil.example:{port}",
+                           Origin=f"http://evil.example:{port}") == HTTPStatus.FORBIDDEN
+
+
+def test_the_app_itself_still_writes(running, journal):
+    """La garde ne vaut rien si elle ferme aussi la porte à l'app."""
+    port = running.rsplit(":", 1)[1]
+    request = urllib.request.Request(
+        running + "/api/entries", data=json.dumps(A_DECISION).encode(), method="POST",
+        headers={"Content-Type": "application/json", "X-Sage-Token": TOKEN,
+                 "Origin": f"http://127.0.0.1:{port}"})
+    with urllib.request.urlopen(request, timeout=5) as response:
+        assert response.status == HTTPStatus.OK
+    assert len(journal.entries()) == 1
+
+
+def test_a_client_that_is_not_a_browser_still_writes(running, journal):
+    """`curl` et l'app native n'envoient pas d'origine, et ne portent pas de session."""
+    assert _post_as_a_page(running, "/api/entries", A_DECISION) == HTTPStatus.OK
+    assert len(journal.entries()) == 1
+
+
+@pytest.mark.parametrize("host,accepted", [
+    ("127.0.0.1:8765", True),
+    ("192.168.1.20:8765", True),
+    ("localhost:8765", True),
+    ("[::1]:8765", True),
+    ("::1", True),
+    ("sage.local:8765", False),
+    ("evil.example", False),
+    ("", False),
+])
+def test_only_an_address_names_this_server(host: str, accepted: bool):
+    assert host_is_an_address(host) is accepted
+
+
+@pytest.mark.parametrize("origin,host,accepted", [
+    ("", "127.0.0.1:8765", True),
+    ("http://127.0.0.1:8765", "127.0.0.1:8765", True),
+    ("http://127.0.0.1:8765", "127.0.0.1:9999", False),
+    ("https://127.0.0.1:8765", "127.0.0.1:8765", False),
+    ("null", "127.0.0.1:8765", False),
+    ("http://evil.example", "127.0.0.1:8765", False),
+])
+def test_the_declared_origin_must_be_this_server(origin: str, host: str, accepted: bool):
+    assert same_origin(origin, host) is accepted
