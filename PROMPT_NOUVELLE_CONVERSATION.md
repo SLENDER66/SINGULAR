@@ -8,7 +8,7 @@ il est dans le dépôt et Claude le lit tout seul.
 Dépôt : **SLENDER66/SINGULAR** (public). Mandat complet dans `CLAUDE.md` à la
 racine : lis-le, applique-le, ne me le fais pas répéter.
 
-**Branche de travail : `claude/remote-control-0pu0vh`**, en avance sur
+**Branche de travail : `claude/remote-control-feedback-ndpzle`**, en avance sur
 `claude/singular-mandate-setup-d51s9t` (branche par défaut, pas à jour).
 Ne merge jamais dans `main` sans mon autorisation.
 
@@ -30,14 +30,17 @@ pip install -e '.[dev]'          # pytest n'est PAS installé dans un conteneur 
 python -m pytest -q              # tout vert, zéro échec
 python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"
 python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer
+python tools/check_xcode_project.py   # le projet Xcode s'ouvre et est complet
 ```
 
 ## Ce qui se passe en ce moment — priorité absolue
 
 **Ma sœur a mon Mac et compile à ma place, à distance.** Elle suit la section
-« Si quelqu'un d'autre compile à ta place » de `ios/README.md` : Xcode, projet
-`SingularSage`, `Cmd+U` puis `Cmd+R` dans le **simulateur**. Aucun compte Apple,
-aucun euro — le simulateur n'en demande pas.
+« Si quelqu'un d'autre compile à ta place » de `ios/README.md` : Xcode,
+`git clone`, `open SINGULAR/ios/SingularSage.xcodeproj`, `Cmd+U` puis `Cmd+R`
+dans le **simulateur**. Aucun compte Apple, aucun euro — le simulateur n'en
+demande pas. Le projet Xcode est dans le dépôt : elle n'a plus rien à monter à
+la main.
 
 Elle ne peut pas installer sur mon iPhone (il n'est pas près du Mac ; seul
 TestFlight le permettrait, donc 99 €/an, écarté pour l'instant).
@@ -47,9 +50,20 @@ TestFlight le permettrait, donc 99 €/an, écarté pour l'instant).
 1. **Erreurs de compilation Xcode** — le plus probable, ce Swift n'a jamais vu
    de compilateur. Corrige le fichier, ne réécris pas l'architecture pour une
    erreur de syntaxe.
+   Déjà écartés sans elle, ne les recherche pas : le mode Swift 6 (les vues
+   touchent le journal `@MainActor`, le formateur ISO8601 est une globale non
+   `Sendable`) et le montage manuel du projet. Le projet fixe `SWIFT_VERSION`
+   et `IPHONEOS_DEPLOYMENT_TARGET`, donc sa version d'Xcode ne décide plus.
+   **Si Xcode dit « the project is damaged »**, c'est la seule panne que
+   `tools/check_xcode_project.py` ne peut pas voir : l'annexe « Si le projet ne
+   s'ouvre pas » du README lui donne le montage manuel en repli.
 2. **Tests rouges** — `NoticeVectorTests` compare le portage Swift au moteur
    Python via `ios/SingularSage/Resources/notice_vectors.json`. **Le moteur
    Python fait foi, c'est le Swift qui a tort.**
+   Douze cas, dont deux qui existent pour une raison précise :
+   `arrondi_sur_une_moitie` (multiplier avant d'arrondir se trompe d'un point,
+   corrigé) et `chaine_rompue` (l'observation la plus grave, et l'ordre de deux
+   observations de même gravité).
 3. **Captures d'écran** — retours de design.
 4. Une fois le build vert : enchaîne sur **Mémoire**.
 
@@ -90,6 +104,10 @@ TestFlight le permettrait, donc 99 €/an, écarté pour l'instant).
    construit — hygiène, pas escalade, vérifié.
 4. `DurableIntegrityChecker.check()` sans argument n'a plus d'appelant en
    production depuis que la frontière est bornée à la mission.
+5. Côté port iOS, ce qui reste hors de portée d'ici : que le Swift **compile**,
+   et qu'il emploie bien les formules vérifiées. L'équivalence de l'arithmétique
+   entre les deux moteurs est, elle, tenue par
+   `tests/test_notice_rounding_port.py`, qui tourne dans le CI.
 
 ## Coût, pour ne pas le recalculer
 
