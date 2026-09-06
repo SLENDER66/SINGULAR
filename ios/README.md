@@ -103,6 +103,45 @@ se planifie toute seule à la première ouverture.
 
 ---
 
+## Si quelqu'un d'autre compile à ta place
+
+Le dépôt est public : la personne qui a le Mac n'a besoin de rien d'autre que
+son adresse. Elle n'a **aucun compte Apple à créer** et **aucun euro à
+dépenser** pour tout ce qui suit.
+
+### Ce qu'elle fait — 1 h, dont 40 min d'attente
+
+1. Étapes **1 à 4** ci-dessus : installer Xcode, `git clone`, créer le projet
+   `SingularSage`, y glisser les fichiers.
+2. **`Cmd + U`** — les tests. C'est le but de l'opération.
+3. En haut de Xcode, choisir **n'importe quel iPhone de la liste des
+   simulateurs** (pas un appareil réel), puis **`Cmd + R`**. L'app démarre dans
+   un iPhone à l'écran, entièrement fonctionnelle.
+
+Le simulateur ne demande ni Apple ID, ni certificat, ni signature. Les étapes 6
+et 7 du haut de page ne la concernent pas.
+
+### Ce qu'elle renvoie
+
+- **Le résultat de `Cmd + U`.** Vert, ou le texte exact de chaque échec.
+- **Si ça ne compile pas** : le message d'erreur et le nom du fichier. C'est
+  attendu — ce code n'a jamais vu de compilateur.
+- **Deux ou trois captures d'écran** de l'app dans le simulateur : l'écran
+  d'accueil, l'ajout d'une décision, le verdict.
+
+Elle n'a rien à comprendre au projet. Copier l'erreur suffit.
+
+### Ce que ça ne donne pas
+
+L'app **sur ton iPhone**. Xcode installe sur un appareil branché en câble ou
+appairé sur le même réseau local ; ton téléphone n'est pas là-bas. Le seul
+chemin à distance est TestFlight, qui demande le compte à 99 €/an : elle
+téléverse une version, tu l'installes depuis n'importe où.
+
+Autrement dit, sa contribution valide **que l'app fonctionne et à quoi elle
+ressemble**. La mettre dans ta poche demande soit le téléphone à côté du Mac,
+soit les 99 €.
+
 ## Ce que la version gratuite change
 
 **Rien dans l'app.** Une seule différence : le certificat gratuit dure **7 jours**.
