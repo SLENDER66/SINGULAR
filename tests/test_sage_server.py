@@ -271,3 +271,86 @@ def test_a_refusal_answers_in_json_rather_than_a_stack_trace(running):
     body = json.loads(refusal.value.read())
     assert "message" in body
     assert "Traceback" not in body["message"]
+
+
+# --- ce que le jeton garde, et ce qu'il n'a jamais eu à garder ---------------
+
+@pytest.fixture
+def from_the_network(journal):
+    """Un serveur joint depuis une vraie adresse réseau, pas la boucle locale.
+
+    Tous les autres tests d'assets passent par `127.0.0.1`, où le jeton n'est
+    pas demandé. C'est ce qui a laissé passer la panne : le serveur exigeait le
+    jeton pour tout, y compris `app.css` et `app.js`, que le navigateur va
+    chercher par lui-même avec des adresses relatives qui ne le portent pas.
+    Depuis un téléphone, l'app s'ouvrait sans mise en forme et sans données, et
+    rien ne disait pourquoi. Depuis la machine, tout marchait.
+    """
+    from singular.sage.server import local_address
+
+    address = local_address()
+    if address in {"127.0.0.1", "::1"}:
+        pytest.skip("aucune adresse non-loopback : ce test a besoin d'un vrai réseau")
+
+    entry = journal.add(title="Titre confidentiel MARQUEUR-TITRE", action="faire",
+                        predicted="résultat MARQUEUR-PREDIT", probability=0.42,
+                        tier=Tier.REVENUS, cost_hours=3, horizon_days=7)
+    journal.resolve(entry.entry_id, happened=False, lesson="leçon MARQUEUR-LECON")
+
+    server = build_server(SageApp(journal, token=TOKEN), "0.0.0.0", 0)  # noqa: S104 - le test veut l'exposition
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://{address}:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+def _fetch(base: str, path: str, token: str | None = None) -> tuple[int, bytes]:
+    request = urllib.request.Request(base + path)
+    if token is not None:
+        request.add_header("X-Sage-Token", token)
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as refused:
+        return refused.code, refused.read()
+
+
+@pytest.mark.parametrize("asset", ["/", "/app.css", "/app.js", "/manifest.webmanifest",
+                                   "/icon-180.png"])
+def test_the_shell_loads_from_the_network_without_the_token(from_the_network, asset):
+    """Le navigateur ne peut pas faire autrement : il demande ces fichiers seul."""
+    status, body = _fetch(from_the_network, asset)
+    assert status == HTTPStatus.OK, f"{asset} refusé : l'app resterait nue sur le téléphone"
+    assert body, f"{asset} servi vide"
+
+
+@pytest.mark.parametrize("token", [None, "", "mauvais-jeton"])
+def test_the_journal_still_refuses_the_network_without_the_right_token(from_the_network, token):
+    status, _ = _fetch(from_the_network, "/api/notice", token)
+    assert status == HTTPStatus.UNAUTHORIZED
+
+
+def test_the_journal_opens_to_the_network_with_the_right_token(from_the_network):
+    status, body = _fetch(from_the_network, "/api/notice", TOKEN)
+    assert status == HTTPStatus.OK
+    assert json.loads(body)["headline"].startswith("Notice.")
+
+
+@pytest.mark.parametrize("asset", ["/", "/app.css", "/app.js", "/manifest.webmanifest",
+                                   "/icon-180.png", "/sw.js"])
+def test_nothing_served_without_the_token_carries_a_decision(from_the_network, asset):
+    """La contre-vérification, et la condition de toute la correction.
+
+    Servir la coquille sans jeton n'est acceptable que tant qu'elle ne contient
+    rien. Le jour où l'un de ces fichiers porterait une décision -- une page
+    rendue côté serveur, un état préchargé pour aller plus vite -- ce choix
+    deviendrait une fuite du journal vers tout le wifi, sans que rien
+    n'échoue. Ce test l'interdit maintenant plutôt qu'après.
+    """
+    _, body = _fetch(from_the_network, asset)
+    text = body.decode("utf-8", "replace")
+    for marker in ("MARQUEUR-TITRE", "MARQUEUR-PREDIT", "MARQUEUR-LECON", "DEC-"):
+        assert marker not in text, (
+            f"{asset} contient {marker!r} et se sert sans jeton : le journal fuirait "
+            "vers tout le réseau local.")

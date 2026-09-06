@@ -312,12 +312,28 @@ class SageHandler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK, target.read_bytes(), content_type)
 
     def _handle(self) -> None:
+        """Le jeton garde le journal, pas la coquille qui l'affiche.
+
+        Il gardait tout, et l'app était inutilisable depuis le téléphone. La
+        page s'ouvre avec `?k=...`, mais le navigateur va ensuite chercher
+        `app.css`, `app.js`, le manifeste et les icônes **par lui-même**, avec
+        des adresses relatives qui ne portent pas le jeton. Toutes étaient
+        refusées : on obtenait le titre sans mise en forme, sans données, et
+        rien n'indiquait pourquoi.
+
+        Le découpage est celui de ce qu'on protège. Derrière `/api/` il y a ce
+        que tu as écrit : jeton obligatoire dès qu'on vient d'ailleurs que de
+        cette machine. Devant, il y a des fichiers identiques pour tout le
+        monde, lus tels quels sur le disque, publics dans le dépôt, et qui ne
+        contiennent aucune décision -- `test_sage_server.py` interdit qu'ils
+        en contiennent jamais. Les servir n'apprend rien à personne.
+        """
         path, query = self._split()
-        client = self.client_address[0] if self.client_address else ""
-        if not self.app.authorised(client, query, self.headers.get("X-Sage-Token", "")):
-            self._json(HTTPStatus.UNAUTHORIZED, {"message": "jeton d'accès manquant ou invalide"})
-            return
         if path.startswith("/api/"):
+            client = self.client_address[0] if self.client_address else ""
+            if not self.app.authorised(client, query, self.headers.get("X-Sage-Token", "")):
+                self._json(HTTPStatus.UNAUTHORIZED, {"message": "jeton d'accès manquant ou invalide"})
+                return
             self._json(HTTPStatus.OK, self.app.route(self.command, path, query, self._body()))
             return
         if self.command not in {"GET", "HEAD"}:
