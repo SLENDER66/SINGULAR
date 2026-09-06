@@ -230,6 +230,13 @@ def main() -> int:
         problems.append("la cible de tests n'a pas de TEST_HOST : « @testable import » échouerait")
     if not targets["SingularSageTests"].get("dependencies"):
         problems.append("la cible de tests ne dépend pas de l'application")
+    # Un bundle de test est chargé par son hôte, pas lancé : sans @loader_path
+    # il ne retrouve pas XCTest, et l'échec arrive à l'exécution, pas au
+    # linkage — donc après une compilation qui a l'air d'avoir réussi.
+    runpath = tests_settings.get("LD_RUNPATH_SEARCH_PATHS", [])
+    if "@loader_path/Frameworks" not in runpath:
+        problems.append("la cible de tests n'a pas @loader_path/Frameworks dans "
+                        "LD_RUNPATH_SEARCH_PATHS : le bundle ne trouverait pas XCTest")
 
     # Le mode de langage doit être écrit, pas hérité de la version d'Xcode
     # installée : c'est exactement ce que ce projet existe pour fixer.
