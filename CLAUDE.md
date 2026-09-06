@@ -2,21 +2,22 @@ SINGULAR — MANDAT DE REPRISE ET DE DÉVELOPPEMENT
 
 Tu reprends le développement réel du projet SINGULAR.
 
-Dépôt GitHub privé :
+Dépôt GitHub public :
 
 SLENDER66/SINGULAR
 
 Branche de travail :
 
-feat/validated-execution-boundary
+claude/remote-control-0pu0vh
 
-Pull Request actuelle :
+Branche par défaut :
 
-#4
+claude/singular-mandate-setup-d51s9t
 
-Base de la PR :
+Pull Request en cours :
 
-feat/human-trajectory-engine
+aucune. La PR #4 est fermée et son travail est intégré. `feat/validated-execution-boundary`
+est une branche morte : n'y retourne pas.
 
 Ne merge jamais dans main sans mon autorisation explicite.
 
@@ -106,8 +107,8 @@ Inspecte réellement :
 
 * branche actuelle ;
 * HEAD ;
-* PR #4 ;
-* base et head SHA ;
+* la branche de travail et la branche par défaut ;
+* le SHA de HEAD ;
 * commits récents ;
 * fichiers modifiés ;
 * architecture ;

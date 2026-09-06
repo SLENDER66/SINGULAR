@@ -230,4 +230,4 @@ Learning proposals are likewise non-executable: accepting a learning review does
 
 `GlobalDecisionGate` remains usable for advisory recommendations. That is not an execution authorization. Only an attested `ValidatedTrajectoryDecision` can cross the durable execution boundary.
 
-The architecture stays isolated on `feat/validated-execution-boundary` until CI is green and production callers are fully migrated. Do not merge this architecture into `main` without explicit human authorization.
+This architecture is no longer isolated on a feature branch: CI is green, production callers are migrated, and the work lives on the default branch's lineage. `feat/validated-execution-boundary` is dead. Do not merge into `main` without explicit human authorization.

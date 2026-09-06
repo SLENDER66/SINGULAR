@@ -1,97 +1,49 @@
-# Ce qu'il te reste à faire — 3 clics
+# Ce que je dois faire moi-même
 
-Tout le reste est fait. Ces trois actions demandent des droits que je n'ai pas.
+Rien sur GitHub. Les trois actions de la version précédente de ce fichier sont
+faites : le dépôt est public, la bonne branche est la branche par défaut, les
+branches mortes sont supprimées.
 
----
-
-## 1. Faire de la bonne branche la branche principale  (2 min)
-
-`main` contient l'ancienne version du projet : 40 modules, 37 fichiers de test,
-**un test qui échoue**. La branche `claude/singular-mandate-setup-d51s9t`
-contient 101 modules, 122 fichiers de test, **664 tests verts**, et tous les
-fichiers de `main` sans exception.
-
-Les deux n'ont aucun ancêtre commun, donc on ne peut pas les fusionner. On change
-juste laquelle est la principale. **Rien n'est supprimé.**
-
-1. Va sur <https://github.com/SLENDER66/SINGULAR/settings>
-2. Section **Default branch**, clique sur l'icône ⇄ (deux flèches)
-3. Choisis `claude/singular-mandate-setup-d51s9t`
-4. **Update** → confirme
-
-C'est réversible : tu peux revenir à `main` par le même chemin.
-
-### Ensuite, pour que ça s'appelle vraiment `main` (optionnel, 1 min)
-
-Une fois l'étape ci-dessus faite :
-
-5. Toujours dans Settings → **Branches** → à côté de l'ancienne `main`, la
-   corbeille 🗑 (elle est sauvegardée dans `archive/main-2026-09-03`)
-6. Puis à côté de `claude/singular-mandate-setup-d51s9t`, le crayon ✏ →
-   renomme-la en `main`
+Il reste une chose, et elle attend le Mac.
 
 ---
 
-## 2. Rendre le dépôt public  (30 s) — et ça répare le CI
+## Compiler l'app iPhone  (≈ 1 h, dont 40 min de téléchargement)
 
-**J'avais l'ordre à l'envers.** J'ai regardé la facturation Actions :
+Suis **`ios/README.md`**. Sept étapes, écrites pour quelqu'un qui n'a jamais
+ouvert Xcode.
 
-```
-run #1025 : 3 jobs, 0 milliseconde facturée, 4 secondes au total
-```
+L'ordre compte :
 
-Zéro milliseconde. Aucun runner n'a jamais démarré. Tu as **1025 runs** sur un
-dépôt privé, dont le quota gratuit est de 2000 minutes par mois. Tu les as
-épuisées.
+1. Installer Xcode depuis l'App Store.
+2. `git clone` du dépôt.
+3. Créer le projet — **Product Name exactement `SingularSage`**.
+4. Y glisser `Core/`, `App/`, `Tests/` et `Resources/notice_vectors.json`.
+5. **`Cmd + U` avant tout le reste.** Les tests comparent le portage Swift au
+   moteur Python. Vert : le cœur de l'app est prouvé fidèle. Rouge : envoie-moi
+   le message d'erreur.
+6. Se signer avec l'Apple ID (gratuit).
+7. `Cmd + R` avec l'iPhone branché.
 
-**Les dépôts publics ont GitHub Actions gratuit et illimité.** Passer en public
-ne casse pas le CI : ça le répare.
+## Pendant la semaine d'essai
 
-1. <https://github.com/SLENDER66/SINGULAR/settings>
-2. Tout en bas, **Danger Zone** → **Change repository visibility**
-3. **Make public** → tape le nom du dépôt pour confirmer
+Le certificat gratuit dure **7 jours**. Au 8ᵉ jour l'app ne s'ouvre plus :
+rebranche l'iPhone, `Cmd + R`, une minute.
 
-Pour vérifier mon diagnostic avant : <https://github.com/settings/billing>,
-section Actions. Tu devrais voir tes minutes à zéro.
+**Ne supprime jamais l'app pour régler ça.** Le rebuild garde tes décisions,
+la désinstallation les efface.
 
-*Fais l'étape 1 avant celle-ci*, pour que les visiteurs tombent sur la bonne
-version.
+Note au fil de l'eau :
 
----
+- Est-ce que tu l'ouvres le matin sans y penser ?
+- Enregistrer une décision fait-il vraiment trente secondes ?
+- Les phrases du Sage sonnent-elles juste, ou te reproche-t-il des choses sans
+  importance ?
+- Qu'as-tu cherché sans le trouver ?
+- La notification de 8 h : bonne heure, bon texte ?
 
-## 3. Nettoyer les 46 branches mortes  (1 min)
+## Ensuite
 
-À faire seulement après l'étape 1, depuis ton terminal :
-
-```bash
-cd ~/SINGULAR
-git pull
-bash migrate_main.sh --dry-run    # montre tout, ne touche à rien
-bash migrate_main.sh              # exécute
-```
-
-Si tu ne veux pas toucher au terminal, ce n'est pas grave : 46 branches
-inutilisées ne cassent rien, c'est juste moins lisible pour un visiteur.
-
----
-
-## Fait, tu n'as rien à faire
-
-- ✅ PR #4 fermée, avec un commentaire qui explique ce qui a été intégré
-- ✅ `archive/main-2026-09-03` créée — l'ancien `main` est sauvegardé
-- ✅ Matrice CI réduite de 3 à 2 versions de Python (un tiers de minutes en moins)
-- ✅ 664 tests verts, audit de frontière propre
-- ✅ Le journal, le provider HTTP réel, le README, `USAGE.md`
-
----
-
-## Et pendant ce temps
-
-```bash
-cd ~/SINGULAR && pip install -e '.[dev]'
-python -m singular apply "Nom de la boîte" "Le poste"
-```
-
-L'outil est vide. Les deux rangs que ta constitution met en premier —
-Stabilité et Revenus — n'ont aucune décision enregistrée. C'est la seule chose
-de cette page qui change quelque chose pour toi cette semaine.
+Quand la réinstallation hebdomadaire te gênera :
+[developer.apple.com/programs](https://developer.apple.com/programs/), 99 €/an,
+et le certificat passe à un an. Tes données sont conservées.
