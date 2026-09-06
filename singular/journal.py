@@ -55,6 +55,23 @@ class Tier(str, Enum):
     def rank(self) -> int:
         return list(Tier).index(self) + 1
 
+    @property
+    def label(self) -> str:
+        """Le nom du rang tel qu'il est écrit dans la constitution.
+
+        Les valeurs stockées sont sans accent, pour qu'une base écrite hier
+        reste lisible demain quel que soit l'encodage. Ce qu'on montre à
+        l'écran, lui, doit être le mot juste.
+        """
+        return {
+            Tier.STABILITE: "Stabilité",
+            Tier.REVENUS: "Revenus",
+            Tier.CAPACITES: "Capacités",
+            Tier.OPPORTUNITES: "Opportunités",
+            Tier.PATRIMOINE: "Patrimoine",
+            Tier.LIBERTE: "Liberté",
+        }[self]
+
 
 class Status(str, Enum):
     OPEN = "OPEN"
@@ -169,6 +186,18 @@ class DecisionJournal:
             raise ValueError("a decision needs a horizon of at least one day to be checkable")
         if not title.strip() or not action.strip() or not predicted.strip():
             raise ValueError("title, action and predicted outcome are all required")
+
+        # Canonicalise before fingerprinting, because the row is read back
+        # canonicalised. `add(cost_hours=60)` fingerprinted the integer 60 and
+        # `_entry` returned 60.0, which json renders differently, so verify()
+        # declared an untouched journal rewritten -- from its very first entry,
+        # for ever, since entries are never rewritten. The CLI passes floats and
+        # never saw it; any other caller broke the chain by writing to it.
+        # Validation runs first, so a string still raises rather than being
+        # quietly converted into a number.
+        probability = float(probability)
+        cost_hours = float(cost_hours)
+        horizon_days = int(horizon_days)
 
         moment = now or datetime.now(UTC)
         entry_id = "DEC-" + uuid.uuid4().hex[:8]

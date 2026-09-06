@@ -329,3 +329,41 @@ def test_recording_a_decision_after_the_fact_does_not_break_the_chain(tmp_path):
 
     assert journal.verify()
     assert [entry.title for entry in journal.entries()] == ["hier, noté après coup", "aujourd'hui"]
+
+
+# --- the chain must survive ordinary use ------------------------------------
+
+def test_an_integer_cost_does_not_break_the_chain(tmp_path):
+    """The row is read back as a float, so it must be written as one.
+
+    `add(cost_hours=60)` fingerprinted the integer and `_entry` returned 60.0;
+    json renders those differently, so verify() called an untouched journal
+    rewritten -- from its first entry, permanently, because entries are never
+    rewritten. The CLI passes floats through argparse and never met it; every
+    other caller broke the chain by using it.
+    """
+    journal = DecisionJournal(tmp_path / "journal.db")
+    journal.add(title="A", action="a", predicted="p", probability=0.8,
+                tier=Tier.REVENUS, cost_hours=60, horizon_days=14)
+    assert journal.verify() is True
+
+    journal.add(title="B", action="b", predicted="q", probability=0.7,
+                tier=Tier.CAPACITES, cost_hours=2.5, horizon_days=30)
+    assert journal.verify() is True
+
+
+def test_a_reopened_journal_still_verifies(tmp_path):
+    path = tmp_path / "journal.db"
+    first = DecisionJournal(path)
+    for index in range(3):
+        first.add(title=f"A{index}", action="a", predicted="p", probability=0.6,
+                  tier=Tier.STABILITE, cost_hours=index, horizon_days=7)
+    assert DecisionJournal(path).verify() is True
+
+
+def test_a_probability_that_is_not_a_number_is_still_refused(tmp_path):
+    """Canonicalising must not become a way of accepting anything."""
+    journal = DecisionJournal(tmp_path / "journal.db")
+    with pytest.raises(TypeError):
+        journal.add(title="A", action="a", predicted="p", probability="0.8",
+                    tier=Tier.REVENUS, cost_hours=1.0, horizon_days=14)
