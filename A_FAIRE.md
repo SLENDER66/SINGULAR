@@ -6,30 +6,31 @@ rien.
 
 ---
 
-## Un clic sur GitHub, qui compte plus qu'il n'en a l'air
+## L'état du dépôt, en une commande plutôt qu'en une phrase
 
-La branche par défaut du dépôt est restée en arrière. Ce n'est pas cosmétique :
-chaque nouvelle conversation démarre depuis elle, donc sur un dépôt **sans le
-Sage, sans `ios/`, et sur un `CLAUDE.md` d'avant la section 0** — celle qui
-existe précisément pour ne plus jamais avoir à être réécrite. Ce n'est pas une
-hypothèse : c'est arrivé le 6 septembre au soir, à la séance qui écrit ces
-lignes.
-
-Sur GitHub : **Settings > General > Default branch**, basculer sur la branche
-que `CLAUDE.md` nomme comme branche de travail. Aucun commit n'est perdu.
-
-La version précédente de ce fichier affirmait que c'était fait. Elle avait
-tort, et rien ne pouvait la contredire : l'affirmation portait sur l'état d'un
-serveur, pas sur le contenu du dépôt. D'où une commande plutôt qu'une phrase,
-qui dit l'état réel et ne conclut jamais qu'elle n'a pas pu vérifier :
+Ce fichier a déjà affirmé « la bonne branche est la branche par défaut » alors
+que c'était faux, et rien ne pouvait le contredire : l'affirmation portait sur
+l'état d'un serveur, pas sur le contenu du dépôt. Il ne l'affirme plus, il te
+donne de quoi le voir :
 
 ```powershell
 cd $HOME\Documents\SINGULAR; python tools/check_repo_state.py
 ```
 
-Elle liste aussi les branches qui traînent — dont celles que `CLAUDE.md`
-déclare mortes, encore présentes. Les supprimer est ton choix ; ce fichier ne
-prétendra plus qu'elles le sont.
+Ce que ça a coûté, pour que personne ne le refasse : la branche par défaut
+était restée 39 commits en arrière, et chaque nouvelle conversation démarre
+depuis elle. La séance du 6 septembre au soir a donc commencé **sans le Sage,
+sans `ios/`, et sur un `CLAUDE.md` d'avant la section 0** — celle qui existe
+précisément pour ne plus avoir à être réécrite. Elle serait partie travailler
+sur une branche morte si elle n'avait pas comparé.
+
+Les deux branches ont été rattrapées le soir même, en avance rapide, sans rien
+perdre. La commande ci-dessus le dira si ça se défait.
+
+**Ce qui reste et qui n'appartient qu'à toi :** huit branches traînent encore
+sur GitHub, dont `feat/validated-execution-boundary` que `CLAUDE.md` déclare
+morte. La commande les liste. Les supprimer ou les garder est ton choix ; ce
+fichier ne prétendra pas qu'elles sont supprimées.
 
 ---
 

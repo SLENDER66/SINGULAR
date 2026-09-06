@@ -10,8 +10,10 @@ Branche de travail :
 
 claude/remote-control-feedback-ndpzle
 
-Branche par défaut, en retard sur le travail — c'est d'elle que part ton
-conteneur, et ce n'est donc pas ce que tu as sous les yeux :
+Branche par défaut — c'est d'elle que part ton conteneur. Elle a été laissée
+39 commits en arrière une fois, et une séance a démarré sans le Sage, sans
+`ios/` et sur un mandat périmé. Vérifie-le, ne le suppose pas :
+`python tools/check_repo_state.py`.
 
 claude/singular-mandate-setup-d51s9t
 

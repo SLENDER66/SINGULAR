@@ -188,3 +188,28 @@ def test_a_trustworthy_mandate_still_reaches_its_verdict():
     assert status == 0
     assert "MANDAT SUSPECT" not in text
     assert "Accord" in text
+
+
+def test_two_names_on_the_same_commit_are_an_agreement():
+    """Le nom ne decide pas ; le commit, si.
+
+    C'est l'etat ou mene le rattrapage : la branche par defaut avancee jusqu'au
+    travail garde son nom, mais sert le meme code. Comparer les noms l'aurait
+    declaree en desaccord avec un depot parfaitement aligne, et le fichier de
+    reprise aurait redemande un geste deja fait -- l'erreur meme que cet outil
+    existe pour arreter.
+    """
+    text, status = _describe(
+        default_branch=DEFAULT,
+        branches={WORK: "a" * 40, DEFAULT: "a" * 40},
+    )
+    assert status == 0
+    assert "Accord" in text
+    assert "meme commit, sous deux noms" in text
+    assert "A faire" not in text
+
+
+def test_the_same_name_on_the_same_commit_says_so_plainly():
+    text, status = _describe(branches={WORK: "a" * 40})
+    assert status == 0
+    assert "sous deux noms" not in text

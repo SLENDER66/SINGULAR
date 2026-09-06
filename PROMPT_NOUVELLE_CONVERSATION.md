@@ -12,15 +12,16 @@ Sa **section 0** dit pour qui tu travailles. Je l'avais écrit trois fois dans
 trois conversations avant qu'elle existe ; elle est là pour que ce soit la
 dernière. Ne me réponds pas que tu l'as bien noté — applique-la.
 
-**Branche de travail : `claude/remote-control-feedback-ndpzle`**, en avance sur
-`claude/singular-mandate-setup-d51s9t` (branche par défaut, pas à jour).
+**Branche de travail : `claude/remote-control-feedback-ndpzle`**.
 Ne merge jamais dans `main` sans mon autorisation.
 
-**Ton conteneur part de la branche par défaut, donc en retard.** Une séance a
-démarré ainsi sans `singular/sage/`, sans `ios/`, et sur un `CLAUDE.md` d'avant
-la section 0 — et aurait travaillé sur une branche morte si elle n'avait pas
-comparé. `python tools/check_repo_state.py` le dit en une commande. Fais-le
-avant de lire quoi que ce soit d'autre.
+**Ton conteneur part de la branche par défaut, pas de la branche de travail.**
+Une séance a démarré ainsi sans `singular/sage/`, sans `ios/` et sur un
+`CLAUDE.md` d'avant la section 0, parce que la branche par défaut était restée
+39 commits en arrière ; elle serait partie travailler sur une branche morte si
+elle n'avait pas comparé. Les deux ont été rattrapées depuis.
+`python tools/check_repo_state.py` te dit où tu es. Fais-le avant de lire quoi
+que ce soit d'autre — c'est une commande, pas une promesse.
 
 ## Ce que SINGULAR est
 

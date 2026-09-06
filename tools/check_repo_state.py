@@ -163,8 +163,13 @@ def describe(
             "suivante sur une branche qui n'existe pas."
         )
         status = 1
-    elif work_branch == default_branch:
-        lines.append("Accord : la branche de travail est la branche par defaut.")
+    elif branches[work_branch] == branches.get(default_branch):
+        # Le nom ne decide pas : deux branches distinctes posees sur le meme
+        # commit servent le meme code, et une session qui part de l'une lit ce
+        # que l'autre dit. C'est exactement l'etat ou mene le rattrapage, et
+        # comparer les noms l'aurait declare en desaccord avec lui-meme.
+        same = "" if work_branch == default_branch else " -- meme commit, sous deux noms"
+        lines.append(f"Accord : la branche par defaut porte le travail{same}.")
     else:
         ecart = f"de {ahead} commits" if ahead is not None else "d'un nombre inconnu de commits"
         lines.append(f"DESACCORD : la branche par defaut est en retard {ecart}.")
@@ -180,8 +185,9 @@ def describe(
                 "Basculer sans les lire en perdrait la trace."
             )
         lines.append(
-            "A faire sur GitHub : Settings > General > Default branch, "
-            f"basculer sur {work_branch}."
+            "A faire : avancer la branche par defaut jusqu'au travail, ou bien "
+            f"sur GitHub, Settings > General > Default branch, basculer sur "
+            f"{work_branch}."
         )
         status = 1
 
