@@ -8,7 +8,7 @@ pendant lesquelles tu n'as rien à faire.
 > travaille n'a pas de compilateur Swift et le réseau y interdit son
 > installation. C'est pour ça que la première chose que tu feras est de lancer
 > les tests. Ils comparent ce port aux **vecteurs de référence** produits par le
-> moteur Python du dépôt, lui-même couvert par 705 tests. S'ils passent, le cœur
+> moteur Python du dépôt, lui-même couvert par sa propre suite. S'ils passent, le cœur
 > de l'app est prouvé équivalent à l'original. S'ils échouent, ils te disent
 > quelle phrase diverge et de quoi — envoie-moi le message, je corrige.
 

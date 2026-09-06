@@ -8,9 +8,11 @@ il est dans le dépôt et Claude le lit tout seul.
 Dépôt : **SLENDER66/SINGULAR** (public). Le mandat complet est dans `CLAUDE.md`
 à la racine : lis-le, applique-le, ne me le fais pas répéter.
 
-**Branche de travail : `claude/remote-control-0pu0vh`.** Elle a 9 commits
-d'avance sur `claude/singular-mandate-setup-d51s9t`, qui est la branche par
-défaut. Travaille sur `remote-control`. Ne merge jamais dans `main` sans mon
+**Branche de travail : `claude/remote-control-0pu0vh`.** Elle est en avance sur
+`claude/singular-mandate-setup-d51s9t`, qui est la branche par défaut et n'a pas
+été mise à jour. Travaille sur `remote-control` ; `git log --oneline
+origin/claude/singular-mandate-setup-d51s9t..HEAD` te dit ce qu'elle contient en
+plus. Ne merge jamais dans `main` sans mon
 autorisation explicite.
 
 ## Ce que le projet est devenu — lis ça avant tout le reste

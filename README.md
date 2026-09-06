@@ -72,17 +72,21 @@ Real socket, real SQLite, no mocks. Every refusal is the boundary refusing.
 | **Tamper-evident** | Decisions, approvals, audit events and outcomes are fingerprinted and re-verified from their own fields, not from a stored hash. |
 | **Learning ≠ policy** | Improvements go candidate → artifact → evaluation → human review → activation, each stage bound to the artifact fingerprint. No promotion path touches safety policy. |
 
-Verified by 572 tests, including adversarial cases: forged reports, substituted
-handlers and providers, tampered identities, replay, restart, revocation races,
-NaN and infinity inputs, and schema version mismatches. The suite passes in
-isolation and in randomised order.
+Verified by an adversarial suite: forged reports, substituted handlers and
+providers, same-named implementations differing only in a constant, tampered
+identities, replay, restart, revocation races, torn reads, NaN and infinity
+inputs, and schema version mismatches. It passes in isolation and in randomised
+order. The count is deliberately not written here — it was wrong within a week,
+twice.
 
 ## What it does not do
 
 - It is not an agent framework. It governs execution; it does not plan or reason.
 - One real provider ships today (HTTP). Everything else is yours to write.
-- Capability fingerprints identify code and closure captures — not what a
-  provider instance holds in its attributes. The limit is stated and tested.
+- Capability fingerprints identify the whole code object, a class's attributes,
+  closure captures and default arguments — but not what a provider *instance*
+  holds unless it declares `artifact_identity()`, and not what a global name
+  resolves to. Both limits are stated and tested.
 - Human approval is currently not an authorization channel: escalated actions
   cannot cross the boundary. That is an open design decision, not an oversight.
 
@@ -91,6 +95,12 @@ isolation and in randomised order.
 Working and tested, not yet used in production by anyone. Built as a single-user
 system; the parts worth reusing are the boundary, the attestation store, the
 capability registry and the outcome ledger.
+
+It is also growing a face. `singular/sage/` turns the decision journal into a
+daily report — what is waiting for a verdict, where your stated confidence
+misses, which rung of the constitution you are neglecting — and `ios/` is that
+same engine as a native iPhone app. The Sage observes and advises; a test
+refuses any import of the execution boundary from it. Thinking is not deciding.
 
 If you deploy agents and any of the four questions at the top is one you cannot
 answer today, I would genuinely like to hear how you handle it.
@@ -108,6 +118,8 @@ singular/providers/                    real providers
 singular/outcome_ledger.py             predictions vs. outcomes
 singular/improvement_registry.py       governed learning lifecycle
 singular/journal.py                    decision journal, the tool its author uses
+singular/sage/                         the observation engine and its web app
+ios/SingularSage/                      the same engine as a native iPhone app
 docs/                                  authority model, boundary design
 attic/                                 parked: what the boundary does not need
 ```
