@@ -42,7 +42,14 @@ class ValidatedExecutionBoundary:
             raise PermissionError("Seule une décision globale PROCEED peut être exécutée.")
         store = getattr(self.executor, "store", None)
         if isinstance(store, DurableStore):
-            DurableIntegrityChecker(store).assert_clean()
+            # This mission's durable state, not the whole database. The scan
+            # gates execution and nothing repairs a row, so a whole-database
+            # scan meant one bad row anywhere shut every mission for ever, and
+            # its cost was the entire history paid before every execution. The
+            # refusal that matters here is about the state this execution is
+            # going to read; DurableIntegrityChecker.check() with no argument
+            # remains the operator's whole-database view.
+            DurableIntegrityChecker(store).assert_clean(decision.contract.mission_id)
 
     @staticmethod
     def _action(decision: ValidatedTrajectoryDecision, action_id: str) -> ValidatedActionRequest:

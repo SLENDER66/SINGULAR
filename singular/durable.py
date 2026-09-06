@@ -127,6 +127,12 @@ class DurableStore:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                -- The integrity scan runs before every validated execution and
+                -- reads one mission's executions, and its effects through them.
+                -- Without these, both are a full scan of the whole history, so
+                -- the check got slower with everything the system had ever done.
+                CREATE INDEX IF NOT EXISTS idx_executions_mission ON executions(mission_id);
+                CREATE INDEX IF NOT EXISTS idx_external_effects_execution ON external_effects(execution_key);
                 """
             )
             columns = {row[1] for row in conn.execute("PRAGMA table_info(approvals)")}

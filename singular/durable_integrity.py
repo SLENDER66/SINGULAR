@@ -29,7 +29,33 @@ class DurableIntegrityChecker:
     def __init__(self, store: DurableStore) -> None:
         self.store = store
 
-    def check(self) -> DurableIntegrityReport:
+    def check(self, mission_id: str | None = None) -> DurableIntegrityReport:
+        """Every impossible cross-table state, or only one mission's.
+
+        The whole-database scan is the operator's and the auditor's view. It is
+        the wrong instrument to gate a single execution on, for two reasons that
+        both bite over time.
+
+        Its cost is the whole history, paid before every validated execution, so
+        the system gets slower the more it has done -- and a scan is not made
+        cheap by finding nothing.
+
+        Worse, `ValidatedExecutionBoundary` refuses every execution while the
+        report is dirty and nothing here repairs a row. One inconsistency
+        anywhere -- an unrelated mission, a row written outside the API, a
+        corrupted page -- and the system can never execute anything again, in
+        any mission, for ever. That is not a control; it is an outage with no
+        supported way out.
+
+        Scoped to a mission, the same refusal is exact: it stops the mission
+        whose durable state is actually incoherent, which is the state the
+        executor is about to read, and leaves the rest of the system able to
+        run. The blast radius of a bad row becomes the mission it belongs to.
+
+        One rule cannot be evaluated in scope: an external effect naming an
+        execution that does not exist belongs to no mission, so EFFECT-EXECUTION
+        is reachable only from the whole-database scan.
+        """
         violations: list[IntegrityViolation] = []
         with self.store._connect() as conn:
             # One snapshot for every table read here. Without it the executions
@@ -41,20 +67,36 @@ class DurableIntegrityChecker:
             # deferred read transaction pins a consistent view without blocking
             # the writer.
             conn.execute("BEGIN")
-            executions = conn.execute(
-                "SELECT rowid,execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until "
-                "FROM executions ORDER BY execution_key"
-            ).fetchall()
-            # One query rather than one per execution row: this scan runs before
-            # every validated execution, so its cost is paid on the hot path and
-            # grew with the whole history.
-            missions = {
-                row["mission_id"]: row["status"]
-                for row in conn.execute("SELECT mission_id,status FROM mission_states")
-            }
-            effects = conn.execute(
-                "SELECT provider_idempotency_key,execution_key,status,action_fingerprint FROM external_effects ORDER BY provider_idempotency_key"
-            ).fetchall()
+            columns = ("rowid,execution_key,mission_id,action_id,status,result,error,"
+                       "started_at,finished_at,lease_until")
+            effect_columns = "provider_idempotency_key,execution_key,status,action_fingerprint"
+            if mission_id is None:
+                executions = conn.execute(f"SELECT {columns} FROM executions ORDER BY execution_key").fetchall()
+                # One query rather than one per execution row: this scan runs
+                # before every validated execution, so its cost was paid on the
+                # hot path once per row of the whole history.
+                missions = {
+                    row["mission_id"]: row["status"]
+                    for row in conn.execute("SELECT mission_id,status FROM mission_states")
+                }
+                effects = conn.execute(
+                    f"SELECT {effect_columns} FROM external_effects ORDER BY provider_idempotency_key"
+                ).fetchall()
+            else:
+                executions = conn.execute(
+                    f"SELECT {columns} FROM executions WHERE mission_id=? ORDER BY execution_key", (mission_id,)
+                ).fetchall()
+                mission = conn.execute(
+                    "SELECT mission_id,status FROM mission_states WHERE mission_id=?", (mission_id,)
+                ).fetchone()
+                missions = {} if mission is None else {mission["mission_id"]: mission["status"]}
+                effects = conn.execute(
+                    f"SELECT {', '.join('effect.' + name for name in effect_columns.split(','))} "
+                    "FROM external_effects AS effect "
+                    "JOIN executions AS execution ON execution.execution_key = effect.execution_key "
+                    "WHERE execution.mission_id=? ORDER BY effect.provider_idempotency_key",
+                    (mission_id,),
+                ).fetchall()
 
             execution_keys = {row["execution_key"] for row in executions}
             # A mission's terminal executions are history the moment it is
@@ -126,11 +168,12 @@ class DurableIntegrityChecker:
 
         return DurableIntegrityReport(tuple(violations))
 
-    def assert_clean(self) -> None:
-        report = self.check()
+    def assert_clean(self, mission_id: str | None = None) -> None:
+        report = self.check(mission_id)
         if not report.clean:
             details = "; ".join(f"{item.entity}:{item.key}:{item.rule}: {item.detail}" for item in report.violations)
-            raise RuntimeError(f"Durable state integrity failure: {details}")
+            scope = "durable state" if mission_id is None else f"mission {mission_id}"
+            raise RuntimeError(f"Durable state integrity failure ({scope}): {details}")
 
 
 __all__ = ["IntegrityViolation", "DurableIntegrityReport", "DurableIntegrityChecker"]
