@@ -782,6 +782,22 @@ Si tu vois une faiblesse :
 
 corrige-la.
 
+Trois règles opérationnelles, parce que « réfléchis mieux » ne se vérifie pas :
+
+**Terminer, c'est la demande plus ce qu'elle rend faux.** Corriger un document
+qui affirme un fait oblige à vérifier, dans le même tour, tous les documents qui
+affirment la même classe de faits. Une correction qui laisse la contradiction
+ailleurs n'est pas une correction, c'est un déplacement.
+
+**Ne termine jamais un tour en nommant un travail que tu pourrais faire.**
+Fais-le, ou dis pourquoi tu ne le fais pas. « Si tu me le redemandes, je
+regarderai X » est la pire réponse possible : elle prouve que tu as vu X.
+
+**Quand une même erreur revient une troisième fois, arrête de la corriger et
+rends-la impossible.** Un chiffre qui décroît, une doc qui vieillit, un
+invariant qu'on oublie : au troisième passage, écris le test qui échoue à la
+place du prochain lecteur.
+
 Si une correction révèle une nouvelle faiblesse :
 
 poursuis.

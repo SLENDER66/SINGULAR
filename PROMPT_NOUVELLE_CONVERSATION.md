@@ -33,8 +33,9 @@ d'exécution.
 
 ## État vérifié au 2026-09-06 (arbre propre, tout est poussé)
 
-- **708 tests verts**, audit de frontière propre, **CI verte jusqu'au run #1069**
-  (Python 3.11 + 3.13).
+- **Suite entièrement verte**, audit de frontière propre, CI verte sur Python
+  3.11 et 3.13. Le compte exact est celui que `pytest -q` affiche ; ne le
+  recopie pas ici, il est faux au commit suivant.
 - `singular/sage/` : `notice.py` (le moteur d'observation), `server.py` (app web
   installable, bibliothèque standard seule, jeton d'accès si ouverte au réseau
   local), `icon.py` (icône dessinée en Python pur).
@@ -50,7 +51,7 @@ d'exécution.
 
 ```bash
 pip install -e '.[dev]'          # pytest n'est PAS installé dans un conteneur neuf
-python -m pytest -q              # 708 verts attendus
+python -m pytest -q              # tout doit être vert, zéro échec
 python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"
 python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer
 ```
