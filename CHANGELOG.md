@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.6.0 — Artifact Identity, Bounded Integrity, and the Sage
+
+Security — artifact identity:
+
+- `artifact_fingerprint` now covers the whole code object (constants recursing into nested code, global and attribute names, varnames, freevars, cellvars, argument counts, flags) plus a function's defaults and keyword defaults. It hashed `co_code` alone, so two same-named implementations differing only in which URL they post to were one artifact — the substitution the durable capability record exists to refuse.
+- A class's non-`__code__` attributes now count too: properties through their getter/setter/deleter, `functools.partial` through its target and bound arguments, callable instances through their `__call__`, and constants by value. Mutable class attributes are recorded by type only, so a cache cannot revoke a live capability.
+- Execution capability schema is v2. A v1 row's fingerprint cannot be recomputed and cannot be trusted, so opening a v1 database revokes every binding with a reason naming the rotation.
+- `ExecutionCapabilityRegistry.attach()` attaches the durable store before writing bindings, so a partial failure leaves the registry stricter rather than reverting to in-memory verification, and refuses to replace an already-attached store. `revoke()` writes durably first, so a failed write can no longer leave a token dead in this process and ACTIVE in the next.
+- `improvement_registry.artifact_fingerprint` no longer falls back to `str()`: data is canonicalised by value and type, code by the boundary's code identity, and an object that can state neither is refused rather than fingerprinted by its memory address. Schema is v3.
+
+Integrity and recovery:
+
+- The durable integrity scan reads every table in one deferred read transaction. Executions and mission statuses were read at different instants, so a concurrent writer could show the scan a contradiction that never existed — and the boundary refuses every execution while the scan is dirty.
+- The execution gate scans the mission being executed rather than the whole database. One bad row anywhere used to shut every mission permanently, with no supported repair. `check()` with no argument remains the operator's whole-database view.
+- `executions(mission_id)` and `external_effects(execution_key)` are indexed.
+
+Journal:
+
+- A decision recorded with an integer cost broke the hash chain from its first entry, permanently: the value was fingerprinted as written and read back as a float. Values are canonicalised before fingerprinting.
+
+The Sage:
+
+- Added `singular/sage/`: an observation engine that turns the journal into a daily report, and a standard-library web app installable on a phone's home screen. It is advisory by construction — a test refuses any import of the execution boundary from the package.
+- Added `ios/SingularSage/`: the same engine as a native SwiftUI iPhone app, pinned to the Python implementation by generated vectors that assert identical output text.
+
 ## 3.5.2 — Governed Control Plane & Continuous Improvement
 
 - Added `SingularControlPlane` as the canonical top-level lifecycle surface for build -> attest -> execute -> observe outcome.

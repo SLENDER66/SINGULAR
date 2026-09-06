@@ -25,6 +25,26 @@ python -m singular review                                 # où vont tes heures
 
 Plus `list`, `abandon DEC-xxx "raison"`, `export` (CSV), `status` (une ligne).
 
+## Le même journal, en app
+
+```bash
+python -m singular sage          # ouvre http://127.0.0.1:8765/
+python -m singular sage --lan    # joignable depuis ton téléphone, avec un jeton
+```
+
+`sage` sert le journal comme une application web, installable sur l'écran
+d'accueil d'un iPhone (Safari → Partager → « Sur l'écran d'accueil »). Elle
+affiche le rapport du jour plutôt que la liste brute : ce qui attend un verdict
+et depuis combien de temps, l'écart entre ce que tu annonces et ce qui arrive,
+les rangs de ta constitution restés vides.
+
+`--lan` l'ouvre aux autres appareils du wifi et exige alors un jeton d'accès,
+imprimé dans l'adresse au démarrage — le wifi d'une maison n'est pas un cercle
+de confiance.
+
+L'application iPhone **native** est dans `ios/` ; sa recette de compilation est
+dans `ios/README.md`.
+
 ## Le mettre devant tes yeux
 
 Ajoute à ton `~/.bashrc` ou `~/.zshrc` :
