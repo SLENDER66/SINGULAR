@@ -29,8 +29,23 @@ from singular.__main__ import _survive_narrow_consoles
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-#: Les modules qui parlent à la console. Le reste du dépôt n'écrit rien.
-SPEAKS_TO_THE_CONSOLE = ["singular/__main__.py", "singular/sage/server.py"]
+#: Les modules dont toute chaîne finit à l'écran.
+#:
+#: `tools/check_xcode_project.py` y a été ajouté après coup : sa sortie normale
+#: tenait, mais son message d'erreur portait une croix et un tiret cadratin. Or
+#: c'est le seul chemin qui compte — `A_FAIRE.md` demande d'envoyer ce message
+#: quand Xcode refuse le projet, et il cassait au moment de l'écrire. Une panne
+#: réservée au jour où l'on en a besoin ne se découvre jamais avant.
+#:
+#: `tools/generate_notice_vectors.py` n'y est pas, et ce n'est pas un oubli :
+#: ses longues chaînes décrivent les vecteurs dans un JSON lu par les tests
+#: Swift, en UTF-8. Les juger sur la page de code d'une console française
+#: interdirait des accents que personne n'affiche.
+SPEAKS_TO_THE_CONSOLE = [
+    "singular/__main__.py",
+    "singular/sage/server.py",
+    "tools/check_xcode_project.py",
+]
 
 #: La page de code d'une console française. cp1252 est plus permissive.
 CONSOLE = "cp850"

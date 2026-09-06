@@ -144,9 +144,9 @@ def main() -> int:
         return 1
 
     try:
-        root = parse(PROJECT.read_text())
+        root = parse(PROJECT.read_text(encoding="utf-8"))
     except ParseError as error:
-        print(f"le projet ne s'analyse pas — Xcode dirait « damaged » : {error}")
+        print(f"le projet ne s'analyse pas - Xcode dirait « damaged » : {error}")
         return 1
 
     objects = root["objects"]
@@ -188,7 +188,7 @@ def main() -> int:
             problems.append(f"la cible {expected} manque")
     if problems:
         for problem in problems:
-            print("✗", problem)
+            print(f"  - {problem}")
         return 1
 
     # Ce que chaque phase embarque réellement.
@@ -250,7 +250,7 @@ def main() -> int:
         problems.append("IPHONEOS_DEPLOYMENT_TARGET n'est pas fixé")
 
     for problem in problems:
-        print("✗", problem)
+        print(f"  - {problem}")
     if problems:
         return 1
 
