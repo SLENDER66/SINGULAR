@@ -4,73 +4,49 @@ Rien sur GitHub. Les trois actions de la version précédente de ce fichier sont
 faites : le dépôt est public, la bonne branche est la branche par défaut, les
 branches mortes sont supprimées.
 
-Il reste deux choses. **La première n'attend rien ni personne** — ni le Mac,
-ni ta sœur, ni un euro. Ce fichier disait le contraire, et c'est ce qui a fait
-passer l'app native avant elle.
+Le Sage tourne et je m'en sers. Ce qui reste tient en deux gestes par
+semaine, plus une chose qui attend un Mac et ne bloque rien.
 
 ---
 
-## 1. Mettre le Sage sur ton écran d'accueil, ce soir  (10 min)
+## Fait — le Sage est sur mon écran d'accueil
 
-Sur ton PC Windows.
+Depuis le 6 septembre 2026 au soir. Première décision enregistrée :
+« Postuler » → « Un entretien », 75 %, 4 h, Revenus, **verdict le 20 septembre**.
 
-**Une seule fois — installer Python.**
-[python.org/downloads](https://www.python.org/downloads/) → le gros bouton
-jaune. Dans l'installateur, **coche « Add python.exe to PATH »** en bas de la
-première fenêtre. C'est la seule case qui compte ; l'oublier est l'erreur que
-tout le monde fait.
-
-**Récupérer le code.** Ouvre PowerShell (touche Windows, tape `powershell`) :
+**Pour le relancer** (il ne répond que si le PC tourne et que je suis sur mon
+wifi) :
 
 ```powershell
-cd $HOME\Documents
-git clone -b claude/remote-control-feedback-ndpzle https://github.com/SLENDER66/SINGULAR.git
-cd SINGULAR
+cd $HOME\Documents\SINGULAR; python -m singular sage --lan
 ```
 
-**Le `-b` compte.** La branche par défaut du dépôt est en retard ; sans lui tu
-récupères une version qui s'arrête net sur la console française de Windows.
-Quand tu auras changé la branche par défaut sur GitHub, il deviendra inutile.
+Si l'app redemande la clé, un champ permet de la coller : l'adresse entière
+affichée par PowerShell, ou le jeton seul.
 
-Si `git` n'existe pas : sur la page GitHub, choisis d'abord la branche
-`claude/remote-control-feedback-ndpzle` dans le menu déroulant en haut à
-gauche, **puis** bouton vert **Code** → **Download ZIP**. Décompresse dans
-`Documents` et entre dans le dossier obtenu.
+**Sauvegarde.** Tout mon journal est dans un seul fichier :
+`C:\Users\Utilisateur\.singular\journal.db`. Le copier de temps en temps sur
+une clé ou dans un dossier synchronisé, c'est toute la sauvegarde nécessaire.
+Rien ne part sur un serveur.
 
-**Pour mettre à jour plus tard**, depuis le dossier `SINGULAR` :
+## Ce qui compte maintenant
 
-```powershell
-git pull
-```
+1. **Ouvrir l'app le matin.** C'est le seul geste qui fait vivre le journal.
+2. **Trancher le 20 septembre.** La carte passera en haut, « À trancher
+   aujourd'hui ». Oui ou non. Un journal où l'on écrit sans jamais trancher
+   n'apprend rien.
+3. **Noter ce qui manque** — au fil de l'eau, pour la prochaine session :
+   - Est-ce que je l'ouvre sans y penser, ou faut-il que j'y pense ?
+   - Enregistrer une décision fait-il vraiment trente secondes ?
+   - Les phrases sonnent-elles juste, ou me reproche-t-il des choses sans
+     importance ?
+   - Qu'ai-je cherché sans le trouver ?
 
-**Lancer le Sage.** Ton iPhone et le PC doivent être sur le même wifi.
-
-```powershell
-python -m singular sage --lan
-```
-
-Windows demandera d'autoriser Python sur le réseau : **accepte** pour les
-réseaux privés. Sans ça, le téléphone ne verra rien.
-
-Le programme affiche une adresse du genre `http://192.168.1.24:8765/?k=...`.
-
-**Sur l'iPhone.** Ouvre cette adresse dans **Safari** — le jeton `?k=` en fait
-partie, recopie-la en entier. Puis bouton **Partager** (le carré avec la
-flèche) → **Sur l'écran d'accueil**.
-
-Tu as une icône. Plein écran, pas de barre de navigateur. C'est le Sage.
-
-**Ce que ça vaut, et ce que ça ne vaut pas.** L'app marche tant que le PC
-tourne et que tu es sur ton wifi. Dehors, ou PC éteint, elle ne répond pas.
-C'est la limite, et c'est ce que l'app native lèvera. En attendant, tu as le
-Sage aujourd'hui au lieu de l'avoir peut-être.
-
-Aucune dépendance à installer : le serveur n'utilise que ce qui vient avec
-Python.
+C'est ça qui décidera de la faculté suivante — pas une liste écrite d'avance.
 
 ---
 
-## 2. L'app native, quand le Mac sera disponible
+## En attente d'un Mac — l'app native, hors ligne et partout
 
 ### Compiler l'app iPhone  (≈ 1 h, dont 40 min de téléchargement)
 
