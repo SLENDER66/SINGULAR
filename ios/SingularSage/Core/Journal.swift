@@ -18,6 +18,11 @@ final class Journal: ObservableObject {
 
     @Published private(set) var entries: [Entry] = []
 
+    /// Non nul quand le fichier existe mais n'a pas pu être lu. Tant que c'est
+    /// le cas, aucune écriture n'est acceptée : le journal en mémoire ne
+    /// représente pas ce qui est sur le disque.
+    @Published private(set) var loadFailure: String?
+
     private let location: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -28,6 +33,7 @@ final class Journal: ObservableObject {
         case missingField(String)
         case unknownEntry(String)
         case alreadyResolved(String)
+        case unreadable(String)
 
         var errorDescription: String? {
             switch self {
@@ -41,6 +47,10 @@ final class Journal: ObservableObject {
                 return "\(id) n'existe pas."
             case .alreadyResolved(let id):
                 return "\(id) a déjà été tranchée ; l'histoire n'est pas modifiable."
+            case .unreadable(let reason):
+                return "Le journal existe mais n'a pas pu être lu (\(reason)). "
+                    + "Rien ne sera écrit tant que ce n'est pas réglé : écrire maintenant "
+                    + "remplacerait ton historique par un journal vide."
             }
         }
     }
@@ -64,6 +74,7 @@ final class Journal: ObservableObject {
     @discardableResult
     func add(title: String, action: String, predicted: String, probability: Double,
              tier: Tier, costHours: Double, horizonDays: Int, now: Date = Date()) throws -> Entry {
+        try requireReadableStore()
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let action = action.trimmingCharacters(in: .whitespacesAndNewlines)
         let predicted = predicted.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -98,6 +109,7 @@ final class Journal: ObservableObject {
     /// Enregistrer ce qui s'est passé. Note la prédiction, ne la réécrit pas.
     @discardableResult
     func resolve(_ id: String, happened: Bool, lesson: String = "", now: Date = Date()) throws -> Entry {
+        try requireReadableStore()
         guard let index = entries.firstIndex(where: { $0.id == id }) else {
             throw JournalError.unknownEntry(id)
         }
@@ -116,6 +128,7 @@ final class Journal: ObservableObject {
     /// Arrêter une décision, en le disant. Abandonner est un résultat.
     @discardableResult
     func abandon(_ id: String, reason: String, now: Date = Date()) throws -> Entry {
+        try requireReadableStore()
         guard let index = entries.firstIndex(where: { $0.id == id }) else {
             throw JournalError.unknownEntry(id)
         }
@@ -183,16 +196,44 @@ final class Journal: ObservableObject {
 
     // MARK: - Disque
 
+    /// Charger le journal, en distinguant « pas encore de fichier » de
+    /// « fichier illisible ».
+    ///
+    /// C'était `(try? decoder.decode(...)) ?? []`, et cette ligne perdait des
+    /// années de journal sans rien dire. Un fichier corrompu, tronqué par une
+    /// batterie vide, ou écrit par une version future du format donnait un
+    /// journal vide ; l'app affichait « Le journal est vide » ; la première
+    /// décision enregistrée repartait sur une chaîne neuve et **écrasait le
+    /// fichier**. Une lecture qui échoue en rendant « rien » est indiscernable
+    /// d'une lecture qui réussit sur un journal neuf, et c'est exactement la
+    /// condition dans laquelle on accepte d'écrire par-dessus.
+    ///
+    /// Un fichier absent est légitime : c'est le premier lancement. Un fichier
+    /// présent et illisible arrête les écritures jusqu'à ce que quelqu'un
+    /// regarde.
     private func load() {
-        guard let data = try? Data(contentsOf: location) else { return }
-        entries = (try? decoder.decode([Entry].self, from: data)) ?? []
+        guard FileManager.default.fileExists(atPath: location.path) else { return }
+        do {
+            entries = try decoder.decode([Entry].self, from: Data(contentsOf: location))
+        } catch {
+            loadFailure = error.localizedDescription
+            entries = []
+        }
     }
 
+    /// Écrire, sauf si ce qu'on a en mémoire ne vient pas du fichier.
     private func save() {
-        guard let data = try? encoder.encode(entries) else { return }
+        guard loadFailure == nil, let data = try? encoder.encode(entries) else { return }
         // `.atomic` : le fichier est l'ancien ou le nouveau, jamais un mélange
         // des deux. Un journal tronqué aurait l'air d'être là.
         try? data.write(to: location, options: .atomic)
+    }
+
+    /// Vérifier avant toute écriture qu'on n'est pas en train de repartir de zéro.
+    private func requireReadableStore() throws {
+        if let failure = loadFailure {
+            throw JournalError.unreadable(failure)
+        }
     }
 }
 

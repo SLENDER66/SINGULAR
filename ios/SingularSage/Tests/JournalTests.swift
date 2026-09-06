@@ -55,10 +55,15 @@ final class JournalTests: XCTestCase {
         try add(journal)
         XCTAssertTrue(journal.verify())
 
-        var raw = try String(contentsOf: location, encoding: .utf8)
-        raw = raw.replacingOccurrences(of: "\"probability\" : 0.6", with: "\"probability\" : 0.05")
-        XCTAssertFalse(raw.contains("\"probability\" : 0.6"), "le remplacement n'a rien changé")
-        try raw.write(to: location, atomically: true, encoding: .utf8)
+        // Relire, modifier, réécrire en JSON plutôt que par remplacement de
+        // texte : l'espacement produit par JSONEncoder n'est pas un contrat, et
+        // un test qui échoue parce que Foundation met un espace avant les deux
+        // points ferait perdre un aller-retour pour rien.
+        let data = try Data(contentsOf: location)
+        var rows = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        XCTAssertEqual(rows.count, 2)
+        rows[0]["probability"] = 0.05
+        try JSONSerialization.data(withJSONObject: rows).write(to: location)
 
         XCTAssertFalse(makeJournal().verify(), "une prédiction retouchée après coup doit se voir")
     }
@@ -100,6 +105,56 @@ final class JournalTests: XCTestCase {
         XCTAssertThrowsError(try journal.resolve(entry.id, happened: false)) { error in
             XCTAssertEqual(error as? Journal.JournalError, .alreadyResolved(entry.id))
         }
+    }
+
+    // MARK: Un fichier illisible n'est pas un journal vide
+
+    func testAnUnreadableJournalRefusesToBeOverwritten() throws {
+        // Le pire scénario possible pour cette app : des années de décisions
+        // remplacées en silence par une décision neuve, parce qu'une lecture
+        // ratée rendait « rien » et que « rien » ressemble à un premier
+        // lancement.
+        let first = makeJournal()
+        try add(first)
+        try add(first)
+        let original = try Data(contentsOf: location)
+
+        try Data("ceci n'est plus du JSON".utf8).write(to: location)
+        let broken = makeJournal()
+
+        XCTAssertNotNil(broken.loadFailure, "un fichier illisible doit être signalé")
+        XCTAssertTrue(broken.entries.isEmpty)
+        XCTAssertThrowsError(try add(broken)) { error in
+            guard case .unreadable = error as? Journal.JournalError else {
+                return XCTFail("l'écriture doit être refusée, pas silencieuse : \(error)")
+            }
+        }
+        XCTAssertEqual(try Data(contentsOf: location).count,
+                       "ceci n'est plus du JSON".utf8.count,
+                       "le fichier ne doit surtout pas avoir été réécrit")
+        XCTAssertNotEqual(original, try Data(contentsOf: location))
+    }
+
+    func testAMissingFileIsAFirstLaunchNotAFailure() throws {
+        let journal = makeJournal()
+        XCTAssertNil(journal.loadFailure, "l'absence de fichier est le cas normal du premier lancement")
+        XCTAssertNoThrow(try add(journal))
+    }
+
+    func testAReadableJournalRestoredAfterAFailureWritesAgain() throws {
+        /// La panne doit être réversible : remettre un fichier valide suffit.
+        let first = makeJournal()
+        try add(first)
+        let good = try Data(contentsOf: location)
+
+        try Data("cassé".utf8).write(to: location)
+        XCTAssertNotNil(makeJournal().loadFailure)
+
+        try good.write(to: location)
+        let restored = makeJournal()
+        XCTAssertNil(restored.loadFailure)
+        XCTAssertEqual(restored.entries.count, 1)
+        XCTAssertNoThrow(try add(restored))
     }
 
     // MARK: Les comptes

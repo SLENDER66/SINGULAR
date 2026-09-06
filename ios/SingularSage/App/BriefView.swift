@@ -17,6 +17,7 @@ struct BriefView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     header
+                    storageFailure
                     observations
                     figures
                     openDecisions
@@ -52,6 +53,36 @@ struct BriefView: View {
             Text(now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
                 .font(.footnote)
                 .foregroundStyle(Theme.muted)
+        }
+    }
+
+    /// Un journal illisible ne doit jamais ressembler à un journal vide.
+    ///
+    /// C'est la différence entre « tu n'as rien écrit » et « ton historique est
+    /// là mais je n'arrive pas à le lire » — et la deuxième interdit d'écrire,
+    /// sans quoi la première décision enregistrée l'écraserait.
+    @ViewBuilder
+    private var storageFailure: some View {
+        if let failure = journal.loadFailure {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Ton journal n'a pas pu être lu")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.text)
+                Text("Il est là, mais illisible : \(failure)\n\nAucune écriture n'est acceptée tant que "
+                     + "ce n'est pas réglé — enregistrer une décision maintenant remplacerait "
+                     + "ton historique par un journal vide.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Theme.colour(for: .critique).opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Theme.colour(for: .critique), lineWidth: 1)
+            )
         }
     }
 
