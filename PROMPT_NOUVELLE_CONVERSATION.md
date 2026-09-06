@@ -33,7 +33,22 @@ python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien chan
 python tools/check_xcode_project.py   # le projet Xcode s'ouvre et est complet
 ```
 
-## Ce qui se passe en ce moment — priorité absolue
+## Ce qui se passe en ce moment
+
+**Le Sage tourne sur mon PC Windows et je l'ouvre depuis mon iPhone.**
+`python -m singular sage --lan` sert une app web installable sur l'écran
+d'accueil, en bibliothèque standard seule, sans rien à installer. C'est le
+chemin qui marche aujourd'hui. Sa limite : il faut que le PC tourne et que je
+sois sur mon wifi.
+
+L'app native Swift lève cette limite — hors ligne, partout — mais elle dépend
+d'un Mac que je n'ai pas. **Ce n'est pas la priorité ; c'est une amélioration
+qui attend.** Une session précédente l'avait traitée comme un blocage et a
+passé son temps à réparer du Swift pendant que l'app web existait déjà,
+inutilisée, dans le même dépôt. Ne refais pas ça : regarde ce qui tourne avant
+de réparer ce qui ne tourne pas.
+
+### L'app native, quand le Mac se libère
 
 **Ma sœur a mon Mac et compile à ma place, à distance.** Elle suit la section
 « Si quelqu'un d'autre compile à ta place » de `ios/README.md` : Xcode,
@@ -65,14 +80,19 @@ TestFlight le permettrait, donc 99 €/an, écarté pour l'instant).
    corrigé) et `chaine_rompue` (l'observation la plus grave, et l'ordre de deux
    observations de même gravité).
 3. **Captures d'écran** — retours de design.
-4. Une fois le build vert : enchaîne sur **Mémoire**.
+4. Une fois le build vert : c'est fini pour l'app native.
 
-**N'écris aucune faculté nouvelle avant que le build soit vert.**
+Le build Swift ne bloque plus rien : le Sage est déjà sur mon téléphone par
+le web. Ce qui décide de la suite, ce n'est plus un compilateur — c'est ce que
+l'usage quotidien me montre.
 
 ## Contraintes — ne les redécouvre pas
 
 - **Aucun compilateur Swift ici et impossible à installer** : la passerelle
   réseau refuse swift.org et les binaires GitHub. Vérifié, n'y passe pas de temps.
+- **Je suis sur Windows.** Toute sortie console doit tenir dans cp850 : ni
+  flèche, ni tiret cadratin, ni points de suspension typographiques. Les
+  accents passent. `tests/test_windows_console.py` le vérifie.
 - CI ignore `**/*.md` et `docs/**` : un commit de doc ne déclenche aucun run.
 - `attic/` hors périmètre. `ruff check` sur tout le dépôt sort ~91 erreurs
   préexistantes : vérifie **tes** fichiers, pas le dépôt entier.
