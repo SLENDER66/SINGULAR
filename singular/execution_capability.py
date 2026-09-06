@@ -517,11 +517,29 @@ class ExecutionCapabilityRegistry:
         self.durable = durable
 
     def attach(self, durable: DurableCapabilityStore) -> None:
-        """Give an existing registry a durable meaning for the tokens it holds."""
+        """Give an existing registry a durable meaning for the tokens it holds.
+
+        Two ways this used to end somewhere weaker than it started.
+
+        A bind that raised partway -- one token already meaning another artifact
+        durably -- left `self.durable` unset, so every token the registry held
+        went back to being verified in memory alone: the failure removed the
+        durable half rather than refusing. The store is attached before the
+        bindings are written now, so a failure leaves the registry stricter than
+        before. Tokens that were not bound stop matching until they are
+        registered again, which is the fail-closed direction.
+
+        Replacing an attached store is refused outright. Pointing a registry at
+        a fresh database would rewrite what every token durably means from
+        whatever is in memory now -- exactly the restart substitution, performed
+        deliberately.
+        """
         with self._lock:
+            if self.durable is not None and self.durable is not durable:
+                raise PermissionError("a registry's durable capability store cannot be replaced")
+            self.durable = durable
             for capability_id, target in self._targets.items():
                 durable.bind(capability_id, target)
-            self.durable = durable
 
     def register(self, target: Any, capability_id: str | None = None) -> str:
         if target is None:
@@ -565,17 +583,29 @@ class ExecutionCapabilityRegistry:
             return self._fingerprints.get(capability_id)
 
     def revoke(self, capability_id: str) -> None:
+        """Retire a token here and durably, durably first.
+
+        The in-process entry was dropped before the durable write was attempted,
+        so a write that failed left the token dead in this process and ACTIVE in
+        the next one: a revocation that a restart undoes. The durable record is
+        the half that survives, so it goes first, and the local entry is dropped
+        either way -- a caller who sees the error knows the revocation is not
+        durable, and meanwhile nothing here will execute under that token.
+        """
         with self._lock:
-            target = self._targets.pop(capability_id, None)
-            self._fingerprints.pop(capability_id, None)
-            if target is not None:
-                self._by_object.pop(id(target), None)
             durable = self.durable
-        if durable is not None:
-            try:
-                durable.revoke(capability_id)
-            except KeyError:
-                pass
+        try:
+            if durable is not None:
+                try:
+                    durable.revoke(capability_id)
+                except KeyError:
+                    pass  # never bound durably: there is nothing to retire there
+        finally:
+            with self._lock:
+                target = self._targets.pop(capability_id, None)
+                self._fingerprints.pop(capability_id, None)
+                if target is not None:
+                    self._by_object.pop(id(target), None)
 
 
 GLOBAL_EXECUTION_CAPABILITIES = ExecutionCapabilityRegistry()
