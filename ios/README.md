@@ -20,57 +20,25 @@ App Store sur le Mac → cherche **Xcode** → Installer. C'est gros (~10 Go, pr
 40 Go de libre). Lance-le une fois l'installation finie, accepte la licence,
 laisse-le installer ses composants.
 
-## 2. Récupérer le code
+## 2. Récupérer le code et ouvrir le projet
 
 Ouvre **Terminal** (Cmd+Espace, tape « Terminal ») et colle :
 
 ```bash
 cd ~/Documents
 git clone https://github.com/SLENDER66/SINGULAR.git
-open SINGULAR/ios
+open SINGULAR/ios/SingularSage.xcodeproj
 ```
 
-Une fenêtre s'ouvre sur le dossier `ios`. Laisse-la ouverte, tu vas y glisser des
-fichiers.
+Xcode s'ouvre sur le projet. Il n'y a rien à créer, rien à glisser, rien à
+cocher : le projet est dans le dépôt, avec ses deux cibles, ses dix fichiers
+et le fichier de vecteurs déjà rangé dans celle des tests.
 
-## 3. Créer le projet
+Xcode peut proposer de « mettre à jour vers les réglages recommandés ».
+**Refuse** (*Cancel*). Ces réglages sont ceux que le projet fixe exprès ; les
+laisser changer est précisément ce qui ferait échouer la compilation.
 
-Dans Xcode : **File → New → Project…**
-
-| Champ | Valeur |
-|---|---|
-| Modèle | **iOS** → **App** |
-| Product Name | `SingularSage` — exactement, les tests en dépendent |
-| Team | laisse vide pour l'instant |
-| Organization Identifier | `com.thomas` (ou ce que tu veux, sans espace) |
-| Interface | **SwiftUI** |
-| Language | **Swift** |
-| Storage | **None** |
-| Include Tests | **coché** |
-
-**Next**, enregistre-le dans `~/Documents` (pas dans le dossier SINGULAR).
-
-## 4. Mettre les fichiers dedans
-
-Dans Xcode, à gauche, tu vois un dossier bleu `SingularSage`.
-
-1. Depuis la fenêtre du Finder ouverte à l'étape 2, glisse les dossiers
-   **`Core`** et **`App`** sur le dossier jaune `SingularSage` de Xcode.
-   Dans la boîte qui s'ouvre : **coche « Copy items if needed »**, choisis
-   **« Create groups »**, et sous *Add to targets* coche **SingularSage**.
-2. Xcode a créé un fichier `SingularSageApp.swift` de son côté et tu viens d'en
-   apporter un autre du même nom. **Supprime celui que Xcode a créé** (clic
-   droit → Delete → *Move to Trash*) ; garde le mien.
-   Fais pareil avec `ContentView.swift`, qui ne sert plus.
-3. Glisse le contenu de **`Tests`** (les deux fichiers `.swift`) sur le dossier
-   `SingularSageTests`. Cette fois, sous *Add to targets*, coche
-   **SingularSageTests** et **décoche SingularSage**.
-4. Glisse **`Resources/notice_vectors.json`** au même endroit, dans
-   `SingularSageTests`, en cochant **SingularSageTests** uniquement.
-   Sans ce fichier, les tests ne peuvent rien vérifier — et ils te le diront
-   plutôt que de passer au vert en silence.
-
-## 5. Lancer les tests  ← fais ça avant tout le reste
+## 3. Lancer les tests  ← fais ça avant tout le reste
 
 **Cmd + U**.
 
@@ -79,7 +47,7 @@ Dans Xcode, à gauche, tu vois un dossier bleu `SingularSage`.
 - Du rouge → clique sur l'erreur, tu verras `attendu ... obtenu ...`.
   Envoie-moi le texte, c'est fait pour ça.
 
-## 6. Se signer avec ton Apple ID  (gratuit)
+## 4. Se signer avec ton Apple ID  (gratuit)
 
 Clique sur le projet `SingularSage` tout en haut à gauche → onglet
 **Signing & Capabilities**.
@@ -89,7 +57,7 @@ Clique sur le projet `SingularSage` tout en haut à gauche → onglet
 3. Si Xcode râle sur le *Bundle Identifier*, change-le pour quelque chose
    d'unique : `com.thomas.singularsage.2026`.
 
-## 7. Installer sur ton iPhone
+## 5. Installer sur ton iPhone
 
 1. Branche l'iPhone au Mac. Sur le téléphone : **Se fier** à cet ordinateur.
 2. En haut de Xcode, à côté du bouton ▶, choisis ton iPhone dans la liste.
@@ -111,15 +79,15 @@ dépenser** pour tout ce qui suit.
 
 ### Ce qu'elle fait — 1 h, dont 40 min d'attente
 
-1. Étapes **1 à 4** ci-dessus : installer Xcode, `git clone`, créer le projet
-   `SingularSage`, y glisser les fichiers.
+1. Étapes **1 et 2** ci-dessus : installer Xcode, puis les trois lignes de
+   Terminal qui clonent le dépôt et ouvrent le projet.
 2. **`Cmd + U`** — les tests. C'est le but de l'opération.
 3. En haut de Xcode, choisir **n'importe quel iPhone de la liste des
    simulateurs** (pas un appareil réel), puis **`Cmd + R`**. L'app démarre dans
    un iPhone à l'écran, entièrement fonctionnelle.
 
-Le simulateur ne demande ni Apple ID, ni certificat, ni signature. Les étapes 6
-et 7 du haut de page ne la concernent pas.
+Le simulateur ne demande ni Apple ID, ni certificat, ni signature. Les étapes 4
+et 5 du haut de page ne la concernent pas.
 
 ### Ce qu'elle renvoie
 
@@ -171,9 +139,36 @@ Quand la semaine te gênera : [developer.apple.com/programs](https://developer.a
 | `App/DailyNotice.swift` | Le rappel de 8 h |
 | `Tests/NoticeVectorTests.swift` | La comparaison avec le moteur de référence |
 | `Tests/JournalTests.swift` | La chaîne, les refus, les comptes |
+| `SingularSage.xcodeproj` | Le projet : cibles, réglages, appartenance des fichiers |
 
 Le journal vit dans un fichier JSON dans l'app. Il ne part sur aucun serveur, et
 la sauvegarde iCloud de ton iPhone l'emporte avec elle.
+
+## Si le projet ne s'ouvre pas
+
+Le `.xcodeproj` de ce dépôt a été écrit sans Xcode, dans un environnement qui
+n'en a pas. Il est vérifié par `tools/check_xcode_project.py`, qui l'analyse et
+refuse un projet incomplet — mais une vérification n'est pas une ouverture. Si
+Xcode dit **« the project is damaged and cannot be opened »**, envoie-moi le
+message et monte le projet à la main en attendant :
+
+1. **File → New → Project…** → **iOS** → **App**.
+   Product Name `SingularSage` — exactement, les tests en dépendent.
+   Team vide, Interface **SwiftUI**, Language **Swift**, Storage **None**,
+   **Include Tests coché**. Enregistre dans `~/Documents`, pas dans `SINGULAR`.
+2. Dans le Finder, ouvre `SINGULAR/ios`. Glisse les dossiers **`Core`** et
+   **`App`** sur le dossier jaune `SingularSage` de Xcode : coche
+   **« Copy items if needed »**, choisis **« Create groups »**, et sous
+   *Add to targets* coche **SingularSage**.
+3. Xcode a créé son propre `SingularSageApp.swift` et tu viens d'en apporter un
+   du même nom. **Supprime celui de Xcode** (clic droit → Delete → *Move to
+   Trash*) ; garde le mien. Pareil pour `ContentView.swift`, qui ne sert plus.
+4. Glisse les deux fichiers de **`Tests`** sur `SingularSageTests`. Sous
+   *Add to targets*, coche **SingularSageTests** et **décoche SingularSage** —
+   un fichier compilé dans les deux cibles casse l'édition de liens.
+5. Glisse **`Resources/notice_vectors.json`** au même endroit, en cochant
+   **SingularSageTests** uniquement. Sans lui les tests ne peuvent rien
+   vérifier, et ils te le diront plutôt que de passer au vert en silence.
 
 ## Quand la règle change côté Python
 
@@ -184,5 +179,6 @@ Le moteur Python reste la référence. Après toute modification de
 python tools/generate_notice_vectors.py
 ```
 
-Remplace ensuite `notice_vectors.json` dans Xcode, relance **Cmd + U**, et le
-test te dira exactement ce qu'il reste à porter.
+Le fichier est écrit à sa place dans le projet ; il n'y a rien à remplacer
+dans Xcode. Relance **Cmd + U**, et le test te dira exactement ce qu'il reste
+à porter.
