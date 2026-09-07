@@ -118,7 +118,7 @@ pas ça : **regarde ce qui tourne avant de réparer ce qui ne tourne pas.**
 # Les deux lignes suivantes sont deja faites par le hook de demarrage :
 # ne les relance que si son bloc n'est pas apparu dans le contexte.
 python tools/check_repo_state.py  # d'ou part ce conteneur ? doit sortir 0
-pip install -e '.[dev]'           # pytest n'est pas installe dans un conteneur neuf
+python -m pip install -e ".[dev]"           # pytest n'est pas installe dans un conteneur neuf
 python -m pytest -q              # tout vert, zéro échec
 python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"
 python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer

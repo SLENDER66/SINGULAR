@@ -147,7 +147,7 @@ def _sdk():
     except ImportError:
         raise AnalyseIndisponible(
             "le paquet « anthropic » n'est pas installe. "
-            "pip install -e '.[analyse]' -- ou laisse la faculte coupee."
+            "python -m pip install -e \".[analyse]\" -- ou laisse la faculte coupee."
         ) from None
     return anthropic
 

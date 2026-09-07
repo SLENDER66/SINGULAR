@@ -8,7 +8,7 @@ demander ce qui s'est passé.
 ## Installation
 
 ```bash
-cd ~/SINGULAR && pip install -e '.[dev]'
+cd ~/SINGULAR && python -m pip install -e ".[dev]"
 ```
 
 La base vit dans `~/.singular/journal.db`.
@@ -43,7 +43,7 @@ l'environnement, elle le dit et affiche la Notice calculée sans elle. Tout le r
 — journal, chaîne d'intégrité, Notice, calibration — n'a jamais besoin d'elle,
 et `tests/test_sage_independence.py` le vérifie plutôt que de le promettre.
 
-Pour l'allumer : `pip install -e '.[analyse]'`, puis une clé depuis
+Pour l'allumer : `python -m pip install -e ".[analyse]"`, puis une clé depuis
 console.anthropic.com (compte séparé de l'abonnement Claude, deux facturations).
 Mets un plafond mensuel dès le premier jour.
 

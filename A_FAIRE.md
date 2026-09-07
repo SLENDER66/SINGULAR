@@ -172,8 +172,12 @@ Rien ne part sur un serveur.
    ```powershell
    cd $HOME\Documents\SINGULAR
    git pull
-   pip install -e ".[analyse]"
+   python -m pip install -e ".[analyse]"
    ```
+
+   `python -m pip` et pas `pip` seul : sur Windows, `pip` n'est pas toujours
+   dans le PATH, et il peut installer pour un autre Python que celui qui lance
+   SINGULAR.
 
    Puis, **dans cette même fenêtre**, poser la clé et vérifier tout de suite
    qu'elle est vue :
