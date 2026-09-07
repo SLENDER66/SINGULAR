@@ -201,4 +201,7 @@ def test_un_fait_dit_n_est_pas_marque_comme_incertain(proto) -> None:
     bloc = proto.texte_pour_claude(donnees, "une question")
 
     assert "Ceci n'est pas verifie" not in bloc
-    assert "centrales de traitement d'air double flux" in bloc
+    # Un fragment stable de PROFIL plutot qu'une phrase entiere : le profil
+    # change des qu'il precise quelque chose, et un test qui casse a chaque
+    # precision apprend a ignorer les tests.
+    assert proto.PROFIL[0][0] in bloc
