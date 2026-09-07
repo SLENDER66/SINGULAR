@@ -27,10 +27,34 @@ sur une branche morte si elle n'avait pas comparé.
 Les deux branches ont été rattrapées le soir même, en avance rapide, sans rien
 perdre. La commande ci-dessus le dira si ça se défait.
 
-**Ce qui reste et qui n'appartient qu'à toi :** plusieurs branches traînent
-encore sur GitHub, dont `feat/validated-execution-boundary` que `CLAUDE.md` déclare
-morte. La commande les liste. Les supprimer ou les garder est ton choix ; ce
-fichier ne prétendra pas qu'elles sont supprimées.
+**Ce qui reste et qui n'appartient qu'à toi :** des branches traînent encore sur
+GitHub. La commande ci-dessus les liste. Les supprimer ou les garder est ton
+choix ; ce fichier ne prétendra pas qu'elles sont supprimées.
+
+Une session ne peut pas les supprimer : le proxy réseau des conteneurs refuse
+l'opération, vérifié. Le geste est donc le tien — sur GitHub, onglet **Branches**,
+icône corbeille — ou depuis ton PC : `git push origin --delete <nom>`.
+
+Le tri a été fait le 7 septembre 2026, pour ne pas être refait :
+
+| Branche | Commits qu'elle est seule à porter |
+|---|---|
+| `claude/remote-control-0pu0vh` | aucun |
+| `claude/singular-mandate-state-check-s1088v` | aucun |
+| `claude/singular-startup-hook-czr3hp` | aucun |
+| `archive/main-2026-09-03` | 191 — et c'est **exactement le même commit que `main`** |
+| `v51-final` | 132 |
+| `feat/global-coherence-integration` | 260 |
+| `feat/economic-control-plane` | 356 |
+| `feat/human-trajectory-engine` | 380 |
+| `feat/decision-lifecycle-hardening` | 426 |
+| `feat/validated-execution-boundary` | 608 — `CLAUDE.md` la déclare morte |
+
+Les trois premières sont entièrement contenues dans la branche de travail :
+les supprimer ne peut rien coûter. Les autres portent du code que la branche de
+travail n'a pas — vieux, probablement superseded, mais je ne peux pas le
+prouver, et une suppression ne se défait pas facilement. Ne les efface que si
+tu sais ce qu'elles contenaient.
 
 ---
 
