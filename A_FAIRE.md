@@ -98,7 +98,20 @@ cd $HOME\Documents\SINGULAR; python -m singular sage --lan
 ```
 
 Si l'app redemande la clé, un champ permet de la coller : l'adresse entière
-affichée par PowerShell, ou le jeton seul.
+affichée par PowerShell, ou le jeton seul. Ça arrivera de temps en temps :
+une app installée sur l'écran d'accueil a son propre stockage, séparé de
+Safari, et iOS le vide quand il veut. Ce n'est pas une panne.
+
+**La partie après `?k=` est un secret.** Elle donne accès à ton journal depuis
+n'importe quel appareil du wifi. Ne la colle jamais dans une conversation, un
+message ou une capture d'écran — pas même ici. Si ça arrive, elle se change en
+vingt secondes :
+
+```powershell
+del $HOME\.singular\sage_token; python -m singular sage --lan
+```
+
+L'ancienne clé cesse alors de fonctionner, et l'app en redemandera une neuve.
 
 **Depuis le téléphone seul, sans PC.** Le cœur n'a plus aucune dépendance : il
 tourne dans **a-Shell** sans rien installer. Une fois, dans a-Shell :
