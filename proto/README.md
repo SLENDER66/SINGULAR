@@ -5,7 +5,44 @@ Un fichier, `suivi_candidatures.py`. Bibliothèque standard seule, aucun
 l'architecture de SINGULAR : pas de couches, pas de frontière d'exécution.
 C'est fait pour être supprimé si une semaine d'usage ne prouve pas que ça sert.
 
-## Sur le PC — une ligne, à coller telle quelle
+## Sur l'iPhone — sans PC, sans serveur, sans wifi particulier
+
+C'est le chemin principal : contrairement au Sage, ce script n'a besoin de rien
+d'autre que du téléphone. Installe **a-Shell** (gratuit, App Store) : un
+terminal avec Python 3 intégré, tout tourne en local.
+
+Une seule fois, dans a-Shell — le script est un fichier autonome, inutile de
+cloner le dépôt :
+
+```
+curl -O https://raw.githubusercontent.com/SLENDER66/SINGULAR/claude/remote-control-feedback-ndpzle/proto/suivi_candidatures.py
+```
+
+Puis chaque matin, une seule ligne :
+
+```
+python suivi_candidatures.py
+```
+
+Il affiche où tu en es, puis **une** action pour aujourd'hui. Puis un menu à un
+chiffre : `1` ajouter, `2` changer un statut, `3` noter, `4` le CV, `5` tout
+voir, `0` quitter.
+
+Tes données restent sur le téléphone, dans `~/.singular/candidatures.json`.
+Pour les relire ou les sauvegarder : `cat ~/.singular/candidatures.json`.
+
+Pour n'avoir qu'un geste : ouvre l'app **Raccourcis**, crée un raccourci qui
+ouvre a-Shell, et pose-le sur ton écran d'accueil.
+
+Pour reprendre une version plus récente du script, relance la même commande
+`curl` : elle écrase le fichier, jamais tes données.
+
+**Ce que je n'ai pas pu vérifier d'ici :** ni App Store, ni iPhone. Le
+téléchargement par `curl` et l'exécution du fichier seul sont testés dans mon
+environnement, mais qu'a-Shell fournisse bien `curl` et `python` ne l'est pas.
+Si l'une des deux lignes ne passe pas, envoie-moi le message d'erreur.
+
+## Sur le PC — si tu y as accès
 
 Appuie sur **Échap** avant de coller (PowerShell fusionne les lignes collées).
 
@@ -13,42 +50,18 @@ Appuie sur **Échap** avant de coller (PowerShell fusionne les lignes collées).
 cd $HOME\Documents\SINGULAR; python proto\suivi_candidatures.py
 ```
 
-Il affiche où tu en es, puis **une** action pour aujourd'hui. Puis un menu à un
-chiffre : `1` ajouter, `2` changer un statut, `3` noter, `4` le CV, `5` tout
-voir, `0` quitter.
+Tes données vont alors dans `C:\Users\Utilisateur\.singular\candidatures.json`,
+le même dossier que `journal.db`.
 
-Tes données vont dans `C:\Users\Utilisateur\.singular\candidatures.json` —
-le même dossier que `journal.db`, donc la sauvegarde que tu fais déjà les
-couvre toutes les deux.
+**Les deux copies ne se parlent pas.** Le fichier du téléphone et celui du PC
+sont deux fichiers séparés : tiens-toi à un seul des deux, sinon tu auras deux
+suivis divergents. Tant que le PC n'est pas accessible, c'est le téléphone.
 
-## Sur l'iPhone
+## Le Sage, lui, a besoin du PC
 
-Le plus court chemin, et il ne demande ni PC allumé ni serveur : **a-Shell**,
-gratuit sur l'App Store. C'est un terminal avec Python intégré, tout tourne sur
-le téléphone, hors ligne.
-
-Une fois installé, dans a-Shell :
-
-```
-lg2 clone https://github.com/SLENDER66/SINGULAR
-```
-
-Puis, chaque matin :
-
-```
-cd SINGULAR && python proto/suivi_candidatures.py
-```
-
-Pour n'avoir qu'un geste : ouvre l'app **Raccourcis**, crée un raccourci qui
-ouvre a-Shell, et pose-le sur ton écran d'accueil à côté du Sage.
-
-**Ce que je n'ai pas pu vérifier d'ici :** je n'ai pas accès à l'App Store ni à
-un iPhone depuis cet environnement. a-Shell embarque bien Python 3 et `lg2`
-(son git), mais si l'une de ces deux commandes ne passe pas chez toi, envoie-moi
-le message d'erreur — c'est le genre de panne qui se corrige en une fois.
-
-Le repli, si a-Shell te déplaît : le script tourne sur le PC, et le fichier
-JSON est lisible tel quel. Rien ne t'y enferme.
+`python -m singular sage --lan` sert l'app web depuis le PC : sans PC allumé et
+sans le même wifi, le Sage n'est pas joignable. Ce prototype-ci ne dépend pas
+de lui et fonctionne seul.
 
 ## Ce que fait l'action du jour, et dans quel ordre
 
