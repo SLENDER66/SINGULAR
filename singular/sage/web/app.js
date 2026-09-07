@@ -199,8 +199,49 @@ function showFormError(id, message) {
   node.hidden = false;
 }
 
+// Un envoi a la fois par formulaire, et les boutons grises pendant ce temps.
+//
+// Le serveur local met un instant a repondre, et rien ne bougeait a l'ecran :
+// on appuie une seconde fois. Pour « trancher », ca envoyait deux verdicts
+// contradictoires -- le journal les refuse depuis, mais le message qui
+// revenait etait le sien, technique et en anglais. Pour « enregistrer », rien
+// ne les refuse : deux appuis font deux decisions identiques et legitimes, des
+// heures comptees double, et une calibration faussee le jour du verdict.
+//
+// Un seul verrou pour les deux : la meme verite ecrite deux fois finit par
+// diverger, et celle-ci est trop subtile pour qu'on remarque la derive.
+const envoisEnCours = new Set();
+
+function griser(boutons, grise) {
+  // `$` rend `null` pour un identifiant absent. Griser un bouton est un
+  // confort ; empecher le double envoi est la garantie. Les lier ferait
+  // qu'un identifiant renomme dans le HTML casserait l'enregistrement
+  // lui-meme -- une panne bien pire que celle qu'on previent. Le verrou
+  // vit donc dans l'ensemble, pas dans le DOM.
+  for (const id of boutons) {
+    const bouton = $(id);
+    if (bouton) bouton.disabled = grise;
+  }
+}
+
+async function envoyerUneFois(cle, boutons, action) {
+  if (envoisEnCours.has(cle)) return;
+  envoisEnCours.add(cle);
+  griser(boutons, true);
+  try {
+    await action();
+  } finally {
+    envoisEnCours.delete(cle);
+    griser(boutons, false);
+  }
+}
+
 async function submitAdd(event) {
   event.preventDefault();
+  await envoyerUneFois("add", ["add-submit"], () => submitAddOnce());
+}
+
+async function submitAddOnce() {
   const data = new FormData($("add-form"));
   try {
     await api("/api/entries", {
@@ -251,18 +292,12 @@ function openResolve(entryId) {
 // Le journal refuse deja la double ecriture cote serveur. Ici on evite
 // qu'elle soit tentee, ce qui n'est pas la meme chose : la garde du serveur
 // protege la verite, celle-ci protege ce qu'on comprend en appuyant.
-let verdictEnCours = false;
-
-function verrouillerVerdict(verrouille) {
-  for (const id of ["resolve-yes", "resolve-no"]) {
-    $(id).disabled = verrouille;
-  }
+async function submitResolve(happened) {
+  await envoyerUneFois("resolve", ["resolve-yes", "resolve-no"],
+                       () => submitResolveOnce(happened));
 }
 
-async function submitResolve(happened) {
-  if (verdictEnCours) return;
-  verdictEnCours = true;
-  verrouillerVerdict(true);
+async function submitResolveOnce(happened) {
   const lesson = new FormData($("resolve-form")).get("lesson") || "";
   try {
     await api(`/api/entries/${resolving}/resolve`, {
@@ -279,9 +314,6 @@ async function submitResolve(happened) {
     showFormError("resolve-error", error.status === 409
       ? "Cette décision a déjà été tranchée. Ferme et rouvre pour voir le verdict enregistré."
       : error.message);
-  } finally {
-    verdictEnCours = false;
-    verrouillerVerdict(false);
   }
 }
 

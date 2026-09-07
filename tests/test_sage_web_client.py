@@ -72,33 +72,36 @@ def test_the_hours_figure_waits_for_a_verdict_before_warning() -> None:
         "la vignette s'alarmerait avant qu'un verdict ait pu être rendu")
 
 
-#: Le bloc du verdict, decoupe entre son verrou et la section suivante.
-def _bloc_verdict() -> str:
+#: Le bloc des envois : le verrou partage, puis les deux formulaires.
+def _bloc_envoi() -> str:
     code = CLIENT.read_text(encoding="utf-8")
-    debut = code.index("let verdictEnCours")
+    debut = code.index("const envoisEnCours")
     fin = code.index("// --- démarrage", debut)
     return code[debut:fin]
 
 
 def _executer(scenario: str) -> dict:
-    """Joue le bloc du verdict dans node, avec un DOM et un reseau simules."""
+    """Joue le bloc des envois dans node, avec un DOM et un reseau simules."""
     harness = """
     const appels = [];
     const erreurs = [];
-    const boutons = {"resolve-yes": {disabled: false}, "resolve-no": {disabled: false}};
-    const $ = (id) => boutons[id] || {reset() {}, close() {}, textContent: "", hidden: true};
-    class FormData { constructor() {} get() { return "une lecon"; } }
-    let resolving = "DEC-1";
+    const boutons = {
+      "resolve-yes": {disabled: false}, "resolve-no": {disabled: false},
+      "add-submit": {disabled: false},
+    };
+    const muet = {reset() {}, close() {}, textContent: "", hidden: true};
+    const $ = (id) => (id in boutons ? boutons[id] : muet);
+    class FormData { constructor() {} get(nom) { return nom === "title" ? "un titre" : "1"; } }
     let reponse = null;
     async function api(chemin, options) {
-      appels.push(JSON.parse(options.body));
+      appels.push({chemin, corps: JSON.parse(options.body)});
       await new Promise((r) => setTimeout(r, 20));
       if (reponse) throw reponse;
       return {};
     }
     async function refresh() {}
     function showFormError(id, message) { erreurs.push(message); }
-    """ + _bloc_verdict() + scenario
+    """ + _bloc_envoi() + '\nresolving = "DEC-1";\n' + scenario
     resultat = subprocess.run([NODE, "-e", harness], capture_output=True, text=True,
                               timeout=20, check=False)
     assert resultat.returncode == 0, resultat.stderr
@@ -124,8 +127,47 @@ def test_un_double_appui_n_envoie_qu_un_seul_verdict() -> None:
     """)
 
     assert len(resultat["appels"]) == 1, f"{len(resultat['appels'])} verdicts envoyes"
-    assert resultat["appels"][0]["happened"] is True
+    assert resultat["appels"][0]["corps"]["happened"] is True
     assert resultat["erreurs"] == []
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_un_double_appui_n_enregistre_qu_une_seule_decision() -> None:
+    """Le meme defaut sur « Enregistrer », et sans filet cote serveur.
+
+    Deux verdicts, le journal les refuse. Deux ajouts, il les accepte : ce
+    sont deux decisions legitimes, avec deux identifiants. Des heures
+    comptees double dans le bilan, et une calibration faussee le jour du
+    verdict -- sans rien qui signale l'erreur.
+    """
+    faux_evenement = "{preventDefault() {}}"
+    resultat = _executer(f"""
+    (async () => {{
+      const premier = submitAdd({faux_evenement});
+      submitAdd({faux_evenement});
+      await premier;
+      process.stdout.write(JSON.stringify({{appels, erreurs}}));
+    }})();
+    """)
+
+    assert len(resultat["appels"]) == 1, f"{len(resultat['appels'])} decisions enregistrees"
+    assert resultat["appels"][0]["chemin"] == "/api/entries"
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_les_deux_formulaires_ont_des_verrous_distincts() -> None:
+    """Un verrou unique bloquerait l'ajout pendant qu'on tranche, et l'inverse."""
+    faux_evenement = "{preventDefault() {}}"
+    resultat = _executer(f"""
+    (async () => {{
+      const a = submitResolve(true);
+      const b = submitAdd({faux_evenement});
+      await Promise.all([a, b]);
+      process.stdout.write(JSON.stringify({{appels: appels.map((x) => x.chemin)}}));
+    }})();
+    """)
+
+    assert sorted(resultat["appels"]) == ["/api/entries", "/api/entries/DEC-1/resolve"]
 
 
 @pytest.mark.skipif(NODE is None, reason="node absent")
@@ -144,6 +186,26 @@ def test_les_boutons_sont_reouverts_apres_l_envoi() -> None:
 
 
 @pytest.mark.skipif(NODE is None, reason="node absent")
+def test_un_bouton_absent_du_html_ne_casse_pas_l_envoi() -> None:
+    """Griser est un confort ; empecher le double envoi est la garantie.
+
+    Les lier ferait qu'un identifiant renomme dans le HTML casserait
+    l'enregistrement lui-meme. C'est arrive en ecrivant ce verrou : le bouton
+    « Enregistrer » n'avait pas d'identifiant, et `$` rendait `null`.
+    """
+    resultat = _executer("""
+    (async () => {
+      await envoyerUneFois("essai", ["bouton-qui-n-existe-pas"], async () => {
+        await api("/api/essai", {body: "{}"});
+      });
+      process.stdout.write(JSON.stringify({appels: appels.length}));
+    })();
+    """)
+
+    assert resultat["appels"] == 1
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
 def test_un_conflit_se_lit_en_francais_et_ne_ressemble_pas_a_une_panne() -> None:
     """409 : l'autre appareil a tranche. Ce n'est pas une panne, et le message
     brut du journal -- « history is not editable » -- ne le dit pas."""
@@ -159,3 +221,37 @@ def test_un_conflit_se_lit_en_francais_et_ne_ressemble_pas_a_une_panne() -> None
     message = resultat["erreurs"][0]
     assert "déjà été tranchée" in message
     assert "history is not editable" not in message
+
+
+def test_les_boutons_grises_existent_vraiment_dans_la_page() -> None:
+    """Le verrou tolere un identifiant absent -- et c'est pour ca qu'il faut ce test.
+
+    `griser()` ignore un bouton introuvable, deliberement : lier le confort
+    visuel a la garantie ferait qu'un identifiant renomme dans le HTML
+    casserait l'enregistrement lui-meme. La consequence est qu'une faute de
+    frappe ne casse plus rien -- elle rend juste le bouton insensible, sans
+    que personne le voie.
+
+    C'est arrive en ecrivant ce verrou : `envoyerUneFois("add", ["add-submit"])`
+    a ete ecrit avant que le bouton « Enregistrer » ait cet identifiant. Le
+    double appui restait bloque, mais rien ne se grisait.
+
+    Ce test lit les deux fichiers et les compare.
+    """
+    import re
+
+    page = (CLIENT.parent / "index.html").read_text(encoding="utf-8")
+    js = CLIENT.read_text(encoding="utf-8")
+
+    demandes = set()
+    for appel in re.findall(r"envoyerUneFois\(\s*\"[^\"]+\",\s*\[([^\]]*)\]", js):
+        demandes.update(re.findall(r'"([^"]+)"', appel))
+    assert demandes, "aucun appel a envoyerUneFois lu : l'analyse a change de forme"
+
+    presents = set(re.findall(r'id="([^"]+)"', page))
+    manquants = sorted(demandes - presents)
+
+    assert not manquants, (
+        f"ces boutons sont grises par app.js mais absents de index.html : {manquants}.\n"
+        "Le double envoi reste bloque, mais le bouton ne montre plus rien."
+    )
