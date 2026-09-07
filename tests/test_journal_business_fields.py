@@ -212,3 +212,61 @@ def test_l_export_porte_les_deux_champs(tmp_path) -> None:
     assert lignes[0]["reversibility"] == "IRREVERSIBLE"
     assert lignes[1]["expected_gain_eur"] == ""
     assert json.dumps(lignes)
+
+
+def test_plusieurs_processus_migrent_la_meme_base_sans_la_casser(tmp_path) -> None:
+    """Le cas réel : le Sage tourne pendant qu'on tape `add` dans une autre fenêtre.
+
+    Les deux ouvrent le journal, les deux le trouvent en v1, les deux migrent.
+    La migration lit le schéma (`PRAGMA table_info`) puis le modifie
+    (`ALTER TABLE`) : entre les deux, un autre processus peut passer, et un
+    second `ALTER` sur la même colonne échoue.
+
+    Ça tient pour deux raisons qu'on ne voit pas en lisant `_migrate` seul :
+    la connexion porte un `timeout` de dix secondes, donc un écrivain
+    concurrent attend au lieu d'échouer ; et `_init_schema` commence par un
+    `CREATE TABLE`, qui prend le verrou d'écriture **avant** la lecture de
+    version. Le contrôle et l'action sont donc dans la même section critique.
+
+    Aucune des deux n'est évidente, et les deux se perdraient en réordonnant
+    trois lignes. D'où ce test plutôt qu'un commentaire.
+    """
+    import subprocess
+    import sys
+    import textwrap
+    import time
+
+    chemin = tmp_path / "journal.db"
+    _base_v1(chemin)
+
+    # Sans barriere, les processus demarrent en file indienne et se ratent :
+    # le test passait alors meme en supprimant le `timeout` de la connexion,
+    # c'est-a-dire en retirant precisement ce qu'il pretend verifier. Ils
+    # attendent donc tous l'apparition d'un fichier avant de migrer.
+    depart = tmp_path / "top"
+    bloc = textwrap.dedent(f'''
+        import os, time
+        while not os.path.exists(r"{depart}"):
+            time.sleep(0.001)
+        from singular.journal import DecisionJournal
+        journal = DecisionJournal(r"{chemin}")
+        assert journal.verify(), "chaine rompue"
+        assert len(journal.entries()) == 1
+        print("OK")
+    ''')
+    processus = [
+        subprocess.Popen([sys.executable, "-c", bloc], stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True)
+        for _ in range(6)
+    ]
+    time.sleep(0.4)      # le temps que chacun ait charge Python et attende
+    depart.write_text("go", encoding="utf-8")
+    sorties = [p.communicate()[0] for p in processus]
+
+    echecs = [s.strip()[-300:] for s in sorties if "OK" not in s]
+    assert not echecs, "une migration concurrente a echoue :\n" + "\n".join(echecs)
+
+    # Et la base est bien en v2, une seule fois.
+    with sqlite3.connect(chemin) as conn:
+        versions = conn.execute("SELECT version FROM journal_schema").fetchall()
+    assert versions == [(SCHEMA_VERSION,)], f"table de version incoherente : {versions}"
