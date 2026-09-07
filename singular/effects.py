@@ -240,6 +240,18 @@ class ExternalEffectCoordinator:
             return cur.rowcount == 1
 
     def _transition(self, key: str, status: str, *, result: Any = None, error: str | None = None) -> None:
+        """Applique une transition d'état atomiquement.
+
+        Rejouer le même état ne fait rien et n'est pas une erreur : c'est ce
+        qui préserve la preuve. Un rejeu -- reprise après incident, appel en
+        double, retentative d'un fournisseur -- ne doit pas écraser le résultat
+        déjà enregistré par une seconde écriture identique, sinon l'horodatage
+        de l'effet ne dit plus quand il s'est réellement produit.
+
+        Phrase récupérée de `feat/validated-execution-boundary` avant que cette
+        branche soit jugée supprimable : le code y était identique, ce
+        commentaire était la seule chose qu'elle avait en plus.
+        """
         with self._connect() as conn:
             row = conn.execute("SELECT status FROM external_effects WHERE provider_idempotency_key=?", (key,)).fetchone()
             if row is None:
