@@ -191,6 +191,20 @@ class DecisionJournal:
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
+            # Le verrou d'ecriture d'abord, et explicitement. Sans lui, le
+            # controle et l'action de la migration ne sont pas dans la meme
+            # section critique : `PRAGMA table_info` dit « colonne absente » a
+            # deux processus a la fois, et le second `ALTER TABLE` echoue en
+            # « duplicate column name ».
+            #
+            # Ce n'est pas theorique : le Sage tourne pendant qu'on tape `add`
+            # dans une autre fenetre, et les deux migrent au premier lancement
+            # apres une mise a jour. On avait cru la sequence protegee par le
+            # `CREATE TABLE IF NOT EXISTS` ci-dessous -- SQLite l'optimise en
+            # rien du tout quand la table existe, et ne prend alors aucun
+            # verrou. C'est le test de concurrence qui l'a montre, apres avoir
+            # ete pris pour instable.
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute("CREATE TABLE IF NOT EXISTS journal_schema (version INTEGER NOT NULL)")
             row = conn.execute("SELECT version FROM journal_schema").fetchone()
             if row is None:
