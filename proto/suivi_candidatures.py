@@ -83,19 +83,41 @@ ETAPES_CV = [
     "Faire relire par quelqu'un du metier",
 ]
 
+#: Les deux seules provenances possibles pour une ligne de profil.
+#:
+#: DIT   : il l'a ecrit lui-meme, dans une conversation. C'est un fait.
+#: DEDUIT: personne ne l'a dit ; ca a ete infere. A confirmer avant de s'en
+#:         servir, et affiche comme tel dans le bloc colle a Claude.
+DIT = "dit"
+DEDUIT = "deduit"
+
 #: Ce que Claude ne peut pas deviner, et que tu ne dois pas retaper a chaque
-#: conversation. C'est exactement ce que ce fichier sait et que Claude oublie
-#: entre deux conversations : c'est tout l'interet du pont plus bas.
+#: conversation.
+#:
+#: Chaque ligne porte sa provenance, et ce n'est pas de la ceremonie. Deux fois
+#: dans la meme journee, une session a deduit un fait de sa vie au lieu de le
+#: demander, et l'a ecrit ici comme s'il etait acquis :
+#:
+#:   - « il vient du terrain, donc c'est une reconversion » -- ses deux ans de
+#:     bureau d'etudes ont ete effaces, et le CV s'excusait d'arriver du terrain ;
+#:   - « chambre froide, groupe electrogene, bruleur, donc pas de tertiaire » --
+#:     il fait des CTA double flux, et le conseil qui en sortait l'ecartait du
+#:     marche toulousain le plus large.
+#:
+#: Sa constitution classe deja tout element du modele du monde en FACT,
+#: HYPOTHESIS, ESTIMATE... Ce fichier ne le faisait pas. Il le fait maintenant,
+#: et `tests/test_proto_suivi.py` refuse une ligne sans provenance : ajouter une
+#: deduction en la faisant passer pour un fait n'est plus possible en silence.
 PROFIL = [
-    "2 ans en bureau d'etudes CVC : chiffrage, dimensionnement.",
-    "Avant cela, 5 ans de terrain dans l'Armee : chambre froide, groupe",
-    "electrogene, bruleur -- froid, energie, combustion.",
-    "Et du tertiaire : centrales de traitement d'air double flux.",
-    "BTS Fluides Energies Domotique. Actuellement au chomage.",
-    "Je cherche un poste en bureau d'etudes dans la region toulousaine.",
-    "Une reprise d'etudes en alternance m'interesse, mais je n'ai ni ecole",
-    "ni entreprise a ce jour.",
-    "Debutant en code, j'utilise un iPhone.",
+    ("2 ans en bureau d'etudes CVC : chiffrage, dimensionnement.", DIT),
+    ("Avant cela, 5 ans de terrain dans l'Armee : chambre froide, groupe", DIT),
+    ("electrogene, bruleur -- froid, energie, combustion.", DIT),
+    ("Et du tertiaire : centrales de traitement d'air double flux.", DIT),
+    ("BTS Fluides Energies Domotique. Actuellement au chomage.", DIT),
+    ("Je cherche un poste en bureau d'etudes dans la region toulousaine.", DIT),
+    ("Une reprise d'etudes en alternance m'interesse, mais je n'ai ni ecole", DIT),
+    ("ni entreprise a ce jour.", DIT),
+    ("Debutant en code, j'utilise un iPhone.", DIT),
 ]
 
 
@@ -436,7 +458,14 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
     l'app Claude est deja sur le telephone.
     """
     lignes = ["Voici ma situation. Reponds en francais, droit au but.", ""]
-    lignes += PROFIL
+    lignes += [texte for texte, source in PROFIL if source == DIT]
+    a_confirmer = [texte for texte, source in PROFIL if source != DIT]
+    if a_confirmer:
+        # L'incertitude voyage avec le fait. Sans ca, une deduction collee dans
+        # une conversation en ressort comme une chose etablie.
+        lignes.append("")
+        lignes.append("Ceci n'est pas verifie, ne t'appuie pas dessus sans me demander :")
+        lignes += [f"- {texte}" for texte in a_confirmer]
     lignes.append("")
 
     ouvertes = [c for c in donnees["candidatures"] if c["statut"] in EN_COURS]

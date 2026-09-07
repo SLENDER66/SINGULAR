@@ -148,3 +148,57 @@ def test_une_etape_deja_cochee_interdit_la_mise_a_jour(proto) -> None:
     donnees = proto.charger()
 
     assert [e["etape"] for e in donnees["cv"]] == ["Une etape d'avant", "Une autre"]
+
+
+# --- rien sur sa vie qui ne vienne de lui ------------------------------------
+
+def test_chaque_ligne_de_profil_porte_sa_provenance(proto) -> None:
+    """Deux fois dans la même journée, une session a déduit un fait de sa vie.
+
+    « Il vient du terrain, donc c'est une reconversion » a effacé deux ans de
+    bureau d'études. « Chambre froide et brûleur, donc pas de tertiaire » l'a
+    écarté du marché toulousain le plus large, alors qu'il fait des CTA double
+    flux. Aucune des deux n'a été demandée, et les deux se sont écrites ici
+    comme des faits.
+
+    Une consigne — « ne déduis pas » — se lit ou ne se lit pas. Une chaîne nue
+    dans PROFIL, elle, échoue.
+    """
+    fautes = [
+        f"« {entree!r} »"
+        for entree in proto.PROFIL
+        if not (isinstance(entree, tuple) and len(entree) == 2
+                and isinstance(entree[0], str) and entree[1] in (proto.DIT, proto.DEDUIT))
+    ]
+
+    assert not fautes, (
+        "chaque ligne de PROFIL doit dire d'ou elle vient -- DIT ou DEDUIT :\n  "
+        + "\n  ".join(fautes)
+        + "\n  Une chaine seule voudrait dire « quelqu'un l'a ecrit, on ne sait plus qui »."
+    )
+
+
+def test_une_deduction_est_affichee_comme_non_verifiee(proto) -> None:
+    """Si une déduction entre quand même, elle ne doit pas voyager déguisée."""
+    donnees = {"candidatures": [], "cv": [{"etape": "x", "fait": True}]}
+    veritable = list(proto.PROFIL)
+    try:
+        proto.PROFIL.append(("Il vise plutot l'industriel.", proto.DEDUIT))
+        bloc = proto.texte_pour_claude(donnees, "une question")
+    finally:
+        proto.PROFIL[:] = veritable
+
+    assert "Ceci n'est pas verifie" in bloc
+    assert "Il vise plutot l'industriel." in bloc
+    ligne = next(l for l in bloc.splitlines() if "industriel" in l)
+    assert ligne.startswith("- "), "une deduction doit etre listee a part, pas fondue dans le profil"
+
+
+def test_un_fait_dit_n_est_pas_marque_comme_incertain(proto) -> None:
+    """L'inverse : signaler tout affaiblirait ce que le signal veut dire."""
+    donnees = {"candidatures": [], "cv": [{"etape": "x", "fait": True}]}
+
+    bloc = proto.texte_pour_claude(donnees, "une question")
+
+    assert "Ceci n'est pas verifie" not in bloc
+    assert "centrales de traitement d'air double flux" in bloc
