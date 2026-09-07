@@ -847,6 +847,20 @@ ailleurs n'est pas une correction, c'est un déplacement.
 Fais-le, ou dis pourquoi tu ne le fais pas. « Si tu me le redemandes, je
 regarderai X » est la pire réponse possible : elle prouve que tu as vu X.
 
+**Mes questions se posent en questionnaire, pas en prose.** Utilise l'outil de
+questions à choix (`AskUserQuestion`). Je réponds sur un téléphone : une liste
+de questions en paragraphes me coûte dix fois plus qu'un appui sur une
+proposition. Je l'ai demandé dix fois, dont une explicitement, et une session
+qui l'avait appliqué est revenue à la prose au message suivant. Ce n'est donc
+plus une préférence, c'est une règle du dépôt. Une question ouverte à la fin
+d'une réponse compte aussi : elle va dans le questionnaire.
+
+Corollaire, qui est la raison d'être de la règle : **ne comble jamais un blanc
+sur ma vie par une déduction.** Demande. `proto/suivi_candidatures.py` marque
+désormais chaque ligne de mon profil `DIT` ou `DEDUIT`, et un test refuse une
+ligne sans provenance — parce que deux déductions non demandées m'ont déjà
+coûté un CV faux et un marché écarté.
+
 **Quand une même erreur revient une troisième fois, arrête de la corriger et
 rends-la impossible.** Un chiffre qui décroît, une doc qui vieillit, un
 invariant qu'on oublie : au troisième passage, écris le test qui échoue à la

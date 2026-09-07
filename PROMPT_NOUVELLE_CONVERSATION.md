@@ -233,6 +233,10 @@ calibration continuent. Ce n'est pas une intention, c'est ce que vérifient
 
 Débutant en code. iPhone + PC Windows ; le Mac est chez ma sœur et n'est pas
 requis. Explique les commandes pas à pas, **une ligne à la fois**.
+
+**Pose-moi tes questions en questionnaire** (`AskUserQuestion`), jamais en
+paragraphes : je réponds sur un téléphone. C'est écrit dans `CLAUDE.md` §24,
+après dix rappels.
 ~30 h/semaine. **Parle-moi en français.** Droit au but, pas de long
 récapitulatif, pas de flatterie.
 
