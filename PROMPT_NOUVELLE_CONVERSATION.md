@@ -71,6 +71,17 @@ rang Revenus, **verdict attendu le 20 septembre**.
 Limite du chemin actuel : il faut que le PC tourne et que je sois sur mon
 wifi. C'est la seule chose que l'application native lèverait.
 
+**Mais le PC n'est plus une dépendance de code.** `singular/__init__.py`
+importait tout le moteur historique au chargement, et `pydantic` avec :
+`python -m singular` exigeait donc un `pip install` pour afficher un journal
+qui n'utilise que la bibliothèque standard. Les noms sont résolus à la demande
+depuis (PEP 562). Journal, chaîne d'intégrité, Notice, ligne de commande et
+serveur du Sage tournent maintenant sans rien installer — donc dans a-Shell sur
+l'iPhone. `tests/test_lazy_package.py` le vérifie en sous-processus, avec
+pydantic rendu introuvable. Ce qui reste ouvert côté téléphone est
+opérationnel, pas structurel : est-ce qu'iOS laisse tourner un serveur en
+arrière-plan quand on bascule vers Safari.
+
 **Deuxième chose en usage : `proto/suivi_candidatures.py`**, livré le
 6 septembre au soir. Un fichier, un JSON, bibliothèque standard, explicitement
 jetable et hors architecture — voir `proto/README.md`. Il me rappelle où en
