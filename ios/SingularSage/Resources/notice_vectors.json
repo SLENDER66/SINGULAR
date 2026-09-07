@@ -166,6 +166,11 @@
           },
           {
             "severity": "INFO",
+            "title": "60 h engagées sans gain attendu",
+            "detail": "Soit 100% de tes heures. La constitution demande de juger une décision sur son levier et son coût ; sans estimation de ce qu'elle rapporte, il ne reste que le coût, et tout finit par se valoir."
+          },
+          {
+            "severity": "INFO",
             "title": "1 décision ouverte",
             "detail": "La prochaine échéance tombe dans 29 jours : « le résultat observable », que tu donnes à 60%."
           }
@@ -285,6 +290,11 @@
           },
           {
             "severity": "INFO",
+            "title": "20 h engagées sans gain attendu",
+            "detail": "Soit 100% de tes heures. La constitution demande de juger une décision sur son levier et son coût ; sans estimation de ce qu'elle rapporte, il ne reste que le coût, et tout finit par se valoir."
+          },
+          {
+            "severity": "INFO",
             "title": "1 décision ouverte",
             "detail": "La prochaine échéance tombe dans 28 jours : « le résultat observable », que tu donnes à 60%."
           }
@@ -366,6 +376,11 @@
             "severity": "ATTENTION",
             "title": "4h engagées sans verdict",
             "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+          },
+          {
+            "severity": "INFO",
+            "title": "20 h engagées sans gain attendu",
+            "detail": "Soit 100% de tes heures. La constitution demande de juger une décision sur son levier et son coût ; sans estimation de ce qu'elle rapporte, il ne reste que le coût, et tout finit par se valoir."
           },
           {
             "severity": "INFO",
@@ -596,6 +611,11 @@
             "severity": "INFO",
             "title": "80h engagées sans verdict",
             "detail": "Contre 2h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+          },
+          {
+            "severity": "INFO",
+            "title": "82 h engagées sans gain attendu",
+            "detail": "Soit 100% de tes heures. La constitution demande de juger une décision sur son levier et son coût ; sans estimation de ce qu'elle rapporte, il ne reste que le coût, et tout finit par se valoir."
           },
           {
             "severity": "INFO",

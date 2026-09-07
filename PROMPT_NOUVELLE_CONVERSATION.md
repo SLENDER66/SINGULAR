@@ -184,8 +184,16 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
    production.
 5. Côté port iOS : que le Swift **compile** reste hors de portée d'ici.
    L'équivalence arithmétique avec le moteur Python est tenue par
-   `tests/test_notice_rounding_port.py`, et la correspondance du JSON des
-   vecteurs avec les structures Swift par `tests/test_notice_vector_schema.py`.
+   `tests/test_notice_rounding_port.py`, la correspondance du JSON des
+   vecteurs avec les structures Swift par `tests/test_notice_vector_schema.py`,
+   et la liste des observations produites de part et d'autre par
+   `tests/test_notice_port_parity.py`.
+   **Le port est en retard de deux observations**, `irreversibleItem` et
+   `unpricedItem`, déclarées dans `ABSENTES_DU_PORT` avec la raison. Les
+   vecteurs committés les attendent déjà : le premier Mac qui compilera le port
+   verra ces vecteurs échouer, et ce n'est pas une surprise mais une dette
+   écrite. Retirer un nom de cette liste sans écrire le Swift fait échouer le
+   test ici, tout de suite.
 
 ## Coût, pour ne pas le recalculer
 

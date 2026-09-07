@@ -88,6 +88,22 @@
       </label>
     </div>
 
+    <label>Gain attendu si ça marche
+      <input name="expected_gain_eur" type="text" inputmode="decimal"
+             placeholder="en euros, vide si tu ne sais pas">
+      <small>Laisse vide plutôt que d'écrire 0 : « non chiffré » et « ne rapporte
+        rien » ne sont pas la même chose, et le Sage les distingue.</small>
+    </label>
+
+    <label>Si tu te trompes, tu peux revenir en arrière ?
+      <select name="reversibility">
+        <option value="">je ne sais pas encore</option>
+        <option value="REVERSIBLE">oui, sans que ça coûte</option>
+        <option value="COUTEUSE">oui, mais ça se paie</option>
+        <option value="IRREVERSIBLE">non, c'est fait</option>
+      </select>
+    </label>
+
     <p class="form-error" id="add-error" hidden></p>
     <div class="actions">
       <button type="button" class="ghost" id="add-cancel">Annuler</button>

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from ..journal import DecisionJournal, Entry, Status, Tier
+from ..journal import DecisionJournal, Entry, Reversibility, Status, Tier
 
 #: Au-delà, un retard n'est plus un oubli : c'est une décision qu'on évite.
 LATE_DAYS = 7
@@ -244,6 +244,68 @@ def _headline(items: tuple[NoticeItem, ...]) -> str:
     return f"Notice. {items[0].title}."
 
 
+#: Au-delà, des heures non chiffrées ne sont plus un oubli ponctuel : c'est une
+#: façon de travailler qui ne dit jamais si le travail rapporte quelque chose.
+#: Le seuil est volontairement haut -- le reproche doit être rare pour être lu.
+UNPRICED_HOURS = 20.0
+
+
+def _irreversible_item(overdue: tuple[Entry, ...], open_entries: tuple[Entry, ...]) -> NoticeItem | None:
+    """L'application de « HALT » de la constitution, enfin possible.
+
+    Une décision irréversible dont on ne rend pas le verdict est le pire cas du
+    journal : l'engagement est pris, et on ne regarde pas s'il a servi. Toutes
+    les autres observations portent sur du temps qu'on peut encore réaffecter ;
+    celle-ci porte sur du temps qu'on ne peut plus.
+    """
+    engagees = tuple(e for e in overdue + open_entries
+                     if e.reversibility is Reversibility.IRREVERSIBLE)
+    if not engagees:
+        return None
+
+    en_retard = tuple(e for e in engagees if e in overdue)
+    if en_retard:
+        return NoticeItem(
+            "CRITIQUE",
+            f"{_plural(len(en_retard), 'engagement irréversible', 'engagements irréversibles')}"
+            " sans verdict",
+            "Tu as pris une décision sur laquelle tu ne peux pas revenir, et son horizon est "
+            "passé sans que tu dises ce qu'elle a donné. C'est le seul cas où ne pas trancher "
+            "coûte deux fois : l'engagement est déjà payé, et tu n'en tires même pas la leçon.",
+            action="Rends le verdict maintenant, même s'il est mauvais.",
+            entry_ids=tuple(e.entry_id for e in en_retard),
+        )
+    return NoticeItem(
+        "ATTENTION",
+        f"{_plural(len(engagees), 'engagement irréversible', 'engagements irréversibles')} en cours",
+        "Rien à corriger aujourd'hui : c'est là pour rester sous les yeux. "
+        "Ce qui est irréversible ne se rattrape pas au moment où l'on s'en aperçoit.",
+        entry_ids=tuple(e.entry_id for e in engagees),
+    )
+
+
+def _unpriced_item(report: dict[str, Any]) -> NoticeItem | None:
+    """Des heures dont personne n'a estimé le rendement.
+
+    « Non chiffré » n'est pas « ne rapporte rien » : le journal garde la
+    différence, et c'est justement elle qui se reproche. Un gain estimé faux
+    s'apprend en le comparant au résultat ; un gain jamais estimé ne s'apprend
+    pas du tout.
+    """
+    heures = report["hours_without_gain"]
+    if heures < UNPRICED_HOURS:
+        return None
+    part = heures / report["hours_total"] if report["hours_total"] else 0
+    return NoticeItem(
+        "INFO",
+        f"{heures:g} h engagées sans gain attendu",
+        f"Soit {part:.0%} de tes heures. La constitution demande de juger une décision sur "
+        "son levier et son coût ; sans estimation de ce qu'elle rapporte, il ne reste que le "
+        "coût, et tout finit par se valoir.",
+        action="Au prochain enregistrement, mets un ordre de grandeur même approximatif.",
+    )
+
+
 def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> Notice:
     """Ce que le Sage a à te dire, dans l'ordre où ça compte.
 
@@ -260,10 +322,12 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     candidates = (
         _chain_item(report),
         _overdue_item(overdue, moment),
+        _irreversible_item(overdue, open_entries),
         _empty_item(report),
         _foundation_item(report),
         _calibration_item(report),
         _unresolved_hours_item(report),
+        _unpriced_item(report),
         _quiet_item(open_entries, moment),
     )
     items = tuple(item for item in candidates if item is not None)
@@ -276,4 +340,5 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     )
 
 
-__all__ = ["CALIBRATION_GAP", "FOUNDATION", "LATE_DAYS", "Notice", "NoticeItem", "build_notice"]
+__all__ = ["CALIBRATION_GAP", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
+           "Notice", "NoticeItem", "build_notice"]

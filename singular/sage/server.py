@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote_plus, urlsplit
 
-from ..journal import DEFAULT_PATH, DecisionJournal, Status, Tier
+from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
 from .icon import render_icon
 from .notice import build_notice
 
@@ -118,6 +118,49 @@ def _number(payload: dict[str, Any], name: str, *, cast) -> Any:
         raise SageError(HTTPStatus.BAD_REQUEST, f"« {name} » doit être un nombre") from None
 
 
+def _gain(payload: dict[str, Any]) -> float | None:
+    """Vide veut dire « non chiffré », jamais « zéro ».
+
+    Un formulaire renvoie toujours la clé, avec une chaîne vide quand le champ
+    n'a pas été rempli. La lire comme 0 inventerait un gain nul et effacerait
+    exactement ce que la Notice doit reprocher : les heures engagées sur des
+    décisions dont personne n'a estimé le rendement.
+
+    La virgule est acceptée : on tape « 5000,50 » sur un clavier français, et
+    faire échouer une décision pour ça serait la meilleure façon de ne plus en
+    enregistrer.
+    """
+    brut = payload.get("expected_gain_eur")
+    if brut is None:
+        return None
+    # Toutes les espaces, pas seulement la nôtre : un clavier iOS insère une
+    # espace fine insécable comme séparateur de milliers, invisible à l'oeil et
+    # fatale à float(). Elle est retirée par ce qu'elle est, et non écrite en
+    # toutes lettres ici -- la console Windows ne sait pas l'afficher, et
+    # tests/test_windows_console.py refuse ce caractère dans ce fichier.
+    texte = "".join(c for c in str(brut) if not c.isspace()).replace(",", ".")
+    if not texte:
+        return None
+    try:
+        return float(texte)
+    except (TypeError, ValueError):
+        raise SageError(HTTPStatus.BAD_REQUEST, "« gain attendu » doit être un nombre") from None
+
+
+def _reversibility(payload: dict[str, Any]) -> Reversibility | None:
+    """Non renseignée est une réponse valable : « je ne sais pas encore »."""
+    brut = payload.get("reversibility")
+    if brut is None:
+        return None
+    texte = str(brut).strip().upper()
+    if not texte:
+        return None
+    try:
+        return Reversibility(texte)
+    except ValueError:
+        raise SageError(HTTPStatus.BAD_REQUEST, f"réversibilité inconnue : {brut}") from None
+
+
 def _text(payload: dict[str, Any], name: str) -> str:
     value = str(payload.get(name, "")).strip()
     if not value:
@@ -142,6 +185,9 @@ def _entry_as_dict(entry: Any) -> dict[str, Any]:
         "overdue_days": entry.overdue_days() if entry.is_open else 0,
         "lesson": entry.lesson or "",
         "brier_score": entry.brier_score,
+        "expected_gain_eur": entry.expected_gain_eur,
+        "reversibility": None if entry.reversibility is None else entry.reversibility.value,
+        "reversibility_label": None if entry.reversibility is None else entry.reversibility.label,
     }
 
 
@@ -186,6 +232,8 @@ class SageApp:
                 tier=_tier(payload.get("tier", Tier.REVENUS.value)),
                 cost_hours=_number(payload, "cost_hours", cast=float),
                 horizon_days=_number(payload, "horizon_days", cast=int),
+                expected_gain_eur=_gain(payload),
+                reversibility=_reversibility(payload),
             )
         except ValueError as exc:
             raise SageError(HTTPStatus.BAD_REQUEST, str(exc)) from None

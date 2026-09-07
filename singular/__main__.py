@@ -17,7 +17,7 @@ import csv
 import sys
 from datetime import datetime
 
-from .journal import DEFAULT_PATH, DecisionJournal, Status, Tier
+from .journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
 
 DIM = "\033[2m"
 BOLD = "\033[1m"
@@ -54,12 +54,61 @@ def _tier_prompt() -> Tier:
     return list(Tier)[index - 1]
 
 
+#: Ce que la constitution appelle « réversibilité ». Le mot est abstrait ; la
+#: question qu'il faut réellement se poser ne l'est pas, alors c'est elle qu'on
+#: pose.
+REVERSIBILITES = (
+    (Reversibility.REVERSIBLE, "je peux annuler sans que ça coûte"),
+    (Reversibility.COUTEUSE, "je peux revenir en arrière, mais ça se paie"),
+    (Reversibility.IRREVERSIBLE, "c'est fait, on ne revient pas dessus"),
+)
+
+
+def _reversibility_prompt() -> Reversibility | None:
+    print(_colour("\n  Si tu te trompes, tu peux revenir en arrière ?", DIM))
+    for numero, (_, phrase) in enumerate(REVERSIBILITES, start=1):
+        print(f"    {numero}. {phrase}")
+    print(_colour("    0. je ne sais pas encore", DIM))
+    index = _ask(
+        "  Réponse", cast=int, default=1,
+        validate=lambda v: None if 0 <= v <= len(REVERSIBILITES)
+        else (_ for _ in ()).throw(ValueError("0 à 3")),
+    )
+    return None if index == 0 else REVERSIBILITES[index - 1][0]
+
+
+def _gain_prompt() -> float | None:
+    """Facultatif, et il doit le rester.
+
+    Exiger un chiffre ferait enregistrer moins de décisions, et une décision
+    non écrite est pire qu'une décision sans chiffre. Ne rien répondre laisse
+    « non chiffré », que la Notice sait reprocher -- ce qui n'est pas la même
+    chose qu'un gain de zéro.
+    """
+    print(_colour("\n  Ce que ça rapporte si ça marche, en euros. Vide si tu ne sais pas.", DIM))
+    brut = input(_colour("  Gain attendu ", BOLD)).strip().replace(",", ".").replace(" ", "")
+    if not brut:
+        return None
+    try:
+        valeur = float(brut)
+    except ValueError:
+        print(_colour("  Pas un nombre : laissé non chiffré.", RED))
+        return None
+    if valeur < 0:
+        print(_colour("  Un coût n'est pas un gain : laissé non chiffré.", RED))
+        return None
+    return valeur
+
+
 def cmd_add(journal: DecisionJournal, args) -> int:
     if args.title:
         entry = journal.add(
             title=args.title, action=args.action, predicted=args.predicted,
             probability=args.probability, tier=Tier(args.tier.upper()),
             cost_hours=args.hours, horizon_days=args.days,
+            expected_gain_eur=args.gain,
+            reversibility=None if args.reversibility is None
+            else Reversibility(args.reversibility.upper()),
         )
     else:
         print(_colour("\nUne décision, avant de la prendre.\n", BOLD))
@@ -70,8 +119,11 @@ def cmd_add(journal: DecisionJournal, args) -> int:
         tier = _tier_prompt()
         hours = _ask("  Heures que ça va te coûter", cast=float, default=4)
         days = _ask("  Dans combien de jours on vérifie", cast=int, default=14)
+        gain = _gain_prompt()
+        reversibility = _reversibility_prompt()
         entry = journal.add(title=title, action=action, predicted=predicted, probability=probability,
-                            tier=tier, cost_hours=hours, horizon_days=days)
+                            tier=tier, cost_hours=hours, horizon_days=days,
+                            expected_gain_eur=gain, reversibility=reversibility)
 
     due = datetime.fromisoformat(entry.due_at).strftime("%d/%m/%Y")
     print(f"\n  {_colour(entry.entry_id, BOLD)}  verdict attendu le {due}")
@@ -248,6 +300,9 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--tier", default="REVENUS", choices=[t.value for t in Tier] + [t.value.lower() for t in Tier])
     add.add_argument("--hours", type=float, default=4.0)
     add.add_argument("--days", type=int, default=14)
+    add.add_argument("--gain", type=float, default=None, help="gain attendu en euros")
+    add.add_argument("--reversibility", default=None,
+                     choices=[r.value for r in Reversibility] + [r.value.lower() for r in Reversibility])
     add.set_defaults(func=cmd_add)
 
     apply = sub.add_parser("apply", help="enregistrer une candidature (chemin rapide)")

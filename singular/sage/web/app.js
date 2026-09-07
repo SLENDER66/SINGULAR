@@ -213,6 +213,11 @@ async function submitAdd(event) {
         tier: data.get("tier"),
         cost_hours: Number(data.get("cost_hours")),
         horizon_days: Number(data.get("horizon_days")),
+        // Transmis tels quels, en texte : « » veut dire non renseigne, et
+        // Number("") vaut 0 -- ce qui inventerait un gain nul a chaque
+        // decision non chiffree, exactement ce que le champ sert a distinguer.
+        expected_gain_eur: data.get("expected_gain_eur"),
+        reversibility: data.get("reversibility"),
       }),
     });
     $("add-form").reset();

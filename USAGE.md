@@ -25,6 +25,23 @@ python -m singular review                                 # où vont tes heures
 
 Plus `list`, `abandon DEC-xxx "raison"`, `export` (CSV), `status` (une ligne).
 
+### Ce que `add` demande en plus depuis la v2 du journal
+
+Deux questions facultatives, à la fin : **ce que la décision rapporte si elle
+marche**, en euros, et **si tu peux revenir en arrière**. La constitution
+demande de juger une décision sur « options, levier, coût, vitesse,
+réversibilité » ; sans ces deux réponses, le journal ne connaissait que le coût
+en heures.
+
+Laisser le gain vide veut dire « non chiffré », **pas** « ne rapporte rien » :
+le journal garde la différence, et c'est elle que la Notice reproche au-delà de
+vingt heures. En ligne de commande : `--gain 5000` et
+`--reversibility irreversible`.
+
+Une décision irréversible dont l'échéance passe sans verdict devient la
+seule observation CRITIQUE avec la chaîne rompue. C'est voulu : partout
+ailleurs, le temps mal placé peut encore être réaffecté.
+
 ## Le même journal, en app
 
 ```bash
