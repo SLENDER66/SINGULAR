@@ -267,3 +267,22 @@ def test_une_route_de_conversation_inconnue_est_refusee(app) -> None:
     with pytest.raises(SageError) as refus:
         app.route("POST", "/api/parle/tout-effacer", {}, {})
     assert refus.value.status == HTTPStatus.NOT_FOUND
+
+
+def test_une_reponse_payee_n_est_pas_perdue_pour_un_compteur(app, client, monkeypatch) -> None:
+    """Le compteur peut se remplir entre la vérification et le décompte : un
+    second serveur sur la même machine, ou la ligne de commande.
+
+    La réponse est déjà payée et déjà écrite dans le fil. La perdre pour un
+    compteur serait le seul vrai dégât de la situation.
+    """
+    from singular import parle
+
+    def plein(self, **kwargs):
+        raise parle.PlafondAtteint("rempli entre-temps")
+
+    monkeypatch.setattr(parle.Quota, "consommer", plein)
+    rendu = app.parle({"question": "et alors ?"})
+    assert rendu["reponse"] == "Voilà."
+    assert rendu["restants"] == 0
+    assert app.parle_etat()["tours"], "le fil a perdu le tour payé"

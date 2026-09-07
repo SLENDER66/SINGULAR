@@ -328,7 +328,7 @@ class SageApp:
         coûter de la journée.
         """
         from ..analyse import AnalyseIndisponible, contexte_pour_analyse
-        from ..parle import Conversation, Quota, repondre
+        from ..parle import Conversation, PlafondAtteint, Quota, repondre
 
         question = _text(payload, "question")
         if len(question) > QUESTION_MAX:
@@ -355,7 +355,14 @@ class SageApp:
             except AnalyseIndisponible as exc:
                 raise SageError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from None
             fil.sauver()
-            restants = quota.consommer()
+            try:
+                restants = quota.consommer()
+            except PlafondAtteint:
+                # Le compteur s'est rempli entre la verification et ici : un
+                # second serveur sur la meme machine, ou la ligne de commande.
+                # La reponse est payee et ecrite dans le fil ; la perdre pour
+                # un compteur serait le seul vrai degat de la situation.
+                restants = 0
         finally:
             self._un_tour.release()
         return {"reponse": texte, "cout": cout, "restants": restants}
