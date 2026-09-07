@@ -79,9 +79,16 @@ candidates pas encore. Un outil qui te réclamerait des candidatures cette
 semaine serait vide et agaçant, et ne t'aurait rien appris — c'est exactement
 le reproche que le Sage t'a fait à tort le premier soir.
 
-Les huit étapes du CV sont pré-remplies pour le passage terrain vers bureau
-d'études. Elles sont dans le fichier, en haut : change-les si elles ne
-correspondent pas à ce que tu as à faire.
+Les huit étapes du CV sont pré-remplies pour un profil qui **a déjà 2 ans de
+bureau d'études** derrière lui, plus 5 ans de terrain Armée (chambre froide,
+groupe électrogène, brûleur). Elles ont d'abord été écrites pour une
+reconversion depuis le terrain : c'était faux, et le tableau de bord a propagé
+l'erreur deux jours. Elles sont dans le fichier, en haut, avec le profil :
+change-les si elles ne correspondent plus.
+
+Tant qu'aucune étape n'est cochée, un changement de cette liste se propage
+automatiquement à ton fichier de données. Dès que tu en coches une, ta liste
+est figée : le travail déjà fait passe avant une liste à jour.
 
 ## Les délais
 

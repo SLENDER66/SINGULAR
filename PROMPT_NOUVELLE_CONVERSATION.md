@@ -203,13 +203,23 @@ requis. Explique les commandes pas à pas, **une ligne à la fois**.
 ~30 h/semaine. **Parle-moi en français.** Droit au but, pas de long
 récapitulatif, pas de flatterie.
 
-Côté métier, parce que le prototype s'en sert et que tu en auras besoin :
-technicien CVC / frigoriste de formation, **BTS Fluides Énergies Domotique**.
-Actuellement au chômage. Je vise un poste en **bureau d'études — chiffrage,
-dimensionnement — dans la région toulousaine**, en parallèle d'une reprise
-d'études **en alternance**. Je ne candidate pas encore : je dois d'abord
-retravailler mon CV, et c'est pour ça que le prototype fait passer le CV avant
-les candidatures.
+Côté métier, parce que le prototype s'en sert et que tu en auras besoin.
+Une session l'avait écrit faux et le prototype a propagé l'erreur pendant deux
+jours : ne le redéduis pas, lis-le.
+
+**2 ans en bureau d'études CVC déjà effectués** — chiffrage, dimensionnement.
+Avant : **5 ans de terrain dans l'Armée**, sur chambre froide, groupe
+électrogène et brûleur — donc froid, énergie et combustion, et **pas** du
+tertiaire clim/ventilation. **BTS Fluides Énergies Domotique.** Actuellement au
+chômage, je cherche un poste en bureau d'études **dans la région toulousaine**.
+
+Je ne suis donc **pas en reconversion** : le bureau d'études est déjà mon
+métier. Une reprise d'études en alternance m'intéresse, mais au 7 septembre
+2026 je n'ai **ni école ni entreprise** — la rentrée 2026 est hors d'atteinte,
+et chercher un poste classique passe devant.
+
+Je ne candidate pas encore : je dois d'abord retravailler mon CV, et c'est pour
+ça que le prototype fait passer le CV avant les candidatures.
 
 ## Méthode
 

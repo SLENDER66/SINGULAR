@@ -58,20 +58,27 @@ EN_COURS = ("a_envoyer", "envoyee", "relancee", "entretien")
 
 #: Le chantier du moment, decoupe en gestes faisables en une soiree.
 #:
-#: Ecrit pour le passage terrain -> bureau d'etudes : un recruteur de BE ne
-#: sait pas lire une fiche de technicien CVC, il faut la traduire dans ses
-#: mots a lui. L'ordre compte, chaque etape se pose sur la precedente.
+#: Ces etapes ont d'abord ete ecrites pour un passage terrain -> bureau
+#: d'etudes. C'etait faux : les 2 ans de BE etaient deja faits, et un CV
+#: qui s'excuse d'arriver du terrain sous-vend deux ans d'experience du
+#: poste vise. La deduction avait remplace la question.
+#:
+#: Elles disent maintenant l'inverse : mettre le BE devant, et se servir du
+#: terrain Armee comme d'un differenciateur, pas d'un passe a traduire.
+#: L'ordre compte, chaque etape se pose sur la precedente.
 ETAPES_CV = [
-    "Changer le titre du CV : viser « Charge d'etudes / chiffrage CVC »,"
-    " pas « Technicien frigoriste »",
-    "Traduire trois chantiers terrain en termes de bureau d'etudes :"
-    " lecture de plans, dimensionnement, selection de materiel",
-    "Chiffrer ces chantiers : puissances, surfaces, budget, delais."
-    " Un BE recrute sur des ordres de grandeur",
-    "Lister les logiciels, meme en niveau debutant :"
-    " AutoCAD, Revit, ClimaWin ou Perrenoud, Excel de chiffrage",
-    "Mettre le BTS FED en avant avec les modules qui parlent a un BE",
-    "Ecrire deux lignes sur l'alternance visee et le rythme souhaite",
+    ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
+    " Les 2 ans de BE en premier, le terrain juste apres"),
+    ("Detailler les 2 ans de bureau d'etudes : combien d'affaires chiffrees,"
+    " quels montants, quels types de batiments, quels lots"),
+    ("Nommer les logiciels et le niveau reel :"
+    " AutoCAD, Revit, ClimaWin ou Perrenoud, Excel de chiffrage"),
+    ("Chiffrer le terrain Armee : puissances frigorifiques, kVA des groupes,"
+    " kW des bruleurs. Un BE recrute sur des ordres de grandeur"),
+    ("Assumer la specialite : froid, energie, combustion."
+    " Ne pas se vendre comme un profil tertiaire clim/ventilation"),
+    ("Retirer toute mention d'alternance tant qu'aucune ecole n'est trouvee :"
+    " une promesse sans date inquiete un recruteur"),
     "Relire a voix haute, couper tout ce qui ne sert pas le poste vise",
     "Faire relire par quelqu'un du metier",
 ]
@@ -80,20 +87,28 @@ ETAPES_CV = [
 #: conversation. C'est exactement ce que ce fichier sait et que Claude oublie
 #: entre deux conversations : c'est tout l'interet du pont plus bas.
 PROFIL = [
-    "Technicien CVC / frigoriste de formation, BTS Fluides Energies Domotique.",
-    "Actuellement au chomage.",
-    "Je vise un poste en bureau d'etudes (chiffrage, dimensionnement) dans la",
-    "region toulousaine, en parallele d'une reprise d'etudes en alternance.",
+    "2 ans en bureau d'etudes CVC : chiffrage, dimensionnement.",
+    "Avant cela, 5 ans de terrain dans l'Armee : chambre froide, groupe",
+    "electrogene, bruleur. Donc froid, energie et combustion -- pas du",
+    "tertiaire clim/ventilation.",
+    "BTS Fluides Energies Domotique. Actuellement au chomage.",
+    "Je cherche un poste en bureau d'etudes dans la region toulousaine.",
+    "Une reprise d'etudes en alternance m'interesse, mais je n'ai ni ecole",
+    "ni entreprise a ce jour.",
     "Debutant en code, j'utilise un iPhone.",
 ]
 
 
 # --- le fichier --------------------------------------------------------------
 
+def _cv_neuf() -> list[dict]:
+    return [{"etape": etape, "fait": False} for etape in ETAPES_CV]
+
+
 def charger() -> dict:
     """Lit le fichier, ou rend un etat neuf. Ne perd jamais rien en silence."""
     if not FICHIER.exists():
-        return {"candidatures": [], "cv": [{"etape": e, "fait": False} for e in ETAPES_CV]}
+        return {"candidatures": [], "cv": _cv_neuf()}
     try:
         donnees = json.loads(FICHIER.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as erreur:
@@ -102,7 +117,17 @@ def charger() -> dict:
         print("  Rien n'a ete efface. Corrige-le ou renomme-le, puis relance.")
         raise SystemExit(1) from None
     donnees.setdefault("candidatures", [])
-    donnees.setdefault("cv", [{"etape": e, "fait": False} for e in ETAPES_CV])
+    donnees.setdefault("cv", _cv_neuf())
+    # Les etapes ont ete ecrites sur une lecture fausse du profil -- une
+    # reconversion depuis le terrain, alors que les 2 ans de bureau d'etudes
+    # etaient deja faits -- puis corrigees. Un fichier deja cree gardait
+    # l'ancienne liste pour toujours : le seul moyen de voir la nouvelle aurait
+    # ete d'effacer ses donnees. Tant qu'aucune etape n'est cochee, il n'y a
+    # rien a perdre. Des qu'une l'est, on ne touche plus a rien : le travail
+    # deja fait vaut mieux qu'une liste a jour.
+    if not any(etape["fait"] for etape in donnees["cv"]) \
+            and [etape["etape"] for etape in donnees["cv"]] != ETAPES_CV:
+        donnees["cv"] = _cv_neuf()
     return donnees
 
 
@@ -177,8 +202,8 @@ def action_du_jour(donnees: dict) -> list[str]:
         return [
             f"Relancer {c['entreprise']} ({c['poste']}).",
             f"Envoyee il y a {jours(depuis(c['date_statut']))}, sans reponse.",
-            "Un mail court : rappel de la candidature, disponibilite, une phrase"
-            " sur ce que tu peux leur apporter.",
+            ("Un mail court : rappel de la candidature, disponibilite, une phrase"
+            " sur ce que tu peux leur apporter."),
         ]
 
     a_classer = [c for c in candidatures
@@ -197,15 +222,15 @@ def action_du_jour(donnees: dict) -> list[str]:
         return [
             f"Avancer le CV. Etape {faites + 1} sur {len(donnees['cv'])} :",
             f"  {restantes[0]['etape']}",
-            "Tant que le CV n'est pas pret, candidater brule des entreprises"
-            " que tu ne pourras pas redemander.",
+            ("Tant que le CV n'est pas pret, candidater brule des entreprises"
+            " que tu ne pourras pas redemander."),
         ]
 
     if not candidatures:
         return [
             "Le CV est pret. Ajouter la premiere candidature.",
-            "Vise trois bureaux d'etudes fluides de la region toulousaine :"
-            " un gros, un moyen, un petit.",
+            ("Vise trois bureaux d'etudes fluides de la region toulousaine :"
+            " un gros, un moyen, un petit."),
             "Le petit repond souvent le premier.",
         ]
 
@@ -220,10 +245,10 @@ def action_du_jour(donnees: dict) -> list[str]:
     if ouvertes:
         return [
             "Rien d'urgent aujourd'hui.",
-            f"{len(ouvertes)} candidature(s) en cours, aucune ne demande de relance"
-            " pour l'instant.",
-            "Si tu as une heure : prepare la suivante plutot que de verifier"
-            " tes mails.",
+            (f"{len(ouvertes)} candidature(s) en cours, aucune ne demande de relance"
+            " pour l'instant."),
+            ("Si tu as une heure : prepare la suivante plutot que de verifier"
+            " tes mails."),
         ]
 
     return ["Rien en cours et le CV est pret. Ajoute une candidature."]

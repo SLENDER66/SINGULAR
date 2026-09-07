@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import pathlib
 import sys
 
@@ -114,3 +115,36 @@ def test_le_bloc_ne_revele_pas_les_candidatures_classees(proto) -> None:
     assert "Refusee SA" not in bloc
     assert "je n'ai pas encore commence" in bloc
     assert "Mon CV est termine." in bloc
+
+
+def test_les_etapes_du_cv_se_mettent_a_jour_tant_que_rien_n_est_coche(proto, tmp_path) -> None:
+    """Un fichier déjà créé ne doit pas rester sur une liste d'étapes fausse.
+
+    Les huit étapes ont été écrites en supposant une reconversion depuis le
+    terrain, alors que les deux ans de bureau d'études étaient déjà faits.
+    Sans ceci, un fichier existant gardait l'ancienne liste pour toujours et
+    la seule sortie était d'effacer ses données.
+    """
+    proto.FICHIER.parent.mkdir(parents=True, exist_ok=True)
+    proto.FICHIER.write_text(json.dumps({
+        "candidatures": [],
+        "cv": [{"etape": "Une etape d'avant", "fait": False}],
+    }), encoding="utf-8")
+
+    donnees = proto.charger()
+
+    assert [e["etape"] for e in donnees["cv"]] == proto.ETAPES_CV
+
+
+def test_une_etape_deja_cochee_interdit_la_mise_a_jour(proto) -> None:
+    """Le travail déjà fait vaut mieux qu'une liste à jour : on ne l'efface pas."""
+    proto.FICHIER.parent.mkdir(parents=True, exist_ok=True)
+    proto.FICHIER.write_text(json.dumps({
+        "candidatures": [],
+        "cv": [{"etape": "Une etape d'avant", "fait": True},
+               {"etape": "Une autre", "fait": False}],
+    }), encoding="utf-8")
+
+    donnees = proto.charger()
+
+    assert [e["etape"] for e in donnees["cv"]] == ["Une etape d'avant", "Une autre"]
