@@ -53,7 +53,7 @@ affichée par PowerShell, ou le jeton seul.
 tourne dans **a-Shell** sans rien installer. Une fois, dans a-Shell :
 
 ```
-lg2 clone -b claude/singular-startup-hook-czr3hp https://github.com/SLENDER66/SINGULAR
+lg2 clone -b claude/remote-control-feedback-ndpzle https://github.com/SLENDER66/SINGULAR
 ```
 
 Puis, chaque matin :

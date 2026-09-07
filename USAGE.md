@@ -104,14 +104,14 @@ plus aucune dépendance : journal, chaîne d'intégrité, Notice, ligne de comma
 et serveur du Sage tournent en bibliothèque standard pure. Donc dans **a-Shell**
 (gratuit, App Store), qui embarque Python.
 
-**Précise la branche, et vérifie laquelle.** Un `lg2 clone` sans elle prend la
-branche par défaut. Au moment où ces lignes sont écrites, la branche par défaut
-**et** la branche de travail sont toutes deux en retard : le travail est sur la
-branche de session ci-dessous. `python tools/check_repo_state.py` dit l'état du
-jour ; crois-le plutôt que cette ligne.
+**Précise la branche.** Un `lg2 clone` sans elle prend la branche par défaut,
+qui n'est pas toujours celle qui porte le travail. Le nom ci-dessous est celui
+que `CLAUDE.md` désigne aujourd'hui ; `python tools/check_repo_state.py` dit
+l'état réel du jour, et il faut le croire plutôt que cette ligne — c'est
+exactement pour ça qu'il existe.
 
 ```
-lg2 clone -b claude/singular-startup-hook-czr3hp https://github.com/SLENDER66/SINGULAR
+lg2 clone -b claude/remote-control-feedback-ndpzle https://github.com/SLENDER66/SINGULAR
 ```
 
 ```
