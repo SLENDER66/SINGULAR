@@ -264,47 +264,11 @@ def test_un_effort_mal_ecrit_retombe_sur_medium(monkeypatch, mauvais: str) -> No
 
 # --- la cle ne doit apparaitre nulle part -------------------------------------
 
-def test_aucun_message_d_erreur_ne_peut_porter_la_cle() -> None:
-    """La faculte parle a un service : ses messages d'erreur sont lus, copies,
-    parfois recolles dans une conversation. Aucun ne doit pouvoir contenir la
-    cle, ni le texte brut d'une exception du SDK -- qui peut porter l'entete
-    d'authentification selon les versions.
-
-    Verifie sur la forme du code plutot qu'en fabriquant des pannes : une
-    exception du SDK qu'on n'a pas prevue passerait entre les mailles d'un
-    test qui les enumere.
-    """
-    import ast
-
-    arbre = ast.parse(SOURCE.read_text(encoding="utf-8"))
-    fautes = []
-    for noeud in ast.walk(arbre):
-        if not (isinstance(noeud, ast.Raise) and isinstance(noeud.exc, ast.Call)):
-            continue
-        if getattr(noeud.exc.func, "id", None) != "AnalyseIndisponible":
-            continue
-        for argument in noeud.exc.args:
-            if isinstance(argument, ast.Constant):
-                continue  # texte fixe : rien a interpoler
-            if isinstance(argument, ast.JoinedStr):
-                for morceau in argument.values:
-                    if isinstance(morceau, ast.Constant):
-                        continue
-                    # Seul un attribut sobre est tolere, `erreur.status_code`
-                    # et rien d'autre : ni la variable d'exception nue, ni la
-                    # cle, ni un appel dont on ne sait pas ce qu'il rend.
-                    valeur = morceau.value
-                    permis = (isinstance(valeur, ast.Attribute)
-                              and valeur.attr in {"status_code"})
-                    if not permis:
-                        fautes.append(f"ligne {noeud.lineno} : {ast.dump(valeur)[:60]}")
-            else:
-                fautes.append(f"ligne {noeud.lineno} : argument non litteral")
-
-    assert not fautes, (
-        "un message d'erreur pourrait porter la cle ou le detail brut du SDK :\n  "
-        + "\n  ".join(fautes)
-    )
+# La verification de forme -- aucun message d'erreur ne peut interpoler la cle
+# ni le texte brut d'une exception du SDK -- vivait ici, pour ce seul fichier.
+# `offres` puis `parle` sont nes sans en heriter. Elle est desormais dans
+# tests/test_facultes_sans_fuite.py, ou elle trouve elle-meme les facultes
+# concernees au lieu d'en nommer une.
 
 
 def test_la_cle_n_est_jamais_dans_le_contexte_envoye(monkeypatch) -> None:
