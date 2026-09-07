@@ -111,13 +111,67 @@ def test_le_fil_survit_a_un_relancement(tmp_path) -> None:
     assert [t["content"] for t in repris.tours] == ["ma premiere question", "Voila."]
 
 
+def _textes(messages: list[dict]) -> list[str]:
+    """Le texte de chaque message, que le contenu soit brut ou en blocs.
+
+    Le dernier tour deja enregistre part en blocs, parce qu'il porte la marque
+    de cache. Comparer des chaines ici garderait le test lisible et le rendrait
+    faux des qu'on touche a la mise en cache.
+    """
+    textes = []
+    for message in messages:
+        contenu = message["content"]
+        textes.append(contenu if isinstance(contenu, str)
+                      else "".join(bloc["text"] for bloc in contenu))
+    return textes
+
+
 def test_le_tour_precedent_est_renvoye_au_modele(fil) -> None:
     client = FauxClient()
     repondre("premiere", "rapport", fil, client=client)
     repondre("seconde", "rapport", fil, client=client)
 
-    envoyes = [m["content"] for m in client.appels[1]["messages"]]
-    assert envoyes == ["premiere", "Voila.", "seconde"]
+    assert _textes(client.appels[1]["messages"]) == ["premiere", "Voila.", "seconde"]
+
+
+def test_le_fil_est_mis_en_cache_jusqu_au_dernier_tour(fil) -> None:
+    """Sinon le fil entier est refacture au plein tarif a chaque tour.
+
+    C'est ce qui decide si une conversation continue tient sur cinq dollars :
+    le vingtieme tour coute vingt fois le premier, ou il relit un cache.
+    """
+    client = FauxClient()
+    repondre("premiere", "rapport", fil, client=client)
+    repondre("seconde", "rapport", fil, client=client)
+
+    messages = client.appels[1]["messages"]
+    marques = [i for i, m in enumerate(messages)
+               if isinstance(m["content"], list)
+               and any("cache_control" in bloc for bloc in m["content"])]
+    assert marques == [len(messages) - 2], (
+        "la marque doit etre sur le dernier tour enregistre, pas ailleurs")
+
+
+def test_la_question_du_moment_n_est_jamais_dans_le_cache(fil) -> None:
+    """Le cache est un prefixe : une question qui change a chaque fois, placee
+    dedans, invaliderait exactement ce qu'on essaie de garder."""
+    client = FauxClient()
+    repondre("premiere", "rapport", fil, client=client)
+    repondre("seconde", "rapport", fil, client=client)
+
+    derniere = client.appels[1]["messages"][-1]
+    assert derniere["content"] == "seconde"
+    assert not isinstance(derniere["content"], list)
+
+
+def test_le_premier_tour_n_a_rien_a_mettre_en_cache(fil) -> None:
+    """Aucun fil derriere lui : marquer quoi que ce soit serait marquer la
+    question elle-meme."""
+    client = FauxClient()
+    repondre("premiere", "rapport", fil, client=client)
+
+    messages = client.appels[0]["messages"]
+    assert messages == [{"role": "user", "content": "premiere"}]
 
 
 def test_le_fil_est_borne(fil) -> None:

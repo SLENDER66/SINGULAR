@@ -51,12 +51,25 @@ Faculties — the parts that call a model, and can all be cut:
 - `singular/parle.py` is a conversation that already knows the day's report and
   the previous thread. Bounded to twenty exchanges, single cached system block,
   per-turn token accounting. It cannot write to the journal.
+- Continuous conversation is affordable because the thread itself is cached up
+  to the last recorded turn, not just the system prefix: without that the whole
+  history is rebilled at full price every turn, and the twentieth costs twenty
+  times the first. `parle` defaults to `claude-sonnet-5` for the same reason —
+  the one faculty whose default differs, because it is the only one called
+  twenty times in an evening.
+- Spending is counted for life, per model, and never resets with the daily cap.
+  The repository holds no prices at all — a hardcoded tariff would age silently
+  and would be used to decide when to stop — so `~/.singular/tarifs.json` holds
+  the owner's own figures and credit, and until it does the conversation talks
+  in tokens and never in dollars. A test refuses any price written into the
+  code.
 - The Sage serves that conversation to the phone at `/api/parle` — the first
   route in the app that can spend money, and the reason the isolation test's
   allowlist now names it. Three refusals stand before the spend: an empty or
   oversized question, a turn already in flight (server-side, not just in the
-  browser), and a daily cap of twenty answers held on disk so a restart cannot
-  reset it. A cut faculty costs nothing and consumes no quota, and the report,
+  browser), a daily cap of sixty answers held on disk so a restart cannot reset
+  it, and — once tariffs are known — a refusal before the call when the credit
+  is spent. A cut faculty costs nothing and consumes no quota, and the report,
   the journal and the verdicts keep working while it is cut.
 - None of them can leak the key: `tests/test_facultes_sans_fuite.py` discovers
   every module that refuses with `AnalyseIndisponible` and checks both the

@@ -286,3 +286,90 @@ def test_une_reponse_payee_n_est_pas_perdue_pour_un_compteur(app, client, monkey
     assert rendu["reponse"] == "Voilà."
     assert rendu["restants"] == 0
     assert app.parle_etat()["tours"], "le fil a perdu le tour payé"
+
+
+# --- le credit achete, qui ne repart pas le lendemain -------------------------
+
+def test_l_etat_porte_le_bilan_de_depense(app, sans_cle) -> None:
+    """Gratuit, sans clé : savoir ce qu'on a dépensé ne doit rien coûter."""
+    etat = app.parle_etat()
+    assert "bilan" in etat
+    assert etat["usd"] is None, "aucun tarif n'a été donné : aucun montant ne doit sortir"
+
+
+def test_un_tour_ajoute_sa_depense_au_total(app, client) -> None:
+    from singular import parle
+
+    app.parle({"question": "une"})
+    app.parle({"question": "deux"})
+
+    depenses = parle.Quota().depenses()
+    modele = next(iter(depenses))
+    assert depenses[modele]["entree"] == 200, "les deux tours n'ont pas été additionnés"
+
+
+def test_le_total_survit_au_lendemain_et_au_redemarrage(app, client, monkeypatch) -> None:
+    """Le plafond est quotidien ; les cinq dollars achetés ne le sont pas.
+
+    Respecter le plafond tous les jours et vider le crédit sans le voir venir
+    est exactement ce que ce total empêche.
+    """
+    from singular import parle
+
+    app.parle({"question": "une"})
+    quota = parle.Quota()
+    quota._ecrire({**quota._lire(), "jour": "1970-01-01"})  # comme si un jour passait
+
+    autre = SageApp(app.journal, token="jeton")
+    etat = autre.parle_etat()
+    assert etat["restants"] == etat["plafond"], "le plafond n'a pas repris"
+    assert parle.Quota().depenses(), "le total de dépense a été effacé"
+
+
+def test_le_montant_apparait_des_qu_il_donne_ses_tarifs(app, client, tmp_path, monkeypatch) -> None:
+    """Ce dépôt n'écrit aucun prix. Les siens font apparaître les dollars."""
+    import json
+
+    from singular import parle
+
+    app.parle({"question": "une"})
+    modele = next(iter(parle.Quota().depenses()))
+    (tmp_path / "tarifs.json").write_text(json.dumps({
+        "credit_usd": 5.0,
+        "modeles": {modele: {"entree": 3.0, "sortie": 15.0,
+                             "cache_lu": 0.3, "cache_ecrit": 3.75}},
+    }), encoding="utf-8")
+    monkeypatch.setattr(parle, "FICHIER_TARIFS", tmp_path / "tarifs.json")
+
+    etat = app.parle_etat()
+    assert etat["usd"] is not None
+    assert etat["restant_usd"] is not None
+    assert "$" in etat["bilan"]
+
+
+def test_le_credit_epuise_refuse_avant_d_appeler(app, client, tmp_path, monkeypatch) -> None:
+    """La vraie garde. Le service refuserait de toute façon, une requête plus
+    tard et sans le dire aussi clairement."""
+    import json
+
+    from singular import parle
+
+    app.parle({"question": "une"})
+    modele = next(iter(parle.Quota().depenses()))
+    (tmp_path / "tarifs.json").write_text(json.dumps({
+        "credit_usd": 0.0, "modeles": {modele: {"entree": 3.0}},
+    }), encoding="utf-8")
+    monkeypatch.setattr(parle, "FICHIER_TARIFS", tmp_path / "tarifs.json")
+
+    appels_avant = client.appels
+    with pytest.raises(SageError) as refus:
+        app.parle({"question": "deux"})
+    assert refus.value.status == HTTPStatus.PAYMENT_REQUIRED
+    assert client.appels == appels_avant, "le service a été appelé alors que le crédit est vide"
+    assert "credit_usd" in str(refus.value.message)
+
+
+def test_sans_tarifs_le_credit_ne_refuse_jamais(app, client) -> None:
+    """Il n'a rien écrit : deviner qu'il est à sec le couperait sans raison."""
+    for numero in range(3):
+        assert app.parle({"question": f"question {numero}"})["reponse"]

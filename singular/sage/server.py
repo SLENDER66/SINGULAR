@@ -306,13 +306,17 @@ class SageApp:
         Rouvrir l'app doit montrer la conversation d'hier soir : sans ça, le
         fil existe sur le disque et nulle part à l'écran.
         """
-        from ..parle import PLAFOND_PAR_JOUR, Conversation, Quota
+        from ..parle import PLAFOND_PAR_JOUR, Conversation, Quota, bilan, phrase_de_bilan
 
         fil = Conversation()
+        compte = bilan(Quota())
         return {
             "tours": fil.tours,
             "restants": Quota().restants(),
             "plafond": PLAFOND_PAR_JOUR,
+            "bilan": phrase_de_bilan(compte),
+            "usd": compte["usd"],
+            "restant_usd": compte["restant_usd"],
         }
 
     def parle(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -328,7 +332,15 @@ class SageApp:
         coûter de la journée.
         """
         from ..analyse import AnalyseIndisponible, contexte_pour_analyse
-        from ..parle import Conversation, PlafondAtteint, Quota, repondre
+        from ..parle import (
+            MODELE_PAR_DEFAUT,
+            Conversation,
+            PlafondAtteint,
+            Quota,
+            Tarifs,
+            bilan,
+            repondre,
+        )
 
         question = _text(payload, "question")
         if len(question) > QUESTION_MAX:
@@ -340,6 +352,23 @@ class SageApp:
                             "une réponse est déjà en train d'arriver. Laisse-la venir.")
         try:
             quota = Quota()
+            # La vraie garde, quand il a donne ses tarifs : l'argent. Le
+            # plafond de tours protege d'un emballement -- une poche, une
+            # soiree distraite -- mais c'est le credit qui s'epuise pour de
+            # bon, et le service refuserait de toute facon, une requete plus
+            # tard et sans le dire aussi clairement.
+            #
+            # C'est une estimation, faite avec ses chiffres. S'il la trouve
+            # fausse, c'est `credit_usd` dans son fichier de tarifs qu'il
+            # corrige -- pas ce code.
+            restant = bilan(quota, Tarifs())["restant_usd"]
+            if restant is not None and restant <= 0:
+                raise SageError(
+                    HTTPStatus.PAYMENT_REQUIRED,
+                    "d'apres tes tarifs, ton credit est epuise. Recharge sur "
+                    "console.anthropic.com, puis corrige « credit_usd » dans "
+                    "ton fichier de tarifs.",
+                )
             if quota.restants() <= 0:
                 raise SageError(
                     HTTPStatus.TOO_MANY_REQUESTS,
@@ -356,7 +385,7 @@ class SageApp:
                 raise SageError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from None
             fil.sauver()
             try:
-                restants = quota.consommer()
+                restants = quota.consommer(cout=cout, modele=MODELE_PAR_DEFAUT)
             except PlafondAtteint:
                 # Le compteur s'est rempli entre la verification et ici : un
                 # second serveur sur la meme machine, ou la ligne de commande.
@@ -365,7 +394,11 @@ class SageApp:
                 restants = 0
         finally:
             self._un_tour.release()
-        return {"reponse": texte, "cout": cout, "restants": restants}
+        # Le bilan est relu apres le decompte : c'est le seul moment ou il
+        # inclut le tour qu'on vient de payer.
+        return {"reponse": texte, "cout": cout, "restants": restants,
+                **{cle: valeur for cle, valeur in self.parle_etat().items()
+                   if cle in ("bilan", "usd", "restant_usd")}}
 
     def parle_oubli(self) -> dict[str, Any]:
         """Efface le fil. Le journal ne bouge pas, et le plafond non plus."""

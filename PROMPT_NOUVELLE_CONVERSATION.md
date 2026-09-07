@@ -233,9 +233,24 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 ## Coût, pour ne pas le recalculer
 
 Mon abonnement Claude **ne donne pas accès à l'API** — deux facturations
-séparées. La faculté « Analyse » consomme ma propre clé : ~2,5 €/mois
-(Sonnet 5), ~6 €/mois (Opus 5), ~22 €/mois en usage intense. Le modèle par
-défaut est `claude-opus-5` ; `SINGULAR_ANALYSE_MODELE` le change.
+séparées. **J'ai acheté une clé, 5 $ de crédit**, le 7 septembre 2026.
+
+Les seuls chiffres justes sont sur console.anthropic.com et sur ma facture.
+Ce dépôt n'écrit aucun prix, et un test l'interdit : un tarif codé en dur
+vieillirait en silence et servirait à décider quand s'arrêter. Mes tarifs à moi
+vivent dans `~/.singular/tarifs.json`, que `python -m singular parle --tarifs`
+prépare — et tant qu'il est vide, la conversation compte des jetons et ne parle
+jamais d'argent.
+
+Modèles par défaut : `claude-opus-5` pour `analyse` et `offres`, qui sont des
+coups uniques ; **`claude-sonnet-5` pour `parle`**, parce qu'une conversation
+c'est vingt appels dans la soirée et que ce choix décide si 5 $ durent une
+semaine ou un après-midi. `SINGULAR_PARLE_MODELE` remet Opus.
+
+Deux gardes sur la conversation, qui ne comptent pas la même chose : soixante
+réponses par jour depuis le téléphone (large exprès — un garde-fou contre
+l'emballement, pas contre l'usage ; le clavier n'en a pas), et le crédit
+restant, qui refuse avant d'appeler dès que les tarifs sont écrits.
 
 La frontière qu'on peut couper existe maintenant : clé révoquée, paquet
 désinstallé, réseau absent — le journal, la chaîne d'intégrité, la Notice et la

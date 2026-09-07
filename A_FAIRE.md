@@ -163,22 +163,29 @@ Rien ne part sur un serveur.
    qu'on s'est dit la dernière fois. Elle ne peut pas écrire dans le journal :
    enregistrer reste le `+`.
 
-   **Tel quel, aujourd'hui, il répondra qu'il est coupé.** C'est normal : il
-   demande une clé d'API que je n'ai pas encore, et c'est le seul endroit du
-   dépôt qui coûte de l'argent. Le reste — le journal, le rapport, les
-   verdicts — n'en a jamais besoin.
+   **J'ai la clé et 5 $ de crédit.** Trois gestes sur le PC, dans cet ordre,
+   une seule fois :
 
-   Si je veux l'allumer un jour, dans cet ordre, et pas avant d'avoir mis un
-   plafond mensuel sur le compte :
+   1. `pip install -e ".[analyse]"`
+   2. Mettre la clé dans `ANTHROPIC_API_KEY` **avant** de lancer le serveur —
+      sinon il démarre sans la voir :
+      ```
+      set ANTHROPIC_API_KEY=sk-ant-...
+      python -m singular sage --lan
+      ```
+   3. `python -m singular parle --tarifs` — il affiche un petit fichier à
+      coller dans `C:\Users\Utilisateur\.singular\tarifs.json`, avec les
+      prix relevés sur console.anthropic.com et mes 5 $. **SINGULAR ne connaît
+      aucun prix** : sans ça il compte des jetons, avec ça il me dit ce qu'il
+      me reste sous chaque réponse.
 
-   1. Un compte sur `console.anthropic.com` — séparé de l'abonnement Claude,
-      deux factures différentes.
-   2. Un plafond mensuel, **le premier jour**, pas plus tard.
-   3. Sur le PC : `pip install -e ".[analyse]"`, puis mettre la clé dans
-      `ANTHROPIC_API_KEY` avant de lancer `python -m singular sage --lan`.
+   Ensuite : soixante réponses par jour depuis le téléphone, aucune limite au
+   clavier, et un refus net quand le crédit est épuisé. Le modèle est
+   `claude-sonnet-5`, choisi pour que 5 $ durent ; `SINGULAR_PARLE_MODELE`
+   remet Opus si je veux.
 
-   Vingt réponses par jour depuis le téléphone, compteur affiché sous chaque
-   réponse. Au clavier, `python -m singular parle`, sans plafond.
+   Le reste — le journal, le rapport, les verdicts — n'a jamais besoin de cette
+   clé. Si je la révoque demain, rien d'autre ne bouge.
 
 5. **Noter ce qui manque** — au fil de l'eau, pour la prochaine session :
    - Est-ce que je l'ouvre sans y penser, ou faut-il que j'y pense ?

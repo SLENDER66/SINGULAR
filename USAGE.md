@@ -113,9 +113,50 @@ Sans clé, le bouton répond qu'elle est coupée — et la Notice, le journal, l
 verdicts continuent exactement comme avant. `tests/test_sage_parle.py` le
 vérifie en fabriquant la panne, plutôt que de le promettre.
 
-`SINGULAR_PARLE_PLAFOND` n'existe pas : le plafond est dans le code, à vingt.
-Le changer est un geste délibéré, pas une variable d'environnement qu'on
-oublie à 200.
+#### Ce que ça coûte, avec tes chiffres et pas les miens
+
+**SINGULAR ne connaît aucun prix, et c'est voulu.** Les tarifs changent, ce
+dépôt ne se met pas à jour tout seul, et un chiffre faux ici servirait à
+décider quand s'arrêter. Un test refuse tout tarif écrit en dur dans le code.
+
+Tant que tu ne lui as rien dit, la conversation compte des jetons. Pour qu'elle
+parle en dollars :
+
+```bash
+python -m singular parle --tarifs     # affiche le fichier à remplir
+```
+
+Colle-le dans `~/.singular/tarifs.json`, avec les prix relevés sur
+console.anthropic.com (en dollars par million de jetons) et le crédit que tu as
+acheté. À partir de là, chaque réponse dit ce qu'il te reste.
+
+Deux gardes, et elles ne comptent pas la même chose :
+
+- **Soixante réponses par jour** depuis le téléphone. C'est large exprès : un
+  garde-fou contre l'emballement — une poche, une soirée distraite — pas contre
+  l'usage. Le clavier n'en a pas.
+- **Le crédit restant**, dès que tes tarifs sont écrits. Quand il tombe à zéro,
+  elle refuse *avant* d'appeler. Le service refuserait de toute façon, une
+  requête plus tard et sans le dire aussi clairement. Si l'estimation te semble
+  fausse, c'est `credit_usd` que tu corriges, pas le code.
+
+Le total des jetons ne repart jamais à zéro, lui. Sans ça, on peut respecter le
+plafond tous les jours et vider son crédit sans l'avoir vu venir.
+
+#### Pourquoi Sonnet et pas Opus
+
+`parle` est la seule faculté dont le modèle par défaut est `claude-sonnet-5`.
+`analyse` et `offres` sont des coups uniques ; une conversation, c'est vingt
+appels dans la soirée, chacun portant tout ce qui précède. Sur un crédit de
+cinq dollars, ce choix décide si la conversation dure une semaine ou un
+après-midi.
+
+Ce n'est pas un rabais : Sonnet 5 est un vrai modèle Claude, le même SDK, la
+même clé. Pour revenir à Opus : `SINGULAR_PARLE_MODELE=claude-opus-5`.
+
+Et le fil lui-même est mis en cache jusqu'au dernier tour enregistré. Sans ça
+il est refacturé au plein tarif à chaque question, et le vingtième tour coûte
+vingt fois le premier — c'est ce qui rend une conversation continue tenable.
 
 ### `offres` — le premier agent
 

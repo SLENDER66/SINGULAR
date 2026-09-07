@@ -108,8 +108,27 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
     finit par contenir des choses que personne n'a décidées.
     """
     from .analyse import AnalyseIndisponible, contexte_pour_analyse
-    from .parle import Conversation, repondre
+    from .parle import (
+        FICHIER_TARIFS,
+        MODELE_DE_TARIFS,
+        MODELE_PAR_DEFAUT,
+        Conversation,
+        Quota,
+        bilan,
+        phrase_de_bilan,
+        repondre,
+    )
     from .sage.notice import build_notice
+
+    if args.tarifs:
+        # Aucun prix n'est ecrit dans ce depot : ils changent, et un chiffre
+        # faux ici servirait a decider quand s'arreter. Les siens, releves sur
+        # la console, sont les seuls justes.
+        print(_colour(f"\n  Colle ceci dans {FICHIER_TARIFS}, avec tes chiffres :\n", BOLD))
+        print(MODELE_DE_TARIFS)
+        print(_colour("  Les prix sont sur console.anthropic.com, en dollars par"
+                      " million de jetons.\n", DIM))
+        return 0
 
     fil = Conversation()
     if args.oubli:
@@ -127,12 +146,16 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
             print(_colour(f"\n  {exc}\n", DIM))
             return False
         fil.sauver()
+        # Le clavier n'a pas de plafond -- une commande se tape, un bouton se
+        # tapote -- mais la depense se compte partout, sinon le total affiche
+        # sur le telephone serait faux de tout ce qui a ete dit ici.
+        Quota(plafond=10**9).consommer(cout=cout, modele=args.modele or MODELE_PAR_DEFAUT)
         print(f"\n{texte}\n")
         # Le cout de chaque tour, sous les yeux : une conversation renvoie tout
         # son historique, et sans ce chiffre on ne voit pas la facture monter.
         economise = f", {cout['cache_lu']} relus du cache" if cout["cache_lu"] else ""
         print(_colour(f"  [{cout['entree']} jetons envoyés{economise},"
-                      f" {cout['sortie']} rendus]\n", DIM))
+                      f" {cout['sortie']} rendus] {phrase_de_bilan(bilan())}\n", DIM))
         return True
 
     if args.question:
@@ -492,6 +515,8 @@ def build_parser() -> argparse.ArgumentParser:
     parle.add_argument("question", nargs="?", default="")
     parle.add_argument("--oubli", action="store_true", help="effacer le fil et repartir a zero")
     parle.add_argument("--modele", default=None)
+    parle.add_argument("--tarifs", action="store_true",
+                       help="afficher le fichier de tarifs a remplir")
     parle.set_defaults(func=cmd_parle)
     return parser
 

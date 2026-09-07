@@ -334,12 +334,17 @@ function renderThread(tours) {
   fil.scrollTop = fil.scrollHeight;
 }
 
+// Deux chiffres, et ils ne disent pas la même chose. Le premier borne la
+// journée ; le second est le crédit acheté, qui ne repart jamais à zéro. Sans
+// le second, on peut respecter le plafond tous les jours et vider les cinq
+// dollars sans l'avoir vu venir.
 function renderRemaining(etat) {
   const reste = etat.restants;
-  $("parle-cost").hidden = false;
-  $("parle-cost").textContent = reste > 0
+  const jour = reste > 0
     ? `${reste} réponses restantes aujourd'hui sur ${etat.plafond}.`
     : "Plafond du jour atteint. Demain, ou depuis le clavier.";
+  $("parle-cost").hidden = false;
+  $("parle-cost").textContent = `${jour} ${etat.bilan || ""}`.trim();
 }
 
 async function openParle() {
@@ -381,7 +386,7 @@ async function submitParleOnce() {
     $("parle-cost").hidden = false;
     $("parle-cost").textContent =
       `${rendu.cout.entree} jetons envoyés${cache}, ${rendu.cout.sortie} rendus.`
-      + ` ${rendu.restants} réponses restantes aujourd'hui.`;
+      + ` ${rendu.restants} restantes aujourd'hui. ${rendu.bilan || ""}`;
   } catch (error) {
     // Chaque refus dit quoi faire. Un code HTTP nu, sur un téléphone, se lit
     // comme une panne -- et deux de ceux-là n'en sont pas.
