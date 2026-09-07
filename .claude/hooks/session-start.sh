@@ -36,9 +36,11 @@ if python tools/check_repo_state.py; then
 else
     echo
     echo "  ^^ NE COMMENCE RIEN AVANT D'AVOIR REGLE CA."
-    echo "  Le code de ce conteneur n'est pas celui de la branche de travail,"
-    echo "  ou n'a pas pu etre compare. Tout ce que tu lirais ensuite, mandat"
-    echo "  compris, peut venir d'une autre branche."
+    echo "  Le bloc ci-dessus dit lequel des cas c'est -- code en retard,"
+    echo "  mandat suspect, travail echoue sur une branche hors mandat, ou"
+    echo "  comparaison impossible. Lis-le : il nomme le probleme et le geste."
+    echo "  Tant qu'il n'est pas regle, ce que tu lirais ensuite, mandat"
+    echo "  compris, peut venir d'ailleurs -- ou n'aller nulle part."
 fi
 echo
 echo "=== fin de la verification ==="
