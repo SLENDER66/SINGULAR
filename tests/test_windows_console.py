@@ -43,6 +43,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: interdirait des accents que personne n'affiche.
 SPEAKS_TO_THE_CONSOLE = [
     "singular/__main__.py",
+    "proto/suivi_candidatures.py",
     "singular/sage/server.py",
     "tools/check_xcode_project.py",
     "tools/check_repo_state.py",

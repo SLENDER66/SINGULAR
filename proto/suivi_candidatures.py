@@ -76,6 +76,17 @@ ETAPES_CV = [
     "Faire relire par quelqu'un du metier",
 ]
 
+#: Ce que Claude ne peut pas deviner, et que tu ne dois pas retaper a chaque
+#: conversation. C'est exactement ce que ce fichier sait et que Claude oublie
+#: entre deux conversations : c'est tout l'interet du pont plus bas.
+PROFIL = [
+    "Technicien CVC / frigoriste de formation, BTS Fluides Energies Domotique.",
+    "Actuellement au chomage.",
+    "Je vise un poste en bureau d'etudes (chiffrage, dimensionnement) dans la",
+    "region toulousaine, en parallele d'une reprise d'etudes en alternance.",
+    "Debutant en code, j'utilise un iPhone.",
+]
+
 
 # --- le fichier --------------------------------------------------------------
 
@@ -386,6 +397,72 @@ def cocher_cv(donnees: dict) -> None:
     sauver(donnees)
     ligne("Fait." if etape["fait"] else "Remis a faire.")
 
+# --- parler a Claude, sans que ce script parle a personne -------------------
+
+def texte_pour_claude(donnees: dict, question: str) -> str:
+    """Le bloc a coller dans l'app Claude.
+
+    Claude oublie tout d'une conversation a l'autre ; ce fichier, non. Le pont
+    ne fait que reunir ce qu'il faudrait retaper : qui tu es, ou tu en es, et
+    ta question.
+
+    Il ne consomme rien et ne contacte personne. Une faculte qui appellerait
+    l'API ferait la meme chose en coutant de l'argent tous les mois, alors que
+    l'app Claude est deja sur le telephone.
+    """
+    lignes = ["Voici ma situation. Reponds en francais, droit au but.", ""]
+    lignes += PROFIL
+    lignes.append("")
+
+    ouvertes = [c for c in donnees["candidatures"] if c["statut"] in EN_COURS]
+    if ouvertes:
+        lignes.append("Mes candidatures en cours :")
+        for c in ouvertes:
+            lignes.append(
+                f"- {c['entreprise']}, {c['poste']} : {STATUTS[c['statut']]}"
+                f" depuis {jours(depuis(c['date_statut']))}"
+            )
+            for note in c.get("notes", []):
+                lignes.append(f"  note : {note}")
+    else:
+        lignes.append("Aucune candidature en cours : je n'ai pas encore commence.")
+    lignes.append("")
+
+    restantes = [e["etape"] for e in donnees["cv"] if not e["fait"]]
+    if restantes:
+        faites = len(donnees["cv"]) - len(restantes)
+        lignes.append(f"Mon CV n'est pas fini : {faites} etape(s) sur {len(donnees['cv'])}.")
+        lignes.append("Il me reste :")
+        lignes += [f"- {e}" for e in restantes]
+    else:
+        lignes.append("Mon CV est termine.")
+    lignes.append("")
+
+    lignes.append("Ma question :")
+    lignes.append(question)
+    return "\n".join(lignes)
+
+
+def preparer_question(donnees: dict) -> None:
+    ligne("Ta question, en une phrase. Par exemple :")
+    ligne("  relis l'etape 1 de mon CV")
+    ligne("  ecris-moi un mail de relance pour telle entreprise")
+    ligne("  prepare mon entretien de jeudi")
+    ligne()
+    question = demander("Question :")
+    if not question:
+        ligne("Annule.")
+        return
+    # Volontairement sans indentation ni repli : ce bloc est fait pour etre
+    # selectionne et colle, pas pour etre joli dans le terminal.
+    print()
+    print("----- copie a partir d'ici -----")
+    print(texte_pour_claude(donnees, question))
+    print("----- jusqu'ici -----")
+    print()
+    ligne("Colle ce bloc dans l'app Claude.")
+    ligne("Rien n'est parti d'ici : ce script ne contacte aucun serveur.")
+
 
 # --- le menu -----------------------------------------------------------------
 
@@ -395,6 +472,7 @@ CHOIX = {
     "3": ("Ajouter une note", noter),
     "4": ("Le CV", cocher_cv),
     "5": ("Tout voir", afficher_tout),
+    "6": ("Preparer une question pour Claude", preparer_question),
 }
 
 

@@ -26,7 +26,7 @@ python suivi_candidatures.py
 
 Il affiche où tu en es, puis **une** action pour aujourd'hui. Puis un menu à un
 chiffre : `1` ajouter, `2` changer un statut, `3` noter, `4` le CV, `5` tout
-voir, `0` quitter.
+voir, `6` préparer une question pour Claude, `0` quitter.
 
 Tes données restent sur le téléphone, dans `~/.singular/candidatures.json`.
 Pour les relire ou les sauvegarder : `cat ~/.singular/candidatures.json`.
@@ -87,6 +87,22 @@ correspondent pas à ce que tu as à faire.
 
 En haut du fichier, six lignes en majuscules. `JOURS_AVANT_RELANCE = 10` et les
 autres. Si dix jours te semblent trop courts, change le chiffre.
+
+## Le `6` : parler à Claude sans payer d'API
+
+Ce script ne contient aucune IA et n'en contiendra pas. Le `6` fait autre
+chose : il assemble un bloc de texte — qui tu es, où en sont tes candidatures,
+ce qu'il reste à faire sur ton CV, ta question — que tu copies dans l'app
+Claude, déjà installée et déjà comprise dans ton abonnement.
+
+Ce n'est pas un pis-aller. Claude oublie tout d'une conversation à l'autre ;
+ce fichier, non. Le seul travail que ferait une faculté « Analyse » branchée
+sur l'API, c'est exactement ce transport-là — en coûtant 2,5 à 6 € par mois et
+en demandant une clé d'API à saisir sur un téléphone.
+
+Rien ne part de ton téléphone quand tu tapes `6` : le bloc s'affiche, c'est
+tout. `tests/test_proto_suivi.py` vérifie cette phrase sur le code plutôt que
+de la promettre — il refuse tout import capable d'ouvrir une connexion.
 
 ## Ce qu'il ne fait pas
 
