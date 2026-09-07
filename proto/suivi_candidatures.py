@@ -75,10 +75,10 @@ EN_COURS = ("a_envoyer", "envoyee", "relancee", "entretien")
 ETAPES_CV = [
     ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
     " Les 2 ans de BE en premier, le terrain juste apres"),
-    ("Assumer la specialite : froid, energie, combustion."
-    " Ne pas se vendre comme un profil tertiaire clim/ventilation"),
     ("Retirer toute mention d'alternance tant qu'aucune ecole n'est trouvee :"
     " une promesse sans date inquiete un recruteur"),
+    ("Assumer la specialite : froid, energie, combustion."
+    " Ne pas se vendre comme un profil tertiaire clim/ventilation"),
     "Relire a voix haute, couper tout ce qui ne sert pas le poste vise",
     "Faire relire par quelqu'un du metier",
 ]
