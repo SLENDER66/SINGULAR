@@ -258,6 +258,28 @@ class Tarifs:
         return max(0.0, self.credit - depense)
 
 
+def etat_de_la_faculte() -> tuple[bool, str]:
+    """La conversation est-elle allumee, et sinon pourquoi -- en une phrase.
+
+    Existe pour etre affichee au demarrage du Sage. La cle se met dans la
+    fenetre ou l'on lance le serveur, avant de le lancer, et la commande n'est
+    pas la meme en `cmd` et en PowerShell : l'oubli est silencieux, et il ne se
+    decouvre qu'une fois le telephone en main, loin du clavier.
+
+    Le Sage ne peut pas ecrire ce diagnostic lui-meme : `test_sage_independence`
+    lui interdit jusqu'au nom d'une variable de cle. La phrase vient donc d'ici,
+    ou elle a le droit d'exister.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return False, ("conversation coupee   aucune cle dans ANTHROPIC_API_KEY "
+                       "-- le bouton le dira aussi")
+    try:
+        _sdk()
+    except AnalyseIndisponible as coupee:
+        return False, f"conversation coupee   {coupee}"
+    return True, f"conversation allumee  {MODELE_PAR_DEFAUT}, {PLAFOND_PAR_JOUR} reponses par jour"
+
+
 def bilan(quota: Quota | None = None, tarifs: Tarifs | None = None) -> dict[str, Any]:
     """Ce que la conversation a coute, pret a afficher.
 
@@ -485,4 +507,4 @@ def _consommation(reponse: Any) -> dict[str, int]:
 __all__ = ["FICHIER", "FICHIER_QUOTA", "FICHIER_TARIFS", "JETONS_MAX",
            "MODELE_DE_TARIFS", "MODELE_PAR_DEFAUT", "PLAFOND_PAR_JOUR", "TOURS_GARDES",
            "Conversation", "PlafondAtteint", "Quota", "Tarifs",
-           "bilan", "phrase_de_bilan", "repondre"]
+           "bilan", "etat_de_la_faculte", "phrase_de_bilan", "repondre"]

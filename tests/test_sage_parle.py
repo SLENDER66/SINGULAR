@@ -12,12 +12,15 @@ de l'argent à chaque exécution du CI.
 from __future__ import annotations
 
 import json
+import threading
+import urllib.error
+import urllib.request
 from http import HTTPStatus
 
 import pytest
 
 from singular.journal import DecisionJournal, Tier
-from singular.sage.server import SageApp, SageError
+from singular.sage.server import SageApp, SageError, build_server
 
 
 @pytest.fixture
@@ -373,3 +376,153 @@ def test_sans_tarifs_le_credit_ne_refuse_jamais(app, client) -> None:
     """Il n'a rien écrit : deviner qu'il est à sec le couperait sans raison."""
     for numero in range(3):
         assert app.parle({"question": f"question {numero}"})["reponse"]
+
+
+# --- le chemin reel du telephone ----------------------------------------------
+#
+# Tout ce qui precede appelle `SageApp` directement. Le telephone, lui, passe
+# par HTTP : l'authentification, la garde contre les autres pages, le type du
+# corps. C'est le chemin qu'il va emprunter, donc c'est celui qu'il faut avoir
+# essaye avant lui.
+
+@pytest.fixture
+def tournant(app):
+    serveur = build_server(app, "127.0.0.1", 0)
+    fil = threading.Thread(target=serveur.serve_forever, daemon=True)
+    fil.start()
+    yield f"http://127.0.0.1:{serveur.server_address[1]}"
+    serveur.shutdown()
+    serveur.server_close()
+
+
+def _demander(base: str, chemin: str, corps: dict | None = None, **entetes) -> tuple[int, dict]:
+    requete = urllib.request.Request(
+        base + chemin,
+        data=json.dumps(corps).encode() if corps is not None else None,
+        method="POST" if corps is not None else "GET",
+        headers={"Content-Type": "application/json", **entetes},
+    )
+    try:
+        with urllib.request.urlopen(requete, timeout=5) as reponse:
+            return reponse.status, json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as refus:
+        return refus.code, json.loads(refus.read().decode("utf-8"))
+
+
+def test_le_fil_se_lit_par_http(tournant, sans_cle) -> None:
+    statut, rendu = _demander(tournant, "/api/parle")
+    assert statut == 200
+    assert rendu["tours"] == []
+    assert rendu["plafond"] > 0
+
+
+def test_un_tour_complet_par_http(tournant, client) -> None:
+    """La chaine entiere, telle que le telephone la parcourt."""
+    statut, rendu = _demander(tournant, "/api/parle", {"question": "je fais quoi ?"})
+    assert statut == 200, rendu
+    assert rendu["reponse"] == "Voilà."
+
+    _, etat = _demander(tournant, "/api/parle")
+    assert [t["content"] for t in etat["tours"]] == ["je fais quoi ?", "Voilà."]
+
+
+def test_la_faculte_coupee_repond_503_et_pas_une_pile(tournant, sans_cle) -> None:
+    """Ce qui remonte doit etre une phrase, pas une trace technique."""
+    statut, rendu = _demander(tournant, "/api/parle", {"question": "et alors ?"})
+    assert statut == HTTPStatus.SERVICE_UNAVAILABLE
+    assert "ANTHROPIC_API_KEY" in rendu["message"]
+    assert "Traceback" not in rendu["message"]
+
+
+def test_une_autre_page_ne_peut_pas_depenser_son_credit(tournant, client) -> None:
+    """La menace a laquelle cette route ajoute un enjeu : une page web ouverte
+    sur le PC pouvait ecrire dans le journal ; elle pourrait maintenant vider
+    cinq dollars, sans rien afficher et sans connaitre le jeton.
+
+    Les trois memes faits la refusent -- l'origine declaree, le nom par lequel
+    on nous appelle, le type du corps -- et il faut le verifier ici plutot que
+    d'esperer que la garde couvre les routes ajoutees apres elle.
+    """
+    statut, _ = _demander(tournant, "/api/parle", {"question": "vide sa poche"},
+                          Origin="https://exemple.invalide")
+    assert statut == HTTPStatus.FORBIDDEN
+    assert client.appels == 0, "une autre page a fait payer une requete"
+
+
+def test_un_corps_non_json_ne_peut_pas_declencher_une_depense(tournant, client) -> None:
+    """Le type du corps est ce qu'une page ne peut pas choisir librement sans
+    demander une permission que ce serveur ne donne pas."""
+    requete = urllib.request.Request(
+        tournant + "/api/parle", data=b"question=vide+sa+poche", method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(requete, timeout=5) as reponse:
+            statut = reponse.status
+    except urllib.error.HTTPError as refus:
+        statut = refus.code
+
+    assert statut == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
+    assert client.appels == 0
+
+
+def test_oublier_par_http_n_efface_que_le_fil(tournant, client) -> None:
+    _demander(tournant, "/api/parle", {"question": "une"})
+    statut, rendu = _demander(tournant, "/api/parle/oubli", {})
+
+    assert statut == 200
+    assert rendu["tours"] == []
+    assert len(app_entries(tournant)) == 1
+
+
+def app_entries(base: str) -> list:
+    _, rendu = _demander(base, "/api/entries")
+    return rendu["entries"]
+
+
+# --- ce que le demarrage annonce ----------------------------------------------
+
+def test_le_demarrage_dit_si_la_conversation_est_coupee(monkeypatch) -> None:
+    """Une clé oubliée ne se découvre sinon qu'une fois le téléphone en main,
+    loin du clavier — et la commande qui la pose n'est pas la même en `cmd`
+    et en PowerShell."""
+    from singular.parle import etat_de_la_faculte
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    allumee, phrase = etat_de_la_faculte()
+    assert allumee is False
+    assert "ANTHROPIC_API_KEY" in phrase
+
+
+def test_le_demarrage_dit_le_modele_et_le_plafond(monkeypatch) -> None:
+    from singular.parle import MODELE_PAR_DEFAUT, PLAFOND_PAR_JOUR, etat_de_la_faculte
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-peu-importe")
+    allumee, phrase = etat_de_la_faculte()
+    assert allumee is True
+    assert MODELE_PAR_DEFAUT in phrase
+    assert str(PLAFOND_PAR_JOUR) in phrase
+
+
+def test_le_demarrage_ne_montre_jamais_la_cle(monkeypatch) -> None:
+    """La phrase est affichée dans une console, parfois recopiée ailleurs."""
+    from singular.parle import etat_de_la_faculte
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-SENTINELLE")
+    assert "SENTINELLE" not in etat_de_la_faculte()[1]
+
+
+def test_le_sage_annonce_l_etat_sans_le_nommer_lui_meme() -> None:
+    """Le Sage n'a pas le droit d'écrire le nom d'une variable de clé — un test
+    d'indépendance le lui interdit. La phrase vient donc de la faculté, et
+    l'import est dans la fonction pour que le serveur marche sans elle."""
+    import ast
+    import pathlib
+
+    source = pathlib.Path("singular/sage/server.py").read_text(encoding="utf-8")
+    arbre = ast.parse(source)
+    dans_serve = [n for n in ast.walk(arbre)
+                  if isinstance(n, ast.FunctionDef) and n.name == "serve"]
+    assert dans_serve, "la fonction serve() a disparu"
+    assert any(isinstance(n, ast.ImportFrom) and "parle" in (n.module or "")
+               for n in ast.walk(dans_serve[0])), "l'import a quitté la fonction"

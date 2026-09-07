@@ -97,6 +97,12 @@ Le Sage sert la conversation dans l'app : le bouton 💬, au-dessus du `+`. Le
 serveur tourne sur le PC, donc ça marche aux mêmes conditions que le reste de
 l'app — PC allumé, même wifi.
 
+La clé se met **dans la fenêtre où tu lances le serveur, avant de le lancer** ;
+un serveur déjà démarré ne la verra jamais. Et la commande diffère selon la
+fenêtre : `set ANTHROPIC_API_KEY=...` en `cmd`, `$env:ANTHROPIC_API_KEY="..."`
+en PowerShell. Pour vérifier avant de lancer quoi que ce soit :
+`python -m singular parle "bonjour"` dans cette même fenêtre.
+
 C'est la **seule route du Sage qui coûte de l'argent**, et trois choses
 tiennent la facture :
 

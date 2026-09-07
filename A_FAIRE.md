@@ -167,12 +167,27 @@ Rien ne part sur un serveur.
    une seule fois :
 
    1. `pip install -e ".[analyse]"`
-   2. Mettre la clé dans `ANTHROPIC_API_KEY` **avant** de lancer le serveur —
-      sinon il démarre sans la voir :
+   2. Mettre la clé dans `ANTHROPIC_API_KEY` **dans la fenêtre où je lance le
+      serveur, avant de le lancer**. Un serveur déjà démarré ne la verra
+      jamais : il faut le fermer et le relancer.
+
+      La commande n'est pas la même selon la fenêtre ouverte. Si l'invite
+      commence par `PS C:\...` c'est PowerShell, sinon c'est `cmd` :
+
       ```
-      set ANTHROPIC_API_KEY=sk-ant-...
-      python -m singular sage --lan
+      cmd :         set ANTHROPIC_API_KEY=sk-ant-...
+      PowerShell :  $env:ANTHROPIC_API_KEY="sk-ant-..."
       ```
+
+      **Vérifier avant d'aller plus loin**, dans la même fenêtre :
+
+      ```
+      python -m singular parle "dis juste bonjour"
+      ```
+
+      S'il répond, la clé est vue — je peux lancer `python -m singular sage --lan`
+      dans cette fenêtre-là. S'il dit « aucune clé dans ANTHROPIC_API_KEY »,
+      c'est que j'ai utilisé la commande de l'autre fenêtre.
    3. `python -m singular parle --tarifs` — il affiche un petit fichier à
       coller dans `C:\Users\Utilisateur\.singular\tarifs.json`, avec les
       prix relevés sur console.anthropic.com et mes 5 $. **SINGULAR ne connaît

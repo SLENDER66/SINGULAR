@@ -691,6 +691,14 @@ def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int =
         print("  Sans lui, toute requête venue d'ailleurs que de cette machine est refusée.")
     else:
         print("\n  Pour y accéder depuis ton iPhone : relance avec --lan")
+    # L'etat de la conversation, au demarrage plutot qu'au moment ou il appuie.
+    # Une cle oubliee ne se voit qu'une fois le telephone en main, loin du
+    # clavier -- et la commande qui la pose n'est pas la meme en `cmd` et en
+    # PowerShell. La phrase vient de la faculte : ici, on n'a pas le droit
+    # d'ecrire le nom d'une variable de cle, et un test le verifie.
+    from ..parle import etat_de_la_faculte  # importe ici : le Sage marche sans
+
+    print(f"\n  {etat_de_la_faculte()[1]}")
     print("\n  Ctrl+C pour arrêter.\n")
 
     try:
