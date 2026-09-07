@@ -33,7 +33,7 @@ from pathlib import Path
 from .learning import Forecast, ForecastKind, LearningEngine
 from .sqlite_support import SqliteLocation
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_PATH = Path.home() / ".singular" / "journal.db"
 
 
@@ -80,6 +80,33 @@ class Status(str, Enum):
     ABANDONED = "ABANDONED"
 
 
+class Reversibility(str, Enum):
+    """Peut-on revenir en arrière, et à quel prix ?
+
+    La constitution dit : « En cas d'incertitude critique et de conséquence
+    élevée : HALT. » Rien dans une décision ne permettait de l'appliquer. Le
+    journal savait ce qu'une décision coûte en heures ; jamais ce que coûte de
+    s'être trompé. Une dette est l'exemple le plus net : deux décisions à
+    5 000 euros et 20 heures ne sont pas la même décision selon qu'on peut
+    l'annuler la semaine suivante ou qu'on la rembourse pendant trois ans.
+
+    Les valeurs stockées sont sans accent, comme celles de `Tier` : une base
+    écrite aujourd'hui doit rester lisible quel que soit l'encodage.
+    """
+
+    REVERSIBLE = "REVERSIBLE"
+    COUTEUSE = "COUTEUSE"
+    IRREVERSIBLE = "IRREVERSIBLE"
+
+    @property
+    def label(self) -> str:
+        return {
+            Reversibility.REVERSIBLE: "réversible",
+            Reversibility.COUTEUSE: "coûteuse à défaire",
+            Reversibility.IRREVERSIBLE: "irréversible",
+        }[self]
+
+
 @dataclass(frozen=True)
 class Entry:
     entry_id: str
@@ -98,6 +125,11 @@ class Entry:
     brier_score: float | None
     previous_fingerprint: str
     fingerprint: str
+    #: En euros. `None` veut dire « pas chiffré », pas « zéro » : une décision
+    #: dont on n'a pas estimé le gain n'est pas une décision sans gain, et les
+    #: confondre effacerait justement ce que la Notice doit reprocher.
+    expected_gain_eur: float | None = None
+    reversibility: Reversibility | None = None
 
     @property
     def is_open(self) -> bool:
@@ -111,6 +143,39 @@ class Entry:
 def _fingerprint(payload: dict, previous: str) -> str:
     material = json.dumps({"previous": previous, **payload}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _payload(
+    *,
+    entry_id: str, title: str, action: str, predicted: str, probability: float,
+    tier: str, cost_hours: float, horizon_days: int, created_at: str,
+    expected_gain_eur: float | None, reversibility: str | None,
+) -> dict:
+    """La matière que l'empreinte signe. Écrite une fois, lue par les deux côtés.
+
+    Elle l'était deux fois -- dans `add()` et dans `verify()` -- et deux copies
+    d'une même vérité finissent par diverger. Ajouter un champ à l'une aurait
+    déclaré réécrit un journal auquel personne n'a touché, définitivement,
+    puisque les entrées ne sont jamais réécrites.
+
+    Les deux champs d'affaires n'entrent dans la charge que lorsqu'ils sont
+    renseignés. C'est ce qui permet à une entrée écrite avant qu'ils existent
+    de rester vérifiable : sa charge est exactement celle d'hier, à l'octet
+    près. Et c'est aussi ce qui fait qu'une valeur glissée après coup dans la
+    base change la charge, donc l'empreinte : `verify()` la voit. Un gain
+    attendu qu'on pourrait réviser une fois le résultat connu n'apprendrait
+    rien -- c'est la raison d'être de la chaîne.
+    """
+    payload = {
+        "entry_id": entry_id, "title": title, "action": action, "predicted": predicted,
+        "probability": probability, "tier": tier, "cost_hours": cost_hours,
+        "horizon_days": horizon_days, "created_at": created_at,
+    }
+    if expected_gain_eur is not None:
+        payload["expected_gain_eur"] = expected_gain_eur
+    if reversibility is not None:
+        payload["reversibility"] = reversibility
+    return payload
 
 
 class DecisionJournal:
@@ -130,8 +195,8 @@ class DecisionJournal:
             row = conn.execute("SELECT version FROM journal_schema").fetchone()
             if row is None:
                 conn.execute("INSERT INTO journal_schema(version) VALUES(?)", (SCHEMA_VERSION,))
-            elif int(row["version"]) != SCHEMA_VERSION:
-                raise RuntimeError(f"journal schema v{int(row['version'])} does not match v{SCHEMA_VERSION}")
+            else:
+                self._migrate(conn, int(row["version"]))
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS journal_entries (
@@ -150,10 +215,44 @@ class DecisionJournal:
                     lesson TEXT,
                     brier_score REAL,
                     previous_fingerprint TEXT NOT NULL,
-                    fingerprint TEXT NOT NULL
+                    fingerprint TEXT NOT NULL,
+                    expected_gain_eur REAL,
+                    reversibility TEXT
                 )
                 """
             )
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection, version: int) -> None:
+        """Fait passer une base existante à la version courante, ou refuse.
+
+        `CREATE TABLE IF NOT EXISTS` ne migre rien : il ne s'exécute pas quand
+        la table est là, et une base d'hier serait restée sans les colonnes
+        neuves pendant que le code les lit. `CLAUDE.md` §13 l'interdit
+        explicitement.
+
+        Ce qui est ajouté ici est ajouté en NULL. C'est voulu : une décision
+        prise avant que le gain attendu existe n'a pas de gain attendu, et lui
+        en inventer un -- zéro compris -- réécrirait l'histoire. Sa charge
+        d'empreinte reste donc celle de la v1, et la chaîne tient.
+        """
+        if version == SCHEMA_VERSION:
+            return
+        if version > SCHEMA_VERSION or version < 1:
+            raise RuntimeError(f"journal schema v{version} does not match v{SCHEMA_VERSION}")
+
+        if version == 1:
+            tables = {r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "journal_entries" in tables:
+                colonnes = {r["name"] for r in conn.execute("PRAGMA table_info(journal_entries)")}
+                if "expected_gain_eur" not in colonnes:
+                    conn.execute("ALTER TABLE journal_entries ADD COLUMN expected_gain_eur REAL")
+                if "reversibility" not in colonnes:
+                    conn.execute("ALTER TABLE journal_entries ADD COLUMN reversibility TEXT")
+            version = 2
+
+        conn.execute("UPDATE journal_schema SET version=?", (version,))
 
     # --- writing -------------------------------------------------------------
 
@@ -167,6 +266,8 @@ class DecisionJournal:
         tier: Tier,
         cost_hours: float,
         horizon_days: int,
+        expected_gain_eur: float | None = None,
+        reversibility: Reversibility | None = None,
         now: datetime | None = None,
     ) -> Entry:
         """Record a decision before acting on it.
@@ -186,6 +287,18 @@ class DecisionJournal:
             raise ValueError("a decision needs a horizon of at least one day to be checkable")
         if not title.strip() or not action.strip() or not predicted.strip():
             raise ValueError("title, action and predicted outcome are all required")
+        # Le gain reste facultatif -- l'exiger ferait enregistrer moins de
+        # décisions, et une décision non écrite est pire qu'une décision sans
+        # chiffre. Mais un chiffre donné doit être un nombre : NaN se propage
+        # sans lever, et un total de gains contaminé par un NaN reste NaN sans
+        # que rien ne le signale.
+        if expected_gain_eur is not None:
+            if not isfinite(expected_gain_eur):
+                raise ValueError("expected_gain_eur must be finite")
+            if expected_gain_eur < 0:
+                raise ValueError("expected_gain_eur cannot be negative: a cost is not a gain")
+        if reversibility is not None and not isinstance(reversibility, Reversibility):
+            raise TypeError("reversibility must be a Reversibility, not a bare string")
 
         # Canonicalise before fingerprinting, because the row is read back
         # canonicalised. `add(cost_hours=60)` fingerprinted the integer 60 and
@@ -198,14 +311,20 @@ class DecisionJournal:
         probability = float(probability)
         cost_hours = float(cost_hours)
         horizon_days = int(horizon_days)
+        # Même raison que ci-dessus : add(expected_gain_eur=5000) signerait
+        # l'entier 5000 quand la ligne relue rend 5000.0.
+        if expected_gain_eur is not None:
+            expected_gain_eur = float(expected_gain_eur)
 
         moment = now or datetime.now(UTC)
         entry_id = "DEC-" + uuid.uuid4().hex[:8]
-        payload = {
-            "entry_id": entry_id, "title": title, "action": action, "predicted": predicted,
-            "probability": probability, "tier": tier.value, "cost_hours": cost_hours,
-            "horizon_days": horizon_days, "created_at": moment.isoformat(),
-        }
+        payload = _payload(
+            entry_id=entry_id, title=title, action=action, predicted=predicted,
+            probability=probability, tier=tier.value, cost_hours=cost_hours,
+            horizon_days=horizon_days, created_at=moment.isoformat(),
+            expected_gain_eur=expected_gain_eur,
+            reversibility=None if reversibility is None else reversibility.value,
+        )
         with self._connect() as conn:
             # Same reason as the outcome ledger and the audit trail: reading the
             # head and inserting behind it has to be one serialised step, or two
@@ -218,13 +337,16 @@ class DecisionJournal:
             due = (moment + timedelta(days=horizon_days)).isoformat()
             conn.execute(
                 "INSERT INTO journal_entries(entry_id,title,action,predicted,probability,tier,cost_hours,horizon_days,"
-                "created_at,due_at,status,resolved_at,lesson,brier_score,previous_fingerprint,fingerprint)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "created_at,due_at,status,resolved_at,lesson,brier_score,previous_fingerprint,fingerprint,"
+                "expected_gain_eur,reversibility)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (entry_id, title, action, predicted, probability, tier.value, cost_hours, horizon_days,
-                 moment.isoformat(), due, Status.OPEN.value, None, None, None, previous, fingerprint),
+                 moment.isoformat(), due, Status.OPEN.value, None, None, None, previous, fingerprint,
+                 expected_gain_eur, None if reversibility is None else reversibility.value),
             )
         return Entry(entry_id, title, action, predicted, probability, tier, cost_hours, horizon_days,
-                     moment.isoformat(), due, Status.OPEN, None, None, None, previous, fingerprint)
+                     moment.isoformat(), due, Status.OPEN, None, None, None, previous, fingerprint,
+                     expected_gain_eur, reversibility)
 
     def resolve(self, entry_id: str, *, happened: bool, lesson: str = "", now: datetime | None = None) -> Entry:
         """Record what actually happened. Scores the prediction, does not rewrite it."""
@@ -298,12 +420,13 @@ class DecisionJournal:
         """Has any prediction been rewritten since it was made?"""
         previous = ""
         for entry in self._chain():
-            payload = {
-                "entry_id": entry.entry_id, "title": entry.title, "action": entry.action,
-                "predicted": entry.predicted, "probability": entry.probability, "tier": entry.tier.value,
-                "cost_hours": entry.cost_hours, "horizon_days": entry.horizon_days,
-                "created_at": entry.created_at,
-            }
+            payload = _payload(
+                entry_id=entry.entry_id, title=entry.title, action=entry.action,
+                predicted=entry.predicted, probability=entry.probability, tier=entry.tier.value,
+                cost_hours=entry.cost_hours, horizon_days=entry.horizon_days,
+                created_at=entry.created_at, expected_gain_eur=entry.expected_gain_eur,
+                reversibility=None if entry.reversibility is None else entry.reversibility.value,
+            )
             if entry.previous_fingerprint != previous or _fingerprint(payload, previous) != entry.fingerprint:
                 return False
             previous = entry.fingerprint
@@ -342,6 +465,8 @@ class DecisionJournal:
                 "predicted": e.predicted,
                 "probability": e.probability,
                 "cost_hours": e.cost_hours,
+                "expected_gain_eur": "" if e.expected_gain_eur is None else e.expected_gain_eur,
+                "reversibility": "" if e.reversibility is None else e.reversibility.value,
                 "status": e.status.value,
                 "resolved_at": e.resolved_at or "",
                 "brier_score": "" if e.brier_score is None else e.brier_score,
@@ -389,6 +514,19 @@ class DecisionJournal:
             "hours_total": round(sum(e.cost_hours for e in all_entries), 1),
             "hours_unresolved": round(sum(e.cost_hours for e in open_entries), 1),
             "hours_that_worked": round(sum(e.cost_hours for e in resolved if e.status is Status.HAPPENED), 1),
+            # Le raisonnement d'affaires, tel que la constitution le demande :
+            # « Optimisation : options, levier, coût, vitesse, réversibilité. »
+            # Le coût et la vitesse étaient là depuis le début ; ce qui suit
+            # est ce qui manquait pour qu'une décision puisse être jugée sur
+            # autre chose que le temps qu'elle prend.
+            "gain_expected_total": round(
+                sum(e.expected_gain_eur for e in all_entries if e.expected_gain_eur is not None), 2),
+            "gain_expected_open": round(
+                sum(e.expected_gain_eur for e in open_entries if e.expected_gain_eur is not None), 2),
+            "hours_without_gain": round(
+                sum(e.cost_hours for e in all_entries if e.expected_gain_eur is None), 1),
+            "irreversible_open": sum(
+                1 for e in open_entries if e.reversibility is Reversibility.IRREVERSIBLE),
             "mean_brier": round(sum(brier) / len(brier), 4) if brier else None,
             "mean_probability": round(mean_probability, 2) if mean_probability is not None else None,
             "hit_rate": round(hit_rate, 2) if hit_rate is not None else None,
@@ -413,7 +551,9 @@ class DecisionJournal:
             row["due_at"], Status(row["status"]), row["resolved_at"], row["lesson"],
             None if row["brier_score"] is None else float(row["brier_score"]),
             row["previous_fingerprint"], row["fingerprint"],
+            None if row["expected_gain_eur"] is None else float(row["expected_gain_eur"]),
+            None if row["reversibility"] is None else Reversibility(row["reversibility"]),
         )
 
 
-__all__ = ["DEFAULT_PATH", "SCHEMA_VERSION", "DecisionJournal", "Entry", "Status", "Tier"]
+__all__ = ["DEFAULT_PATH", "SCHEMA_VERSION", "DecisionJournal", "Entry", "Reversibility", "Status", "Tier"]
