@@ -91,6 +91,41 @@ de confiance.
 L'application iPhone **native** est dans `ios/` ; sa recette de compilation est
 dans `ios/README.md`.
 
+## Sur l'iPhone seul, sans PC et sans rien installer
+
+Depuis que `singular/__init__.py` résout ses noms à la demande, le cœur n'a
+plus aucune dépendance : journal, chaîne d'intégrité, Notice, ligne de commande
+et serveur du Sage tournent en bibliothèque standard pure. Donc dans **a-Shell**
+(gratuit, App Store), qui embarque Python.
+
+**Précise la branche, et vérifie laquelle.** Un `lg2 clone` sans elle prend la
+branche par défaut. Au moment où ces lignes sont écrites, la branche par défaut
+**et** la branche de travail sont toutes deux en retard : le travail est sur la
+branche de session ci-dessous. `python tools/check_repo_state.py` dit l'état du
+jour ; crois-le plutôt que cette ligne.
+
+```
+lg2 clone -b claude/singular-startup-hook-czr3hp https://github.com/SLENDER66/SINGULAR
+```
+
+```
+cd SINGULAR && python -m singular sage
+```
+
+Puis Safari sur `http://127.0.0.1:8765/`.
+
+**Ce qui reste à vérifier, et que personne n'a encore testé :** iOS suspend les
+applications passées à l'arrière-plan. Basculer d'a-Shell vers Safari peut
+couper le serveur. Si la page ne charge pas, c'est ça — dis-le, il y a d'autres
+chemins.
+
+**Un journal par machine, et ils ne se parlent pas.** `~/.singular/journal.db`
+sur le PC et sur le téléphone sont deux fichiers différents. Deux journaux
+divergents donnent deux calibrations fausses, et rien ne le signale : un journal
+neuf ressemble exactement à un journal qu'on n'a pas encore rempli. C'est pour
+ça que « Journal vide » affiche désormais **le chemin** où il a regardé. Tiens-toi
+à une seule machine tant qu'il n'y a pas de synchronisation.
+
 ## Le mettre devant tes yeux
 
 Ajoute à ton `~/.bashrc` ou `~/.zshrc` :

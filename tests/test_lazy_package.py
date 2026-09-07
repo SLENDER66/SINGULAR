@@ -140,3 +140,23 @@ def test_le_serveur_du_sage_s_importe_sans_dependance() -> None:
     ''')
     assert resultat.returncode == 0, resultat.stderr[-800:]
     assert "OK" in resultat.stdout
+
+
+def test_un_journal_vide_dit_ou_il_a_regarde(tmp_path, capsys) -> None:
+    """Le corollaire du coeur sans dependance : deux machines, deux journaux.
+
+    Un journal vide et un journal ouvert au mauvais endroit donnent le meme
+    ecran. Depuis que SINGULAR tourne aussi sur le telephone, la confusion est
+    devenue possible pour de bon -- et elle ne se signale pas toute seule :
+    chacun des deux a l'air simplement neuf.
+    """
+    from singular.__main__ import cmd_list, cmd_review
+    from singular.journal import DecisionJournal
+
+    chemin = tmp_path / "ailleurs.db"
+    journal = DecisionJournal(chemin)
+
+    for commande in (cmd_list, cmd_review):
+        capsys.readouterr()
+        commande(journal, type("Args", (), {"status": None})())
+        assert str(chemin) in capsys.readouterr().out, commande.__name__

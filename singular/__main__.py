@@ -194,6 +194,19 @@ def cmd_apply(journal: DecisionJournal, args) -> int:
     return 0
 
 
+def _vide(journal: DecisionJournal) -> str:
+    """« Journal vide », plus l'endroit où l'on a regardé.
+
+    Un journal vide et un mauvais journal donnent exactement le même écran.
+    Depuis que le coeur tourne sans rien installer, la même personne peut en
+    ouvrir un sur son PC et un autre sur son téléphone, et les deux
+    divergeraient en silence -- chacun ayant l'air simplement neuf. Dire où
+    l'on a cherché coûte une ligne et rend la confusion impossible à rater.
+    """
+    return (f"\n  Journal vide : {journal.path}\n"
+            "  `python -m singular add` pour commencer.\n")
+
+
 def cmd_status(journal: DecisionJournal, args) -> int:
     """One line, for your shell profile."""
     print(journal.summary_line())
@@ -248,7 +261,7 @@ def cmd_abandon(journal: DecisionJournal, args) -> int:
 def cmd_list(journal: DecisionJournal, args) -> int:
     entries = journal.entries(status=Status(args.status.upper()) if args.status else None)
     if not entries:
-        print("\n  Journal vide. `python -m singular add` pour commencer.\n")
+        print(_vide(journal))
         return 0
     print()
     for entry in entries:
@@ -278,7 +291,7 @@ def cmd_sage(journal: DecisionJournal, args) -> int:
 def cmd_review(journal: DecisionJournal, args) -> int:
     report = journal.review()
     if not report["decisions"]:
-        print("\n  Journal vide. `python -m singular add` pour commencer.\n")
+        print(_vide(journal))
         return 0
 
     print(_colour("\n  OÙ VONT TES HEURES\n", BOLD))
