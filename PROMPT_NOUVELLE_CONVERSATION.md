@@ -246,9 +246,12 @@ jours : ne le redéduis pas, lis-le.
 
 **2 ans en bureau d'études CVC déjà effectués** — chiffrage, dimensionnement.
 Avant : **5 ans de terrain dans l'Armée**, sur chambre froide, groupe
-électrogène et brûleur — froid, énergie, combustion. **Et du tertiaire : je
-dimensionne, sélectionne et chiffre des centrales de traitement d'air, tous
-types — travail de bureau d'études, pas d'entretien.** Le profil est donc large, pas
+électrogène et brûleur — froid, énergie, combustion, chambres froides en
+positif **et** en négatif. **Et du tertiaire : je dimensionne, sélectionne et
+chiffre des centrales de traitement d'air, de 600 à 50 000 m³/h — travail de
+bureau d'études, pas d'entretien.** Récupération : échangeur à plaques, roue
+enthalpique, batteries à eau glycolée, les trois. Le combustible des brûleurs,
+je ne m'en souviens plus : ne me le redemande pas. Le profil est donc large, pas
 spécialisé d'un seul côté : une session l'avait rétréci à l'industriel par
 déduction, et c'était faux. **BTS Fluides Énergies Domotique.** Actuellement au
 chômage, je cherche un poste en bureau d'études **dans la région toulousaine**.
