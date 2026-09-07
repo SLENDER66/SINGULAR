@@ -39,7 +39,7 @@ fichier ne prétendra pas qu'elles sont supprimées.
 Depuis le 6 septembre 2026 au soir. Première décision enregistrée :
 « Postuler » → « Un entretien », 75 %, 4 h, Revenus, **verdict le 20 septembre**.
 
-**Pour le relancer** (il ne répond que si le PC tourne et que je suis sur mon
+**Depuis le PC** (il ne répond alors que si le PC tourne et que je suis sur mon
 wifi) :
 
 ```powershell
@@ -49,6 +49,29 @@ cd $HOME\Documents\SINGULAR; python -m singular sage --lan
 Si l'app redemande la clé, un champ permet de la coller : l'adresse entière
 affichée par PowerShell, ou le jeton seul.
 
+**Depuis le téléphone seul, sans PC.** Le cœur n'a plus aucune dépendance : il
+tourne dans **a-Shell** sans rien installer. Une fois, dans a-Shell :
+
+```
+lg2 clone -b claude/singular-startup-hook-czr3hp https://github.com/SLENDER66/SINGULAR
+```
+
+Puis, chaque matin :
+
+```
+cd SINGULAR && python -m singular sage
+```
+
+Et Safari sur `http://127.0.0.1:8765/`. Pas de jeton : rien ne sort du
+téléphone.
+
+Deux réserves, non vérifiées d'ici. iOS suspend les applications passées à
+l'arrière-plan : basculer vers Safari peut couper le serveur — si la page ne
+charge pas, c'est ça, dis-le. Et **le journal du téléphone n'est pas celui du
+PC** : deux fichiers, aucune synchronisation. Tant qu'il n'y en a pas, s'en
+tenir à une seule machine. C'est pour ça que « Journal vide » affiche
+maintenant le chemin où il a regardé.
+
 **Sauvegarde.** Tout mon journal est dans un seul fichier :
 `C:\Users\Utilisateur\.singular\journal.db`. Le copier de temps en temps sur
 une clé ou dans un dossier synchronisé, c'est toute la sauvegarde nécessaire.
@@ -57,6 +80,8 @@ Rien ne part sur un serveur.
 ## Ce qui compte maintenant
 
 1. **Ouvrir l'app le matin.** C'est le seul geste qui fait vivre le journal.
+   Depuis le PC ou depuis le téléphone, mais **toujours le même des deux** tant
+   que les deux journaux ne se parlent pas.
 2. **Trancher le 20 septembre.** La carte passera en haut, « À trancher
    aujourd'hui ». Oui ou non. Un journal où l'on écrit sans jamais trancher
    n'apprend rien.
