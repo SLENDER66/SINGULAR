@@ -99,7 +99,8 @@ def _executer(scenario: str) -> dict:
     async function refresh() {}
     function showFormError(id, message) { erreurs.push(message); }
     """ + _bloc_verdict() + scenario
-    resultat = subprocess.run([NODE, "-e", harness], capture_output=True, text=True, timeout=20)
+    resultat = subprocess.run([NODE, "-e", harness], capture_output=True, text=True,
+                              timeout=20, check=False)
     assert resultat.returncode == 0, resultat.stderr
     return json.loads(resultat.stdout)
 
