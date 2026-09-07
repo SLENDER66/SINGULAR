@@ -213,3 +213,55 @@ def test_the_same_name_on_the_same_commit_says_so_plainly():
     text, status = _describe(branches={WORK: "a" * 40})
     assert status == 0
     assert "sous deux noms" not in text
+
+
+# --- l'angle mort qui rendait l'outil faux au pire moment ---------------------
+
+def test_work_stranded_on_a_session_branch_is_reported_and_fails():
+    """L'outil annonçait « Accord » avec quinze commits échoués ailleurs.
+
+    Les deux branches nommées étaient au même commit, donc d'accord entre
+    elles ; tout le travail du jour vivait sur la branche de session, que
+    l'outil rangeait plus bas parmi celles « à garder ou à supprimer ». C'est
+    la panne qu'il existe pour empêcher, retournée : au lieu d'une séance qui
+    démarre sur du code périmé, une séance qui finit avec son travail perdu de
+    vue.
+    """
+    text, status = _describe(head_branch="claude/session-du-jour", head_ahead=15)
+
+    assert status == 1
+    assert "TRAVAIL HORS MANDAT" in text
+    assert "claude/session-du-jour" in text
+    assert "15 commit" in text
+
+
+def test_the_branch_carrying_the_work_is_not_also_listed_as_disposable():
+    """Elle ne peut pas être à la fois « porte le travail » et « à supprimer »."""
+    text, _ = _describe(
+        branches={WORK: "a" * 40, DEFAULT: "a" * 40, "claude/session-du-jour": "b" * 40},
+        head_branch="claude/session-du-jour",
+        head_ahead=3,
+    )
+
+    avant, _, apres = text.partition("a garder ou a supprimer")
+    assert "claude/session-du-jour" in avant
+    assert "claude/session-du-jour" not in apres
+
+
+def test_committing_on_the_working_branch_itself_stays_silent():
+    """Commiter sans pousser, pendant une séance, est le cas normal.
+
+    Le signaler à chaque vérification rendrait l'alerte inaudible le jour où
+    elle compte.
+    """
+    text, status = _describe(head_branch=WORK, head_ahead=4)
+
+    assert status == 0
+    assert "TRAVAIL HORS MANDAT" not in text
+
+
+def test_a_clone_level_with_the_mandate_says_nothing_about_it():
+    text, status = _describe(head_branch="claude/session-du-jour", head_ahead=0)
+
+    assert status == 0
+    assert "TRAVAIL HORS MANDAT" not in text

@@ -103,12 +103,23 @@ def describe(
     ahead: int | None,
     fast_forward: bool | None,
     mandate_trustworthy: bool | None = True,
+    head_branch: str | None = None,
+    head_ahead: int | None = None,
 ) -> tuple[list[str], int]:
     """Rend les lignes à afficher et le code de sortie. Aucun accès réseau.
 
     Séparé de tout le reste pour être testable : c'est ici que se décide ce
     qui compte comme un désaccord, et cette décision doit pouvoir être mise
     en défaut sans dépendre d'un serveur.
+
+    `head_branch` et `head_ahead` disent où en est *ce clone-ci* par rapport à
+    la branche de travail. Sans eux, l'outil a eu un angle mort qui l'a rendu
+    faux au pire moment : il annonçait « Accord » parce que les deux branches
+    nommées étaient au même commit, pendant que quinze commits de travail
+    vivaient sur la branche de session -- qu'il rangeait, plus bas, parmi les
+    branches « à garder ou à supprimer ». La panne qu'il existe pour empêcher,
+    retournée : au lieu d'une session qui démarre sur du code périmé, une
+    session qui finit avec son travail échoué sur une branche jetable.
 
     `mandate_trustworthy` vaut faux lorsque le `CLAUDE.md` lu ne vient pas de
     la branche de travail. Ce cas n'est pas théorique : c'est précisément
@@ -191,7 +202,30 @@ def describe(
         )
         status = 1
 
-    others = sorted(set(branches) - {work_branch, default_branch} - KEPT_BY_DESIGN)
+    # Ce clone porte-t-il du travail qu'aucune branche du mandat n'a ? Pendant
+    # une session, commiter sans pousser est normal -- d'où la condition sur le
+    # nom : on ne le signale que lorsque le travail vit ailleurs que sur la
+    # branche que le mandat désigne, seul cas où il peut être oublié.
+    porteuse: set[str] = set()
+    if head_ahead and head_branch and head_branch != work_branch:
+        # Elle ne peut pas etre a la fois « porte le travail » et « a supprimer ».
+        porteuse = {head_branch}
+        lines.append("")
+        lines.append(
+            f"TRAVAIL HORS MANDAT : {head_branch} porte {head_ahead} commit(s) "
+            f"que {work_branch} n'a pas."
+        )
+        lines.append(
+            "Aucune branche du mandat ne les porte. Une session suivante partira "
+            "sans eux, et cet outil les aurait listes comme une branche a supprimer."
+        )
+        lines.append(
+            "A faire : les porter sur la branche de travail, ou dire ici que "
+            "cette branche est la nouvelle."
+        )
+        status = 1
+
+    others = sorted(set(branches) - {work_branch, default_branch} - KEPT_BY_DESIGN - porteuse)
     if others:
         lines.append("")
         lines.append(f"{len(others)} autres branches sur origin, a garder ou a supprimer :")
@@ -228,6 +262,15 @@ def main() -> int:
     if work_branch and work_branch in branches:
         trustworthy = _is_ancestor(branches[work_branch], "HEAD")
 
+    # Où en est ce clone-ci, et sous quel nom.
+    head_branch = head_ahead = None
+    try:
+        head_branch = _git("rev-parse", "--abbrev-ref", "HEAD").strip() or None
+    except (RuntimeError, OSError):
+        head_branch = None
+    if work_branch and work_branch in branches:
+        head_ahead = _ahead_count(branches[work_branch], "HEAD")
+
     lines, status = describe(
         work_branch=work_branch,
         default_branch=default_branch,
@@ -235,6 +278,8 @@ def main() -> int:
         ahead=ahead,
         fast_forward=fast_forward,
         mandate_trustworthy=trustworthy,
+        head_branch=head_branch,
+        head_ahead=head_ahead,
     )
     for line in lines:
         print(line)
