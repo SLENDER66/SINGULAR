@@ -214,3 +214,49 @@ def test_avec_des_tarifs_et_rien_de_depense_le_zero_est_dit(tmp_path) -> None:
     compte = bilan(Quota(tmp_path / "q.json", plafond=10), Tarifs(tmp_path / "t.json"))
     assert compte["usd"] == 0.0
     assert compte["restant_usd"] == 5.0
+
+
+# --- deux surfaces, un seul fichier -------------------------------------------
+
+def test_le_clavier_ne_mange_pas_le_plafond_du_telephone(tmp_path) -> None:
+    """Le défaut que ça corrige : `consommer` incrémentait le compteur du jour
+    depuis la ligne de commande, qui écrit le même fichier. Trois questions au
+    PC et le téléphone n'en avait plus que cinquante-sept — alors que la
+    documentation promet au clavier de ne pas être plafonné.
+    """
+    chemin = tmp_path / "q.json"
+    clavier = Quota(chemin, plafond=60)
+    for _ in range(3):
+        clavier.ajouter_depense(cout=COUT, modele="m")
+
+    telephone = Quota(chemin, plafond=60)
+    assert telephone.restants() == 60, "le clavier a entamé le plafond du téléphone"
+    assert telephone.depenses()["m"]["entree"] == 3000, "la dépense n'a pas été comptée"
+
+
+def test_le_telephone_compte_les_deux(tmp_path) -> None:
+    quota = Quota(tmp_path / "q.json", plafond=60)
+    quota.consommer(cout=COUT, modele="m")
+    assert quota.restants() == 59
+    assert quota.depenses()["m"]["entree"] == 1000
+
+
+def test_la_depense_du_clavier_s_ajoute_a_celle_du_telephone(tmp_path) -> None:
+    """Le crédit acheté ne sait pas d'où vient la question."""
+    chemin = tmp_path / "q.json"
+    Quota(chemin, plafond=60).consommer(cout=COUT, modele="m")
+    Quota(chemin, plafond=60).ajouter_depense(cout=COUT, modele="m")
+
+    total = Quota(chemin, plafond=60)
+    assert total.depenses()["m"]["entree"] == 2000
+    assert total.restants() == 59, "le clavier a bougé le compteur du jour"
+
+
+def test_une_depense_du_clavier_ne_perd_pas_le_compteur_du_jour(tmp_path) -> None:
+    """Elle réécrit le fichier : elle doit préserver ce qu'elle ne touche pas."""
+    chemin = tmp_path / "q.json"
+    quota = Quota(chemin, plafond=60)
+    quota.consommer(cout=COUT, modele="m", aujourdhui="2026-09-07")
+    quota.ajouter_depense(cout=COUT, modele="m")
+
+    assert quota.restants(aujourdhui="2026-09-07") == 59

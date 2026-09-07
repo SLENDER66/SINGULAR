@@ -147,9 +147,12 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
             return False
         fil.sauver()
         # Le clavier n'a pas de plafond -- une commande se tape, un bouton se
-        # tapote -- mais la depense se compte partout, sinon le total affiche
-        # sur le telephone serait faux de tout ce qui a ete dit ici.
-        Quota(plafond=10**9).consommer(cout=cout, modele=args.modele or MODELE_PAR_DEFAUT)
+        # tapote -- mais la depense se compte partout, sinon le total affiché
+        # sur le téléphone serait faux de tout ce qui a été dit ici.
+        #
+        # `ajouter_depense` et pas `consommer` : passer par le second faisait
+        # manger au clavier le plafond du téléphone, qui lit le même fichier.
+        Quota().ajouter_depense(cout=cout, modele=args.modele or MODELE_PAR_DEFAUT)
         print(f"\n{texte}\n")
         # Le cout de chaque tour, sous les yeux : une conversation renvoie tout
         # son historique, et sans ce chiffre on ne voit pas la facture monter.

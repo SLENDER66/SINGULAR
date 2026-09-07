@@ -153,6 +153,34 @@ class Quota:
             }
         return propre
 
+    @staticmethod
+    def _cumuler(jetons: dict[str, dict[str, int]], cout: dict[str, int] | None,
+                 modele: str) -> dict[str, dict[str, int]]:
+        if not (cout and modele):
+            return jetons
+        compte = jetons.setdefault(modele, dict.fromkeys(
+            ("entree", "sortie", "cache_lu", "cache_ecrit"), 0))
+        for poste, valeur in cout.items():
+            if poste in compte:
+                compte[poste] += int(valeur or 0)
+        return jetons
+
+    def ajouter_depense(self, *, cout: dict[str, int], modele: str) -> None:
+        """Compter une depense sans entamer le plafond du jour.
+
+        C'est ce que fait le clavier. Les deux surfaces ecrivent le meme
+        fichier, et faire passer les tours du clavier par `consommer` revenait
+        a leur faire manger le plafond du telephone : trois questions au PC, et
+        le telephone n'en avait plus que cinquante-sept -- alors que la
+        documentation promet au clavier de ne pas etre plafonne.
+
+        La depense, elle, se compte partout : c'est le credit achete, et il ne
+        sait pas d'ou vient la question.
+        """
+        donnees = self._lire()
+        donnees["jetons"] = self._cumuler(self.depenses(), cout, modele)
+        self._ecrire(donnees)
+
     def consommer(self, *, cout: dict[str, int] | None = None, modele: str = "",
                   aujourdhui: str | None = None) -> int:
         """Compte un tour, ajoute sa depense, et rend ce qu'il reste du jour.
@@ -170,15 +198,8 @@ class Quota:
                 "Demain, ou depuis le clavier avec `python -m singular parle`."
             )
 
-        jetons = self.depenses()
-        if cout and modele:
-            compte = jetons.setdefault(modele, dict.fromkeys(
-                ("entree", "sortie", "cache_lu", "cache_ecrit"), 0))
-            for poste, valeur in cout.items():
-                if poste in compte:
-                    compte[poste] += int(valeur or 0)
-
-        self._ecrire({"jour": jour, "tours": deja + 1, "jetons": jetons})
+        jetons = self._cumuler(self.depenses(), cout, modele)
+        self._ecrire({**donnees, "jour": jour, "tours": deja + 1, "jetons": jetons})
         return self.plafond - (deja + 1)
 
 
