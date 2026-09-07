@@ -12,7 +12,13 @@ dependencies = ["pydantic>=2.0,<3"]
 
 [project.optional-dependencies]
 runtime = ["openai-agents>=0.14.0"]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "anthropic>=1.0"]
+# La faculte « Analyse » est la seule chose de ce depot qui consomme des jetons.
+# Elle est optionnelle par construction : le journal, la chaine d'integrite, la
+# Notice et la calibration tournent sans elle, et tests/test_sage_independence.py
+# le verifie plutot que de le promettre. Ne pas l'installer coupe la faculte,
+# rien d'autre.
+analyse = ["anthropic>=1.0"]
 
 [tool.setuptools.packages.find]
 include = ["singular*"]

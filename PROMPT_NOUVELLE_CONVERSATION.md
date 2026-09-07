@@ -45,7 +45,18 @@ protège : penser ≠ décider ≠ autoriser ≠ exécuter.
 d'exécution depuis `singular/sage/` ; `tests/test_sage_independence.py`
 interdit au cœur de dépendre d'une clé d'API, d'un service ou du réseau.
 
-**Facultés :** Notice (faite, en usage) → Mémoire → Analyse → Compétences.
+**Facultés :** Notice (faite, en usage) → **Analyse (faite, coupée par défaut)**
+→ Mémoire → Compétences.
+
+« Analyse » est la seule chose du dépôt qui consomme des jetons. Elle vit dans
+`singular/analyse.py`, **hors** de `singular/sage/`, parce que
+`tests/test_sage_independence.py` interdit au cœur de mentionner une clé. Sans
+`ANTHROPIC_API_KEY`, elle se déclare coupée et la Notice s'affiche sans elle.
+`python -m singular analyse --blanc` montre exactement ce qui partirait, sans
+rien envoyer — et un test impose que ce soit la même chaîne que celle envoyée
+ensuite. Elle n'importe ni le journal ni la frontière d'exécution : commenter
+n'est pas décider, et c'est tenu par `tests/test_analyse.py`, pas par une
+phrase dans l'instruction système.
 
 ## Ce qui tourne — l'état réel, pas un plan
 
@@ -198,11 +209,14 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 ## Coût, pour ne pas le recalculer
 
 Mon abonnement Claude **ne donne pas accès à l'API** — deux facturations
-séparées. La faculté « Analyse » consommera ma propre clé : ~2,5 €/mois
-(Sonnet 5), ~6 €/mois (Opus 5), ~22 €/mois en usage intense. Le moteur
-déterministe tourne sans un jeton, et doit continuer : quand « Analyse »
-arrivera, elle vivra derrière une frontière qu'on peut couper — clé révoquée,
-service fermé, réseau absent — sans emporter le reste.
+séparées. La faculté « Analyse » consomme ma propre clé : ~2,5 €/mois
+(Sonnet 5), ~6 €/mois (Opus 5), ~22 €/mois en usage intense. Le modèle par
+défaut est `claude-opus-5` ; `SINGULAR_ANALYSE_MODELE` le change.
+
+La frontière qu'on peut couper existe maintenant : clé révoquée, paquet
+désinstallé, réseau absent — le journal, la chaîne d'intégrité, la Notice et la
+calibration continuent. Ce n'est pas une intention, c'est ce que vérifient
+`tests/test_sage_independence.py` et `tests/test_analyse.py`.
 
 ## Contexte personnel (ne me le redemande pas)
 

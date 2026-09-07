@@ -100,6 +100,41 @@ def _gain_prompt() -> float | None:
     return valeur
 
 
+def cmd_analyse(journal: DecisionJournal, args) -> int:
+    """La seule commande qui coûte de l'argent, et la seule qui peut être coupée.
+
+    Elle appelle un modèle. Tout le reste de cet outil marche sans, et doit
+    continuer à marcher sans : c'est pour ça que l'échec ici s'affiche comme
+    un fait et rend 1, au lieu de remonter une trace de pile.
+    """
+    from .analyse import AnalyseIndisponible, analyser, contexte_pour_analyse
+    from .sage.notice import build_notice
+
+    notice = build_notice(journal).as_dict()
+
+    if args.blanc:
+        print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
+        print(contexte_pour_analyse(notice))
+        print(_colour("\n  Rien n'a ete envoye.\n", DIM))
+        return 0
+
+    try:
+        texte = analyser(notice, modele=args.modele)
+    except AnalyseIndisponible as exc:
+        print(_colour(f"\n  Analyse coupee : {exc}", DIM))
+        print(_colour("  La Notice ci-dessous est calculee sans elle.\n", DIM))
+        print(_colour(f"  {notice['headline']}", BOLD))
+        for item in notice["items"]:
+            print(f"  [{item['severity']}] {item['title']}")
+        print()
+        return 1
+
+    print(_colour(f"\n  {notice['headline']}\n", BOLD))
+    print(texte)
+    print()
+    return 0
+
+
 def cmd_add(journal: DecisionJournal, args) -> int:
     if args.title:
         entry = journal.add(
@@ -346,6 +381,12 @@ def build_parser() -> argparse.ArgumentParser:
     sage.add_argument("--lan", action="store_true",
                       help="rendre l'app joignable depuis ton téléphone sur le même wifi")
     sage.set_defaults(func=cmd_sage)
+
+    analyse = sub.add_parser("analyse", help="faire commenter la Notice par un modele (consomme des jetons)")
+    analyse.add_argument("--blanc", action="store_true",
+                         help="afficher ce qui serait envoye, sans rien envoyer")
+    analyse.add_argument("--modele", default=None)
+    analyse.set_defaults(func=cmd_analyse)
     return parser
 
 

@@ -25,6 +25,35 @@ python -m singular review                                 # où vont tes heures
 
 Plus `list`, `abandon DEC-xxx "raison"`, `export` (CSV), `status` (une ligne).
 
+### `analyse` — la seule commande qui coûte de l'argent
+
+```bash
+python -m singular analyse --blanc     # montre ce qui partirait, n'envoie rien
+python -m singular analyse             # fait commenter la Notice par un modele
+```
+
+Elle est **coupée par défaut** : sans `ANTHROPIC_API_KEY` dans l'environnement,
+elle le dit et affiche la Notice calculée sans elle. Tout le reste de SINGULAR
+— journal, chaîne d'intégrité, Notice, calibration — n'a jamais besoin d'elle,
+et `tests/test_sage_independence.py` le vérifie plutôt que de le promettre.
+
+Pour l'allumer : `pip install -e '.[analyse]'`, puis une clé depuis
+console.anthropic.com (compte séparé de l'abonnement Claude, deux facturations).
+Mets un plafond mensuel dès le premier jour.
+
+**Lance `--blanc` avant la première vraie fois.** Il affiche exactement le texte
+qui quitterait la machine — les observations et les chiffres de la Notice, pas
+l'historique de tes décisions — sans contacter personne. C'est la même chaîne
+que celle qui part ensuite, et un test l'impose.
+
+Le modèle par défaut est `claude-opus-5`. `SINGULAR_ANALYSE_MODELE=claude-sonnet-5`
+coûte environ deux fois moins ; c'est ton arbitrage, pas le mien.
+`SINGULAR_ANALYSE_EFFORT` accepte `low`, `medium` (défaut), `high`.
+
+Ce qu'elle ne peut pas faire, et ce n'est pas une consigne mais une absence
+d'import : écrire dans ton journal, résoudre une décision, en créer une. Elle
+commente un rapport déjà calculé. Elle ne décide jamais à ta place.
+
 ### Ce que `add` demande en plus depuis la v2 du journal
 
 Deux questions facultatives, à la fin : **ce que la décision rapporte si elle
