@@ -65,16 +65,16 @@ EN_COURS = ("a_envoyer", "envoyee", "relancee", "entretien")
 #:
 #: Elles disent maintenant l'inverse : mettre le BE devant, et se servir du
 #: terrain Armee comme d'un differenciateur, pas d'un passe a traduire.
+#:
+#: Trois etapes de contenu -- detailler les affaires, lister les logiciels,
+#: chiffrer le terrain -- ont ete retirees a la demande : ce contenu est deja
+#: sur le CV. Ce qui manquait etait le cadrage, pas la matiere. Une liste qui
+#: fait refaire ce qui est fait ne se coche jamais.
+#:
 #: L'ordre compte, chaque etape se pose sur la precedente.
 ETAPES_CV = [
     ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
     " Les 2 ans de BE en premier, le terrain juste apres"),
-    ("Detailler les 2 ans de bureau d'etudes : combien d'affaires chiffrees,"
-    " quels montants, quels types de batiments, quels lots"),
-    ("Nommer les logiciels et le niveau reel :"
-    " AutoCAD, Revit, ClimaWin ou Perrenoud, Excel de chiffrage"),
-    ("Chiffrer le terrain Armee : puissances frigorifiques, kVA des groupes,"
-    " kW des bruleurs. Un BE recrute sur des ordres de grandeur"),
     ("Assumer la specialite : froid, energie, combustion."
     " Ne pas se vendre comme un profil tertiaire clim/ventilation"),
     ("Retirer toute mention d'alternance tant qu'aucune ecole n'est trouvee :"

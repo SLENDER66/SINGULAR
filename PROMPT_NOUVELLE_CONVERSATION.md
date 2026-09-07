@@ -64,7 +64,7 @@ wifi. C'est la seule chose que l'application native lèverait.
 6 septembre au soir. Un fichier, un JSON, bibliothèque standard, explicitement
 jetable et hors architecture — voir `proto/README.md`. Il me rappelle où en
 sont mes candidatures et me donne **une** action pour la journée. Tant que mon
-CV n'est pas fini, cette action porte sur le CV, découpé en huit étapes.
+CV n'est pas fini, cette action porte sur le CV, découpé en étapes courtes.
 C'est délibéré : je ne candidate pas encore, et un suivi qui me réclamerait
 des candidatures serait vide toute la semaine d'essai.
 

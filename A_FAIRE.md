@@ -27,8 +27,8 @@ sur une branche morte si elle n'avait pas comparé.
 Les deux branches ont été rattrapées le soir même, en avance rapide, sans rien
 perdre. La commande ci-dessus le dira si ça se défait.
 
-**Ce qui reste et qui n'appartient qu'à toi :** huit branches traînent encore
-sur GitHub, dont `feat/validated-execution-boundary` que `CLAUDE.md` déclare
+**Ce qui reste et qui n'appartient qu'à toi :** plusieurs branches traînent
+encore sur GitHub, dont `feat/validated-execution-boundary` que `CLAUDE.md` déclare
 morte. La commande les liste. Les supprimer ou les garder est ton choix ; ce
 fichier ne prétendra pas qu'elles sont supprimées.
 
