@@ -215,3 +215,33 @@ def test_les_noms_prives_ne_declenchent_aucun_import() -> None:
     for sonde in ("__wrapped__", "__bases__", "_interne"):
         with pytest.raises(AttributeError):
             singular.__getattr__(sonde)
+
+
+def test_l_apercu_d_analyse_marche_sans_la_moindre_dependance(tmp_path) -> None:
+    """`analyse --blanc` est le pont vers Claude qui ne coute rien.
+
+    Il assemble le rapport en texte et n'appelle personne : donc il tourne sur
+    un telephone, sans SDK, sans cle, sans PC -- on colle le bloc dans l'app
+    Claude, deja payee par l'abonnement.
+
+    Ca tient parce que l'import du SDK est tardif. Rien ne le garantissait :
+    remonter cet import en tete de `analyse.py` casserait ce chemin sans
+    casser un seul autre test, et personne ne le verrait avant le telephone.
+    """
+    resultat = _sans_les_lourds(f'''
+        import sys
+        from singular.journal import DecisionJournal, Reversibility, Tier
+
+        journal = DecisionJournal(r"{tmp_path / 'j.db'}")
+        journal.add(title="Emprunter", action="Credit", predicted="Materiel en service",
+                    probability=0.8, tier=Tier.REVENUS, cost_hours=3, horizon_days=60,
+                    expected_gain_eur=0, reversibility=Reversibility.IRREVERSIBLE)
+
+        sys.argv = ["singular", "--db", r"{tmp_path / 'j.db'}", "analyse", "--blanc"]
+        from singular.__main__ import main
+        raise SystemExit(main())
+    ''')
+    assert resultat.returncode == 0, resultat.stderr[-800:]
+    assert "Rien n'a ete envoye" in resultat.stdout
+    assert "irréversible" in resultat.stdout
+    assert "chain_intact" in resultat.stdout

@@ -32,8 +32,14 @@ python -m singular analyse --blanc     # montre ce qui partirait, n'envoie rien
 python -m singular analyse             # fait commenter la Notice par un modele
 ```
 
-Elle est **coupée par défaut** : sans `ANTHROPIC_API_KEY` dans l'environnement,
-elle le dit et affiche la Notice calculée sans elle. Tout le reste de SINGULAR
+**`--blanc` ne coûte rien et ne demande rien.** Pas de SDK, pas de clé, pas de
+PC : il assemble le rapport en texte et n'appelle personne. Colle le bloc dans
+l'app Claude — c'est le même pont que le `6` du prototype, pour le journal.
+C'est aujourd'hui le seul chemin qui marche depuis un téléphone seul, et un
+test l'impose plutôt que d'en dépendre par chance.
+
+Sans `--blanc`, elle est **coupée par défaut** : sans `ANTHROPIC_API_KEY` dans
+l'environnement, elle le dit et affiche la Notice calculée sans elle. Tout le reste de SINGULAR
 — journal, chaîne d'intégrité, Notice, calibration — n'a jamais besoin d'elle,
 et `tests/test_sage_independence.py` le vérifie plutôt que de le promettre.
 

@@ -85,7 +85,16 @@ Rien ne part sur un serveur.
 2. **Trancher le 20 septembre.** La carte passera en haut, « À trancher
    aujourd'hui ». Oui ou non. Un journal où l'on écrit sans jamais trancher
    n'apprend rien.
-3. **Noter ce qui manque** — au fil de l'eau, pour la prochaine session :
+3. **Quand une question se pose sur mon journal**, sans clé d'API et sans PC :
+
+   ```
+   python -m singular analyse --blanc
+   ```
+
+   Il affiche le rapport en texte, sans rien envoyer. Je colle le bloc dans
+   l'app Claude. C'est gratuit et ça marche depuis le téléphone.
+
+4. **Noter ce qui manque** — au fil de l'eau, pour la prochaine session :
    - Est-ce que je l'ouvre sans y penser, ou faut-il que j'y pense ?
    - Enregistrer une décision fait-il vraiment trente secondes ?
    - Les phrases sonnent-elles juste, ou me reproche-t-il des choses sans
