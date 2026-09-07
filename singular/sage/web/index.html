@@ -52,7 +52,30 @@
   </section>
 </main>
 
+<button id="parle-button" class="fab second" type="button" aria-label="Parler au Sage">&#128172;</button>
 <button id="add-button" class="fab" type="button" aria-label="Enregistrer une décision">+</button>
+
+<dialog id="parle-dialog" class="sheet">
+  <form id="parle-form" method="dialog">
+    <h2>Parler</h2>
+    <!-- Le fil des tours précédents. Il vient du serveur : la conversation
+         d'hier soir doit être là quand on rouvre l'app. -->
+    <div id="parle-thread" class="thread" aria-live="polite"></div>
+
+    <label>Ta question
+      <textarea id="parle-input" name="question" rows="3" maxlength="2000"
+                autocomplete="off" placeholder="je fais quoi avec ça ?"></textarea>
+    </label>
+
+    <p id="parle-cost" class="cost" hidden></p>
+    <p class="form-error" id="parle-error" hidden></p>
+    <div class="actions three">
+      <button type="button" class="ghost" id="parle-oubli">Effacer le fil</button>
+      <button type="button" class="ghost" id="parle-close">Fermer</button>
+      <button type="submit" class="primary" id="parle-submit">Envoyer</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="add-dialog" class="sheet">
   <form id="add-form" method="dialog">

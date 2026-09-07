@@ -129,31 +129,96 @@ def test_elle_ne_connait_pas_le_journal() -> None:
     )
 
 
-def test_le_coeur_ne_connait_pas_analyse() -> None:
-    """L'inverse compte autant : le Sage ne doit jamais appeler cette faculté.
+def _imports_de_facultes(arbre: ast.AST) -> list[str]:
+    """Les imports d'une faculté trouvés dans cet arbre, sans descendre dedans."""
+    trouves = []
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.ImportFrom) and any(
+            mot in (noeud.module or "") for mot in ("analyse", "parle")
+        ):
+            trouves.append(f"from {'.' * noeud.level}{noeud.module} import ...")
+        elif isinstance(noeud, ast.Import):
+            trouves += [f"import {a.name}" for a in noeud.names
+                        if "analyse" in a.name or a.name.endswith(".parle")]
+    return trouves
 
-    S'il l'appelait, couper la clé casserait la Notice -- exactement ce que
-    `tests/test_sage_independence.py` interdit.
+
+def _corps_du_module(arbre: ast.Module) -> ast.Module:
+    """Le module sans le contenu de ses fonctions.
+
+    Ce qui distingue les deux cas : un import au niveau du module s'exécute
+    quand le Sage démarre, un import dans une fonction seulement quand la
+    route est appelée. Le premier ferait dépendre la Notice d'une faculté ; le
+    second est une route qu'on peut ne jamais toucher.
+    """
+    def sans_fonctions(corps):
+        garde = []
+        for noeud in corps:
+            if isinstance(noeud, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if isinstance(noeud, ast.ClassDef):
+                noeud = ast.ClassDef(
+                    name=noeud.name, bases=[], keywords=[],
+                    body=sans_fonctions(noeud.body), decorator_list=[],
+                )
+                ast.fix_missing_locations(noeud)
+            garde.append(noeud)
+        return garde
+
+    return ast.Module(body=sans_fonctions(arbre.body), type_ignores=[])
+
+
+def test_le_coeur_ne_connait_pas_les_facultes() -> None:
+    """Le cœur déterministe ne doit pas dépendre d'une faculté qui a besoin
+    d'une clé. S'il en dépendait, couper la clé casserait la Notice --
+    exactement ce que `tests/test_sage_independence.py` interdit.
+
+    Une exception, et elle est écrite ici pour qu'elle reste un choix :
+    `sage/server.py` sert `/api/parle` depuis le jour où Thomas a demandé la
+    conversation sur son téléphone, avec un plafond quotidien. L'import y est
+    **dans la fonction**, donc il ne s'exécute que si la route est appelée --
+    et jamais quand le serveur démarre, ni quand la Notice se calcule.
+
+    La règle est donc précise plutôt que large : aucun import de faculté au
+    niveau d'un module du cœur, y compris dans `server.py`. Que le reste
+    continue quand la faculté est coupée n'est pas promis ici, c'est prouvé
+    sur l'acte par `tests/test_sage_parle.py` et par la Notice construite
+    réseau coupé dans `tests/test_sage_independence.py`.
     """
     racine = SOURCE.parent
     fautes = []
     for fichier in [*(racine / "sage").rglob("*.py"), racine / "journal.py"]:
         arbre = ast.parse(fichier.read_text(encoding="utf-8"))
-        for noeud in ast.walk(arbre):
-            # On juge les imports, pas le texte : « analyse » est un mot
-            # français courant, et il apparaît dans les phrases que le Sage
-            # écrit à l'écran. Une heuristique sur la prose échouerait sur
-            # celles-ci et laisserait passer un import écrit autrement.
-            if isinstance(noeud, ast.ImportFrom) and "analyse" in (noeud.module or ""):
-                fautes.append(f"{fichier.name}: from {noeud.module} import ...")
-            elif isinstance(noeud, ast.Import):
-                fautes += [f"{fichier.name}: import {a.name}"
-                           for a in noeud.names if "analyse" in a.name]
+        fautes += [f"{fichier.name}, au niveau du module : {faute}"
+                   for faute in _imports_de_facultes(_corps_du_module(arbre))]
 
     assert not fautes, (
-        "le coeur deterministe importerait une faculte qui a besoin d'une cle :\n  "
-        + "\n  ".join(fautes)
+        "le coeur deterministe importerait une faculte qui a besoin d'une cle "
+        "des son demarrage :\n  " + "\n  ".join(fautes)
     )
+
+
+def test_le_journal_et_la_notice_n_appellent_aucune_faculte() -> None:
+    """Là où il n'y a aucune exception : ce qui calcule ne parle à personne.
+
+    `server.py` sert une route qui peut appeler un modèle ; le journal et la
+    Notice, jamais, à aucune profondeur. C'est la moitié du dépôt qui doit
+    marcher sur une machine débranchée dans dix ans.
+    """
+    racine = SOURCE.parent
+    fautes = []
+    for fichier in [racine / "journal.py", racine / "sage" / "notice.py"]:
+        arbre = ast.parse(fichier.read_text(encoding="utf-8"))
+        fautes += [f"{fichier.name} : {faute}" for faute in _imports_de_facultes(arbre)]
+
+    assert not fautes, "\n  ".join(["ce qui calcule ne doit appeler personne :", *fautes])
+
+
+def test_la_lecture_verrait_un_import_au_niveau_du_module() -> None:
+    """Le témoin : sans lui, les deux tests ci-dessus passeraient à vide."""
+    arbre = ast.parse("from .analyse import analyser\ndef f():\n    from .parle import repondre\n")
+    assert _imports_de_facultes(_corps_du_module(arbre)) == ["from .analyse import ..."]
+    assert len(_imports_de_facultes(arbre)) == 2
 
 
 # --- ce qui part est montrable ------------------------------------------------

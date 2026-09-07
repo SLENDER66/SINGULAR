@@ -27,7 +27,21 @@ EXECUTION_MODULES = frozenset({
 })
 
 #: Ce que le Sage a le droit de lire.
-ALLOWED = frozenset({"journal", "sage", "icon", "notice", "server", "learning", "sqlite_support"})
+#:
+#: `analyse` et `parle` y sont entrés le jour où la conversation a été servie
+#: depuis le téléphone, et c'est une décision, pas une dérive : Thomas l'a
+#: demandée, avec un plafond quotidien. Ce qu'elles ajoutent est un appel à un
+#: modèle, qui rend du texte -- pas un pouvoir d'agir. Ni l'une ni l'autre
+#: n'importe la frontière d'exécution, ni le journal pour `parle` : le test
+#: au-dessus continue de le vérifier, et c'est lui qui porte l'invariant.
+#:
+#: Ce que ça coûte, écrit ici pour que personne n'ait à le redécouvrir : une
+#: route du Sage peut désormais dépenser de l'argent. Elle refuse sans clé, un
+#: seul tour à la fois, vingt par jour, et le reste de l'app continue quand
+#: elle est coupée -- `test_sage_parle.py` le vérifie plutôt que de le
+#: promettre.
+ALLOWED = frozenset({"journal", "sage", "icon", "notice", "server", "learning",
+                     "sqlite_support", "analyse", "parle"})
 
 
 def _imported_modules(source: Path) -> set[str]:

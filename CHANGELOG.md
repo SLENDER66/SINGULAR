@@ -51,6 +51,13 @@ Faculties — the parts that call a model, and can all be cut:
 - `singular/parle.py` is a conversation that already knows the day's report and
   the previous thread. Bounded to twenty exchanges, single cached system block,
   per-turn token accounting. It cannot write to the journal.
+- The Sage serves that conversation to the phone at `/api/parle` — the first
+  route in the app that can spend money, and the reason the isolation test's
+  allowlist now names it. Three refusals stand before the spend: an empty or
+  oversized question, a turn already in flight (server-side, not just in the
+  browser), and a daily cap of twenty answers held on disk so a restart cannot
+  reset it. A cut faculty costs nothing and consumes no quota, and the report,
+  the journal and the verdicts keep working while it is cut.
 - None of them can leak the key: `tests/test_facultes_sans_fuite.py` discovers
   every module that refuses with `AnalyseIndisponible` and checks both the
   shape of its messages and what actually escapes when the SDK fails. An

@@ -91,6 +91,32 @@ Mêmes conditions qu'`analyse` : clé requise, coupée sans elle, le reste de
 SINGULAR marche sans. `SINGULAR_PARLE_MODELE` et `SINGULAR_PARLE_EFFORT`
 valent pour elle ce que leurs équivalents valent pour `analyse`.
 
+#### Depuis le téléphone
+
+Le Sage sert la conversation dans l'app : le bouton 💬, au-dessus du `+`. Le
+serveur tourne sur le PC, donc ça marche aux mêmes conditions que le reste de
+l'app — PC allumé, même wifi.
+
+C'est la **seule route du Sage qui coûte de l'argent**, et trois choses
+tiennent la facture :
+
+- **Vingt réponses par jour.** Le compteur est sur le disque, pas en mémoire :
+  un plafond qu'un redémarrage efface n'est pas un plafond. Au-delà, elle dit
+  de revenir demain ou de passer par le clavier — où il n'y a pas de plafond,
+  parce qu'une commande se tape et qu'un bouton se tapote.
+- **Un seul tour à la fois.** Deux appuis feraient deux factures pour une
+  question, et la seconde écriture du fil écraserait la première. Refusé côté
+  serveur, pas seulement dans le navigateur.
+- **Ce qu'il reste et ce que ça a coûté** sont écrits sous chaque réponse.
+
+Sans clé, le bouton répond qu'elle est coupée — et la Notice, le journal, les
+verdicts continuent exactement comme avant. `tests/test_sage_parle.py` le
+vérifie en fabriquant la panne, plutôt que de le promettre.
+
+`SINGULAR_PARLE_PLAFOND` n'existe pas : le plafond est dans le code, à vingt.
+Le changer est un geste délibéré, pas une variable d'environnement qu'on
+oublie à 200.
+
 ### `offres` — le premier agent
 
 ```bash

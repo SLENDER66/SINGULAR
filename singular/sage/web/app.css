@@ -243,3 +243,44 @@ output { color: var(--text); font-weight: 600; }
   font-weight: 620;
   padding: 12px 14px;
 }
+
+/* --- parler --- */
+
+/* Le second bouton monte au-dessus du premier : deux ronds cote a cote au
+   pouce, c'est un appui sur le mauvais. */
+.fab.second {
+  bottom: calc(var(--safe-bottom) + 94px);
+  width: 52px;
+  height: 52px;
+  font-size: 22px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.thread {
+  display: grid;
+  gap: 10px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.thread:empty { display: none; }
+.thread .tour {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.thread .tour.user { background: var(--line); color: var(--text); }
+.thread .tour.assistant { background: var(--card); border: 1px solid var(--line); color: var(--muted); }
+
+#parle-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.cost { margin: 0; font-size: 12px; color: var(--muted); }

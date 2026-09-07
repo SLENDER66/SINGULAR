@@ -41,7 +41,8 @@ def test_a_pasted_address_or_a_bare_token_both_yield_the_key(supplied: str, expe
     {CLIENT.read_text(encoding="utf-8").split("async function api")[0]}
     process.stdout.write(JSON.stringify(readSuppliedToken({json.dumps(supplied)})));
     """
-    result = subprocess.run([NODE, "-e", harness], capture_output=True, text=True, timeout=20)
+    result = subprocess.run([NODE, "-e", harness], capture_output=True, text=True,
+                            timeout=20, check=False)
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == expected
 
@@ -49,7 +50,8 @@ def test_a_pasted_address_or_a_bare_token_both_yield_the_key(supplied: str, expe
 @pytest.mark.skipif(NODE is None, reason="node absent")
 def test_the_client_still_parses() -> None:
     """Une erreur de syntaxe rendrait l'app blanche, sans message."""
-    result = subprocess.run([NODE, "--check", str(CLIENT)], capture_output=True, text=True, timeout=20)
+    result = subprocess.run([NODE, "--check", str(CLIENT)], capture_output=True, text=True,
+                            timeout=20, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -87,17 +89,25 @@ def _executer(scenario: str) -> dict:
     const erreurs = [];
     const boutons = {
       "resolve-yes": {disabled: false}, "resolve-no": {disabled: false},
-      "add-submit": {disabled: false},
+      "add-submit": {disabled: false}, "parle-submit": {disabled: false},
+      "parle-oubli": {disabled: false},
     };
-    const muet = {reset() {}, close() {}, textContent: "", hidden: true};
+    const muet = {
+      reset() {}, close() {}, showModal() {}, appendChild() {},
+      textContent: "", hidden: true, value: "une question",
+      scrollTop: 0, scrollHeight: 0,
+    };
     const $ = (id) => (id in boutons ? boutons[id] : muet);
+    const el = (tag, className, text) => ({tag, className, text});
     class FormData { constructor() {} get(nom) { return nom === "title" ? "un titre" : "1"; } }
     let reponse = null;
+    let rendu = {tours: [], restants: 19, plafond: 20, cout: {entree: 100, sortie: 30, cache_lu: 0}};
     async function api(chemin, options) {
-      appels.push({chemin, corps: JSON.parse(options.body)});
+      // Une lecture n'a pas de corps : `options` est absent sur les GET.
+      appels.push({chemin, corps: options && options.body ? JSON.parse(options.body) : null});
       await new Promise((r) => setTimeout(r, 20));
       if (reponse) throw reponse;
-      return {};
+      return rendu;
     }
     async function refresh() {}
     function showFormError(id, message) { erreurs.push(message); }
@@ -255,3 +265,72 @@ def test_les_boutons_grises_existent_vraiment_dans_la_page() -> None:
         f"ces boutons sont grises par app.js mais absents de index.html : {manquants}.\n"
         "Le double envoi reste bloque, mais le bouton ne montre plus rien."
     )
+
+
+# --- parler : la seule chose de l'app qui coûte de l'argent --------------------
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_un_double_appui_n_envoie_qu_une_seule_question() -> None:
+    """Le même défaut que sur « Enregistrer », avec une facture au bout.
+
+    Une réponse met des dizaines de secondes à arriver. Sans verrou, on
+    rappuie -- et on paie deux fois la même question. Le serveur refuse le
+    second tour, mais l'utilisateur n'a pas à découvrir un 409 pour ça.
+    """
+    resultat = _executer("""
+    (async () => {
+      const premier = submitParle(null);
+      submitParle(null);             // le double appui, sans attendre
+      await premier;
+      process.stdout.write(JSON.stringify({
+        envois: appels.filter((a) => a.corps !== null).length, erreurs,
+      }));
+    })();
+    """)
+
+    assert resultat["envois"] == 1, f"{resultat['envois']} questions envoyées"
+    assert resultat["erreurs"] == []
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_le_plafond_se_lit_en_francais_et_dit_quoi_faire() -> None:
+    """429 sur un téléphone, c'est une panne. Ce n'en est pas une."""
+    resultat = _executer("""
+    reponse = Object.assign(new Error("le plafond de réponses du jour"), {status: 429});
+    (async () => {
+      await submitParle(null);
+      process.stdout.write(JSON.stringify({erreurs}));
+    })();
+    """)
+
+    assert len(resultat["erreurs"]) == 1
+    assert "Plafond" in resultat["erreurs"][0]
+    assert "clavier" in resultat["erreurs"][0]
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_une_reponse_deja_en_route_ne_ressemble_pas_a_une_panne() -> None:
+    """409 : un autre appareil, ou une fenêtre restée ouverte."""
+    resultat = _executer("""
+    reponse = Object.assign(new Error("une réponse est déjà"), {status: 409});
+    (async () => {
+      await submitParle(null);
+      process.stdout.write(JSON.stringify({erreurs}));
+    })();
+    """)
+
+    assert "déjà en train d'arriver" in resultat["erreurs"][0]
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_le_bouton_est_rouvert_apres_un_echec() -> None:
+    """Sinon la première panne fermerait la conversation jusqu'au rechargement."""
+    resultat = _executer("""
+    reponse = Object.assign(new Error("coupée"), {status: 503});
+    (async () => {
+      await submitParle(null);
+      process.stdout.write(JSON.stringify({verrouille: boutons["parle-submit"].disabled}));
+    })();
+    """)
+
+    assert resultat["verrouille"] is False

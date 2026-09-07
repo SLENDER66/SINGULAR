@@ -317,6 +317,97 @@ async function submitResolveOnce(happened) {
   }
 }
 
+// --- parler ------------------------------------------------------------------
+
+// La seule chose de cette app qui coûte de l'argent. Trois conséquences,
+// toutes visibles à l'écran plutôt qu'écrites dans un fichier : ce qu'il
+// reste de la journée est affiché avant qu'on tape, le coût du tour est
+// affiché après, et le bouton se grise pendant. On ne corrige pas ce qu'on ne
+// voit pas, et une facture est exactement ce qu'on ne voit pas.
+
+function renderThread(tours) {
+  const fil = $("parle-thread");
+  fil.textContent = "";
+  for (const tour of tours) {
+    fil.appendChild(el("div", `tour ${tour.role}`, tour.content));
+  }
+  fil.scrollTop = fil.scrollHeight;
+}
+
+function renderRemaining(etat) {
+  const reste = etat.restants;
+  $("parle-cost").hidden = false;
+  $("parle-cost").textContent = reste > 0
+    ? `${reste} réponses restantes aujourd'hui sur ${etat.plafond}.`
+    : "Plafond du jour atteint. Demain, ou depuis le clavier.";
+}
+
+async function openParle() {
+  $("parle-error").hidden = true;
+  $("parle-cost").hidden = true;
+  $("parle-dialog").showModal();
+  try {
+    const etat = await api("/api/parle");
+    renderThread(etat.tours);
+    renderRemaining(etat);
+  } catch (error) {
+    showFormError("parle-error", error.message);
+  }
+}
+
+async function submitParle(event) {
+  if (event) event.preventDefault();
+  await envoyerUneFois("parle", ["parle-submit"], () => submitParleOnce());
+}
+
+async function submitParleOnce() {
+  const question = $("parle-input").value.trim();
+  if (!question) return;
+  $("parle-error").hidden = true;
+  // La question monte dans le fil tout de suite : sinon rien ne bouge pendant
+  // les dizaines de secondes que met une réponse, et on rappuie.
+  $("parle-thread").appendChild(el("div", "tour user", question));
+  $("parle-thread").appendChild(el("div", "tour assistant", "…"));
+  $("parle-thread").scrollTop = $("parle-thread").scrollHeight;
+  try {
+    const rendu = await api("/api/parle", {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    });
+    $("parle-input").value = "";
+    const etat = await api("/api/parle");
+    renderThread(etat.tours);
+    const cache = rendu.cout.cache_lu ? `, ${rendu.cout.cache_lu} relus du cache` : "";
+    $("parle-cost").hidden = false;
+    $("parle-cost").textContent =
+      `${rendu.cout.entree} jetons envoyés${cache}, ${rendu.cout.sortie} rendus.`
+      + ` ${rendu.restants} réponses restantes aujourd'hui.`;
+  } catch (error) {
+    // Chaque refus dit quoi faire. Un code HTTP nu, sur un téléphone, se lit
+    // comme une panne -- et deux de ceux-là n'en sont pas.
+    const messages = {
+      429: "Plafond de réponses atteint pour aujourd'hui. Demain, ou depuis le clavier.",
+      409: "Une réponse est déjà en train d'arriver. Laisse-la venir.",
+    };
+    showFormError("parle-error", messages[error.status] || error.message);
+    const etat = await api("/api/parle").catch(() => null);
+    if (etat) renderThread(etat.tours);
+  }
+}
+
+async function oublierParle() {
+  await envoyerUneFois("parle-oubli", ["parle-oubli"], async () => {
+    try {
+      const etat = await api("/api/parle/oubli", { method: "POST", body: "{}" });
+      renderThread(etat.tours);
+      renderRemaining(etat);
+      $("parle-error").hidden = true;
+    } catch (error) {
+      showFormError("parle-error", error.message);
+    }
+  });
+}
+
 // --- démarrage ---------------------------------------------------------------
 
 $("unlock-form").addEventListener("submit", async (event) => {
@@ -328,6 +419,11 @@ $("unlock-form").addEventListener("submit", async (event) => {
   // « Sur l'écran d'accueil » retiendra si on l'installe depuis ici.
   location.replace(`${location.pathname}?k=${encodeURIComponent(supplied)}`);
 });
+
+$("parle-button").addEventListener("click", openParle);
+$("parle-close").addEventListener("click", () => $("parle-dialog").close());
+$("parle-form").addEventListener("submit", submitParle);
+$("parle-oubli").addEventListener("click", oublierParle);
 
 $("add-button").addEventListener("click", openAdd);
 $("add-cancel").addEventListener("click", () => $("add-dialog").close());

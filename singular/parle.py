@@ -30,6 +30,9 @@ from .analyse import AnalyseIndisponible, _sdk, effort_valide
 #: Le fil, a cote du journal : une seule chose a sauvegarder.
 FICHIER = Path.home() / ".singular" / "conversation.json"
 
+#: Le compteur du jour, a cote du fil.
+FICHIER_QUOTA = Path.home() / ".singular" / "parle_quota.json"
+
 MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_PARLE_MODELE", "claude-opus-5")
 
 EFFORT = effort_valide("SINGULAR_PARLE_EFFORT")
@@ -39,6 +42,77 @@ EFFORT = effort_valide("SINGULAR_PARLE_EFFORT")
 TOURS_GARDES = 20
 
 JETONS_MAX = 2000
+
+#: Le plafond quotidien, quand la conversation est ouverte depuis le telephone.
+#: Un bouton se tapote ; une commande se tape. Ce n'est pas la meme retenue, et
+#: chaque tour est une facture. Vingt tours par jour laissent la place a une
+#: vraie discussion et ferment la porte a une soiree distraite.
+PLAFOND_PAR_JOUR = 20
+
+
+def _aujourdhui() -> str:
+    """La date locale. `date.today()` dit la meme chose ; ruff la refuse parce
+    qu'elle est muette sur le fuseau. Ici le fuseau est le sien, exprès."""
+    return datetime.now().astimezone().date().isoformat()
+
+
+class PlafondAtteint(Exception):
+    """Le nombre de tours du jour est epuise. Demain, ou depuis le clavier."""
+
+
+class Quota:
+    """Le compteur du jour, sur le disque.
+
+    Sur le disque et pas en memoire, sinon redemarrer le serveur remettrait le
+    compteur a zero : un plafond qu'un redemarrage efface n'est pas un plafond.
+
+    La date est locale, pas UTC : « aujourd'hui » est sa journee a lui, celle
+    ou il regarde son telephone, pas celle du meridien de Greenwich.
+    """
+
+    def __init__(self, chemin: Path | str | None = None, *, plafond: int | None = None) -> None:
+        self.chemin = Path(chemin) if chemin else FICHIER_QUOTA
+        self.plafond = PLAFOND_PAR_JOUR if plafond is None else plafond
+
+    def _lire(self) -> tuple[str, int]:
+        try:
+            donnees = json.loads(self.chemin.read_text(encoding="utf-8"))
+            return str(donnees["jour"]), int(donnees["tours"])
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            # L'ecriture est atomique (voir `_ecrire`), donc un fichier illisible
+            # n'est pas une ecriture interrompue : c'est un premier lancement, ou
+            # quelqu'un qui a efface le compteur sur sa propre machine. Repartir
+            # de zero est la bonne lecture, et le refus serait une panne.
+            return "", 0
+
+    def _ecrire(self, jour: str, tours: int) -> None:
+        # Atomique : un plafond qui se corrompt en tombant serait un plafond
+        # qu'une coupure de courant remet a zero.
+        self.chemin.parent.mkdir(parents=True, exist_ok=True)
+        provisoire = self.chemin.with_suffix(".tmp")
+        provisoire.write_text(
+            json.dumps({"jour": jour, "tours": tours}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        provisoire.replace(self.chemin)
+
+    def restants(self, *, aujourdhui: str | None = None) -> int:
+        jour = aujourdhui or _aujourdhui()
+        vu, tours = self._lire()
+        return self.plafond if vu != jour else max(0, self.plafond - tours)
+
+    def consommer(self, *, aujourdhui: str | None = None) -> int:
+        """Compte un tour et rend ce qu'il reste. Leve si le jour est fini."""
+        jour = aujourdhui or _aujourdhui()
+        vu, tours = self._lire()
+        deja = tours if vu == jour else 0
+        if deja >= self.plafond:
+            raise PlafondAtteint(
+                f"{self.plafond} reponses aujourd'hui, c'est le plafond. "
+                "Demain, ou depuis le clavier avec `python -m singular parle`."
+            )
+        self._ecrire(jour, deja + 1)
+        return self.plafond - (deja + 1)
 
 INSTRUCTION = INSTRUCTION_ANALYSE + """
 
@@ -53,8 +127,11 @@ pire service possible.
 class Conversation:
     """Le fil, sur le disque. Rien de plus qu'une liste de tours."""
 
-    def __init__(self, chemin: Path | str = FICHIER) -> None:
-        self.chemin = Path(chemin)
+    def __init__(self, chemin: Path | str | None = None) -> None:
+        # Resolu a l'appel, pas fige dans la signature : un defaut evalue a
+        # l'import rendrait le chemin impossible a deplacer -- pour un test,
+        # pour un second profil, pour un disque externe.
+        self.chemin = Path(chemin) if chemin else FICHIER
         self.tours: list[dict[str, str]] = []
         self._charger()
 
@@ -173,5 +250,6 @@ def _consommation(reponse: Any) -> dict[str, int]:
     }
 
 
-__all__ = ["FICHIER", "JETONS_MAX", "MODELE_PAR_DEFAUT", "TOURS_GARDES",
-           "Conversation", "repondre"]
+__all__ = ["FICHIER", "FICHIER_QUOTA", "JETONS_MAX", "MODELE_PAR_DEFAUT",
+           "PLAFOND_PAR_JOUR", "TOURS_GARDES",
+           "Conversation", "PlafondAtteint", "Quota", "repondre"]

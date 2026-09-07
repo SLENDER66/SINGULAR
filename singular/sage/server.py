@@ -22,6 +22,7 @@ import re
 import secrets
 import ipaddress
 import socket
+import threading
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,6 +39,10 @@ TOKEN_PATH = DEFAULT_PATH.parent / "sage_token"
 
 #: Un corps de requête plus gros que ça n'est pas une décision de journal.
 MAX_BODY = 64 * 1024
+
+#: Une question plus longue que ça n'est plus une question, c'est un fichier --
+#: et elle part vers un service qui facture ce qu'on lui envoie.
+QUESTION_MAX = 2000
 
 #: Les seules adresses qui n'ont pas besoin du jeton : elles ne peuvent venir
 #: que de la machine elle-même.
@@ -227,6 +232,13 @@ class SageApp:
     def __init__(self, journal: DecisionJournal, *, token: str = "") -> None:
         self.journal = journal
         self.token = token
+        # Un tour de conversation a la fois. Le serveur est multi-thread, un
+        # bouton se tapote, et deux tours simultanes feraient trois degats :
+        # deux factures pour une question, deux ecritures du fil dont la
+        # seconde ecrase la premiere, et deux reponses a une conversation qui
+        # n'en attend qu'une. Le verrou de l'interface evite qu'on le tente ;
+        # celui-ci le rend impossible, ce qui n'est pas la meme chose.
+        self._un_tour = threading.Lock()
 
     # --- lecture -------------------------------------------------------------
 
@@ -286,6 +298,75 @@ class SageApp:
             raise SageError(HTTPStatus.CONFLICT, str(exc)) from None
         return _entry_as_dict(entry)
 
+    # --- la conversation, quand elle est allumée ------------------------------
+
+    def parle_etat(self) -> dict[str, Any]:
+        """Le fil et ce qu'il reste de la journée. Gratuit, sans clé, sans SDK.
+
+        Rouvrir l'app doit montrer la conversation d'hier soir : sans ça, le
+        fil existe sur le disque et nulle part à l'écran.
+        """
+        from ..parle import PLAFOND_PAR_JOUR, Conversation, Quota
+
+        fil = Conversation()
+        return {
+            "tours": fil.tours,
+            "restants": Quota().restants(),
+            "plafond": PLAFOND_PAR_JOUR,
+        }
+
+    def parle(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Un tour de conversation. La seule route qui coûte de l'argent.
+
+        Trois refus avant la dépense, dans cet ordre : une question vide ou
+        démesurée ne part pas ; un tour déjà en cours refuse le second ; le
+        plafond du jour refuse le vingt-et-unième. Ensuite seulement le
+        service est appelé.
+
+        Le tour n'est compté qu'au retour. Une faculté coupée -- pas de clé,
+        pas de paquet, pas de réseau -- n'a rien dépensé et ne doit rien
+        coûter de la journée.
+        """
+        from ..analyse import AnalyseIndisponible, contexte_pour_analyse
+        from ..parle import Conversation, Quota, repondre
+
+        question = _text(payload, "question")
+        if len(question) > QUESTION_MAX:
+            raise SageError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                            f"une question tient en {QUESTION_MAX} caractères")
+
+        if not self._un_tour.acquire(blocking=False):
+            raise SageError(HTTPStatus.CONFLICT,
+                            "une réponse est déjà en train d'arriver. Laisse-la venir.")
+        try:
+            quota = Quota()
+            if quota.restants() <= 0:
+                raise SageError(
+                    HTTPStatus.TOO_MANY_REQUESTS,
+                    "le plafond de réponses du jour est atteint. Demain, ou depuis "
+                    "le clavier avec « python -m singular parle ».",
+                )
+            # Le fil est relu du disque a chaque tour : la ligne de commande
+            # ecrit le meme fichier, et repartir de ce qu'on avait en memoire
+            # ferait disparaitre ce qui s'est dit ailleurs.
+            fil = Conversation()
+            try:
+                texte, cout = repondre(question, contexte_pour_analyse(self.notice()), fil)
+            except AnalyseIndisponible as exc:
+                raise SageError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from None
+            fil.sauver()
+            restants = quota.consommer()
+        finally:
+            self._un_tour.release()
+        return {"reponse": texte, "cout": cout, "restants": restants}
+
+    def parle_oubli(self) -> dict[str, Any]:
+        """Efface le fil. Le journal ne bouge pas, et le plafond non plus."""
+        from ..parle import Conversation
+
+        Conversation().oublier()
+        return self.parle_etat()
+
     # --- routage -------------------------------------------------------------
 
     def route(self, method: str, path: str, query: dict[str, str], body: dict[str, Any]) -> dict[str, Any]:
@@ -295,6 +376,12 @@ class SageApp:
             return self.entries(query.get("status"))
         if method == "POST" and path == "/api/entries":
             return self.add(body)
+        if method == "GET" and path == "/api/parle":
+            return self.parle_etat()
+        if method == "POST" and path == "/api/parle":
+            return self.parle(body)
+        if method == "POST" and path == "/api/parle/oubli":
+            return self.parle_oubli()
         matched = re.fullmatch(r"/api/entries/([^/]+)/(resolve|abandon)", path)
         if matched and method == "POST":
             entry_id = matched.group(1)
