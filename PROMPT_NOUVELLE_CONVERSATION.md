@@ -16,12 +16,19 @@ dernière. Ne me réponds pas que tu l'as bien noté — applique-la.
 Ne merge jamais dans `main` sans mon autorisation.
 
 **Ton conteneur part de la branche par défaut, pas de la branche de travail.**
-Une séance a démarré ainsi sans `singular/sage/`, sans `ios/` et sur un
-`CLAUDE.md` d'avant la section 0, parce que la branche par défaut était restée
-39 commits en arrière ; elle serait partie travailler sur une branche morte si
-elle n'avait pas comparé. Les deux ont été rattrapées depuis.
-`python tools/check_repo_state.py` te dit où tu es. Fais-le avant de lire quoi
-que ce soit d'autre — c'est une commande, pas une promesse.
+Les deux sont au même commit aujourd'hui, donc tu devrais démarrer au bon
+endroit. Vérifie-le quand même, en premier, avant de lire autre chose :
+
+```bash
+python tools/check_repo_state.py    # doit sortir 0 et dire « Accord »
+```
+
+Pourquoi cette commande existe : une séance a démarré sans `singular/sage/`,
+sans `ios/` et sur un `CLAUDE.md` d'avant la section 0, parce que la branche
+par défaut était restée 39 commits en arrière. Elle serait partie travailler
+sur une branche morte si elle n'avait pas comparé. Si la commande dit
+« MANDAT SUSPECT » ou « DESACCORD », arrête tout et règle ça d'abord : rien de
+ce que tu lirais ensuite ne serait fiable.
 
 ## Ce que SINGULAR est
 
@@ -48,6 +55,17 @@ rang Revenus, **verdict attendu le 20 septembre**.
 Limite du chemin actuel : il faut que le PC tourne et que je sois sur mon
 wifi. C'est la seule chose que l'application native lèverait.
 
+**Deuxième chose en usage : `proto/suivi_candidatures.py`**, livré le
+6 septembre au soir. Un fichier, un JSON, bibliothèque standard, explicitement
+jetable et hors architecture — voir `proto/README.md`. Il me rappelle où en
+sont mes candidatures et me donne **une** action pour la journée. Tant que mon
+CV n'est pas fini, cette action porte sur le CV, découpé en huit étapes.
+C'est délibéré : je ne candidate pas encore, et un suivi qui me réclamerait
+des candidatures serait vide toute la semaine d'essai.
+
+Ces deux outils sont la seule chose qui décide de la suite. **Ne construis
+rien de neuf tant que je ne t'ai pas dit ce qui me manque en m'en servant.**
+
 **L'application native Swift n'est pas la priorité et ne bloque rien.** Le
 port existe, `ios/SingularSage.xcodeproj` est livré, mais il n'a jamais été
 compilé — je n'ai pas de Mac. Une session précédente a passé son temps à le
@@ -57,12 +75,13 @@ pas ça : **regarde ce qui tourne avant de réparer ce qui ne tourne pas.**
 ## Vérifie l'état en 90 secondes
 
 ```bash
-python tools/check_repo_state.py  # AVANT tout : sur quelle branche ce conteneur est-il parti ?
+python tools/check_repo_state.py  # AVANT tout : d'ou part ce conteneur ? doit sortir 0
 pip install -e '.[dev]'          # pytest n'est PAS installé dans un conteneur neuf
 python -m pytest -q              # tout vert, zéro échec
 python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"
 python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer
 python tools/check_xcode_project.py                          # le projet Xcode tient
+python proto/suivi_candidatures.py < /dev/null               # le proto s'affiche
 ```
 
 ## Contraintes — ne les redécouvre pas
@@ -104,12 +123,28 @@ La leçon, et elle vaut pour la suite : **ce que je constate en m'en servant
 vaut mieux que ce que tu peux déduire d'ici.** Quand je te donne une capture
 d'écran ou un message d'erreur, c'est la meilleure donnée de la session.
 
+Une cinquième, trouvée le 6 septembre en relisant le serveur, pas à l'usage :
+n'importe quelle page web ouverte dans un navigateur sur mon PC pouvait
+écrire dans mon journal et **rendre un verdict à ma place**, sans connaître le
+jeton, y compris en mode `127.0.0.1`. `authorised()` accordait tout à la
+boucle locale « parce qu'il n'y a personne d'autre dessus » : il y a le
+navigateur. Corrigé — origine, hôte et type du corps sont vérifiés — et
+`tests/test_sage_server.py` le tient. Retiens la forme du bug plutôt que le
+bug : **une phrase juste dans un commentaire peut devenir fausse sans que le
+code change.**
+
 ## Ce qui décide de la suite
 
-Pas un compilateur, pas une liste de facultés : **une semaine d'usage.**
+Pas un compilateur, pas une liste de facultés : **une semaine d'usage**, et
+maintenant deux outils à observer, le Sage et `proto/suivi_candidatures.py`.
 N'écris pas « Mémoire » avant que je t'aie dit ce qui me manque en m'en
 servant. Construire pour un usage que personne n'a observé est exactement ce
 que la section 0 interdit.
+
+Le prototype est **jetable, et c'est le but**. S'il ne sert pas au bout d'une
+semaine, on le supprime : c'est un résultat, pas un échec. S'il sert, ce qui
+lui manquera dira quelle faculté construire — et ce sera fondé sur un usage
+réel plutôt que sur une liste écrite d'avance.
 
 Ce que j'aurai à te dire viendra sous une de ces formes :
 - quelque chose casse → corrige, avec le test qui l'aurait attrapé ;
@@ -156,10 +191,18 @@ service fermé, réseau absent — sans emporter le reste.
 
 ## Contexte personnel (ne me le redemande pas)
 
-Débutant. iPhone + PC Windows ; le Mac est chez ma sœur et n'est pas requis.
-Explique les commandes pas à pas, **une ligne à la fois**. ~30 h/semaine.
-**Parle-moi en français.** Droit au but, pas de long récapitulatif, pas de
-flatterie.
+Débutant en code. iPhone + PC Windows ; le Mac est chez ma sœur et n'est pas
+requis. Explique les commandes pas à pas, **une ligne à la fois**.
+~30 h/semaine. **Parle-moi en français.** Droit au but, pas de long
+récapitulatif, pas de flatterie.
+
+Côté métier, parce que le prototype s'en sert et que tu en auras besoin :
+technicien CVC / frigoriste de formation, **BTS Fluides Énergies Domotique**.
+Actuellement au chômage. Je vise un poste en **bureau d'études — chiffrage,
+dimensionnement — dans la région toulousaine**, en parallèle d'une reprise
+d'études **en alternance**. Je ne candidate pas encore : je dois d'abord
+retravailler mon CV, et c'est pour ça que le prototype fait passer le CV avant
+les candidatures.
 
 ## Méthode
 
