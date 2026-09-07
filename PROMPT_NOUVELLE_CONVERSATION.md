@@ -242,8 +242,10 @@ jours : ne le redéduis pas, lis-le.
 
 **2 ans en bureau d'études CVC déjà effectués** — chiffrage, dimensionnement.
 Avant : **5 ans de terrain dans l'Armée**, sur chambre froide, groupe
-électrogène et brûleur — donc froid, énergie et combustion, et **pas** du
-tertiaire clim/ventilation. **BTS Fluides Énergies Domotique.** Actuellement au
+électrogène et brûleur — froid, énergie, combustion. **Et du tertiaire :
+centrales de traitement d'air double flux.** Le profil est donc large, pas
+spécialisé d'un seul côté : une session l'avait rétréci à l'industriel par
+déduction, et c'était faux. **BTS Fluides Énergies Domotique.** Actuellement au
 chômage, je cherche un poste en bureau d'études **dans la région toulousaine**.
 
 Je ne suis donc **pas en reconversion** : le bureau d'études est déjà mon

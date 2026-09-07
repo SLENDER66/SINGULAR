@@ -77,8 +77,8 @@ ETAPES_CV = [
     " Les 2 ans de BE en premier, le terrain juste apres"),
     ("Retirer toute mention d'alternance tant qu'aucune ecole n'est trouvee :"
     " une promesse sans date inquiete un recruteur"),
-    ("Assumer la specialite : froid, energie, combustion."
-    " Ne pas se vendre comme un profil tertiaire clim/ventilation"),
+    ("Nommer le materiel au lieu d'ecrire « CVC » : chambres froides, groupes"
+    " electrogenes, bruleurs, CTA double flux. Avec les puissances et volumes"),
     "Relire a voix haute, couper tout ce qui ne sert pas le poste vise",
     "Faire relire par quelqu'un du metier",
 ]
@@ -89,8 +89,8 @@ ETAPES_CV = [
 PROFIL = [
     "2 ans en bureau d'etudes CVC : chiffrage, dimensionnement.",
     "Avant cela, 5 ans de terrain dans l'Armee : chambre froide, groupe",
-    "electrogene, bruleur. Donc froid, energie et combustion -- pas du",
-    "tertiaire clim/ventilation.",
+    "electrogene, bruleur -- froid, energie, combustion.",
+    "Et du tertiaire : centrales de traitement d'air double flux.",
     "BTS Fluides Energies Domotique. Actuellement au chomage.",
     "Je cherche un poste en bureau d'etudes dans la region toulousaine.",
     "Une reprise d'etudes en alternance m'interesse, mais je n'ai ni ecole",
