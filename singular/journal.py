@@ -366,6 +366,17 @@ class DecisionJournal:
         """Record what actually happened. Scores the prediction, does not rewrite it."""
         moment = now or datetime.now(UTC)
         with self._connect() as conn:
+            # Le verrou avant la lecture, sinon le controle ne controle rien.
+            # Deux resolutions simultanees lisaient toutes deux OPEN, passaient
+            # toutes deux le refus ci-dessous, et ecrivaient toutes deux : une
+            # decision tranchee deux fois, et celle qui perdait la course
+            # s'entendait repondre que son verdict etait enregistre alors que
+            # le journal disait l'inverse. Mesure, pas suppose -- quatre
+            # processus, deux verdicts contradictoires acceptes.
+            #
+            # « history is not editable » est la promesse centrale de ce
+            # fichier. Elle ne tenait qu'en l'absence de concurrence.
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute("SELECT * FROM journal_entries WHERE entry_id=?", (entry_id,)).fetchone()
             if row is None:
                 raise KeyError(entry_id)
@@ -376,10 +387,16 @@ class DecisionJournal:
                 happened,
             )
             status = Status.HAPPENED if happened else Status.DID_NOT_HAPPEN
-            conn.execute(
-                "UPDATE journal_entries SET status=?, resolved_at=?, lesson=?, brier_score=? WHERE entry_id=?",
-                (status.value, moment.isoformat(), lesson or record.lesson, record.brier_score, entry_id),
+            # `AND status=OPEN` en plus du verrou : si la course se rouvrait un
+            # jour par un autre chemin, l'ecriture ne passerait pas en silence.
+            ecrit = conn.execute(
+                "UPDATE journal_entries SET status=?, resolved_at=?, lesson=?, brier_score=?"
+                " WHERE entry_id=? AND status=?",
+                (status.value, moment.isoformat(), lesson or record.lesson, record.brier_score,
+                 entry_id, Status.OPEN.value),
             )
+            if ecrit.rowcount != 1:
+                raise PermissionError(f"{entry_id} a ete tranche par quelqu'un d'autre entre-temps")
             row = conn.execute("SELECT * FROM journal_entries WHERE entry_id=?", (entry_id,)).fetchone()
         return self._entry(row)
 
@@ -387,15 +404,19 @@ class DecisionJournal:
         """Stopping is a result too, and an honest one. It is not a silent delete."""
         moment = now or datetime.now(UTC)
         with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")  # meme course que resolve()
             row = conn.execute("SELECT status FROM journal_entries WHERE entry_id=?", (entry_id,)).fetchone()
             if row is None:
                 raise KeyError(entry_id)
             if row["status"] != Status.OPEN.value:
                 raise PermissionError(f"{entry_id} was already resolved as {row['status']}")
-            conn.execute(
-                "UPDATE journal_entries SET status=?, resolved_at=?, lesson=? WHERE entry_id=?",
-                (Status.ABANDONED.value, moment.isoformat(), reason, entry_id),
+            ecrit = conn.execute(
+                "UPDATE journal_entries SET status=?, resolved_at=?, lesson=?"
+                " WHERE entry_id=? AND status=?",
+                (Status.ABANDONED.value, moment.isoformat(), reason, entry_id, Status.OPEN.value),
             )
+            if ecrit.rowcount != 1:
+                raise PermissionError(f"{entry_id} a ete tranche par quelqu'un d'autre entre-temps")
             row = conn.execute("SELECT * FROM journal_entries WHERE entry_id=?", (entry_id,)).fetchone()
         return self._entry(row)
 
