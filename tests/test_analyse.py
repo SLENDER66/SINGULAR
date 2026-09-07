@@ -27,6 +27,7 @@ from singular.analyse import (
     AnalyseIndisponible,
     analyser,
     contexte_pour_analyse,
+    effort_valide,
 )
 
 SOURCE = pathlib.Path(__file__).resolve().parent.parent / "singular" / "analyse.py"
@@ -248,18 +249,29 @@ def test_le_repli_par_defaut_est_une_valeur_que_l_api_accepte() -> None:
 
 @pytest.mark.parametrize("mauvais", ["moyen", "MEDIUM", "", "tres_haut"])
 def test_un_effort_mal_ecrit_retombe_sur_medium(monkeypatch, mauvais: str) -> None:
-    """Silencieusement, plutôt que de faire échouer la commande sur une typo."""
-    import importlib
+    """Silencieusement, plutôt que de faire échouer la commande sur une typo.
 
-    import singular.analyse as module
-
+    Vérifié sur la fonction, plus par `importlib.reload`. Recharger ce module
+    recrée `AnalyseIndisponible` : `offres` et `parle`, qui avaient importé
+    l'ancienne classe, cessaient d'être rattrapés par un
+    `except AnalyseIndisponible` fraîchement importé. Deux tests d'une autre
+    suite tombaient, selon l'ordre d'exécution, sur une faute qui n'était pas
+    la leur.
+    """
     monkeypatch.setenv("SINGULAR_ANALYSE_EFFORT", mauvais)
-    recharge = importlib.reload(module)
-    try:
-        assert recharge.EFFORT == "medium"
-    finally:
-        monkeypatch.delenv("SINGULAR_ANALYSE_EFFORT", raising=False)
-        importlib.reload(module)
+    assert effort_valide("SINGULAR_ANALYSE_EFFORT") == "medium"
+
+
+@pytest.mark.parametrize("bon", ["low", "high", "xhigh", "max"])
+def test_un_effort_valide_est_respecte(monkeypatch, bon: str) -> None:
+    """L'autre sens : un repli qui replierait toujours ne serait pas un repli."""
+    monkeypatch.setenv("SINGULAR_ANALYSE_EFFORT", bon)
+    assert effort_valide("SINGULAR_ANALYSE_EFFORT") == bon
+
+
+def test_une_variable_absente_vaut_medium(monkeypatch) -> None:
+    monkeypatch.delenv("SINGULAR_ANALYSE_EFFORT", raising=False)
+    assert effort_valide("SINGULAR_ANALYSE_EFFORT") == "medium"
 
 
 # --- la cle ne doit apparaitre nulle part -------------------------------------

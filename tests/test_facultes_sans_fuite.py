@@ -16,6 +16,8 @@ from __future__ import annotations
 import ast
 import pathlib
 
+import pytest
+
 PAQUET = pathlib.Path(__file__).resolve().parent.parent / "singular"
 
 #: Le seul detail d'exception tolere dans un message : un code HTTP, qui ne
@@ -100,3 +102,95 @@ def test_aucun_message_d_erreur_ne_peut_porter_la_cle() -> None:
         "un message d'erreur pourrait porter la cle ou le detail brut du SDK :\n  "
         + "\n  ".join(f"{chemin} -> {liste}" for chemin, liste in fautes.items())
     )
+
+
+# --- ce qui s'echappe compte autant que ce qu'on ecrit ------------------------
+
+def _appels():
+    """Chaque faculte, appelable avec un client injecte.
+
+    Une table ecrite a la main -- les signatures different, on ne les devine
+    pas -- mais gardee par `test_la_table_couvre_toutes_les_facultes` : une
+    faculte de plus fait tomber ce test tant qu'elle n'est pas branchee ici.
+    """
+    from singular.analyse import analyser
+    from singular.offres import chercher
+    from singular.parle import Conversation, repondre
+
+    return {
+        "singular/analyse.py": lambda client: analyser(
+            {"headline": "Notice.", "generated_at": "2026-09-07T09:00:00+00:00",
+             "items": [], "report": {"decisions": 0}},
+            client=client,
+        ),
+        "singular/offres.py": lambda client: chercher(client=client),
+        "singular/parle.py": lambda client: repondre(
+            "bonjour", "rapport", Conversation(pathlib.Path("/nonexistent/fil.json")),
+            client=client,
+        ),
+    }
+
+
+class ClientQuiEchoue:
+    """Un SDK qui leve une erreur dont le texte porterait la cle.
+
+    `APIResponseValidationError` est le cas reel : elle descend d'`APIError`
+    sans passer par `APIStatusError` ni `APIConnectionError`, donc elle
+    traversait les quatre `except` de chaque faculte.
+    """
+
+    def __init__(self, exception: BaseException) -> None:
+        self._exception = exception
+
+    @property
+    def beta(self):
+        return self
+
+    @property
+    def messages(self):
+        return self
+
+    def create(self, **kwargs):
+        raise self._exception
+
+
+def test_la_table_couvre_toutes_les_facultes() -> None:
+    """Sinon la faculte suivante serait verifiee sur la forme et pas sur l'acte."""
+    assert set(_appels()) == set(_facultes())
+
+
+@pytest.mark.parametrize("chemin", sorted(_facultes()))
+def test_aucune_erreur_du_sdk_ne_remonte_telle_quelle(chemin: str) -> None:
+    """Ce qui s'echappe remonte jusqu'a l'ecran, et pire, jusqu'au navigateur.
+
+    Le Sage repond `f"{type(exc).__name__}: {exc}"` sur toute exception
+    imprevue : une exception du SDK qui traverse une faculte finit en clair
+    dans un corps JSON. Le texte brut d'une exception du SDK peut porter
+    l'entete d'authentification selon les versions.
+
+    Verifie sur l'acte, pas sur la forme : le test precedent lit le code, ici
+    on fait echouer le SDK pour de vrai et on regarde ce qui sort.
+    """
+    from singular.analyse import AnalyseIndisponible, _sdk
+
+    anthropic = _sdk()
+    fuite = "sk-ant-SENTINELLE-dans-le-texte-de-l-exception"
+
+    class Bizarre(anthropic.AnthropicError):
+        pass
+
+    for exception in (anthropic.APIResponseValidationError.__new__(
+                          anthropic.APIResponseValidationError),
+                      Bizarre(fuite)):
+        if isinstance(exception, anthropic.APIResponseValidationError):
+            # Construite sans passer par son __init__, qui exige une reponse
+            # httpx : on ne teste pas le SDK, on teste ce qui sort de chez nous.
+            Exception.__init__(exception, fuite)
+
+        with pytest.raises(AnalyseIndisponible) as leve:
+            _appels()[chemin](ClientQuiEchoue(exception))
+
+        assert "SENTINELLE" not in str(leve.value), (
+            f"{chemin} laisse remonter le texte d'une exception du SDK"
+        )
+        assert "sk-ant" not in str(leve.value)

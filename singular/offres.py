@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .analyse import EFFORTS, AnalyseIndisponible, _sdk
+from .analyse import AnalyseIndisponible, _sdk, effort_valide
 
 #: Comme pour l'analyse : le modèle est un arbitrage de celui qui paie.
 MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_OFFRES_MODELE", "claude-opus-5")
@@ -36,9 +36,7 @@ RECHERCHES_MAX = 5
 #: Une liste courte se lit ; une liste longue se survole puis s'abandonne.
 JETONS_MAX = 4000
 
-EFFORT = os.environ.get("SINGULAR_OFFRES_EFFORT", "medium")
-if EFFORT not in EFFORTS:
-    EFFORT = "medium"
+EFFORT = effort_valide("SINGULAR_OFFRES_EFFORT")
 
 #: Ce qu'il cherche, dit par lui. Rien ici n'est déduit -- même règle que le
 #: profil du prototype, et pour la même raison : deux déductions non demandées
@@ -132,6 +130,13 @@ def chercher(question: str = "", *, modele: str | None = None, client: Any = Non
         raise AnalyseIndisponible("pas de reseau. Le reste de SINGULAR marche sans.") from None
     except anthropic.APIStatusError as erreur:
         raise AnalyseIndisponible(f"le service a repondu {erreur.status_code}.") from None
+    except anthropic.AnthropicError:
+        # Le filet. Les quatre familles ci-dessus ne couvrent pas tout l'arbre
+        # du SDK, et ce qui s'echappe remonte tel quel jusqu'a l'ecran :
+        # l'explication est dans `analyse.py`, au meme endroit.
+        raise AnalyseIndisponible(
+            "le service a echoue d'une facon imprevue. Rien n'a ete ecrit."
+        ) from None
 
     if reponse.stop_reason == "refusal":
         raise AnalyseIndisponible("le modele a refuse de repondre. Rien n'a ete enregistre.")

@@ -24,17 +24,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .analyse import EFFORTS, AnalyseIndisponible, _sdk
 from .analyse import INSTRUCTION as INSTRUCTION_ANALYSE
+from .analyse import AnalyseIndisponible, _sdk, effort_valide
 
 #: Le fil, a cote du journal : une seule chose a sauvegarder.
 FICHIER = Path.home() / ".singular" / "conversation.json"
 
 MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_PARLE_MODELE", "claude-opus-5")
 
-EFFORT = os.environ.get("SINGULAR_PARLE_EFFORT", "medium")
-if EFFORT not in EFFORTS:
-    EFFORT = "medium"
+EFFORT = effort_valide("SINGULAR_PARLE_EFFORT")
 
 #: Au-dela, le fil coute plus qu'il n'apporte : les vieux tours sont rarement
 #: ce qui manque, et ils sont renvoyes en entier a chaque question.
@@ -146,6 +144,13 @@ def repondre(
         raise AnalyseIndisponible("pas de reseau. Le reste de SINGULAR marche sans.") from None
     except anthropic.APIStatusError as erreur:
         raise AnalyseIndisponible(f"le service a repondu {erreur.status_code}.") from None
+    except anthropic.AnthropicError:
+        # Le filet. Les quatre familles ci-dessus ne couvrent pas tout l'arbre
+        # du SDK, et ce qui s'echappe remonte tel quel jusqu'a l'ecran :
+        # l'explication est dans `analyse.py`, au meme endroit.
+        raise AnalyseIndisponible(
+            "le service a echoue d'une facon imprevue. Rien n'a ete ecrit."
+        ) from None
 
     if reponse.stop_reason == "refusal":
         raise AnalyseIndisponible("le modele a refuse de repondre.")

@@ -48,11 +48,24 @@ JETONS_MAX = 2000
 #: requête pour un message d'erreur illisible. On le refuse ici, gratuitement.
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
+
+def effort_valide(variable: str) -> str:
+    """L'effort demandé par l'environnement, ou « medium » si on l'a mal écrit.
+
+    Une fonction plutôt que trois lignes au niveau du module, pour une raison
+    de test : vérifier le repli obligeait sinon à recharger ce module avec
+    `importlib.reload`, ce qui recrée `AnalyseIndisponible`. Les modules qui
+    avaient importé l'ancienne classe ne la reconnaissaient plus, et un
+    `except AnalyseIndisponible` cessait de rattraper -- une contamination
+    entre tests qui ne se voit qu'a l'ordre d'exécution.
+    """
+    demande = os.environ.get(variable, "medium")
+    return demande if demande in EFFORTS else "medium"
+
+
 #: Ni un audit exhaustif ni une réponse expédiée. Relevable si les réponses
 #: manquent de fond.
-EFFORT = os.environ.get("SINGULAR_ANALYSE_EFFORT", "medium")
-if EFFORT not in EFFORTS:
-    EFFORT = "medium"
+EFFORT = effort_valide("SINGULAR_ANALYSE_EFFORT")
 
 INSTRUCTION = """\
 Tu es la faculté « Analyse » de SINGULAR, l'outil personnel de Thomas.
@@ -176,6 +189,21 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None, client: Any =
         raise AnalyseIndisponible("pas de reseau. Le reste de SINGULAR marche sans.") from None
     except anthropic.APIStatusError as erreur:
         raise AnalyseIndisponible(f"le service a repondu {erreur.status_code}.") from None
+    except anthropic.AnthropicError:
+        # Le filet, et il en faut un. Les quatre familles ci-dessus ne couvrent
+        # pas tout l'arbre du SDK -- `APIResponseValidationError` descend
+        # d'`APIError` sans passer par `APIStatusError` ni `APIConnectionError`,
+        # et s'echappait donc d'ici. Ce qui s'echappe remonte tel quel : en
+        # traceback dans la console, et en clair dans le corps JSON du Sage,
+        # qui renvoie `f"{type(exc).__name__}: {exc}"` sur toute exception
+        # imprevue. Le texte brut d'une exception du SDK peut porter l'entete
+        # d'authentification selon les versions.
+        #
+        # Message fixe, sans interpolation : le detail qu'on afficherait est
+        # exactement celui qu'on ne veut pas voir sortir.
+        raise AnalyseIndisponible(
+            "le service a echoue d'une facon imprevue. Rien n'a ete ecrit."
+        ) from None
 
     if reponse.stop_reason == "refusal":
         raise AnalyseIndisponible(
@@ -186,5 +214,5 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None, client: Any =
 
 __all__ = [
     "EFFORT", "EFFORTS", "JETONS_MAX", "MODELE_PAR_DEFAUT",
-    "AnalyseIndisponible", "analyser", "contexte_pour_analyse",
+    "AnalyseIndisponible", "analyser", "contexte_pour_analyse", "effort_valide",
 ]
