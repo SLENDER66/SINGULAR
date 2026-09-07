@@ -241,10 +241,9 @@ def test_le_repli_par_defaut_est_une_valeur_que_l_api_accepte() -> None:
     typing_ = pytest.importorskip("typing")
     module = pytest.importorskip("anthropic.types.beta.beta_fallbacks_param")
 
-    assert "default" in typing_.get_args(
-        [a for a in typing_.get_args(module.BetaFallbacksParam)
-         if typing_.get_origin(a) is typing_.Literal][0]
-    )
+    literal = next(a for a in typing_.get_args(module.BetaFallbacksParam)
+                   if typing_.get_origin(a) is typing_.Literal)
+    assert "default" in typing_.get_args(literal)
 
 
 @pytest.mark.parametrize("mauvais", ["moyen", "MEDIUM", "", "tres_haut"])
