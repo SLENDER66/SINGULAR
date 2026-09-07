@@ -84,10 +84,35 @@ def read_token(path: Path = TOKEN_PATH) -> str:
     if path.exists():
         existing = path.read_text(encoding="utf-8").strip()
         if existing:
+            _restreindre(path)
             return existing
     token = secrets.token_urlsafe(18)
     path.write_text(token, encoding="utf-8")
+    _restreindre(path)
     return token
+
+
+def _restreindre(path: Path) -> None:
+    """Le jeton n'est lisible que par son propriétaire.
+
+    Il était créé en 0644, comme tout fichier écrit sans le dire. Sur le PC
+    Windows d'un utilisateur unique, ça ne changeait rien -- et c'est pour ça
+    que personne ne l'avait vu. Le cœur tourne désormais aussi sur le téléphone
+    et sur des machines multi-utilisateurs, où « lisible par tout le monde »
+    veut dire ce qu'il dit : la clé du journal personnel, en clair, à côté de
+    lui.
+
+    Un fichier déjà écrit est resserré au passage : sinon la correction ne
+    protégerait que les installations neuves, c'est-à-dire personne.
+
+    Sur Windows, `chmod` ne sait poser que le bit lecture seule. L'échec n'est
+    donc pas une panne, et il ne doit pas empêcher le Sage de démarrer -- un
+    journal qu'on ne peut pas ouvrir serait pire que le défaut qu'on corrige.
+    """
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
 
 
 def local_address() -> str:

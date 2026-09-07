@@ -527,3 +527,45 @@ def test_only_an_address_names_this_server(host: str, accepted: bool):
 ])
 def test_the_declared_origin_must_be_this_server(origin: str, host: str, accepted: bool):
     assert same_origin(origin, host) is accepted
+
+
+def test_le_jeton_n_est_lisible_que_par_son_proprietaire(tmp_path) -> None:
+    """La cle du journal ne doit pas etre en clair et lisible par tous.
+
+    Elle l'etait -- 0644, le mode par defaut de tout fichier ecrit sans le
+    dire. Sur un PC Windows a utilisateur unique ca ne changeait rien, et c'est
+    pour ca que personne ne l'avait vu. Depuis que le coeur tourne sans
+    dependance, il tourne aussi sur des machines partagees.
+    """
+    import stat
+    import sys
+
+    from singular.sage.server import read_token
+
+    if sys.platform.startswith("win"):
+        pytest.skip("chmod ne pose que le bit lecture seule sur Windows")
+
+    chemin = tmp_path / "sage_token"
+    jeton = read_token(chemin)
+
+    assert jeton
+    mode = stat.S_IMODE(chemin.stat().st_mode)
+    assert mode == 0o600, f"jeton lisible au-dela de son proprietaire : {mode:o}"
+
+
+def test_un_jeton_deja_ecrit_est_resserre_au_passage(tmp_path) -> None:
+    """Sinon la correction ne protegerait que les installations neuves."""
+    import stat
+    import sys
+
+    from singular.sage.server import read_token
+
+    if sys.platform.startswith("win"):
+        pytest.skip("chmod ne pose que le bit lecture seule sur Windows")
+
+    chemin = tmp_path / "sage_token"
+    chemin.write_text("un-jeton-deja-la", encoding="utf-8")
+    chemin.chmod(0o644)
+
+    assert read_token(chemin) == "un-jeton-deja-la"
+    assert stat.S_IMODE(chemin.stat().st_mode) == 0o600
