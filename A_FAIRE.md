@@ -48,10 +48,15 @@ Le tri a été fait le 7 septembre 2026, pour ne pas être refait :
 | `feat/economic-control-plane` | 356 |
 | `feat/human-trajectory-engine` | 380 |
 | `feat/decision-lifecycle-hardening` | 426 |
-| `feat/validated-execution-boundary` | 608 — `CLAUDE.md` la déclare morte |
+| `feat/validated-execution-boundary` | 608 — **examinée le 7 septembre : rien d'unique, supprimable** |
 
 Les trois premières sont entièrement contenues dans la branche de travail :
-les supprimer ne peut rien coûter. Les autres portent du code que la branche de
+les supprimer ne peut rien coûter. `feat/validated-execution-boundary` a été
+examinée fichier par fichier : ses 608 commits ne laissent que trois fichiers
+absents du travail, des greffons de 140 lignes repliés depuis dans les classes.
+Chaque requête, chaque message d'erreur et chaque garde s'y retrouve, et la
+version intégrée est meilleure. Seule une phrase de docstring manquait ; elle
+est récupérée dans `singular/effects.py`. Supprimable sans rien perdre. Les autres portent du code que la branche de
 travail n'a pas — vieux, probablement superseded, mais je ne peux pas le
 prouver, et une suppression ne se défait pas facilement. Ne les efface que si
 tu sais ce qu'elles contenaient.
