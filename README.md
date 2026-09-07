@@ -119,6 +119,9 @@ singular/outcome_ledger.py             predictions vs. outcomes
 singular/improvement_registry.py       governed learning lifecycle
 singular/journal.py                    decision journal, the tool its author uses
 singular/sage/                         the observation engine and its web app
+singular/analyse.py                    the faculties that call a model --
+singular/offres.py                     each one cuttable, none able to write
+singular/parle.py
 ios/SingularSage/                      the same engine as a native iPhone app
 docs/                                  authority model, boundary design
 attic/                                 parked: what the boundary does not need

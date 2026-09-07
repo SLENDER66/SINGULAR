@@ -45,18 +45,31 @@ protège : penser ≠ décider ≠ autoriser ≠ exécuter.
 d'exécution depuis `singular/sage/` ; `tests/test_sage_independence.py`
 interdit au cœur de dépendre d'une clé d'API, d'un service ou du réseau.
 
-**Facultés :** Notice (faite, en usage) → **Analyse (faite, coupée par défaut)**
-→ Mémoire → Compétences.
+**Facultés :** Notice (faite, en usage) → **Analyse, Offres, Parle** (faites,
+coupées par défaut) → Mémoire → Compétences.
 
-« Analyse » est la seule chose du dépôt qui consomme des jetons. Elle vit dans
-`singular/analyse.py`, **hors** de `singular/sage/`, parce que
+Trois facultés appellent un modèle, et ce sont les seules choses du dépôt qui
+consomment des jetons :
+
+| commande | ce qu'elle fait | ce qu'elle ne peut pas faire |
+|---|---|---|
+| `analyse` | commente la Notice déjà calculée | écrire, décider, résoudre |
+| `offres` | cherche des offres BE sur le web, en propose cinq au plus | postuler, écrire, décider |
+| `parle` | une conversation qui connaît le journal et le fil précédent | écrire dans le journal |
+
+Elles vivent **hors** de `singular/sage/`, parce que
 `tests/test_sage_independence.py` interdit au cœur de mentionner une clé. Sans
-`ANTHROPIC_API_KEY`, elle se déclare coupée et la Notice s'affiche sans elle.
-`python -m singular analyse --blanc` montre exactement ce qui partirait, sans
-rien envoyer — et un test impose que ce soit la même chaîne que celle envoyée
-ensuite. Elle n'importe ni le journal ni la frontière d'exécution : commenter
-n'est pas décider, et c'est tenu par `tests/test_analyse.py`, pas par une
-phrase dans l'instruction système.
+`ANTHROPIC_API_KEY`, chacune se déclare coupée et le reste marche sans elle.
+`analyse --blanc` et `offres --blanc` montrent exactement ce qui partirait,
+sans rien envoyer — et un test impose que ce soit la même chaîne que celle
+envoyée ensuite.
+
+Aucune n'importe le journal ni la frontière d'exécution : commenter n'est pas
+décider, et c'est tenu par des tests qui lisent les imports, pas par une phrase
+dans l'instruction système — une phrase se contourne par une tournure, une
+absence d'import non. `tests/test_facultes_sans_fuite.py` trouve tout seul les
+facultés qui appellent un modèle et vérifie qu'aucune ne peut laisser
+échapper la clé, y compris celle qui n'existe pas encore.
 
 ## Ce qui tourne — l'état réel, pas un plan
 

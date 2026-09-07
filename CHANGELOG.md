@@ -1,5 +1,68 @@
 # Changelog
 
+## 3.7.0 — The Sage in daily use: concurrency, business fields, faculties
+
+The journal went into real daily use on a phone. Everything below was found by
+using it, not by reading it.
+
+Security — the journal and the Sage:
+
+- `resolve()` and `abandon()` read the status, refused if it was not open, then
+  wrote — three steps, no lock. Measured with four concurrent processes: two
+  contradictory verdicts accepted on the same decision, and the loser was told
+  its own verdict had been recorded while the journal kept the other one. The
+  tool lied about what it had just written, and calibration is computed from
+  the stored verdict. Closed twice over: `BEGIN IMMEDIATE` before the read, and
+  a conditional `UPDATE ... AND status=OPEN` whose `rowcount` is checked.
+  Either alone suffices — verified by disabling them separately.
+- The schema migration could fail with "duplicate column name" when two
+  processes opened the journal at once: the version check and the `ALTER TABLE`
+  ran in a deferred transaction. Now `BEGIN IMMEDIATE`.
+- Any web page open on the machine while the Sage was running could write to
+  the journal and render verdicts — `127.0.0.1` was trusted wholesale, and the
+  browser is somebody. Refused on three facts the calling page does not
+  control: the Host header must be an address, the Origin must match, and the
+  body must be declared JSON.
+- The access token file is now created 0600, and existing files are tightened
+  on startup.
+- The token guard no longer depends on how the server was asked to start:
+  `--host 0.0.0.0` without `--lan` served the personal journal to the whole
+  network with an empty token. Absence of a token now refuses.
+- A double tap sent two verdicts, or recorded the same decision twice. One
+  submit lock per form in the web app, and the 409 now reads in French.
+
+Journal — schema v2:
+
+- Entries carry `expected_gain_eur` and `reversibility`. Business fields enter
+  the integrity payload only when set, so v1 entries keep their exact payload
+  and stay verifiable. Real migration by `ALTER TABLE`, not
+  `CREATE TABLE IF NOT EXISTS`.
+- The report adds expected gain, hours spent on decisions with no stated gain,
+  and open irreversible decisions.
+
+Faculties — the parts that call a model, and can all be cut:
+
+- `singular/analyse.py` comments the already-computed report.
+  `analyse --blanc` prints exactly what would leave the machine and sends
+  nothing; a test pins it to the same string that is sent.
+- `singular/offres.py` searches the web for engineering-office job offers and
+  proposes at most five. It cannot apply, write, or decide — it imports
+  neither the journal nor the execution boundary, and a test reads the imports.
+- `singular/parle.py` is a conversation that already knows the day's report and
+  the previous thread. Bounded to twenty exchanges, single cached system block,
+  per-turn token accounting. It cannot write to the journal.
+- None of them can leak the key: `tests/test_facultes_sans_fuite.py` discovers
+  every module that refuses with `AnalyseIndisponible` and checks both the
+  shape of its messages and what actually escapes when the SDK fails. An
+  `APIResponseValidationError` used to traverse all four handlers and reach the
+  screen — and, through the Sage's JSON error body, the browser.
+
+Packaging:
+
+- `singular/__init__.py` resolves its exports lazily. The journal and the Sage
+  now import on a bare Python with nothing installed; a broken submodule still
+  reports its real cause rather than an `AttributeError`.
+
 ## 3.6.0 — Artifact Identity, Bounded Integrity, and the Sage
 
 Security — artifact identity:
