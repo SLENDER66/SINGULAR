@@ -70,3 +70,91 @@ def test_the_hours_figure_waits_for_a_verdict_before_warning() -> None:
     condition = code.split(marker, 1)[1].split("),", 1)[0]
     assert "report.resolved > 0" in condition, (
         "la vignette s'alarmerait avant qu'un verdict ait pu être rendu")
+
+
+#: Le bloc du verdict, decoupe entre son verrou et la section suivante.
+def _bloc_verdict() -> str:
+    code = CLIENT.read_text(encoding="utf-8")
+    debut = code.index("let verdictEnCours")
+    fin = code.index("// --- démarrage", debut)
+    return code[debut:fin]
+
+
+def _executer(scenario: str) -> dict:
+    """Joue le bloc du verdict dans node, avec un DOM et un reseau simules."""
+    harness = """
+    const appels = [];
+    const erreurs = [];
+    const boutons = {"resolve-yes": {disabled: false}, "resolve-no": {disabled: false}};
+    const $ = (id) => boutons[id] || {reset() {}, close() {}, textContent: "", hidden: true};
+    class FormData { constructor() {} get() { return "une lecon"; } }
+    let resolving = "DEC-1";
+    let reponse = null;
+    async function api(chemin, options) {
+      appels.push(JSON.parse(options.body));
+      await new Promise((r) => setTimeout(r, 20));
+      if (reponse) throw reponse;
+      return {};
+    }
+    async function refresh() {}
+    function showFormError(id, message) { erreurs.push(message); }
+    """ + _bloc_verdict() + scenario
+    resultat = subprocess.run([NODE, "-e", harness], capture_output=True, text=True, timeout=20)
+    assert resultat.returncode == 0, resultat.stderr
+    return json.loads(resultat.stdout)
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_un_double_appui_n_envoie_qu_un_seul_verdict() -> None:
+    """Deux boutons cote a cote, et un serveur local qui met un instant.
+
+    « Arrive » puis, sans reponse visible, « Pas arrive » : deux verdicts
+    contradictoires partaient. Le journal refuse desormais la seconde
+    ecriture, mais le message qui revenait etait le sien -- technique, en
+    anglais, le matin ou l'on tranche.
+    """
+    resultat = _executer("""
+    (async () => {
+      const premier = submitResolve(true);
+      submitResolve(false);          // le double appui, sans attendre
+      await premier;
+      process.stdout.write(JSON.stringify({appels, erreurs}));
+    })();
+    """)
+
+    assert len(resultat["appels"]) == 1, f"{len(resultat['appels'])} verdicts envoyes"
+    assert resultat["appels"][0]["happened"] is True
+    assert resultat["erreurs"] == []
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_les_boutons_sont_reouverts_apres_l_envoi() -> None:
+    """Sinon un echec reseau laisserait la decision intranchable."""
+    resultat = _executer("""
+    (async () => {
+      await submitResolve(true);
+      process.stdout.write(JSON.stringify({
+        verrouilles: [boutons["resolve-yes"].disabled, boutons["resolve-no"].disabled],
+      }));
+    })();
+    """)
+
+    assert resultat["verrouilles"] == [False, False]
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_un_conflit_se_lit_en_francais_et_ne_ressemble_pas_a_une_panne() -> None:
+    """409 : l'autre appareil a tranche. Ce n'est pas une panne, et le message
+    brut du journal -- « history is not editable » -- ne le dit pas."""
+    resultat = _executer("""
+    reponse = Object.assign(new Error("DEC-1 was already resolved as HAPPENED"), {status: 409});
+    (async () => {
+      await submitResolve(true);
+      process.stdout.write(JSON.stringify({erreurs}));
+    })();
+    """)
+
+    assert len(resultat["erreurs"]) == 1
+    message = resultat["erreurs"][0]
+    assert "déjà été tranchée" in message
+    assert "history is not editable" not in message

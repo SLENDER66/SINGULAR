@@ -242,7 +242,27 @@ function openResolve(entryId) {
   $("resolve-dialog").showModal();
 }
 
+// Un seul verdict a la fois. Deux boutons cote a cote, aucun verrou : un
+// double appui -- ou l'impatience quand le serveur local met un instant --
+// envoyait deux verdicts, et le second revenait en 409 avec le message
+// technique du journal, en anglais, le jour meme ou l'on tranche. Pire :
+// appuyer sur l'autre bouton tentait d'enregistrer le verdict inverse.
+//
+// Le journal refuse deja la double ecriture cote serveur. Ici on evite
+// qu'elle soit tentee, ce qui n'est pas la meme chose : la garde du serveur
+// protege la verite, celle-ci protege ce qu'on comprend en appuyant.
+let verdictEnCours = false;
+
+function verrouillerVerdict(verrouille) {
+  for (const id of ["resolve-yes", "resolve-no"]) {
+    $(id).disabled = verrouille;
+  }
+}
+
 async function submitResolve(happened) {
+  if (verdictEnCours) return;
+  verdictEnCours = true;
+  verrouillerVerdict(true);
   const lesson = new FormData($("resolve-form")).get("lesson") || "";
   try {
     await api(`/api/entries/${resolving}/resolve`, {
@@ -253,7 +273,15 @@ async function submitResolve(happened) {
     $("resolve-dialog").close();
     await refresh();
   } catch (error) {
-    showFormError("resolve-error", error.message);
+    // 409 : quelqu'un d'autre a tranche entre-temps -- l'autre appareil, ou
+    // une fenetre restee ouverte. Ce n'est pas une panne, et le message brut
+    // du journal ne le dit pas dans une langue qu'on lit un matin.
+    showFormError("resolve-error", error.status === 409
+      ? "Cette décision a déjà été tranchée. Ferme et rouvre pour voir le verdict enregistré."
+      : error.message);
+  } finally {
+    verdictEnCours = false;
+    verrouillerVerdict(false);
   }
 }
 
