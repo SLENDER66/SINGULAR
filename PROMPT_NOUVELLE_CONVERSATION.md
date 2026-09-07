@@ -16,8 +16,13 @@ dernière. Ne me réponds pas que tu l'as bien noté — applique-la.
 Ne merge jamais dans `main` sans mon autorisation.
 
 **Ton conteneur part de la branche par défaut, pas de la branche de travail.**
-Les deux sont au même commit aujourd'hui, donc tu devrais démarrer au bon
-endroit. Vérifie-le quand même, en premier, avant de lire autre chose :
+Un hook de démarrage (`.claude/hooks/session-start.sh`) l'a déjà vérifié et a
+déjà installé les dépendances : son verdict est en haut de ton contexte, avant
+ta première ligne. Lis-le. S'il dit autre chose que « Accord », règle ça avant
+de lire la suite — ce n'est plus une consigne que tu peux sauter, et c'est
+délibéré.
+
+À relancer à la main seulement si ce bloc n'est pas apparu :
 
 ```bash
 python tools/check_repo_state.py    # doit sortir 0 et dire « Accord »
@@ -75,8 +80,10 @@ pas ça : **regarde ce qui tourne avant de réparer ce qui ne tourne pas.**
 ## Vérifie l'état en 90 secondes
 
 ```bash
-python tools/check_repo_state.py  # AVANT tout : d'ou part ce conteneur ? doit sortir 0
-pip install -e '.[dev]'          # pytest n'est PAS installé dans un conteneur neuf
+# Les deux lignes suivantes sont deja faites par le hook de demarrage :
+# ne les relance que si son bloc n'est pas apparu dans le contexte.
+python tools/check_repo_state.py  # d'ou part ce conteneur ? doit sortir 0
+pip install -e '.[dev]'           # pytest n'est pas installe dans un conteneur neuf
 python -m pytest -q              # tout vert, zéro échec
 python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"
 python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer

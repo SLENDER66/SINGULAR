@@ -12,7 +12,9 @@ claude/remote-control-feedback-ndpzle
 
 Branche par défaut — c'est d'elle que part ton conteneur. Elle a été laissée
 39 commits en arrière une fois, et une séance a démarré sans le Sage, sans
-`ios/` et sur un mandat périmé. Vérifie-le, ne le suppose pas :
+`ios/` et sur un mandat périmé. Ce n'est plus à toi de t'en souvenir :
+`.claude/hooks/session-start.sh` compare les deux branches au démarrage et met
+son verdict en haut de ton contexte. Lis-le ; s'il manque, lance
 `python tools/check_repo_state.py`.
 
 claude/singular-mandate-setup-d51s9t
@@ -153,8 +155,10 @@ Ground truth
 
 Inspecte réellement :
 
-* `python tools/check_repo_state.py` — d'où part ce conteneur, et l'écart
-  avec la branche de travail ; à faire avant tout le reste ;
+* le verdict du hook de démarrage, en haut de ton contexte — d'où part ce
+  conteneur, et l'écart avec la branche de travail ; à lire avant tout le
+  reste, et à relancer à la main (`python tools/check_repo_state.py`)
+  seulement s'il manque ;
 * branche actuelle ;
 * HEAD ;
 * la branche de travail et la branche par défaut ;
