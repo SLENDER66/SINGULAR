@@ -43,20 +43,42 @@ Le tri a été fait le 7 septembre 2026, pour ne pas être refait :
 | `claude/singular-mandate-state-check-s1088v` | aucun |
 | `claude/singular-startup-hook-czr3hp` | aucun |
 | `archive/main-2026-09-03` | 191 — et c'est **exactement le même commit que `main`** |
-| `v51-final` | 132 |
-| `feat/global-coherence-integration` | 260 |
-| `feat/economic-control-plane` | 356 |
-| `feat/human-trajectory-engine` | 380 |
-| `feat/decision-lifecycle-hardening` | 426 |
-| `feat/validated-execution-boundary` | 608 — **examinée le 7 septembre : rien d'unique, supprimable** |
+| `v51-final` | 132 — **rien d'unique, supprimable** |
+| `feat/global-coherence-integration` | 260 — **rien d'unique, supprimable** |
+| `feat/economic-control-plane` | 356 — **rien d'unique, supprimable** |
+| `feat/human-trajectory-engine` | 380 — **rien d'unique, supprimable** |
+| `feat/decision-lifecycle-hardening` | 426 — **rien d'unique, supprimable** |
+| `feat/validated-execution-boundary` | 608 — **rien d'unique, supprimable** |
 
-Les trois premières sont entièrement contenues dans la branche de travail :
-les supprimer ne peut rien coûter. `feat/validated-execution-boundary` a été
-examinée fichier par fichier : ses 608 commits ne laissent que trois fichiers
-absents du travail, des greffons de 140 lignes repliés depuis dans les classes.
-Chaque requête, chaque message d'erreur et chaque garde s'y retrouve, et la
-version intégrée est meilleure. Seule une phrase de docstring manquait ; elle
-est récupérée dans `singular/effects.py`. Supprimable sans rien perdre. Les autres portent du code que la branche de
+**Toutes les branches `feat/*` et `v51-final` ont été examinées le 7 septembre,
+définition par définition, `attic/` compris.** Aucune ne porte quoi que ce soit
+que la branche de travail n'ait, sous une forme meilleure.
+
+La méthode, si tu veux la refaire : comparer les définitions publiques
+(fonctions et classes) plutôt que les fichiers ou les commits. Le compte de
+commits est trompeur — ces branches datent du 3 septembre et leur « retard »
+est ce que le travail a en plus, pas l'inverse.
+
+Ce que l'examen a trouvé, et pourquoi ce n'est pas une perte :
+
+- les modules `capital_allocation`, `v2_empire`, `v2_1_control`,
+  `cashflow_engine`, `openai_runtime` sont **dans `attic/`** sur le travail,
+  pas disparus. Les oublier dans la comparaison fait croire à 250 définitions
+  perdues ;
+- `begin_execution` et `finish_execution` sont les versions **non atomiques**
+  de méthodes que le travail ne garde qu'en version atomique. Retrait
+  volontaire d'une API dangereuse ;
+- la quarantaine de tests « uniques » testent précisément cette API brute.
+  Le travail les a remplacés par quatre tests qui vérifient qu'elle **reste
+  désactivée** — `test_raw_execution_api_is_disabled`,
+  `test_raw_recovery_takeover_path_is_closed`. Tester qu'un chemin dangereux
+  n'existe plus vaut mieux que tester qu'il se comporte bien ;
+- `feat/validated-execution-boundary` ne laissait que trois greffons de
+  140 lignes, repliés depuis dans les classes. Une phrase de docstring
+  manquait vraiment : récupérée dans `singular/effects.py`.
+
+`archive/main-2026-09-03` n'a pas été examinée : elle est le même commit que
+`main`, et `main` ne se touche pas sans ta décision. Les autres portent du code que la branche de
 travail n'a pas — vieux, probablement superseded, mais je ne peux pas le
 prouver, et une suppression ne se défait pas facilement. Ne les efface que si
 tu sais ce qu'elles contenaient.
