@@ -100,6 +100,34 @@ def _gain_prompt() -> float | None:
     return valeur
 
 
+def cmd_offres(journal: DecisionJournal, args) -> int:
+    """Le premier agent : il cherche, il ecarte, il propose. Tu decides.
+
+    Il ne touche pas au journal -- il ne l'importe meme pas. Ce qu'il rend est
+    du texte, et rien d'autre ne se produit tant que tu n'as rien fait.
+    """
+    from .analyse import AnalyseIndisponible
+    from .offres import RECHERCHES_MAX, chercher, contexte_pour_recherche
+
+    if args.blanc:
+        print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
+        print(contexte_pour_recherche(args.precision))
+        print(_colour(f"\n  Rien n'a ete envoye. Jusqu'a {RECHERCHES_MAX} recherches web"
+                      " seraient faites.\n", DIM))
+        return 0
+
+    print(_colour("\n  Recherche en cours. Quelques dizaines de secondes.\n", DIM))
+    try:
+        texte = chercher(args.precision, modele=args.modele)
+    except AnalyseIndisponible as exc:
+        print(_colour(f"\n  Recherche impossible : {exc}\n", DIM))
+        return 1
+
+    print(texte)
+    print(_colour("\n  Rien n'a ete envoye a personne. A toi de decider.\n", DIM))
+    return 0
+
+
 def cmd_analyse(journal: DecisionJournal, args) -> int:
     """La seule commande qui coûte de l'argent, et la seule qui peut être coupée.
 
@@ -400,6 +428,14 @@ def build_parser() -> argparse.ArgumentParser:
                          help="afficher ce qui serait envoye, sans rien envoyer")
     analyse.add_argument("--modele", default=None)
     analyse.set_defaults(func=cmd_analyse)
+
+    offres = sub.add_parser("offres", help="chercher des offres d'emploi (consomme des jetons)")
+    offres.add_argument("--blanc", action="store_true",
+                        help="afficher ce qui serait envoye, sans rien envoyer")
+    offres.add_argument("--modele", default=None)
+    offres.add_argument("precision", nargs="?", default="",
+                        help="une precision pour cette recherche, facultative")
+    offres.set_defaults(func=cmd_offres)
     return parser
 
 

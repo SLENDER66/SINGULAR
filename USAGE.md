@@ -60,6 +60,25 @@ Ce qu'elle ne peut pas faire, et ce n'est pas une consigne mais une absence
 d'import : écrire dans ton journal, résoudre une décision, en créer une. Elle
 commente un rapport déjà calculé. Elle ne décide jamais à ta place.
 
+### `offres` — le premier agent
+
+```bash
+python -m singular offres --blanc          # montre ce qui partirait, n'envoie rien
+python -m singular offres                  # cherche des offres BE dans la region
+python -m singular offres "jusqu'a Albi"   # avec une precision
+```
+
+Il cherche sur le web, écarte, et propose cinq offres au maximum, chacune avec
+ce qui correspond **et** ce qui coince. Puis il s'arrête. **Il ne postule
+jamais, il n'écrit rien, il ne décide de rien** — et ce n'est pas une consigne
+dans son instruction, qui se contournerait par une tournure de phrase : il
+n'importe ni le journal, ni la frontière d'exécution, ni de quoi envoyer un
+message. `tests/test_offres.py` le vérifie sur les imports.
+
+Même conditions qu'`analyse` : clé requise, coupé sans elle, `--blanc` gratuit.
+Il coûte plus cher qu'`analyse` — chaque recherche ramène des pages entières —
+d'où un plafond de cinq recherches par appel, qui rend la facture prévisible.
+
 ### Ce que `add` demande en plus depuis la v2 du journal
 
 Deux questions facultatives, à la fin : **ce que la décision rapporte si elle
