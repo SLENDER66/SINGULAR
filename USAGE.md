@@ -60,6 +60,37 @@ Ce qu'elle ne peut pas faire, et ce n'est pas une consigne mais une absence
 d'import : écrire dans ton journal, résoudre une décision, en créer une. Elle
 commente un rapport déjà calculé. Elle ne décide jamais à ta place.
 
+### `parle` — la conversation qui connaît ton journal
+
+```bash
+python -m singular parle                     # une conversation, tu tapes, elle répond
+python -m singular parle "je fais quoi ?"    # une seule question, une seule réponse
+python -m singular parle --oubli             # efface le fil, garde le journal
+```
+
+C'est la différence exacte entre parler à Claude dans son application et parler
+à SINGULAR : **le modèle est le même** — Opus 5, ta clé — mais l'application
+repart de zéro à chaque fois, alors qu'ici le rapport du jour et le fil de la
+conversation précédente sont déjà là. Le fil vit dans `~/.singular/conversation.json`,
+à côté du journal, et survit à la fermeture de la fenêtre.
+
+**Elle n'écrit rien dans ton journal.** Enregistrer une décision reste `add`,
+et ce n'est pas une consigne dans son instruction : le module n'importe pas le
+journal, `tests/test_parle.py` le vérifie sur les imports. Un système qui
+inscrit des décisions parce qu'on en a parlé finit par contenir des choses que
+personne n'a décidées.
+
+Trois choses tiennent la facture, dans cet ordre : l'instruction et le rapport
+partent en **un seul bloc mis en cache** — payé une fois, relu ensuite ; le fil
+est **borné aux vingt derniers échanges**, parce qu'une conversation renvoie
+tout son historique à chaque tour ; et chaque réponse affiche
+`[N jetons envoyés, M relus du cache, K rendus]`, parce qu'on ne corrige pas ce
+qu'on ne voit pas.
+
+Mêmes conditions qu'`analyse` : clé requise, coupée sans elle, le reste de
+SINGULAR marche sans. `SINGULAR_PARLE_MODELE` et `SINGULAR_PARLE_EFFORT`
+valent pour elle ce que leurs équivalents valent pour `analyse`.
+
 ### `offres` — le premier agent
 
 ```bash

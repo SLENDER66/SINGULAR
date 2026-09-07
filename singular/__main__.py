@@ -100,6 +100,57 @@ def _gain_prompt() -> float | None:
     return valeur
 
 
+def cmd_parle(journal: DecisionJournal, args) -> int:
+    """Une conversation, pas un rapport. Le fil survit entre deux lancements.
+
+    Elle n'écrit rien dans le journal : c'est `add` qui enregistre, et c'est
+    volontaire. Un système qui inscrit des décisions parce qu'on en a parlé
+    finit par contenir des choses que personne n'a décidées.
+    """
+    from .analyse import AnalyseIndisponible, contexte_pour_analyse
+    from .parle import Conversation, repondre
+    from .sage.notice import build_notice
+
+    fil = Conversation()
+    if args.oubli:
+        fil.oublier()
+        print(_colour("\n  Fil effacé. Le journal, lui, n'a pas bougé.\n", DIM))
+        if not args.question:
+            return 0
+
+    contexte = contexte_pour_analyse(build_notice(journal).as_dict())
+
+    def un_tour(question: str) -> bool:
+        try:
+            texte, cout = repondre(question, contexte, fil, modele=args.modele)
+        except AnalyseIndisponible as exc:
+            print(_colour(f"\n  {exc}\n", DIM))
+            return False
+        fil.sauver()
+        print(f"\n{texte}\n")
+        # Le cout de chaque tour, sous les yeux : une conversation renvoie tout
+        # son historique, et sans ce chiffre on ne voit pas la facture monter.
+        economise = f", {cout['cache_lu']} relus du cache" if cout["cache_lu"] else ""
+        print(_colour(f"  [{cout['entree']} jetons envoyés{economise},"
+                      f" {cout['sortie']} rendus]\n", DIM))
+        return True
+
+    if args.question:
+        return 0 if un_tour(args.question) else 1
+
+    print(_colour("\n  Parle. Ligne vide ou Ctrl+C pour sortir.\n", BOLD))
+    while True:
+        try:
+            question = input(_colour("  > ", BOLD)).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if not question:
+            print()
+            return 0
+        un_tour(question)
+
+
 def cmd_offres(journal: DecisionJournal, args) -> int:
     """Le premier agent : il cherche, il ecarte, il propose. Tu decides.
 
@@ -436,6 +487,12 @@ def build_parser() -> argparse.ArgumentParser:
     offres.add_argument("precision", nargs="?", default="",
                         help="une precision pour cette recherche, facultative")
     offres.set_defaults(func=cmd_offres)
+
+    parle = sub.add_parser("parle", help="une conversation qui connait ton journal")
+    parle.add_argument("question", nargs="?", default="")
+    parle.add_argument("--oubli", action="store_true", help="effacer le fil et repartir a zero")
+    parle.add_argument("--modele", default=None)
+    parle.set_defaults(func=cmd_parle)
     return parser
 
 
