@@ -158,49 +158,69 @@ Rien ne part sur un serveur.
    Il affiche le rapport en texte, sans rien envoyer. Je colle le bloc dans
    l'app Claude. C'est gratuit et ça marche depuis le téléphone.
 
-4. **Le bouton 💬 dans l'app** — il est là depuis le 7 septembre, au-dessus
-   du `+`. Il ouvre une conversation qui connaît déjà le rapport du jour et ce
-   qu'on s'est dit la dernière fois. Elle ne peut pas écrire dans le journal :
-   enregistrer reste le `+`.
+4. **Le bouton 💬 dans l'app** — une conversation qui connaît déjà le rapport
+   du jour et ce qu'on s'est dit la dernière fois. Elle ne peut pas écrire dans
+   le journal : enregistrer reste le `+`.
 
-   **J'ai la clé et 5 $ de crédit.** Trois gestes sur le PC, dans cet ordre,
-   une seule fois :
+   **Rien de tout ça n'est encore sur mon PC.** Mon clone date d'avant, et
+   c'est la première chose à faire — sinon il n'y a ni bouton, ni commande
+   `parle`, et les étapes suivantes échouent sans dire pourquoi.
 
-   1. `pip install -e ".[analyse]"`
-   2. Mettre la clé dans `ANTHROPIC_API_KEY` **dans la fenêtre où je lance le
-      serveur, avant de le lancer**. Un serveur déjà démarré ne la verra
-      jamais : il faut le fermer et le relancer.
+   J'ai la clé et 5 $ de crédit. Une seule fois, dans PowerShell, dans
+   l'ordre :
 
-      La commande n'est pas la même selon la fenêtre ouverte. Si l'invite
-      commence par `PS C:\...` c'est PowerShell, sinon c'est `cmd` :
+   ```powershell
+   cd $HOME\Documents\SINGULAR
+   git pull
+   pip install -e ".[analyse]"
+   ```
 
-      ```
-      cmd :         set ANTHROPIC_API_KEY=sk-ant-...
-      PowerShell :  $env:ANTHROPIC_API_KEY="sk-ant-..."
-      ```
+   Puis, **dans cette même fenêtre**, poser la clé et vérifier tout de suite
+   qu'elle est vue :
 
-      **Vérifier avant d'aller plus loin**, dans la même fenêtre :
+   ```powershell
+   $env:ANTHROPIC_API_KEY = "sk-ant-..."
+   python -m singular parle "dis juste bonjour"
+   ```
 
-      ```
-      python -m singular parle "dis juste bonjour"
-      ```
+   S'il répond, c'est bon. S'il dit « aucune clé dans ANTHROPIC_API_KEY »,
+   c'est que la ligne du dessus n'a pas pris — en `cmd` la commande s'écrit
+   `set ANTHROPIC_API_KEY=sk-ant-...`, ce n'est pas la même.
 
-      S'il répond, la clé est vue — je peux lancer `python -m singular sage --lan`
-      dans cette fenêtre-là. S'il dit « aucune clé dans ANTHROPIC_API_KEY »,
-      c'est que j'ai utilisé la commande de l'autre fenêtre.
-   3. `python -m singular parle --tarifs` — il affiche un petit fichier à
-      coller dans `C:\Users\Utilisateur\.singular\tarifs.json`, avec les
-      prix relevés sur console.anthropic.com et mes 5 $. **SINGULAR ne connaît
-      aucun prix** : sans ça il compte des jetons, avec ça il me dit ce qu'il
-      me reste sous chaque réponse.
+   Enfin, dire à SINGULAR ce que je paie. **Il ne connaît aucun prix**, et
+   c'est voulu : un tarif écrit dans le code vieillirait en silence et me
+   servirait à décider quand m'arrêter.
 
-   Ensuite : soixante réponses par jour depuis le téléphone, aucune limite au
-   clavier, et un refus net quand le crédit est épuisé. Le modèle est
+   ```powershell
+   python -m singular parle --tarifs
+   ```
+
+   Il affiche un petit fichier à coller dans
+   `C:\Users\Utilisateur\.singular\tarifs.json`, avec les prix relevés sur
+   console.anthropic.com et mes 5 $. Sans ça il compte des jetons ; avec, il
+   me dit ce qu'il me reste sous chaque réponse.
+
+   **Ensuite, chaque fois**, la clé doit être posée dans la fenêtre **avant**
+   de lancer le serveur — un serveur déjà démarré ne la verra jamais :
+
+   ```powershell
+   cd $HOME\Documents\SINGULAR
+   $env:ANTHROPIC_API_KEY = "sk-ant-..."
+   python -m singular sage --lan
+   ```
+
+   Le démarrage écrit maintenant « conversation allumée » ou « conversation
+   coupée » : je le lis avant de prendre le téléphone, pas après. **Et s'il
+   n'écrit ni l'une ni l'autre, c'est que le `git pull` n'a pas eu lieu** —
+   cette ligne n'existe que dans la nouvelle version.
+
+   Soixante réponses par jour depuis le téléphone, aucune limite au clavier,
+   et un refus net quand le crédit est épuisé. Le modèle est
    `claude-sonnet-5`, choisi pour que 5 $ durent ; `SINGULAR_PARLE_MODELE`
-   remet Opus si je veux.
+   remet Opus.
 
-   Le reste — le journal, le rapport, les verdicts — n'a jamais besoin de cette
-   clé. Si je la révoque demain, rien d'autre ne bouge.
+   Le reste — le journal, le rapport, les verdicts — n'a jamais besoin de
+   cette clé. Si je la révoque demain, rien d'autre ne bouge.
 
 5. **Noter ce qui manque** — au fil de l'eau, pour la prochaine session :
    - Est-ce que je l'ouvre sans y penser, ou faut-il que j'y pense ?
