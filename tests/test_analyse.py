@@ -198,3 +198,66 @@ def test_un_modele_choisi_est_respecte() -> None:
 def test_la_reponse_est_rendue_telle_quelle() -> None:
     client = FauxClient(FausseReponse("  Trois phrases.  "))
     assert analyser(NOTICE, client=client) == "Trois phrases."
+
+
+# --- le contrat avec le SDK, verifie hors ligne -------------------------------
+#
+# Le premier vrai appel sera celui de Thomas, sur ses 5 dollars. Rien ici ne
+# peut prouver que le service repondra, mais tout ce qui est verifiable sans
+# reseau doit l'etre : un parametre disparu ou une valeur hors du Literal
+# revient en 400 illisible, apres avoir coute une requete.
+
+def test_le_sdk_accepte_tous_les_parametres_envoyes() -> None:
+    """Une montée de version du SDK ne doit pas se découvrir sur sa facture."""
+    inspect = pytest.importorskip("inspect")
+    messages = pytest.importorskip("anthropic.resources.beta.messages.messages")
+
+    signature = inspect.signature(messages.Messages.create)
+    envoyes = {"model", "max_tokens", "system", "output_config",
+               "betas", "fallbacks", "messages"}
+
+    manquants = sorted(envoyes - set(signature.parameters))
+    assert not manquants, (
+        f"le SDK installe n'accepte plus : {manquants}. "
+        "Corrige analyse.py avant que l'appel parte."
+    )
+
+
+def test_l_effort_configure_est_une_valeur_que_l_api_accepte() -> None:
+    """`SINGULAR_ANALYSE_EFFORT=moyen` est le réflexe français, et c'est un 400."""
+    typing_ = pytest.importorskip("typing")
+    module = pytest.importorskip("anthropic.types.beta.beta_output_config_param")
+
+    from singular.analyse import EFFORT, EFFORTS
+
+    permis = typing_.get_type_hints(module.BetaOutputConfigParam)["effort"]
+    literaux = set(typing_.get_args(typing_.get_args(permis)[0]))
+
+    assert set(EFFORTS) == literaux, "EFFORTS a divergé de ce que le SDK autorise"
+    assert EFFORT in literaux
+
+
+def test_le_repli_par_defaut_est_une_valeur_que_l_api_accepte() -> None:
+    typing_ = pytest.importorskip("typing")
+    module = pytest.importorskip("anthropic.types.beta.beta_fallbacks_param")
+
+    assert "default" in typing_.get_args(
+        [a for a in typing_.get_args(module.BetaFallbacksParam)
+         if typing_.get_origin(a) is typing_.Literal][0]
+    )
+
+
+@pytest.mark.parametrize("mauvais", ["moyen", "MEDIUM", "", "tres_haut"])
+def test_un_effort_mal_ecrit_retombe_sur_medium(monkeypatch, mauvais: str) -> None:
+    """Silencieusement, plutôt que de faire échouer la commande sur une typo."""
+    import importlib
+
+    import singular.analyse as module
+
+    monkeypatch.setenv("SINGULAR_ANALYSE_EFFORT", mauvais)
+    recharge = importlib.reload(module)
+    try:
+        assert recharge.EFFORT == "medium"
+    finally:
+        monkeypatch.delenv("SINGULAR_ANALYSE_EFFORT", raising=False)
+        importlib.reload(module)

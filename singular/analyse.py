@@ -42,9 +42,17 @@ MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_ANALYSE_MODELE", "claude-opus-5")
 #: décision de coût assumée, pas une troncature accidentelle.
 JETONS_MAX = 2000
 
+#: Les seules valeurs que l'API accepte. Une faute de frappe dans la variable
+#: d'environnement -- « moyen » au lieu de « medium », le réflexe naturel ici --
+#: partirait sinon jusqu'au service, reviendrait en 400, et aurait coûté une
+#: requête pour un message d'erreur illisible. On le refuse ici, gratuitement.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
 #: Ni un audit exhaustif ni une réponse expédiée. Relevable si les réponses
 #: manquent de fond.
 EFFORT = os.environ.get("SINGULAR_ANALYSE_EFFORT", "medium")
+if EFFORT not in EFFORTS:
+    EFFORT = "medium"
 
 INSTRUCTION = """\
 Tu es la faculté « Analyse » de SINGULAR, l'outil personnel de Thomas.
@@ -177,6 +185,6 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None, client: Any =
 
 
 __all__ = [
-    "EFFORT", "JETONS_MAX", "MODELE_PAR_DEFAUT",
+    "EFFORT", "EFFORTS", "JETONS_MAX", "MODELE_PAR_DEFAUT",
     "AnalyseIndisponible", "analyser", "contexte_pour_analyse",
 ]
