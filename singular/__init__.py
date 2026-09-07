@@ -213,16 +213,32 @@ __all__ = [*sorted(_EXPORTS)]  # noqa: PLE0604 -- les cles de _EXPORTS sont des 
 
 def __getattr__(nom: str) -> Any:
     """Resolution paresseuse : on n'importe que ce qui est reellement demande."""
+    # Les noms prives et les crochets du langage (`__wrapped__`, `__bases__`,
+    # que `inspect` et pytest sondent constamment) ne sont jamais des exports :
+    # tenter de les importer ne trouverait rien et coûterait un aller-retour
+    # sur le disque a chaque sondage.
+    if nom.startswith("_"):
+        raise AttributeError(f"module {__name__!r} has no attribute {nom!r}")
+
     cible = _EXPORTS.get(nom)
     if cible is not None:
         module, origine = cible
         return getattr(importlib.import_module(f".{module}", __name__), origine)
+
     # `import singular; singular.audit` marchait parce que les imports
     # d'en-tete liaient chaque sous-module comme attribut. Sans ce repli, la
     # paresse casserait cet usage-la en silence.
     try:
         return importlib.import_module(f".{nom}", __name__)
-    except ImportError:
+    except ModuleNotFoundError as absent:
+        # Un sous-module qui existe mais qui echoue a s'importer -- une
+        # dependance manquante, par exemple -- ne doit pas etre annonce comme
+        # un nom inconnu. C'est precisement le cas sur un telephone sans
+        # `pydantic` : « singular n'a pas d'attribut models » enverrait
+        # chercher une faute de frappe au lieu du paquet absent. On ne
+        # convertit donc que l'absence du module demande lui-meme.
+        if absent.name != f"{__name__}.{nom}":
+            raise
         raise AttributeError(f"module {__name__!r} has no attribute {nom!r}") from None
 
 

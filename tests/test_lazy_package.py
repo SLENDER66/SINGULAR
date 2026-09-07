@@ -160,3 +160,58 @@ def test_un_journal_vide_dit_ou_il_a_regarde(tmp_path, capsys) -> None:
         capsys.readouterr()
         commande(journal, type("Args", (), {"status": None})())
         assert str(chemin) in capsys.readouterr().out, commande.__name__
+
+
+# --- ce que la paresse ne doit pas masquer -----------------------------------
+
+def test_un_module_casse_ne_passe_pas_pour_un_nom_inconnu(tmp_path) -> None:
+    """« Unsafe fallback », au sens de CLAUDE.md §7, et il tombait sur son cas.
+
+    Un sous-module qui existe mais echoue a s'importer -- une dependance
+    absente -- etait annonce exactement comme un nom mal orthographie. Sur un
+    telephone sans `pydantic`, `singular.models` disait « singular n'a pas
+    d'attribut models » : on part chercher une faute de frappe pendant que la
+    vraie cause est un paquet manquant.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    resultat = subprocess.run(
+        [sys.executable, "-c", textwrap.dedent('''
+            import builtins
+            _vrai = builtins.__import__
+            def _sans(nom, *a, **k):
+                if nom.split(".")[0].startswith("pydantic"):
+                    raise ModuleNotFoundError("No module named 'pydantic'", name="pydantic")
+                return _vrai(nom, *a, **k)
+            builtins.__import__ = _sans
+            import singular
+            try:
+                singular.models
+            except ModuleNotFoundError as erreur:
+                assert "pydantic" in str(erreur), erreur
+                print("OK")
+            except AttributeError:
+                raise SystemExit("la vraie cause a ete masquee")
+        ''')],
+        capture_output=True, text=True, timeout=120, check=False,
+    )
+    assert resultat.returncode == 0, resultat.stderr[-600:]
+    assert "OK" in resultat.stdout
+
+
+def test_un_nom_vraiment_inconnu_reste_une_erreur_d_attribut() -> None:
+    """L'autre moitié : ne pas convertir l'absence réelle en autre chose."""
+    with pytest.raises(AttributeError, match="pas_de_module_de_ce_nom"):
+        singular.__getattr__("pas_de_module_de_ce_nom")
+
+
+def test_les_noms_prives_ne_declenchent_aucun_import() -> None:
+    """`inspect` et pytest sondent `__wrapped__`, `__bases__` et consorts.
+
+    Chacun coûterait sinon une recherche de module sur le disque, pour rien.
+    """
+    for sonde in ("__wrapped__", "__bases__", "_interne"):
+        with pytest.raises(AttributeError):
+            singular.__getattr__(sonde)
