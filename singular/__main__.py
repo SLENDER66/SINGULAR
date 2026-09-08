@@ -47,6 +47,64 @@ def _ask(prompt: str, *, cast=str, default=None, validate=None):
             print(_colour(f"  {exc}", RED))
 
 
+def _nombre(brut: str) -> float:
+    """Un nombre tel qu'il le tape : « 0,75 » et « 1 500 » comptent.
+
+    Il est en France, sur un clavier français : la virgule décimale est ce qui
+    vient naturellement. `float("0,75")` lève, et le message que `_ask`
+    affichait alors était « could not convert string to float: '0,75' » — de
+    l'anglais de machine, à quelqu'un qui débute en code, pour une saisie qui
+    n'avait rien de fautif. `_gain_prompt` acceptait déjà la virgule ; les
+    autres questions non.
+    """
+    # Toutes les espaces, sans en nommer aucune : l'espace fine insécable des
+    # milliers ne s'écrit pas dans une console Windows française, et
+    # `test_windows_console.py` refuse -- à raison -- qu'un littéral de ce
+    # fichier contienne un caractère qu'elle ne sait pas afficher.
+    propre = "".join(c for c in brut if not c.isspace()).replace(",", ".")
+    try:
+        return float(propre)
+    except ValueError:
+        raise ValueError(f"« {brut} » n'est pas un nombre") from None
+
+
+def _entier(brut: str) -> int:
+    return int(_nombre(brut))
+
+
+def _verifie_probabilite(valeur: float) -> None:
+    """La même règle que le journal, dite dans sa langue et avant d'écrire.
+
+    Sans elle, taper « 75 » en pensant pourcents passait les six questions
+    suivantes, puis échouait sur `probability must be strictly between 0 and 1`
+    — en anglais, et surtout **après coup** : tout ce qu'il venait de saisir
+    était perdu, et un outil censé prendre trente secondes en redemandait
+    autant. `_ask` reboucle sur place ; il corrige un chiffre, pas huit.
+
+    `test_saisie_au_clavier.py` vérifie que ce qui est accepté ici est
+    exactement ce que `DecisionJournal.add` accepte : deux écritures d'une même
+    règle finissent par diverger, et c'est la garde qui l'empêche.
+    """
+    if valeur >= 1 and valeur <= 100:
+        raise ValueError(
+            f"entre 0.05 et 0.95, pas en pourcents - pour {valeur:g} %, ecris "
+            f"{valeur / 100:g}")
+    if not 0 < valeur < 1:
+        raise ValueError("entre 0.05 et 0.95 : une certitude ne peut pas avoir tort")
+
+
+def _verifie_heures(valeur: float) -> None:
+    if valeur < 0:
+        raise ValueError("des heures ne se comptent pas en négatif")
+    if valeur != valeur or valeur in (float("inf"), float("-inf")):
+        raise ValueError("un nombre d'heures, pas l'infini")
+
+
+def _verifie_jours(valeur: int) -> None:
+    if valeur < 1:
+        raise ValueError("au moins un jour, sinon rien ne peut être vérifié")
+
+
 def _tier_prompt() -> Tier:
     print(_colour("\n  Quel rang de la constitution ? (Stabilité > Revenus > ... > Liberté)", DIM))
     for tier in Tier:
@@ -87,11 +145,14 @@ def _gain_prompt() -> float | None:
     chose qu'un gain de zéro.
     """
     print(_colour("\n  Ce que ça rapporte si ça marche, en euros. Vide si tu ne sais pas.", DIM))
-    brut = input(_colour("  Gain attendu ", BOLD)).strip().replace(",", ".").replace(" ", "")
+    brut = input(_colour("  Gain attendu ", BOLD)).strip()
     if not brut:
         return None
     try:
-        valeur = float(brut)
+        # `_nombre` et pas un nettoyage de plus : la virgule et les espaces se
+        # lisent partout de la même façon, sinon « 1 500 » passe à une question
+        # et échoue à la suivante.
+        valeur = _nombre(brut)
     except ValueError:
         print(_colour("  Pas un nombre : laissé non chiffré.", RED))
         return None
@@ -266,10 +327,13 @@ def cmd_add(journal: DecisionJournal, args) -> int:
         title = _ask("  Décision (une ligne)")
         action = _ask("  Ce que tu vas faire concrètement")
         predicted = _ask("  Ce que tu attends comme résultat observable")
-        probability = _ask("  Probabilité que ça arrive (0.05 à 0.95)", cast=float, default=0.6)
+        probability = _ask("  Probabilité que ça arrive (0.05 à 0.95)", cast=_nombre,
+                           default=0.6, validate=_verifie_probabilite)
         tier = _tier_prompt()
-        hours = _ask("  Heures que ça va te coûter", cast=float, default=4)
-        days = _ask("  Dans combien de jours on vérifie", cast=int, default=14)
+        hours = _ask("  Heures que ça va te coûter", cast=_nombre, default=4,
+                     validate=_verifie_heures)
+        days = _ask("  Dans combien de jours on vérifie", cast=_entier, default=14,
+                    validate=_verifie_jours)
         gain = _gain_prompt()
         reversibility = _reversibility_prompt()
         entry = journal.add(title=title, action=action, predicted=predicted, probability=probability,

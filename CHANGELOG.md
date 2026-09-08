@@ -1,5 +1,33 @@
 # Changelog
 
+## 3.12.0 — Taper « 75 » ne fait plus perdre tout ce qu'on vient d'écrire
+
+`python -m singular add` pose huit questions. Deux fautes de saisie s'y payaient
+cher, et aucune n'était de sa faute.
+
+Taper **75** en pensant pourcents passait les six questions suivantes, puis
+échouait à l'écriture sur `probability must be strictly between 0 and 1` — en
+anglais, et surtout **après coup** : tout ce qui venait d'être saisi était
+perdu, et un outil censé prendre trente secondes en redemandait autant.
+
+Taper **0,75**, avec la virgule décimale d'un clavier français, rendait
+`could not convert string to float: '0,75'`. Une saisie qui n'avait rien de
+fautif, refusée par un message de machine.
+
+- Les trois questions numériques valident sur place, dans sa langue, et disent
+  quoi écrire : « entre 0.05 et 0.95, pas en pourcents - pour 75 %, ecris
+  0.75 ». `_ask` reboucle : il corrige un chiffre, pas huit.
+- La virgule et les espaces se lisent partout de la même façon — « 1 500 »
+  vaut 1500. La question du gain avait son propre nettoyage ; elle passe
+  maintenant par le même.
+- `test_saisie_au_clavier.py` vérifie que ce qu'une question accepte est
+  exactement ce que `DecisionJournal.add` accepte. Deux écritures de la même
+  règle finissent par diverger, et celle qui se tromperait ferait perdre la
+  saisie à la question suivante.
+- Aucun message neuf ne contient de caractère que sa console Windows ne sait
+  pas afficher : `test_windows_console.py` a attrapé un tiret cadratin et une
+  espace fine insécable au passage, et il avait raison.
+
 ## 3.11.0 — Une règle, un domicile : les vignettes cessent de contredire les phrases
 
 La correction de la calibration avait laissé quatre copies vivantes. La
