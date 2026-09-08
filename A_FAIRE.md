@@ -184,8 +184,24 @@ Rien ne part sur un serveur.
 
    ```powershell
    cd $HOME\Documents\SINGULAR
+   git fetch origin
+   git checkout claude/decision-companion-rebuild-3k25h3
    git pull
    python -m pip install -e ".[analyse]"
+   ```
+
+   **`git pull` seul ne suffit pas**, et c'est le piège : il met à jour la
+   branche sur laquelle tu es, pas celle qui porte le travail. Ton clone est
+   resté sur celle d'une séance précédente. La commande ne dit rien, ne se
+   plaint de rien, et rend simplement l'ancienne version — on ne s'en aperçoit
+   qu'en cherchant pourquoi le bouton annoncé n'est pas là. D'où le `checkout`
+   au-dessus, et la branche nommée est celle que `CLAUDE.md` déclare : un test
+   refuse que les deux se séparent.
+
+   Pour vérifier d'un coup que tu es au bon endroit, avant tout le reste :
+
+   ```powershell
+   python tools/check_repo_state.py
    ```
 
    `python -m pip` et pas `pip` seul : sur Windows, `pip` n'est pas toujours

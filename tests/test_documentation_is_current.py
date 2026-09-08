@@ -124,13 +124,26 @@ def test_the_clone_command_names_the_branch_the_mandate_declares():
     declaree = declared_work_branch(_read("CLAUDE.md"))
     assert declaree, "CLAUDE.md ne nomme plus de branche de travail"
 
-    clonee = re.search(r"lg2 clone -b (\S+)", _read("A_FAIRE.md"))
+    a_faire = _read("A_FAIRE.md")
+
+    clonee = re.search(r"lg2 clone -b (\S+)", a_faire)
     assert clonee, "la commande de clonage a disparu d'A_FAIRE.md ou changé de forme"
 
     assert clonee.group(1) == declaree, (
         f"A_FAIRE.md fait cloner « {clonee.group(1)} » alors que le mandat "
         f"déclare « {declaree} » comme branche de travail.\n"
         "Le téléphone installerait une version qui n'a pas le travail en cours."
+    )
+
+    # Le PC a la même faille, par un autre chemin : `git pull` met à jour la
+    # branche où l'on est, pas celle qui porte le travail. Un clone resté sur
+    # la branche d'une séance précédente ne bouge donc pas, sans rien dire.
+    sortie = re.search(r"git checkout (\S+)", a_faire)
+    assert sortie, "la commande qui place le PC sur la bonne branche a disparu d'A_FAIRE.md"
+    assert sortie.group(1) == declaree, (
+        f"A_FAIRE.md fait basculer le PC sur « {sortie.group(1)} » alors que le "
+        f"mandat déclare « {declaree} ».\n"
+        "Le PC resterait sur l'ancienne version, et `git pull` ne le dirait pas."
     )
 
 
