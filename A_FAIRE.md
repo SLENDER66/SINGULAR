@@ -117,7 +117,7 @@ L'ancienne clé cesse alors de fonctionner, et l'app en redemandera une neuve.
 tourne dans **a-Shell** sans rien installer. Une fois, dans a-Shell :
 
 ```
-lg2 clone -b claude/remote-control-feedback-ndpzle https://github.com/SLENDER66/SINGULAR
+lg2 clone -b claude/decision-companion-rebuild-3k25h3 https://github.com/SLENDER66/SINGULAR
 ```
 
 Puis, chaque matin :
@@ -128,6 +128,19 @@ cd SINGULAR && python -m singular sage
 
 Et Safari sur `http://127.0.0.1:8765/`. Pas de jeton : rien ne sort du
 téléphone.
+
+La branche nommée ci-dessus est celle que `CLAUDE.md` déclare comme branche de
+travail. Ce n'est pas une coïncidence à maintenir à la main :
+`test_documentation_is_current.py` refuse que les deux se séparent. Une
+commande de clonage qui nomme une branche périmée ne casse rien — elle rend
+simplement l'ancienne version, avec les défauts qu'on croyait corrigés, et on
+ne s'en aperçoit qu'en cherchant pourquoi le bouton promis n'est pas là.
+
+**Ce qui ne marche pas depuis le téléphone seul :** les boutons 💬 et 🔎. Ils
+ont besoin du paquet `anthropic`, qui ne fait pas partie du cœur — c'est
+précisément ce qui permet au reste de tourner sans rien installer. Le journal,
+le rapport, les verdicts et la Notice marchent ; les deux facultés qui
+appellent un modèle se déclarent coupées et le disent.
 
 Deux réserves, non vérifiées d'ici. iOS suspend les applications passées à
 l'arrière-plan : basculer vers Safari peut couper le serveur — si la page ne

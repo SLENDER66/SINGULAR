@@ -8,7 +8,7 @@ SLENDER66/SINGULAR
 
 Branche de travail :
 
-claude/remote-control-feedback-ndpzle
+claude/decision-companion-rebuild-3k25h3
 
 Branche par défaut — c'est d'elle que part ton conteneur. Elle a été laissée
 39 commits en arrière une fois, et une séance a démarré sans le Sage, sans

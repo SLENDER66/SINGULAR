@@ -90,6 +90,50 @@ def test_usage_does_not_promise_commands_that_do_not_exist():
     assert not phantom, f"USAGE.md décrit des commandes inexistantes : {phantom}"
 
 
+# --- la branche que les documents envoient chercher ---------------------------
+
+def test_the_clone_command_names_the_branch_the_mandate_declares():
+    """Un clonage qui nomme une branche périmée rend l'ancienne version, en silence.
+
+    `A_FAIRE.md` donne la commande à taper dans a-Shell pour installer SINGULAR
+    sur le téléphone, sans PC. Elle nomme une branche. Le mandat en nomme une
+    aussi, et c'est celle-là qui porte le travail — c'est ce que le hook de
+    démarrage vérifie à chaque séance.
+
+    Les deux se sont séparées : la commande de clonage est restée sur la
+    branche d'une séance précédente pendant que le travail avançait ailleurs.
+    Ça ne casse rien, et c'est le problème. On obtient une app qui démarre,
+    qui a l'air normale, et à laquelle manquent les corrections qu'on croit
+    avoir. On ne s'en aperçoit qu'en cherchant pourquoi le bouton promis n'est
+    pas là — un jour où l'on n'a que son téléphone, donc le jour où c'est le
+    plus cher.
+
+    Ce test ne vérifie pas que la branche est à jour : ça demande le serveur, et
+    c'est le travail de `tools/check_repo_state.py`, que le hook lance au
+    démarrage. Il vérifie que les deux documents ne peuvent pas se contredire,
+    ce qui se lit sans réseau et tient dès qu'un seul des deux est corrigé.
+    """
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from check_repo_state import declared_work_branch
+    finally:
+        sys.path.pop(0)
+
+    declaree = declared_work_branch(_read("CLAUDE.md"))
+    assert declaree, "CLAUDE.md ne nomme plus de branche de travail"
+
+    clonee = re.search(r"lg2 clone -b (\S+)", _read("A_FAIRE.md"))
+    assert clonee, "la commande de clonage a disparu d'A_FAIRE.md ou changé de forme"
+
+    assert clonee.group(1) == declaree, (
+        f"A_FAIRE.md fait cloner « {clonee.group(1)} » alors que le mandat "
+        f"déclare « {declaree} » comme branche de travail.\n"
+        "Le téléphone installerait une version qui n'a pas le travail en cours."
+    )
+
+
 # --- la version publiée ------------------------------------------------------
 
 def test_the_published_version_has_a_changelog_entry():
