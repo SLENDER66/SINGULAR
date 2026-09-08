@@ -28,19 +28,25 @@ Les deux branches ont été rattrapées le soir même, en avance rapide, sans ri
 perdre. La commande ci-dessus le dira si ça se défait.
 
 **Ce qui reste et qui n'appartient qu'à toi :** des branches traînent encore sur
-GitHub. La commande ci-dessus les liste. Les supprimer ou les garder est ton
+GitHub. La commande ci-dessus les liste. Depuis le 8 septembre,
+`claude/remote-control-feedback-ndpzle` en fait partie : elle a été mise au
+même commit que la branche par défaut, donc elle ne porte plus rien qui lui
+soit propre. Les supprimer ou les garder est ton
 choix ; ce fichier ne prétendra pas qu'elles sont supprimées.
 
 Une session ne peut pas les supprimer : le proxy réseau des conteneurs refuse
 l'opération, vérifié. Le geste est donc le tien — sur GitHub, onglet **Branches**,
 icône corbeille — ou depuis ton PC : `git push origin --delete <nom>`.
 
-Le tri a été fait le 7 septembre 2026, pour ne pas être refait :
+Le tri a été fait le 7 septembre 2026, pour ne pas être refait. Ce tableau est
+une **analyse**, pas un inventaire : il dit ce que chaque branche portait, pas
+lesquelles existent aujourd'hui. Pour l'inventaire, une seule source —
+`python tools/check_repo_state.py`, qui interroge le serveur. Trois des lignes
+d'origine nommaient des branches que tu as depuis supprimées ; les recopier
+ici une deuxième fois ne ferait que recommencer.
 
 | Branche | Commits qu'elle est seule à porter |
 |---|---|
-| `claude/remote-control-0pu0vh` | aucun |
-| `claude/singular-mandate-state-check-s1088v` | aucun |
 | `claude/singular-startup-hook-czr3hp` | aucun |
 | `archive/main-2026-09-03` | 191 — et c'est **exactement le même commit que `main`** |
 | `v51-final` | 132 — **rien d'unique, supprimable** |
