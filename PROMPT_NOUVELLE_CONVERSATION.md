@@ -103,7 +103,27 @@ CV n'est pas fini, cette action porte sur le CV, découpé en étapes courtes.
 C'est délibéré : je ne candidate pas encore, et un suivi qui me réclamerait
 des candidatures serait vide toute la semaine d'essai.
 
-Ces deux outils sont la seule chose qui décide de la suite. **Ne construis
+**Troisième chose, depuis le 7 septembre au soir : la conversation.**
+`python -m singular parle` au clavier, et le bouton 💬 dans l'app du téléphone
+— au-dessus du `+`. Elle connaît le rapport du jour et le fil précédent, et
+elle **ne peut pas écrire dans le journal** : ce n'est pas une consigne, c'est
+une absence d'import, vérifiée par un test. Enregistrer reste le `+`.
+
+**Où j'en suis exactement, et c'est la première chose à me demander.** J'ai
+acheté une clé d'API le 7 septembre, 5 $ de crédit, et j'étais en train de
+l'installer quand la session s'est arrêtée. Dernier point connu : le
+`python -m pip install -e ".[analyse]"` était l'étape qui manquait, et je ne
+t'ai pas dit si elle a abouti. **Ne suppose rien** — demande-moi ce
+qu'affiche :
+
+```powershell
+python -m singular parle "dis juste bonjour"
+```
+
+S'il répond, tout est en place. S'il parle du paquet `anthropic`, l'install
+n'a pas abouti. S'il parle de `ANTHROPIC_API_KEY`, j'ai changé de fenêtre.
+
+Ces trois outils sont la seule chose qui décide de la suite. **Ne construis
 rien de neuf tant que je ne t'ai pas dit ce qui me manque en m'en servant.**
 
 **L'application native Swift n'est pas la priorité et ne bloque rien.** Le
@@ -125,6 +145,27 @@ python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien chan
 python tools/check_xcode_project.py                          # le projet Xcode tient
 python proto/suivi_candidatures.py < /dev/null               # le proto s'affiche
 ```
+
+## Mes commandes s'écrivent dans MA fenêtre
+
+**Je suis sur Windows, dans PowerShell.** Deux fois le 7 septembre, une
+commande écrite pour moi a échoué pour une raison qui n'avait rien à voir avec
+SINGULAR :
+
+- `set ANTHROPIC_API_KEY=...` ne fait rien en PowerShell. La forme est
+  `$env:ANTHROPIC_API_KEY = "..."`.
+- `pip install` suppose que `pip` est dans le PATH et vise le bon Python.
+  Aucune des deux n'est acquise ici. La forme est `python -m pip install`.
+
+Les deux échouent en silence ou de travers, et je les découvre seul sans
+pouvoir faire le lien. `tests/test_commandes_de_sa_fenetre.py` tient la règle
+maintenant : toute commande écrite pour moi doit marcher dans `cmd`, dans
+PowerShell et sous Unix sans être réécrite.
+
+Mon clone est dans `C:\Users\Utilisateur\Documents\SINGULAR`. **Il ne se met
+pas à jour tout seul** : si tu viens de pousser quelque chose, la première
+chose que je dois faire est `git pull` — sinon rien de ce que tu as écrit
+n'existe chez moi, et les étapes suivantes échouent sans dire pourquoi.
 
 ## Contraintes — ne les redécouvre pas
 
@@ -178,10 +219,15 @@ code change.**
 ## Ce qui décide de la suite
 
 Pas un compilateur, pas une liste de facultés : **une semaine d'usage**, et
-maintenant deux outils à observer, le Sage et `proto/suivi_candidatures.py`.
-N'écris pas « Mémoire » avant que je t'aie dit ce qui me manque en m'en
-servant. Construire pour un usage que personne n'a observé est exactement ce
-que la section 0 interdit.
+maintenant trois choses à observer — le Sage, `proto/suivi_candidatures.py`,
+et la conversation, dès qu'elle tournera chez moi. N'écris pas « Mémoire »
+avant que je t'aie dit ce qui me manque en m'en servant. Construire pour un
+usage que personne n'a observé est exactement ce que la section 0 interdit.
+
+Le 7 septembre a été une journée de construction dense — trois facultés, la
+conversation servie au téléphone, un compteur de dépense. **La suite ne l'est
+pas.** La prochaine information utile vient de moi en train de m'en servir,
+pas d'une session qui continue sur sa lancée.
 
 Le prototype est **jetable, et c'est le but**. S'il ne sert pas au bout d'une
 semaine, on le supprime : c'est un résultat, pas un échec. S'il sert, ce qui
@@ -206,6 +252,12 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 2. `ActionRequest.capability` (la capacité **nommée**, pas le jeton `cap_`)
    vaut `None` par défaut. Faut-il la rendre obligatoire pour toute action
    exécutable ?
+3. **Des branches mortes traînent sur `origin`** — le hook de démarrage les
+   liste à chaque démarrage, avec leur compte du jour. Aucune ne porte de
+   travail unique, c'est vérifié et écrit. Les supprimer est un geste que je
+   dois faire moi-même : la passerelle bloque `git push --delete` depuis le
+   conteneur, et aucun outil disponible ne supprime une branche. Ne me le
+   propose pas une troisième fois.
 
 ## Pistes d'audit encore ouvertes
 
