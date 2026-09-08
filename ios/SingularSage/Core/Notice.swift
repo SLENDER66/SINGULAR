@@ -72,6 +72,10 @@ struct Report: Sendable {
     var hitRate: Double?
     var overconfidence: Double?
     var tiersWithDecisions: Set<Tier> = []
+    /// Les probabilités annoncées sur ce qui a été tranché, dans l'ordre.
+    /// Une moyenne ne dit pas si un écart vient du hasard : voir
+    /// `chanceDuHasard`.
+    var resolvedProbabilities: [Double] = []
     /// Les heures posées hors des rangs fondateurs — les seules que
     /// `foundationItem` a le droit d'appeler « ailleurs ».
     var hoursOutsideFoundation = 0.0
@@ -91,6 +95,7 @@ struct Report: Sendable {
         report.hoursThatWorked = Numbers.round(
             entries.filter { $0.status == .happened }.reduce(0) { $0 + $1.costHours }, places: 1)
         report.tiersWithDecisions = Set(entries.map(\.tier))
+        report.resolvedProbabilities = settled.map(\.probability)
         report.hoursOutsideFoundation = Numbers.round(
             entries.filter { !Tier.foundation.contains($0.tier) }.reduce(0) { $0 + $1.costHours },
             places: 1)
@@ -123,6 +128,10 @@ enum NoticeEngine {
 
     /// Nombre de verdicts en dessous duquel une calibration ne veut rien dire.
     static let calibrationMinimum = 3
+
+    /// Au-delà de quelle rareté un écart cesse de s'expliquer par le hasard.
+    /// Une fois sur vingt — conventionnel, écrit plutôt que sous-entendu.
+    static let calibrationHasard = 0.05
 
     static func build(entries: [Entry], at moment: Date, chainIntact: Bool) -> Notice {
         let report = Report.build(entries: entries, at: moment, chainIntact: chainIntact)
@@ -236,26 +245,91 @@ enum NoticeEngine {
         )
     }
 
+    /// La chance qu'un écart au moins aussi grand sorte de probabilités justes.
+    ///
+    /// La distribution du nombre de réussites se construit en ajoutant les
+    /// paris un par un : chaque pari déplace une part `p` du poids vers « une
+    /// réussite de plus ». Exact même quand les probabilités diffèrent — une
+    /// moyenne aurait approximé la réponse à la seule question pour laquelle
+    /// ce journal existe.
+    ///
+    /// Mêmes opérations, dans le même ordre, que `chance_du_hasard` en Python :
+    /// les vecteurs comparent les phrases produites, donc les nombres.
+    static func chanceDuHasard(_ probabilities: [Double], hits: Int) -> Double {
+        guard !probabilities.isEmpty else { return 1.0 }
+        var distribution: [Double] = [1.0]
+        for p in probabilities {
+            var suivante = [Double](repeating: 0.0, count: distribution.count + 1)
+            for (reussites, poids) in distribution.enumerated() {
+                suivante[reussites] += poids * (1.0 - p)
+                suivante[reussites + 1] += poids * p
+            }
+            distribution = suivante
+        }
+        let attendu = probabilities.reduce(0, +)
+        let ecart = abs(Double(hits) - attendu)
+        return distribution.enumerated()
+            .filter { abs(Double($0.offset) - attendu) >= ecart - 1e-9 }
+            .reduce(0.0) { $0 + $1.element }
+    }
+
+    /// « une fois sur 6 » — le chiffre qu'on lit, pas une probabilité à traduire.
+    ///
+    /// Le groupement des milliers est fait à la main, avec une espace fine
+    /// insécable : un `NumberFormatter` dépend de la langue du téléphone, et
+    /// deux appareils afficheraient deux phrases différentes.
+    static func uneFoisSur(_ chance: Double) -> String {
+        if chance <= 0 || 1.0 / chance > 1_000_000 {
+            return "moins d'une fois sur un million"
+        }
+        let sur = max(2, Int((1.0 / chance).rounded()))
+        var chiffres = Array(String(sur))
+        var index = chiffres.count - 3
+        while index > 0 {
+            chiffres.insert("\u{202f}", at: index)
+            index -= 3
+        }
+        return "une fois sur \(String(chiffres))"
+    }
+
     private static func calibrationItem(_ report: Report) -> NoticeItem? {
         guard let gap = report.overconfidence,
               let predicted = report.meanProbability,
               let happened = report.hitRate,
               report.resolved >= calibrationMinimum,
               abs(gap) >= calibrationGap else { return nil }
+
+        let hits = Int((happened * Double(report.resolved)).rounded())
+        let hasard = chanceDuHasard(report.resolvedProbabilities, hits: hits)
+        let constat = "Tu annonces \(Numbers.percent(predicted)) en moyenne ; "
+            + "il en arrive \(Numbers.percent(happened))."
+
+        if hasard > calibrationHasard {
+            return NoticeItem(
+                severity: .info,
+                title: gap > 0 ? "Tu annonces plus que ce qui arrive"
+                               : "Il arrive plus que ce que tu annonces",
+                detail: constat + " Sur \(report.resolved) verdicts, un écart pareil sort "
+                    + "du pur hasard \(uneFoisSur(hasard)) : c'est encore trop peu pour en "
+                    + "conclure quoi que ce soit. Regarde-le sans le corriger."
+            )
+        }
+
         if gap > 0 {
             return NoticeItem(
                 severity: .attention,
                 title: "Tu te surestimes de \(Numbers.signedPercent(gap))",
-                detail: "Tu annonces \(Numbers.percent(predicted)) en moyenne ; il en arrive \(Numbers.percent(happened)). "
-                    + "Sur \(report.resolved) verdicts, ce n'est plus de la malchance. "
+                detail: constat + " Sur \(report.resolved) verdicts, ce n'est plus de la "
+                    + "malchance : le hasard seul produirait cet écart \(uneFoisSur(hasard)). "
                     + "Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
             )
         }
         return NoticeItem(
             severity: .info,
             title: "Tu te sous-estimes de \(Numbers.signedPercent(gap))",
-            detail: "Tu annonces \(Numbers.percent(predicted)) ; il en arrive \(Numbers.percent(happened)). "
-                + "Tu réussis plus souvent que tu ne l'oses : tes paris sont trop petits."
+            detail: constat + " Sur \(report.resolved) verdicts, ce n'est plus de la "
+                + "malchance : le hasard seul produirait cet écart \(uneFoisSur(hasard)). "
+                + "Tu réussis plus souvent que tu ne l'oses, tes paris sont trop petits."
         )
     }
 

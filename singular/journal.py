@@ -614,6 +614,12 @@ class DecisionJournal:
                 sum(e.cost_hours for e in all_entries if e.expected_gain_eur is None), 1),
             "irreversible_open": sum(
                 1 for e in open_entries if e.reversibility is Reversibility.IRREVERSIBLE),
+            # Les probabilités annoncées sur ce qui a été tranché, dans l'ordre.
+            # La Notice en a besoin pour répondre exactement à « est-ce que mes
+            # 70 % arrivent 7 fois sur 10 ? » : la moyenne seule ne dit pas si
+            # un écart vient du hasard, et c'est cette question-là que le
+            # journal existe pour trancher.
+            "resolved_probabilities": [e.probability for e in resolved],
             "mean_brier": round(sum(brier) / len(brier), 4) if brier else None,
             "mean_probability": round(mean_probability, 2) if mean_probability is not None else None,
             "hit_rate": round(hit_rate, 2) if hit_rate is not None else None,

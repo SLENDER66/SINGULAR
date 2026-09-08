@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.10.0 — La calibration ne conclut plus avant d'en avoir le droit
+
+C'est la question pour laquelle ce journal existe : « est-ce que mes 70 %
+arrivent 7 fois sur 10 ? » Elle était mal répondue.
+
+Dès trois verdicts, la Notice affirmait « sur 3 verdicts, ce n'est plus de la
+malchance » et enchaînait sur « baisse tes probabilités d'autant ». Sur trois
+paris à 75 %, n'en gagner qu'un arrive **une fois sur six** par pur hasard.
+L'outil conseillait donc de corriger un jugement que rien ne montrait faux — et
+corriger un jugement juste, c'est le dérégler.
+
+- La Notice calcule maintenant, exactement, à quelle fréquence des probabilités
+  justes produiraient un écart au moins aussi grand, et affiche le nombre :
+  « une fois sur 6 », « une fois sur 117 ». En dessous d'une fois sur vingt elle
+  conclut ; au-dessus elle montre l'écart et dit de ne pas le corriger.
+- Le calcul est exact, pas approché par la moyenne des probabilités. Deux paris
+  à 5 % et un à 95 %, tous perdus : c'est le pari sûr qui parle, et une moyenne
+  à 35 % l'effacerait. Une fois sur 21 — le Sage le dit ; avec la moyenne il se
+  serait tu.
+- Il reste déterministe : de l'arithmétique sur des flottants, sans réseau,
+  sans modèle, dans le même ordre des deux côtés du portage.
+- Un seuil plat aurait été faux dans les deux sens : trois verdicts à 75 % ne
+  prouvent rien, mais quatre paris à 90 % tous perdus valent une chance sur dix
+  mille et méritent d'être dits. C'est l'écart **et** le nombre.
+- Le port Swift porte le même calcul. Deux vecteurs de parité neufs le tiennent,
+  un de chaque côté du seuil ; le cas d'arrondi a été refait pour qu'il continue
+  de séparer les deux formules de `Numbers.round`.
+- `review()` expose `resolved_probabilities` : la moyenne seule ne permettait
+  pas de répondre.
+
 ## 3.9.1 — La leçon est la sienne, ou rien
 
 Le journal écrivait dans le champ « leçon », quand Thomas n'en donnait pas :

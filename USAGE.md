@@ -348,6 +348,29 @@ Les deux chiffres qui comptent : **les heures sans verdict** et **l'écart de
 calibration**. Le premier mesure l'activité qui ne s'est jamais transformée en
 résultat. Le second mesure de combien tu te crois.
 
+### Quand la Notice conclut sur ta calibration, et quand elle s'abstient
+
+L'écart s'affiche dès trois verdicts — c'est ce que tu veux voir. Mais dire
+« ce n'est plus de la malchance » est une affirmation, et elle doit être vraie.
+
+Le Sage calcule donc, exactement, à quelle fréquence des probabilités **justes**
+produiraient un écart au moins aussi grand, et il te donne le nombre : « une
+fois sur 6 », « une fois sur 117 ». En dessous d'une fois sur vingt, il conclut
+et te conseille de baisser tes probabilités. Au-dessus, il montre l'écart et te
+dit de le regarder sans le corriger.
+
+Ça compte, parce que la version d'avant affirmait « sur 3 verdicts, ce n'est
+plus de la malchance » et enchaînait sur « baisse tes probabilités ». Sur trois
+paris à 75 %, n'en gagner qu'un arrive **une fois sur six** par pur hasard :
+l'outil conseillait de corriger un jugement que rien ne montrait faux. Corriger
+un jugement juste, c'est le dérégler — sur la seule question pour laquelle ce
+journal existe.
+
+Le calcul tient compte de **chaque** probabilité, pas de leur moyenne. Deux
+paris à 5 % et un à 95 %, tous perdus : la moyenne les ramènerait à 35 % et
+effacerait ce qui compte, alors que c'est le pari sûr qui est tombé. Une fois
+sur 21, donc : le Sage le dit.
+
 ## Le rituel
 
 | Quand | Quoi | Durée |

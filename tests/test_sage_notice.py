@@ -160,16 +160,115 @@ def test_nothing_is_said_when_both_founding_ranks_are_served(tmp_path):
 
 # --- ce que vaut la confiance ------------------------------------------------
 
+def _verdicts(journal, *, combien, reussites, probability):
+    """`combien` paris à la même probabilité, dont `reussites` gagnés."""
+    for index in range(combien):
+        entry = _add(journal, probability=probability, tier=Tier.REVENUS,
+                     title=f"Décision {index}")
+        journal.resolve(entry.entry_id, happened=index < reussites,
+                        now=NOW + timedelta(days=1))
+
+
+def _calibration(journal):
+    return next((item for item in build_notice(journal, now=NOW + timedelta(days=2)).items
+                 if "estimes" in item.title or "annonces plus" in item.title
+                 or "arrive plus" in item.title), None)
+
+
 def test_overconfidence_is_named_once_there_is_enough_to_say_it(tmp_path):
+    """Quatre paris à 90 % tous perdus : le hasard ne fait pas ça."""
     journal = _journal(tmp_path)
-    for index in range(4):
-        entry = _add(journal, probability=0.9, tier=Tier.REVENUS, title=f"Décision {index}")
-        journal.resolve(entry.entry_id, happened=False, now=NOW + timedelta(days=1))
+    _verdicts(journal, combien=4, reussites=0, probability=0.9)
     _add(journal, tier=Tier.STABILITE)
 
-    item = next(item for item in build_notice(journal, now=NOW + timedelta(days=2)).items
-                if "surestimes" in item.title)
+    item = _calibration(journal)
+    assert item is not None and "surestimes" in item.title
+    assert item.severity == "ATTENTION"
     assert "90%" in item.detail and "0%" in item.detail
+    # 0,1^4 = 1/10 000, vérifiable à la main.
+    assert "une fois sur 10\u202f000" in item.detail, item.detail
+
+
+def test_three_verdicts_do_not_prove_anything_and_the_report_says_so(tmp_path):
+    """« Sur 3 verdicts, ce n'est plus de la malchance » — c'en était.
+
+    Un pari sur trois gagné quand on en annonçait trois quarts : le hasard seul
+    produit cet écart une fois sur six. L'outil l'affirmait pourtant comme un
+    fait, et enchaînait sur « baisse tes probabilités ». Corriger un jugement
+    que rien ne montre faux, c'est le dérégler — sur la seule question pour
+    laquelle ce journal existe.
+
+    Le compte est vérifiable à la main : sur trois paris à 75 %, obtenir 0 ou 1
+    réussite vaut 0,25³ + 3 × 0,75 × 0,25² = 0,015625 + 0,140625, soit 15,6 %.
+    """
+    journal = _journal(tmp_path)
+    _verdicts(journal, combien=3, reussites=1, probability=0.75)
+
+    item = _calibration(journal)
+    assert item is not None, "l'écart doit rester visible : il veut le voir"
+    assert item.severity == "INFO", "un constat, pas un reproche"
+    assert "surestimes" not in item.title
+    assert "une fois sur 6" in item.detail, item.detail
+    assert "plus de la malchance" not in item.detail
+    assert "Baisse tes probabilités" not in item.detail
+
+
+def test_ten_verdicts_can_still_be_luck_and_the_report_admits_it(tmp_path):
+    """Le nombre de verdicts ne suffit pas : c'est l'écart ET le nombre."""
+    journal = _journal(tmp_path)
+    _verdicts(journal, combien=10, reussites=5, probability=0.75)
+
+    item = _calibration(journal)
+    assert item is not None and item.severity == "INFO"
+    assert "trop peu pour en conclure" in item.detail
+
+
+def test_a_sure_bet_that_failed_is_not_diluted_by_the_long_shots(tmp_path):
+    """Deux paris à 5 %, un à 95 %, aucun tenu. C'est le 95 % qui parle.
+
+    Une moyenne les ramène tous à 35 % et efface exactement ce qui compte :
+    perdre deux paris à 5 % est banal, perdre celui à 95 % ne l'est pas. Le
+    calcul exact donne une chance sur 21 et conclut ; la moyenne donnerait
+    une chance sur 3 et se tairait.
+
+    Ce test passe par la Notice, pas par la fonction : c'est le branchement
+    qu'il tient. Un raccourci par la moyenne laisserait la fonction juste et
+    le rapport faux, ce qui est le pire des deux.
+    """
+    journal = _journal(tmp_path)
+    for index, probability in enumerate((0.05, 0.05, 0.95)):
+        entry = _add(journal, probability=probability, tier=Tier.REVENUS,
+                     title=f"Pari {index}")
+        journal.resolve(entry.entry_id, happened=False, now=NOW + timedelta(days=1))
+
+    item = _calibration(journal)
+    assert item is not None
+    assert item.severity == "ATTENTION", "le pari sûr qui tombe doit se dire"
+    assert "surestimes" in item.title
+    # 0,95 × 0,95 × 0,05 = 0,0475, soit une fois sur 21.
+    assert "une fois sur 21" in item.detail, item.detail
+
+
+def test_the_chance_of_luck_is_exact_even_when_the_bets_differ(tmp_path):
+    """Une moyenne aurait approximé la réponse à la seule question qui compte.
+
+    Deux paris à 50 % et deux à 90 % n'ont pas la même distribution que quatre
+    paris à 70 %, et c'est justement là qu'un raccourci se paierait.
+    """
+    from singular.sage.notice import chance_du_hasard
+
+    # Un seul pari à 100 %... impossible dans le journal, mais la fonction doit
+    # rester bornée : une certitude tenue n'a rien d'improbable.
+    assert chance_du_hasard([0.5], 1) == pytest.approx(1.0)
+    # Deux paris à 50 %, aucun gagné : (0,5)² = 0,25 des deux côtés = 0,5.
+    assert chance_du_hasard([0.5, 0.5], 0) == pytest.approx(0.5)
+    # Quatre paris à 90 %, aucun gagné : 0,1^4.
+    assert chance_du_hasard([0.9] * 4, 0) == pytest.approx(1e-4, rel=1e-9)
+    # Probabilités mêlées : le calcul exact, pas celui de leur moyenne.
+    melange = chance_du_hasard([0.5, 0.5, 0.9, 0.9], 0)
+    moyenne = chance_du_hasard([0.7] * 4, 0)
+    assert melange != pytest.approx(moyenne), "la moyenne n'est pas la bonne réponse"
+    assert melange == pytest.approx(0.5 * 0.5 * 0.1 * 0.1)
 
 
 def test_two_verdicts_are_not_enough_to_call_someone_overconfident(tmp_path):

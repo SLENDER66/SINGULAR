@@ -31,6 +31,12 @@ CALIBRATION_GAP = 0.15
 #: Nombre de verdicts en dessous duquel une calibration ne veut rien dire.
 CALIBRATION_MINIMUM = 3
 
+#: Au-delà de quelle rareté un écart cesse de s'expliquer par le hasard.
+#: Une fois sur vingt : le seuil est conventionnel, il est écrit ici plutôt que
+#: sous-entendu, et la phrase affichée donne la rareté réelle pour qu'on puisse
+#: en juger autrement.
+CALIBRATION_HASARD = 0.05
+
 #: Les deux premiers rangs de la constitution. Les négliger est le seul défaut
 #: que le Sage signale même quand tout le reste va bien.
 FOUNDATION = (Tier.STABILITE, Tier.REVENUS)
@@ -182,25 +188,100 @@ def foundation_item(report: dict[str, Any]) -> NoticeItem | None:
     )
 
 
+def chance_du_hasard(probabilities: list[float], hits: int) -> float:
+    """La chance qu'un écart au moins aussi grand sorte de probabilités justes.
+
+    C'est la question du journal, posée exactement : si chacune de ses
+    prédictions valait ce qu'il a annoncé, à quelle fréquence obtiendrait-il un
+    résultat aussi éloigné de ce qu'il attendait ?
+
+    La distribution du nombre de réussites se construit en ajoutant les paris
+    un par un — chaque pari déplace une part `p` du poids vers « une réussite
+    de plus ». Exact, y compris quand les probabilités diffèrent entre elles :
+    une moyenne aurait été une approximation, et approximer la réponse à la
+    seule question pour laquelle cet outil existe serait une drôle d'économie.
+
+    Déterministe, sans réseau, sans modèle : de l'arithmétique sur des
+    flottants, dans le même ordre des deux côtés du portage.
+    """
+    if not probabilities:
+        return 1.0
+    distribution = [1.0]
+    for p in probabilities:
+        suivante = [0.0] * (len(distribution) + 1)
+        for reussites, poids in enumerate(distribution):
+            suivante[reussites] += poids * (1.0 - p)
+            suivante[reussites + 1] += poids * p
+        distribution = suivante
+    attendu = sum(probabilities)
+    ecart = abs(hits - attendu)
+    return sum(poids for reussites, poids in enumerate(distribution)
+               if abs(reussites - attendu) >= ecart - 1e-9)
+
+
+def _une_fois_sur(chance: float) -> str:
+    """« une fois sur 6 » — le chiffre qu'on lit, pas une probabilité à traduire.
+
+    « 0,038 » demande une conversion mentale avant de vouloir dire quelque
+    chose, et ce rapport se lit d'un pouce, le matin. Au-delà du million, le
+    compte exact n'apprend plus rien : il devient un nombre qu'on saute.
+    """
+    if chance <= 0 or 1 / chance > 1_000_000:
+        return "moins d'une fois sur un million"
+    sur = max(2, round(1 / chance))
+    return f"une fois sur {sur:,}".replace(",", "\u202f")
+
+
 def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
+    """L'écart entre ce qu'il annonce et ce qui arrive — sans conclure trop tôt.
+
+    C'est la question pour laquelle ce journal existe : « est-ce que mes 70 %
+    arrivent 7 fois sur 10 ? » Elle mérite donc d'être répondue exactement.
+
+    Elle ne l'était pas. Dès trois verdicts, l'observation affirmait « ce n'est
+    plus de la malchance » et enchaînait sur « baisse tes probabilités ». Sur
+    trois verdicts à 75 %, n'en réussir qu'un arrive une fois sur six par pur
+    hasard : l'outil conseillait de corriger un jugement que rien ne montrait
+    faux, et corriger un jugement juste, c'est le dérégler.
+
+    Deux états, donc, et la différence est dite plutôt que sous-entendue : en
+    dessous de `CALIBRATION_CERTAIN` verdicts on montre l'écart et on dit qu'il
+    est encore mince ; au-delà, on peut affirmer qu'il ne vient plus du hasard.
+    """
     gap = report["overconfidence"]
     if gap is None or report["resolved"] < CALIBRATION_MINIMUM or abs(gap) < CALIBRATION_GAP:
         return None
     predicted = report["mean_probability"]
     happened = report["hit_rate"]
+    verdicts = report["resolved"]
+    probabilites = report["resolved_probabilities"]
+    hasard = chance_du_hasard(probabilites, round(report["hit_rate"] * verdicts))
+    constat = f"Tu annonces {predicted:.0%} en moyenne ; il en arrive {happened:.0%}."
+
+    if hasard > CALIBRATION_HASARD:
+        return NoticeItem(
+            "INFO",
+            "Tu annonces plus que ce qui arrive" if gap > 0
+            else "Il arrive plus que ce que tu annonces",
+            f"{constat} Sur {verdicts} verdicts, un écart pareil sort du pur hasard "
+            f"{_une_fois_sur(hasard)} : c'est encore trop peu pour en conclure quoi que "
+            "ce soit. Regarde-le sans le corriger.",
+        )
+
     if gap > 0:
         return NoticeItem(
             "ATTENTION",
             f"Tu te surestimes de {gap:+.0%}",
-            f"Tu annonces {predicted:.0%} en moyenne ; il en arrive {happened:.0%}. "
-            f"Sur {report['resolved']} verdicts, ce n'est plus de la malchance. "
+            f"{constat} Sur {verdicts} verdicts, ce n'est plus de la malchance : le "
+            f"hasard seul produirait cet écart {_une_fois_sur(hasard)}. "
             "Baisse tes probabilités d'autant, ou choisis des paris plus sûrs.",
         )
     return NoticeItem(
         "INFO",
         f"Tu te sous-estimes de {gap:+.0%}",
-        f"Tu annonces {predicted:.0%} ; il en arrive {happened:.0%}. "
-        "Tu réussis plus souvent que tu ne l'oses : tes paris sont trop petits.",
+        f"{constat} Sur {verdicts} verdicts, ce n'est plus de la malchance : le hasard "
+        f"seul produirait cet écart {_une_fois_sur(hasard)}. Tu réussis plus souvent "
+        "que tu ne l'oses, tes paris sont trop petits.",
     )
 
 
@@ -361,5 +442,5 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     )
 
 
-__all__ = ["CALIBRATION_GAP", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS", "foundation_item",
-           "Notice", "NoticeItem", "build_notice"]
+__all__ = ["CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS", "foundation_item",
+           "Notice", "NoticeItem", "build_notice", "chance_du_hasard"]

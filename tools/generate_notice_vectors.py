@@ -128,8 +128,30 @@ CASES: list[dict[str, Any]] = [
                            days=14, created_hour=11, predicted="Un entretien")],
     },
     {
+        "name": "ecart_qui_peut_encore_etre_du_hasard",
+        "why": "Un pari sur trois gagné quand on en annonçait trois quarts : le hasard "
+               "seul fait ça une fois sur six. On montre l'écart, on ne conclut pas.",
+        "at_offset_days": 2,
+        "entries": [
+            _entry(f"Pari {index}", tier=Tier.REVENUS, probability=0.75, days=1,
+                   resolved=index == 0)
+            for index in range(3)
+        ],
+    },
+    {
+        "name": "un_pari_sur_qui_tombe",
+        "why": "Deux paris à 5 % et un à 95 %, aucun tenu. C'est le 95 % qui parle : "
+               "une moyenne les ramènerait tous à 35 % et effacerait le signal.",
+        "at_offset_days": 2,
+        "entries": [
+            _entry("Pari long 1", tier=Tier.REVENUS, probability=0.05, days=1, resolved=False),
+            _entry("Pari long 2", tier=Tier.REVENUS, probability=0.05, days=1, resolved=False),
+            _entry("Pari sûr", tier=Tier.REVENUS, probability=0.95, days=1, resolved=False),
+        ],
+    },
+    {
         "name": "surconfiance",
-        "why": "Quatre verdicts suffisent à le dire ; deux ne suffiraient pas.",
+        "why": "Quatre paris à 90 % tous perdus : une fois sur dix mille. Là, on conclut.",
         "at_offset_days": 2,
         "entries": [
             _entry(f"Pari {index}", tier=Tier.REVENUS, probability=0.9, days=14, resolved=False)
@@ -138,17 +160,17 @@ CASES: list[dict[str, Any]] = [
     },
     {
         "name": "arrondi_sur_une_moitie",
-        "why": "L'écart tombe pile sur une moitié : 0,225 → +23 %, pas +22 %. "
+        "why": "L'écart tombe pile sur une moitié : 0,475 → +47 %, pas +48 %. "
                "Un port qui multiplie par 100 avant d'arrondir bascule ici, "
-               "et se trompe d'un point tous les matins sans rien signaler.",
+               "et se trompe d'un point tous les matins sans rien signaler. "
+               "Huit paris et un seul gagné : assez pour que le titre porte le "
+               "nombre, ce qui est la seule raison d'être de ce cas.",
         "at_offset_days": 2,
         "entries": [
-            _entry("Petit pari 1", tier=Tier.REVENUS, probability=0.05, days=14, resolved=False),
-            _entry("Petit pari 2", tier=Tier.REVENUS, probability=0.05, days=14, resolved=False),
-            _entry("Petit pari 3", tier=Tier.REVENUS, probability=0.05, days=14, resolved=False),
-            _entry("Gros pari", tier=Tier.REVENUS, probability=0.75, days=14, resolved=False),
-            _entry("Loyer", tier=Tier.STABILITE, days=30),
-        ],
+            _entry(f"Pari {index}", tier=Tier.REVENUS, probability=0.6, days=1,
+                   resolved=index == 0)
+            for index in range(8)
+        ] + [_entry("Loyer", tier=Tier.STABILITE, days=30)],
     },
     {
         "name": "trop_peu_de_verdicts_pour_juger",
