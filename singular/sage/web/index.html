@@ -52,6 +52,7 @@
   </section>
 </main>
 
+<button id="offres-button" class="fab third" type="button" aria-label="Chercher des offres">&#128269;</button>
 <button id="parle-button" class="fab second" type="button" aria-label="Parler au Sage">&#128172;</button>
 <button id="add-button" class="fab" type="button" aria-label="Enregistrer une décision">+</button>
 
@@ -73,6 +74,39 @@
       <button type="button" class="ghost" id="parle-oubli">Effacer le fil</button>
       <button type="button" class="ghost" id="parle-close">Fermer</button>
       <button type="submit" class="primary" id="parle-submit">Envoyer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="offres-dialog" class="sheet">
+  <form id="offres-form" method="dialog">
+    <h2>Chercher</h2>
+    <!-- Dit avant, pas après. Un agent qui cherche du travail pour quelqu'un
+         doit annoncer ce qu'il ne fera pas, sinon on se demande, en lisant sa
+         liste, si une candidature est déjà partie. -->
+    <p class="note">Il lit les annonces, il écarte, il propose. <strong>Il ne
+      postule jamais.</strong> Tu décides.</p>
+
+    <label>Une précision, si tu en as une
+      <textarea id="offres-input" name="precision" rows="2" maxlength="2000"
+                autocomplete="off" placeholder="plutôt du tertiaire, pas d'industrie"></textarea>
+    </label>
+
+    <!-- Ce qui quitte le téléphone, lisible avant de partir. Même contenu que
+         « python -m singular offres --blanc » au clavier : il a le droit de
+         relire ce qui est dit de lui. -->
+    <details id="offres-contexte-bloc">
+      <summary>Ce qui part de ton téléphone</summary>
+      <pre id="offres-contexte" class="contexte"></pre>
+    </details>
+
+    <div id="offres-resultat" class="thread" aria-live="polite"></div>
+
+    <p id="offres-cost" class="cost" hidden></p>
+    <p class="form-error" id="offres-error" hidden></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="offres-close">Fermer</button>
+      <button type="submit" class="primary" id="offres-submit">Chercher</button>
     </div>
   </form>
 </dialog>

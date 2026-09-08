@@ -24,6 +24,7 @@ import os
 from typing import Any
 
 from .analyse import AnalyseIndisponible, _sdk, effort_valide
+from .parle import _consommation
 
 #: Comme pour l'analyse : le modèle est un arbitrage de celui qui paie.
 MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_OFFRES_MODELE", "claude-opus-5")
@@ -51,7 +52,15 @@ CRITERES = [
     "traitement d'air de 600 a 50 000 m3/h, avec recuperation par echangeur",
     "a plaques, roue enthalpique ou batteries a eau glycolee.",
     "Diplome : BTS Fluides Energies Domotique.",
-    "Il ne cherche pas d'alternance : il n'a ni ecole ni entreprise.",
+    # Ce qu'il a dit, mot pour mot, est plus ouvert que ce qui etait ecrit ici :
+    # « une reprise d'etudes en alternance m'interesse, mais je n'ai ni ecole
+    # ni entreprise a ce jour ». C'etait devenu « il ne cherche pas
+    # d'alternance » -- une deduction non marquee, qui faisait ecarter des
+    # annonces qu'il aurait voulu voir. La provenance de chaque ligne est dans
+    # `proto/suivi_candidatures.py`, ou celle-ci est marquee DIT.
+    "Une reprise d'etudes en alternance l'interesse, mais il n'a ni ecole ni",
+    "entreprise a ce jour : une offre d'alternance ne se retient que si elle",
+    "dit prendre en charge la recherche d'ecole, et il faut le signaler.",
 ]
 
 INSTRUCTION = """\
@@ -90,8 +99,15 @@ def contexte_pour_recherche(question: str = "") -> str:
     return "\n".join(lignes)
 
 
-def chercher(question: str = "", *, modele: str | None = None, client: Any = None) -> str:
-    """Les offres retenues, en texte. Aucune ecriture, aucune action.
+def chercher(question: str = "", *, modele: str | None = None,
+             client: Any = None) -> tuple[str, dict[str, int]]:
+    """Les offres retenues, et ce que la recherche a coute. Aucune ecriture.
+
+    Le cout est rendu pour la meme raison que dans `parle.repondre`, dont
+    cette fonction est la jumelle : ce qui n'est pas compte ne se voit pas sur
+    le budget, et une recherche web coute nettement plus qu'un tour de
+    conversation -- chaque recherche ramene des pages entieres. Une faculte
+    qui depense sans etre comptee viderait les cinq dollars en silence.
 
     `client` est injectable pour que les tests n'aient besoin ni de reseau ni
     de cle : un test qui appellerait le vrai service testerait la meteo, et
@@ -140,7 +156,8 @@ def chercher(question: str = "", *, modele: str | None = None, client: Any = Non
 
     if reponse.stop_reason == "refusal":
         raise AnalyseIndisponible("le modele a refuse de repondre. Rien n'a ete enregistre.")
-    return "\n".join(b.text for b in reponse.content if b.type == "text").strip()
+    texte = "\n".join(b.text for b in reponse.content if b.type == "text").strip()
+    return texte, _consommation(reponse)
 
 
 __all__ = ["CRITERES", "JETONS_MAX", "MODELE_PAR_DEFAUT", "RECHERCHES_MAX",

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import sys
 
 import pytest
 
@@ -85,18 +86,69 @@ def test_il_ne_connait_ni_le_journal_ni_l_execution() -> None:
     )
 
 
-def test_le_coeur_ne_connait_pas_l_agent() -> None:
-    """Couper l'agent ne doit rien casser du moteur deterministe."""
+def test_le_coeur_ne_charge_pas_l_agent_pour_demarrer() -> None:
+    """Aucun import au chargement : le Sage demarre sur une machine sans agent.
+
+    Un import a l'interieur d'une methode ne s'execute que si on appelle la
+    route. Un import en tete de fichier s'execute a l'ouverture de l'app, et
+    rendrait le journal dependant d'une faculte qui appelle un service. C'est
+    la difference que ce test regarde -- l'ancien interdisait les deux, donc
+    aussi le branchement que Thomas a demande, sans rien prouver de plus.
+    """
     racine = SOURCE.parent
     fautes = []
     for fichier in [*(racine / "sage").rglob("*.py"), racine / "journal.py"]:
         arbre = ast.parse(fichier.read_text(encoding="utf-8"))
-        for noeud in ast.walk(arbre):
-            if isinstance(noeud, ast.ImportFrom) and "offres" in (noeud.module or ""):
-                fautes.append(fichier.name)
+        for noeud in arbre.body:  # le corps du module, pas celui des fonctions
+            noms = []
+            if isinstance(noeud, ast.ImportFrom):
+                noms = [noeud.module or "", *(a.name for a in noeud.names)]
             elif isinstance(noeud, ast.Import):
-                fautes += [fichier.name for a in noeud.names if "offres" in a.name]
+                noms = [a.name for a in noeud.names]
+            fautes += [fichier.name for nom in noms if "offres" in nom]
     assert not fautes, fautes
+
+
+def test_l_agent_retire_ne_casse_rien_d_autre(tmp_path, monkeypatch) -> None:
+    """La preuve par l'acte : on retire le module, tout le gratuit doit marcher.
+
+    Un test d'imports montre que le coeur ne charge pas l'agent. Il ne montre
+    pas que le coeur s'en passe : c'est ce que dit la regle du depot -- une
+    faculte qui a besoin d'un modele doit pouvoir etre coupee sans rien casser
+    d'autre -- et c'est verifiable en coupant pour de bon.
+    """
+    from http import HTTPStatus
+
+    from singular.journal import DecisionJournal, Tier
+    from singular.sage.server import SageApp, SageError
+
+    journal = DecisionJournal(tmp_path / "journal.db")
+    app = SageApp(journal)
+
+    # `None` dans sys.modules : tout import de `singular.offres` echoue, comme
+    # si le fichier n'avait jamais ete livre.
+    monkeypatch.setitem(sys.modules, "singular.offres", None)
+
+    entree = journal.add(title="Postuler", action="candidature", predicted="un entretien",
+                         probability=0.75, tier=Tier.REVENUS, cost_hours=4, horizon_days=14)
+    assert journal.verify() is True
+    assert app.notice()["headline"].startswith("Notice.")
+    assert app.entries()["entries"], "la liste des decisions doit encore se lire"
+    journal.resolve(entree.entry_id, happened=True)
+    assert journal.verify() is True
+
+    for appel in (app.offres_etat, lambda: app.offres({})):
+        with pytest.raises(SageError) as refus:
+            appel()
+        assert refus.value.status == HTTPStatus.SERVICE_UNAVAILABLE
+        assert "marchent sans elle" in refus.value.message
+
+
+def test_le_temoin_du_retrait() -> None:
+    """Sans le sabotage ci-dessus, le test passerait meme s'il ne coupait rien."""
+    import importlib
+
+    assert importlib.import_module("singular.offres") is not None
 
 
 # --- ce qui part, et ce qui revient ------------------------------------------

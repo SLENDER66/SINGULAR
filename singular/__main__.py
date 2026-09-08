@@ -185,7 +185,8 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
     du texte, et rien d'autre ne se produit tant que tu n'as rien fait.
     """
     from .analyse import AnalyseIndisponible
-    from .offres import RECHERCHES_MAX, chercher, contexte_pour_recherche
+    from .offres import MODELE_PAR_DEFAUT, RECHERCHES_MAX, chercher, contexte_pour_recherche
+    from .parle import Quota, bilan, phrase_de_bilan
 
     if args.blanc:
         print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
@@ -196,13 +197,22 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
 
     print(_colour("\n  Recherche en cours. Quelques dizaines de secondes.\n", DIM))
     try:
-        texte = chercher(args.precision, modele=args.modele)
+        texte, cout = chercher(args.precision, modele=args.modele)
     except AnalyseIndisponible as exc:
         print(_colour(f"\n  Recherche impossible : {exc}\n", DIM))
         return 1
 
+    # Meme raison que pour un tour de conversation : la depense se compte
+    # partout, sinon le total affiche sur le telephone est faux de tout ce qui
+    # a ete cherche ici. `ajouter_depense` et pas `consommer` -- le clavier ne
+    # mange pas le plafond du telephone.
+    Quota().ajouter_depense(cout=cout, modele=args.modele or MODELE_PAR_DEFAUT)
+
     print(texte)
-    print(_colour("\n  Rien n'a ete envoye a personne. A toi de decider.\n", DIM))
+    economise = f", {cout['cache_lu']} relus du cache" if cout["cache_lu"] else ""
+    print(_colour(f"\n  [{cout['entree']} jetons envoyes{economise},"
+                  f" {cout['sortie']} rendus] {phrase_de_bilan(bilan())}", DIM))
+    print(_colour("  Rien n'a ete envoye a personne. A toi de decider.\n", DIM))
     return 0
 
 

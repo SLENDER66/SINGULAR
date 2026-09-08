@@ -258,6 +258,32 @@ output { color: var(--text); font-weight: 600; }
   border: 1px solid var(--line);
 }
 
+/* Le troisieme monte encore : empiles, jamais cote a cote -- meme raison que
+   le second, un rond a cote d'un autre au pouce est un appui sur le mauvais. */
+.fab.third {
+  bottom: calc(var(--safe-bottom) + 158px);
+  width: 52px;
+  height: 52px;
+  font-size: 22px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.contexte {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+#offres-resultat .tour.offres a { color: var(--gold); }
+
 .thread {
   display: grid;
   gap: 10px;

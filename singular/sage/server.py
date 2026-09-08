@@ -17,6 +17,7 @@ décides.
 """
 from __future__ import annotations
 
+import importlib
 import json
 import re
 import secrets
@@ -221,6 +222,33 @@ def _entry_as_dict(entry: Any) -> dict[str, Any]:
     }
 
 
+def _faculte_offres(*noms: str) -> tuple[Any, ...]:
+    """La recherche d'offres, si elle est là — sinon un refus qui se lit.
+
+    L'import est tardif, et il est protégé. Tardif : le Sage doit démarrer,
+    afficher la Notice et enregistrer une décision sur une machine où la
+    faculté a été retirée. Protégé : sans ça, l'absence remonterait en
+    ImportError jusqu'à l'écran du téléphone, sous forme de 500, et une
+    faculté coupée ressemblerait à une panne de l'app.
+
+    `tests/test_offres.py` ne le vérifie plus sur les imports mais en coupant
+    réellement le module, puis en refaisant tout le parcours gratuit.
+    """
+    try:
+        # `importlib` et pas `from .. import offres` : le second lit l'attribut
+        # deja pose sur le paquet et reussit meme quand le module a ete retire,
+        # ce qui rendait la coupure intestable -- donc invérifiable, donc
+        # promise plutot que tenue.
+        offres = importlib.import_module("singular.offres")
+    except ImportError:
+        raise SageError(
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "la recherche d'offres n'est pas disponible sur cette installation. "
+            "Le journal, la Notice et les verdicts marchent sans elle.",
+        ) from None
+    return tuple(getattr(offres, nom) for nom in noms)
+
+
 class SageApp:
     """Le routage et la logique, sans rien qui touche à HTTP.
 
@@ -400,6 +428,90 @@ class SageApp:
                 **{cle: valeur for cle, valeur in self.parle_etat().items()
                    if cle in ("bilan", "usd", "restant_usd")}}
 
+    def offres_etat(self) -> dict[str, Any]:
+        """Ce qui partirait, et ce qu'il reste. Gratuit, sans clé, sans SDK.
+
+        Le contexte est rendu en entier parce qu'il parle de lui : il a le
+        droit de lire ce qui quitte sa machine avant que ça la quitte, et
+        `python -m singular offres --blanc` le lui montre déjà au clavier.
+        """
+        RECHERCHES_MAX, contexte_pour_recherche = _faculte_offres(
+            "RECHERCHES_MAX", "contexte_pour_recherche")
+        from ..parle import PLAFOND_PAR_JOUR, Quota, bilan, phrase_de_bilan
+
+        quota = Quota()
+        compte = bilan(quota)
+        return {
+            "contexte": contexte_pour_recherche(),
+            "recherches_max": RECHERCHES_MAX,
+            "restants": quota.restants(),
+            "plafond": PLAFOND_PAR_JOUR,
+            "bilan": phrase_de_bilan(compte),
+            "restant_usd": compte["restant_usd"],
+        }
+
+    def offres(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Il cherche, il écarte, il propose. Il ne postule pas, et il n'écrit rien.
+
+        Cette route ne touche pas au journal, et ne peut pas y toucher : elle
+        rend du texte. `tests/test_sage_isolation.py` tient l'invariant du
+        dépôt sur les imports plutôt que sur les intentions -- penser n'est pas
+        décider, décider n'est pas autoriser.
+
+        Les gardes sont celles de `parle`, et pour les mêmes raisons, à une
+        près : une recherche coûte nettement plus qu'un tour de conversation,
+        parce que chaque recherche web ramène des pages entières. Le verrou est
+        donc le même objet que celui de la conversation -- ce n'est pas une
+        économie de code, c'est le même porte-monnaie : lancer une recherche
+        pendant qu'une réponse arrive dépenserait deux fois sur un crédit qui
+        n'a été vérifié qu'une.
+        """
+        from ..analyse import AnalyseIndisponible
+        MODELE_PAR_DEFAUT, chercher = _faculte_offres("MODELE_PAR_DEFAUT", "chercher")
+        from ..parle import PlafondAtteint, Quota, Tarifs, bilan
+
+        precision = payload.get("precision", "")
+        if not isinstance(precision, str):
+            raise SageError(HTTPStatus.BAD_REQUEST, "« precision » doit être du texte")
+        if len(precision) > QUESTION_MAX:
+            raise SageError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                            f"une précision tient en {QUESTION_MAX} caractères")
+
+        if not self._un_tour.acquire(blocking=False):
+            raise SageError(HTTPStatus.CONFLICT,
+                            "une réponse est déjà en train d'arriver. Laisse-la venir.")
+        try:
+            quota = Quota()
+            restant = bilan(quota, Tarifs())["restant_usd"]
+            if restant is not None and restant <= 0:
+                raise SageError(
+                    HTTPStatus.PAYMENT_REQUIRED,
+                    "d'apres tes tarifs, ton credit est epuise. Recharge sur "
+                    "console.anthropic.com, puis corrige « credit_usd » dans "
+                    "ton fichier de tarifs.",
+                )
+            if quota.restants() <= 0:
+                raise SageError(
+                    HTTPStatus.TOO_MANY_REQUESTS,
+                    "le plafond du jour est atteint. Demain, ou depuis le clavier "
+                    "avec « python -m singular offres ».",
+                )
+            try:
+                texte, cout = chercher(precision)
+            except AnalyseIndisponible as exc:
+                raise SageError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from None
+            try:
+                restants = quota.consommer(cout=cout, modele=MODELE_PAR_DEFAUT)
+            except PlafondAtteint:
+                # La recherche est payee. La perdre pour un compteur qui s'est
+                # rempli entre-temps serait le seul vrai degat de la situation.
+                restants = 0
+        finally:
+            self._un_tour.release()
+        return {"offres": texte, "cout": cout, "restants": restants,
+                **{cle: valeur for cle, valeur in self.offres_etat().items()
+                   if cle in ("bilan", "restant_usd")}}
+
     def parle_oubli(self) -> dict[str, Any]:
         """Efface le fil. Le journal ne bouge pas, et le plafond non plus."""
         from ..parle import Conversation
@@ -422,6 +534,10 @@ class SageApp:
             return self.parle(body)
         if method == "POST" and path == "/api/parle/oubli":
             return self.parle_oubli()
+        if method == "GET" and path == "/api/offres":
+            return self.offres_etat()
+        if method == "POST" and path == "/api/offres":
+            return self.offres(body)
         matched = re.fullmatch(r"/api/entries/([^/]+)/(resolve|abandon)", path)
         if matched and method == "POST":
             entry_id = matched.group(1)

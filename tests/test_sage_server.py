@@ -447,6 +447,49 @@ def test_another_page_cannot_deliver_a_verdict_in_your_place(journal, running):
     )
 
 
+def test_no_api_route_escapes_the_cross_origin_guard(running):
+    """La garde vaut pour toutes les routes, y compris celles qui n'existent pas encore.
+
+    Les tests au-dessus la vérifient là où la faille a été trouvée : écrire, et
+    trancher. Elle est pourtant posée une seule fois, dans `_handle`, pour tout
+    ce qui commence par `/api/` -- et c'est cette propriété-là qu'il faut
+    tenir, parce que la route suivante sera ajoutée par quelqu'un qui n'aura
+    pas relu ce fichier. `/api/offres` est la première qui dépense de l'argent
+    réel : une page ouverte pendant que le Sage tourne pouvait autrefois écrire
+    dans le journal, elle ne doit pas pouvoir vider un crédit.
+
+    Les routes sont lues dans le source plutôt qu'énumérées ici : une liste
+    recopiée vieillit sans rien casser, ce qui est exactement le mode de panne
+    que ce test existe pour empêcher.
+    """
+    import ast
+    import pathlib
+
+    from singular.sage import server as module
+
+    source = ast.parse(pathlib.Path(module.__file__).read_text(encoding="utf-8"))
+    corps = next(noeud for noeud in ast.walk(source)
+                 if isinstance(noeud, ast.FunctionDef) and noeud.name == "route")
+    chemins = sorted({
+        noeud.value for noeud in ast.walk(corps)
+        if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)
+        and noeud.value.startswith("/api/")
+    })
+    # La route paramétrée ne se lit pas comme une constante : elle est décrite
+    # par une expression régulière, et vaut le même refus.
+    chemins.append("/api/entries/DEC-INEXISTANTE/resolve")
+    assert len(chemins) >= 6, f"trop peu de routes lues : {chemins}"
+
+    for chemin in chemins:
+        refus = _post_as_a_page(running, chemin, {},
+                                Origin="https://site-malveillant.example")
+        assert refus == HTTPStatus.FORBIDDEN, (
+            f"{chemin} répond {refus} à une page quelconque au lieu de 403. "
+            "La garde est posée dans `_handle` pour tout `/api/` : cette route "
+            "y échappe, ou elle a été branchée ailleurs."
+        )
+
+
 def test_a_page_without_an_origin_of_its_own_is_refused(running):
     """`null` est ce qu'annonce une page sandboxée ou ouverte depuis un fichier."""
     assert _post_as_a_page(running, "/api/entries", A_DECISION,

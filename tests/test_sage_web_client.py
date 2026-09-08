@@ -90,7 +90,7 @@ def _executer(scenario: str) -> dict:
     const boutons = {
       "resolve-yes": {disabled: false}, "resolve-no": {disabled: false},
       "add-submit": {disabled: false}, "parle-submit": {disabled: false},
-      "parle-oubli": {disabled: false},
+      "parle-oubli": {disabled: false}, "offres-submit": {disabled: false},
     };
     const muet = {
       reset() {}, close() {}, showModal() {}, appendChild() {},
@@ -98,10 +98,17 @@ def _executer(scenario: str) -> dict:
       scrollTop: 0, scrollHeight: 0,
     };
     const $ = (id) => (id in boutons ? boutons[id] : muet);
-    const el = (tag, className, text) => ({tag, className, text});
+    const el = (tag, className, text) => ({
+      tag, className, text, children: [],
+      appendChild(noeud) { this.children.push(noeud); },
+    });
+    // `texteAvecLiens` pose ses morceaux par le DOM, jamais par innerHTML :
+    // c'est ce qui empeche une annonce lue sur le web de devenir du balisage.
+    const document = { createTextNode: (texte) => ({tag: "#text", text: texte}) };
     class FormData { constructor() {} get(nom) { return nom === "title" ? "un titre" : "1"; } }
     let reponse = null;
-    let rendu = {tours: [], restants: 19, plafond: 20, cout: {entree: 100, sortie: 30, cache_lu: 0}};
+    let rendu = {tours: [], restants: 19, plafond: 20, offres: "une offre",
+                 cout: {entree: 100, sortie: 30, cache_lu: 0}};
     async function api(chemin, options) {
       // Une lecture n'a pas de corps : `options` est absent sur les GET.
       appels.push({chemin, corps: options && options.body ? JSON.parse(options.body) : null});
@@ -334,3 +341,88 @@ def test_le_bouton_est_rouvert_apres_un_echec() -> None:
     """)
 
     assert resultat["verrouille"] is False
+
+
+# --- chercher des offres : le second bouton qui dépense -----------------------
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_un_double_appui_ne_lance_qu_une_seule_recherche() -> None:
+    """Le défaut déjà payé sur « trancher » et « parler », avec la plus grosse facture.
+
+    Une recherche web ramène des pages entières et met des dizaines de
+    secondes : c'est l'appel le plus cher de l'app, et celui pendant lequel
+    l'écran reste le plus longtemps immobile. Exactement les conditions du
+    double appui.
+    """
+    resultat = _executer("""
+    (async () => {
+      const premier = submitOffres(null);
+      submitOffres(null);            // le double appui, sans attendre
+      await premier;
+      process.stdout.write(JSON.stringify({
+        envois: appels.filter((a) => a.corps !== null).length, erreurs,
+      }));
+    })();
+    """)
+
+    assert resultat["envois"] == 1, f"{resultat['envois']} recherches lancées"
+    assert resultat["erreurs"] == []
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_une_faculte_coupee_ne_ressemble_pas_a_une_panne() -> None:
+    """503 : pas de clé, pas de réseau. Le reste de l'app marche, il faut le dire."""
+    resultat = _executer("""
+    reponse = Object.assign(new Error("coupée"), {status: 503});
+    (async () => {
+      await submitOffres(null);
+      process.stdout.write(JSON.stringify({
+        erreurs, verrouille: boutons["offres-submit"].disabled,
+      }));
+    })();
+    """)
+
+    assert "Le reste de l'app marche sans." in resultat["erreurs"][0]
+    assert resultat["verrouille"] is False, "la première panne fermerait la recherche"
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_le_credit_epuise_se_dit_en_francais() -> None:
+    """402 : le seul refus qui parle d'argent réel, pas d'un compteur du jour."""
+    resultat = _executer("""
+    reponse = Object.assign(new Error("credit"), {status: 402});
+    (async () => {
+      await submitOffres(null);
+      process.stdout.write(JSON.stringify({erreurs}));
+    })();
+    """)
+
+    assert "crédit est épuisé" in resultat["erreurs"][0]
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_seules_les_adresses_web_deviennent_des_liens() -> None:
+    """Ce que rend l'agent vient d'annonces lues sur le web. Ce n'est pas du HTML.
+
+    Une offre se lit sur un téléphone : une adresse qu'il faudrait recopier à
+    la main ne sert à rien, donc les liens doivent être cliquables. Mais
+    construire la page avec `innerHTML` à partir de ce qu'un modèle a lu sur
+    des sites quelconques ferait entrer ces sites dans l'app -- celle qui tient
+    le journal. Chaque morceau est donc posé par le DOM, et seuls `http://` et
+    `https://` deviennent des `<a>`.
+    """
+    resultat = _executer("""
+    const bloc = texteAvecLiens(
+      "Voir https://exemple.fr/offre/1 puis javascript:alert(1) "
+      + "et <script>vole()</script> et ftp://ailleurs.fr/x");
+    process.stdout.write(JSON.stringify({
+      liens: bloc.children.filter((n) => n.tag === "a").map((n) => n.text),
+      textes: bloc.children.filter((n) => n.tag === "#text").map((n) => n.text),
+    }));
+    """)
+
+    assert resultat["liens"] == ["https://exemple.fr/offre/1"]
+    reste = "".join(resultat["textes"])
+    assert "javascript:alert(1)" in reste, "un autre schéma reste du texte"
+    assert "<script>vole()</script>" in reste, "une balise reste du texte"
+    assert "ftp://ailleurs.fr/x" in reste

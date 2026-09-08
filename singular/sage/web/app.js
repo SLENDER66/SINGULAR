@@ -400,6 +400,111 @@ async function submitParleOnce() {
   }
 }
 
+// --- chercher des offres -----------------------------------------------------
+
+// Le premier agent, et le seul endroit de l'app ou quelque chose cherche pour
+// lui. Il ne postule pas : ce n'est pas une consigne dans une instruction --
+// une consigne se contourne par une tournure de phrase -- c'est que la route
+// n'importe pas le journal et ne rend que du texte. `test_sage_isolation.py`
+// le lit sur les imports plutot que sur les intentions.
+//
+// Ce qui coute est affiche comme pour la conversation, et pour la meme raison :
+// une recherche web ramene des pages entieres, donc elle coute nettement plus
+// qu'un tour de parole sur le meme credit.
+
+// Les liens deviennent cliquables sans que le texte du modele devienne du HTML.
+// Une offre se lit sur un telephone : recopier une adresse a la main ne se fait
+// pas. Mais construire la page avec `innerHTML` a partir de ce qu'un modele
+// rend ouvrirait l'app a ce que le modele a lu sur le web -- une annonce peut
+// contenir n'importe quoi. On decoupe donc le texte, et chaque morceau est pose
+// par le DOM : seuls `http://` et `https://` deviennent des liens, jamais un
+// autre schema, et jamais une balise.
+const ADRESSES = /(https?:\/\/[^\s<>"')\]]+)/g;
+
+function texteAvecLiens(texte) {
+  const bloc = el("div", "tour offres");
+  for (const morceau of texte.split(ADRESSES)) {
+    if (!morceau) continue;
+    if (/^https?:\/\//.test(morceau)) {
+      const lien = el("a", null, morceau);
+      lien.href = morceau;
+      lien.target = "_blank";
+      lien.rel = "noopener noreferrer";
+      bloc.appendChild(lien);
+    } else {
+      bloc.appendChild(document.createTextNode(morceau));
+    }
+  }
+  return bloc;
+}
+
+function renderOffresRestant(etat) {
+  const reste = etat.restants;
+  const jour = reste > 0
+    ? `${reste} appels restants aujourd'hui sur ${etat.plafond}.`
+    : "Plafond du jour atteint. Demain, ou depuis le clavier.";
+  $("offres-cost").hidden = false;
+  $("offres-cost").textContent =
+    `${jour} Une recherche coûte plus qu'une réponse. ${etat.bilan || ""}`.trim();
+}
+
+async function openOffres() {
+  $("offres-error").hidden = true;
+  $("offres-cost").hidden = true;
+  $("offres-dialog").showModal();
+  try {
+    const etat = await api("/api/offres");
+    $("offres-contexte").textContent = etat.contexte;
+    renderOffresRestant(etat);
+  } catch (error) {
+    showFormError("offres-error", error.message);
+  }
+}
+
+async function submitOffres(event) {
+  if (event) event.preventDefault();
+  await envoyerUneFois("offres", ["offres-submit"], () => submitOffresOnce());
+}
+
+async function submitOffresOnce() {
+  const precision = $("offres-input").value.trim();
+  $("offres-error").hidden = true;
+  // Quelque chose bouge tout de suite : une recherche met des dizaines de
+  // secondes, et un ecran fige se fait retaper dessus.
+  const resultat = $("offres-resultat");
+  resultat.textContent = "";
+  resultat.appendChild(el("div", "tour assistant", "Recherche en cours…"));
+  try {
+    const rendu = await api("/api/offres", {
+      method: "POST",
+      body: JSON.stringify({ precision }),
+    });
+    resultat.textContent = "";
+    resultat.appendChild(texteAvecLiens(rendu.offres));
+    resultat.appendChild(el("div", "tour assistant",
+      "Rien n'a été envoyé à personne. À toi de décider."));
+    resultat.scrollTop = 0;
+    const cache = rendu.cout.cache_lu ? `, ${rendu.cout.cache_lu} relus du cache` : "";
+    $("offres-cost").hidden = false;
+    $("offres-cost").textContent =
+      `${rendu.cout.entree} jetons envoyés${cache}, ${rendu.cout.sortie} rendus.`
+      + ` ${rendu.restants} restants aujourd'hui. ${rendu.bilan || ""}`;
+  } catch (error) {
+    // Les memes refus que la conversation, dans la meme langue : sur un
+    // telephone, un code HTTP nu se lit comme une panne, et aucun de ceux-la
+    // n'en est une.
+    const messages = {
+      429: "Plafond atteint pour aujourd'hui. Demain, ou depuis le clavier.",
+      409: "Une réponse est déjà en train d'arriver. Laisse-la venir.",
+      402: "D'après tes tarifs, ton crédit est épuisé.",
+      503: "La recherche est coupée : pas de clé, pas de réseau, ou le service refuse."
+           + " Le reste de l'app marche sans.",
+    };
+    resultat.textContent = "";
+    showFormError("offres-error", messages[error.status] || error.message);
+  }
+}
+
 async function oublierParle() {
   await envoyerUneFois("parle-oubli", ["parle-oubli"], async () => {
     try {
@@ -425,6 +530,9 @@ $("unlock-form").addEventListener("submit", async (event) => {
   location.replace(`${location.pathname}?k=${encodeURIComponent(supplied)}`);
 });
 
+$("offres-button").addEventListener("click", openOffres);
+$("offres-close").addEventListener("click", () => $("offres-dialog").close());
+$("offres-form").addEventListener("submit", submitOffres);
 $("parle-button").addEventListener("click", openParle);
 $("parle-close").addEventListener("click", () => $("parle-dialog").close());
 $("parle-form").addEventListener("submit", submitParle);

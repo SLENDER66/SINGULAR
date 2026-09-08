@@ -1,5 +1,41 @@
 # Changelog
 
+## 3.8.0 — Le bouton 🔎 : chercher depuis le téléphone
+
+« Chercher pour moi » était le point 5 de sa liste et le seul qui n'existait
+qu'au clavier : depuis son téléphone, il ne pouvait pas l'atteindre. C'est
+maintenant le troisième rond de l'app.
+
+- `GET /api/offres` montre ce qui partirait — son profil, le même texte que
+  `offres --blanc` — sans clé et sans rien dépenser. `POST /api/offres`
+  cherche.
+- La route ne peut pas écrire dans le journal : elle rend du texte, et
+  `test_sage_offres.py` le vérifie sur le journal lui-même, pas sur
+  l'instruction donnée au modèle. L'autorité reste lui, avant toute action.
+- Le verrou est **le même objet** que celui de la conversation. Deux verrous
+  distincts auraient laissé une recherche et une réponse partir ensemble, sur
+  un crédit vérifié une seule fois : c'est la course qui vide les cinq dollars
+  sans que rien ne l'ait refusée.
+- `chercher()` rend maintenant son coût, comme sa jumelle `parle.repondre()`.
+  Il ne le rendait pas, donc une recherche ne se comptait nulle part : le solde
+  affiché sur le téléphone était faux de tout ce qui avait été cherché. Compté
+  des deux côtés désormais, au clavier comme dans l'app.
+- Les liens des offres sont cliquables sans que le texte du modèle devienne du
+  HTML : chaque morceau est posé par le DOM, et seuls `http://` et `https://`
+  deviennent des liens. Ce que rend l'agent vient d'annonces lues sur le web.
+- Son profil disait « il ne cherche pas d'alternance ». Ce qu'il a dit est
+  « une reprise d'études en alternance m'intéresse, mais je n'ai ni école ni
+  entreprise à ce jour » — marqué DIT dans `proto/suivi_candidatures.py`. Le
+  durcissement était une déduction non marquée, qui faisait écarter des
+  annonces qu'il aurait voulu voir. Remis à ce qu'il a dit.
+- La garde d'origine — celle qui empêche une page web quelconque d'agir en son
+  nom — est désormais vérifiée sur **toutes** les routes `/api/`, lues dans le
+  source plutôt qu'énumérées à la main. `/api/offres` est la première qui
+  dépense de l'argent réel.
+- `test_offres.py` ne vérifiait la coupure que sur les imports, ce qui
+  interdisait aussi le branchement demandé sans rien prouver de plus. Il coupe
+  maintenant le module pour de bon et refait tout le parcours gratuit.
+
 ## 3.7.1 — The report stops reproaching what could not have been done
 
 One defect, found in three places. The Sage told Thomas, the morning after he

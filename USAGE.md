@@ -177,11 +177,29 @@ ce qui correspond **et** ce qui coince. Puis il s'arrête. **Il ne postule
 jamais, il n'écrit rien, il ne décide de rien** — et ce n'est pas une consigne
 dans son instruction, qui se contournerait par une tournure de phrase : il
 n'importe ni le journal, ni la frontière d'exécution, ni de quoi envoyer un
-message. `tests/test_offres.py` le vérifie sur les imports.
+message. `tests/test_offres.py` ne s'en tient plus aux imports : il coupe le
+module pour de bon et refait tout le parcours gratuit, et `test_sage_offres.py`
+vérifie sur le journal lui-même qu'une recherche ne l'a pas touché.
 
 Même conditions qu'`analyse` : clé requise, coupé sans elle, `--blanc` gratuit.
 Il coûte plus cher qu'`analyse` — chaque recherche ramène des pages entières —
 d'où un plafond de cinq recherches par appel, qui rend la facture prévisible.
+Ce que la recherche a dépensé est compté dans le même total que la
+conversation, au clavier comme au téléphone : sans ça, le solde affiché sur le
+téléphone serait faux de tout ce qui a été cherché ailleurs.
+
+#### Depuis le téléphone : le bouton 🔎
+
+Le même agent, dans l'app, troisième rond en bas à droite. Il montre d'abord
+**ce qui part de ton téléphone** — le même texte que `--blanc` au clavier —
+puis cherche, et affiche les offres avec leurs liens cliquables.
+
+Les gardes sont celles de la conversation, plus une : le verrou est **le même
+objet**, parce que c'est le même porte-monnaie. Lancer une recherche pendant
+qu'une réponse arrive dépenserait deux fois sur un crédit vérifié une seule
+fois. Un double appui ne lance donc qu'une recherche, un crédit épuisé refuse
+avant de chercher, et une faculté coupée le dit au lieu de ressembler à une
+panne.
 
 ### Ce que `add` demande en plus depuis la v2 du journal
 

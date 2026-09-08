@@ -226,7 +226,17 @@ Rien ne part sur un serveur.
    Le reste — le journal, le rapport, les verdicts — n'a jamais besoin de
    cette clé. Si je la révoque demain, rien d'autre ne bouge.
 
-5. **Noter ce qui manque** — au fil de l'eau, pour la prochaine session :
+5. **Le bouton 🔎 dans l'app** — le troisième rond, au-dessus de 💬. Il
+   cherche des offres de bureau d'études CVC en région toulousaine, il écarte,
+   il propose — **il ne postule jamais**. Avant de chercher, il te montre ce
+   qui part de ton téléphone : c'est ton profil, celui que tu as dicté, et si
+   une ligne est fausse dis-le-moi plutôt que de laisser chercher dessus.
+
+   Même clé et même crédit que 💬, et il coûte nettement plus : une recherche
+   ramène des pages entières. Le compteur est commun aux deux — c'est le même
+   porte-monnaie.
+
+6. **Noter ce qui manque** — au fil de l'eau, pour la prochaine session :
    - Est-ce que je l'ouvre sans y penser, ou faut-il que j'y pense ?
    - Enregistrer une décision fait-il vraiment trente secondes ?
    - Les phrases sonnent-elles juste, ou me reproche-t-il des choses sans

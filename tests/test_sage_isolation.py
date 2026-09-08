@@ -35,13 +35,21 @@ EXECUTION_MODULES = frozenset({
 #: n'importe la frontière d'exécution, ni le journal pour `parle` : le test
 #: au-dessus continue de le vérifier, et c'est lui qui porte l'invariant.
 #:
+#: `offres` y est entré ensuite, pour la même raison et sous les mêmes gardes :
+#: il lit des annonces, il écarte, il propose. Il ne postule jamais et il
+#: n'importe pas le journal -- « l'autorité reste moi, toujours, avant toute
+#: action », et c'est le test au-dessus qui le tient, pas cette phrase. Il
+#: partage le verrou de la conversation : même porte-monnaie, donc une seule
+#: dépense à la fois.
+#:
 #: Ce que ça coûte, écrit ici pour que personne n'ait à le redécouvrir : une
-#: route du Sage peut désormais dépenser de l'argent. Elle refuse sans clé, un
-#: seul tour à la fois, vingt par jour, et le reste de l'app continue quand
-#: elle est coupée -- `test_sage_parle.py` le vérifie plutôt que de le
-#: promettre.
+#: route du Sage peut dépenser de l'argent. Elle refuse sans clé, une seule
+#: dépense à la fois, `parle.PLAFOND_PAR_JOUR` par jour -- le nombre n'est pas
+#: recopié ici, il l'a déjà été et il avait vieilli -- et le reste de l'app
+#: continue quand elle est coupée : `test_sage_parle.py` et
+#: `test_sage_offres.py` le vérifient plutôt que de le promettre.
 ALLOWED = frozenset({"journal", "sage", "icon", "notice", "server", "learning",
-                     "sqlite_support", "analyse", "parle"})
+                     "sqlite_support", "analyse", "parle", "offres"})
 
 
 def _imported_modules(source: Path) -> set[str]:
