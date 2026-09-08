@@ -1,5 +1,36 @@
 # Changelog
 
+## 3.11.0 — Une règle, un domicile : les vignettes cessent de contredire les phrases
+
+La correction de la calibration avait laissé quatre copies vivantes. La
+vignette dorée du rapport gardait « écart ≥ 15 % et 3 verdicts » et s'allumait
+donc en alerte pendant que la phrase, juste en dessous, expliquait qu'il était
+trop tôt pour conclure. Deux réponses contradictoires à la même question, sur
+le même écran — dans l'app web et dans le port iOS.
+
+Et `python -m singular review`, que personne ne regardait parce qu'il est au
+clavier, tenait la pire version : **son propre seuil de 5 %, sans minimum de
+verdicts**. Après le tout premier verdict, il imprimait en rouge
+« surconfiance de +75 % - tu crois plus que ce qui arrive ». Sur un pari.
+
+C'est la troisième fois que le même défaut se produit — une phrase corrigée,
+sa vignette qui garde l'ancienne condition — donc la règle n'a plus qu'un
+domicile et `tests/test_une_seule_regle_par_phrase.py` échoue si une interface
+la refait.
+
+- `calibration_verdict()` calcule l'écart, la rareté et la conclusion une fois.
+  La Notice le rend avec le rapport ; les trois interfaces lisent `conclusive`.
+- La même garde manquait sur la ligne des heures de `review` : elle passait au
+  rouge dès la première décision, alors que son échéance était dans deux
+  semaines. C'est le défaut déjà payé, à un quatrième endroit.
+- Un test du dépôt figeait ce défaut : il exigeait que `review` imprime
+  « surconfiance » après un seul verdict. Il exige maintenant l'inverse, et un
+  second cas vérifie que le rouge revient quand il est mérité.
+- `is_due` est exposé sur chaque décision ouverte. « Échue » et « en retard »
+  ne sont pas la même chose : le jour dit, le retard vaut zéro jour, et la
+  ligne restait grise pendant que le rapport la mettait en tête. Elle affiche
+  maintenant « aujourd'hui ».
+
 ## 3.10.1 — Le rapport ne parle plus au nom d'un document qui se tait
 
 « C'est la définition que ta constitution donne de confondre activité et

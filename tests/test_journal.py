@@ -249,7 +249,34 @@ def test_the_cli_records_and_reviews_without_a_terminal(tmp_path, capsys):
     assert main(["--db", db, "review"]) == 0
     output = capsys.readouterr().out
     assert "OÙ VONT TES HEURES" in output
-    assert "surconfiance" in output
+    assert "CE QUE TA CONFIANCE VAUT" in output
+    # Ce test exigeait « surconfiance » ici. Sur **un** verdict : il figeait donc
+    # exactement le défaut. Un pari à 50 % perdu ne dit rien de son jugement, et
+    # l'imprimer en rouge lui conseillait de corriger ce que rien ne montre faux.
+    assert "surconfiance" not in output, output
+    assert "rien a conclure" in output
+
+
+def test_the_command_line_only_calls_him_overconfident_when_it_can(tmp_path, capsys):
+    """Le rouge du clavier suit la même règle que la phrase du rapport.
+
+    `review` tenait son propre seuil — 5 %, sans minimum de verdicts — et
+    imprimait « surconfiance de +75 % - tu crois plus que ce qui arrive » après
+    la première décision tranchée. C'est le pire cas de la série, parce que
+    c'est la commande qu'il lance le dimanche pour faire le point.
+    """
+    from singular.__main__ import main
+
+    db = str(tmp_path / "journal.db")
+    journal = DecisionJournal(db)
+    for index in range(6):
+        entry = _add(journal, probability=0.9, title=f"Pari {index}")
+        journal.resolve(entry.entry_id, happened=False, now=NOW + timedelta(days=1))
+
+    assert main(["--db", db, "review"]) == 0
+    output = capsys.readouterr().out
+    # Six paris à 90 % tous perdus : 0,1^6. Là, le rouge est mérité.
+    assert "surconfiance" in output, output
 
 
 def test_the_cli_refuses_an_ambiguous_verdict(tmp_path, capsys):

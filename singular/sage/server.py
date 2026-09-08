@@ -214,6 +214,10 @@ def _entry_as_dict(entry: Any) -> dict[str, Any]:
         "due_at": entry.due_at,
         "status": entry.status.value,
         "overdue_days": entry.overdue_days() if entry.is_open else 0,
+        # « échue » et « en retard » ne sont pas la même chose : le jour dit,
+        # le retard vaut zéro et la décision demande pourtant un verdict.
+        # La liste marquait donc en gris la carte que le rapport mettait en tête.
+        "is_due": entry.is_due() if entry.is_open else False,
         "lesson": entry.lesson or "",
         "brier_score": entry.brier_score,
         "expected_gain_eur": entry.expected_gain_eur,

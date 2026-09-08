@@ -82,6 +82,8 @@ class Notice:
     items: tuple[NoticeItem, ...]
     report: dict[str, Any] = field(default_factory=dict)
     generated_at: str = ""
+    #: `None` tant qu'il n'y a pas de quoi en parler. Voir `calibration_verdict`.
+    calibration: dict[str, Any] | None = None
 
     @property
     def severity(self) -> str:
@@ -94,6 +96,7 @@ class Notice:
             "items": [item.as_dict() for item in self.items],
             "report": self.report,
             "generated_at": self.generated_at,
+            "calibration": self.calibration,
         }
 
 
@@ -232,6 +235,32 @@ def _une_fois_sur(chance: float) -> str:
     return f"une fois sur {sur:,}".replace(",", "\u202f")
 
 
+def calibration_verdict(report: dict[str, Any]) -> dict[str, Any] | None:
+    """Ce que valent ses probabilités — calculé une fois, pour tous ceux qui l'affichent.
+
+    La phrase du rapport et la vignette dorée au-dessus disent la même chose ;
+    elles le disaient chacune à leur façon. La vignette gardait « écart ≥ 15 %
+    et 3 verdicts » et s'allumait donc en alerte pendant que la phrase, juste
+    en dessous, expliquait qu'il était trop tôt pour conclure. Deux réponses
+    contradictoires à la même question, sur le même écran.
+
+    Ce n'est pas la première fois : `test_sage_web_client.py` garde déjà une
+    vignette qui avait survécu à la correction de sa phrase. Troisième fois,
+    donc la règle n'a plus qu'un domicile et les interfaces lisent son verdict
+    au lieu de le refaire.
+    """
+    gap = report["overconfidence"]
+    if gap is None or report["resolved"] < CALIBRATION_MINIMUM:
+        return None
+    hasard = chance_du_hasard(report["resolved_probabilities"],
+                              round(report["hit_rate"] * report["resolved"]))
+    return {
+        "gap": gap,
+        "chance": hasard,
+        "conclusive": abs(gap) >= CALIBRATION_GAP and hasard <= CALIBRATION_HASARD,
+    }
+
+
 def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
     """L'écart entre ce qu'il annonce et ce qui arrive — sans conclure trop tôt.
 
@@ -248,17 +277,17 @@ def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
     dessous de `CALIBRATION_CERTAIN` verdicts on montre l'écart et on dit qu'il
     est encore mince ; au-delà, on peut affirmer qu'il ne vient plus du hasard.
     """
+    verdict = calibration_verdict(report)
     gap = report["overconfidence"]
-    if gap is None or report["resolved"] < CALIBRATION_MINIMUM or abs(gap) < CALIBRATION_GAP:
+    if verdict is None or abs(gap) < CALIBRATION_GAP:
         return None
     predicted = report["mean_probability"]
     happened = report["hit_rate"]
     verdicts = report["resolved"]
-    probabilites = report["resolved_probabilities"]
-    hasard = chance_du_hasard(probabilites, round(report["hit_rate"] * verdicts))
+    hasard = verdict["chance"]
     constat = f"Tu annonces {predicted:.0%} en moyenne ; il en arrive {happened:.0%}."
 
-    if hasard > CALIBRATION_HASARD:
+    if not verdict["conclusive"]:
         return NoticeItem(
             "INFO",
             "Tu annonces plus que ce qui arrive" if gap > 0
@@ -441,8 +470,9 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
         items=ordered,
         report=report,
         generated_at=moment.isoformat(),
+        calibration=calibration_verdict(report),
     )
 
 
 __all__ = ["CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS", "foundation_item",
-           "Notice", "NoticeItem", "build_notice", "chance_du_hasard"]
+           "Notice", "NoticeItem", "build_notice", "calibration_verdict", "chance_du_hasard"]

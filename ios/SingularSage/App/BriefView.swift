@@ -161,11 +161,14 @@ struct BriefView: View {
                            warn: report.resolved > 0
                                && report.hoursUnresolved > report.hoursThatWorked)
                     figure("\(report.overdue)", "à trancher", warn: report.overdue > 0)
-                    if let gap = report.overconfidence, report.resolved >= NoticeEngine.calibrationMinimum,
+                    // Le verdict vient du moteur, il ne se refait pas ici : cette
+                    // vignette s'allumait en alerte pendant que la phrase juste en
+                    // dessous disait qu'il était trop tôt pour conclure.
+                    if let verdict = NoticeEngine.calibrationVerdict(report),
                        let hit = report.hitRate, let mean = report.meanProbability {
-                        figure(Numbers.signedPercent(gap),
-                               gap > 0 ? "de surconfiance" : "de sous-confiance",
-                               warn: abs(gap) >= NoticeEngine.calibrationGap)
+                        figure(Numbers.signedPercent(verdict.gap),
+                               verdict.gap > 0 ? "de surconfiance" : "de sous-confiance",
+                               warn: verdict.conclusive)
                         figure(Numbers.percent(hit), "arrivent, sur \(Numbers.percent(mean)) annoncés")
                     }
                 }

@@ -77,7 +77,7 @@ function renderNotice(notice) {
     }
     container.append(card);
   }
-  renderFigures(notice.report);
+  renderFigures(notice.report, notice.calibration);
 }
 
 function figure(value, label, warn) {
@@ -86,7 +86,15 @@ function figure(value, label, warn) {
   return box;
 }
 
-function renderFigures(report) {
+// Le verdict de calibration vient du moteur, il ne se refait pas ici.
+//
+// Cette vignette gardait sa propre règle -- « écart ≥ 15 % et 3 verdicts » --
+// et s'allumait donc en alerte pendant que la phrase, juste en dessous,
+// expliquait qu'il était trop tôt pour conclure. Deux réponses contradictoires
+// à la même question, sur le même écran. C'est la deuxième vignette à survivre
+// à la correction de sa phrase : la première est gardée par
+// `test_the_hours_figure_waits_for_a_verdict_before_warning`.
+function renderFigures(report, calibration) {
   if (!report || !report.decisions) { $("numbers").hidden = true; return; }
   const percent = (x) => `${Math.round(x * 100)}%`;
   const boxes = [
@@ -99,12 +107,12 @@ function renderFigures(report) {
            report.resolved > 0 && report.hours_unresolved > report.hours_that_worked),
     figure(String(report.overdue), "à trancher", report.overdue > 0),
   ];
-  if (report.overconfidence !== null && report.resolved >= 3) {
-    const gap = report.overconfidence;
+  if (calibration) {
+    const gap = calibration.gap;
     boxes.push(figure(
       `${gap > 0 ? "+" : ""}${percent(gap)}`,
       gap > 0 ? "de surconfiance" : "de sous-confiance",
-      Math.abs(gap) >= 0.15,
+      calibration.conclusive,
     ));
     boxes.push(figure(percent(report.hit_rate), `arrivent, sur ${percent(report.mean_probability)} annoncés`));
   }
@@ -120,11 +128,15 @@ function renderOpen(entries) {
   const list = $("open-entries");
   list.replaceChildren();
   for (const entry of open) {
-    const late = entry.overdue_days > 0;
+    // « Échue » et « en retard » ne sont pas la même chose. Le jour dit, le
+    // retard vaut zéro jour et la décision demande pourtant son verdict : la
+    // ligne restait grise pendant que le rapport la mettait en tête.
+    const late = entry.is_due;
     const row = el("li", late ? "entry late" : "entry");
     row.append(el("span", "title", entry.title));
+    const retard = entry.overdue_days > 0 ? `+${entry.overdue_days}j` : "aujourd'hui";
     row.append(el("span", "meta", late
-      ? `+${entry.overdue_days}j · ${Math.round(entry.probability * 100)}%`
+      ? `${retard} · ${Math.round(entry.probability * 100)}%`
       : `${Math.round(entry.probability * 100)}% · ${entry.tier_label}`));
     row.addEventListener("click", () => openResolve(entry.entry_id));
     list.append(row);

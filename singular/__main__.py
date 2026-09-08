@@ -18,7 +18,7 @@ import sys
 from datetime import datetime
 
 from .journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
-from .sage.notice import foundation_item
+from .sage.notice import calibration_verdict, foundation_item
 
 DIM = "\033[2m"
 BOLD = "\033[1m"
@@ -415,15 +415,27 @@ def cmd_review(journal: DecisionJournal, args) -> int:
     unresolved = report["hours_unresolved"]
     worked = report["hours_that_worked"]
     print(f"  {worked:g}h ont produit le résultat attendu")
-    warn = RED if unresolved > worked else DIM
+    # Même garde que la Notice et que la vignette de l'app : s'alarmer d'heures
+    # sans verdict n'a de sens qu'une fois qu'un verdict a pu être rendu.
+    # Cette ligne-ci ne l'avait pas et passait au rouge dès la première
+    # décision, dont l'échéance était dans deux semaines.
+    warn = RED if report["resolved"] and unresolved > worked else DIM
     print(_colour(f"  {unresolved:g}h encore sans verdict ({report['open']} ouvertes, {report['overdue']} en retard)", warn))
 
     if report["hit_rate"] is not None:
         print(_colour("\n  CE QUE TA CONFIANCE VAUT\n", BOLD))
         print(f"  tu prédis en moyenne {report['mean_probability']:.0%}   il arrive {report['hit_rate']:.0%}")
+        # Le verdict vient du moteur. Cette ligne tenait sa propre regle -- un
+        # seuil de 5 %, sans minimum de verdicts -- et imprimait donc en rouge
+        # « surconfiance de +75 % - tu crois plus que ce qui arrive » apres un
+        # seul verdict. Un jugement corrige sur une observation, c'est un
+        # jugement deregle.
         gap = report["overconfidence"]
-        if abs(gap) < 0.05:
-            print(_colour("  calibration correcte", GREEN))
+        verdict = calibration_verdict(report)
+        if verdict is None or not verdict["conclusive"]:
+            print(_colour(f"  ecart de {gap:+.0%} sur {report['resolved']} verdict"
+                          f"{'s' if report['resolved'] > 1 else ''}"
+                          " - le hasard seul en produit autant, rien a conclure", DIM))
         elif gap > 0:
             print(_colour(f"  surconfiance de {gap:+.0%} - tu crois plus que ce qui arrive", RED))
         else:

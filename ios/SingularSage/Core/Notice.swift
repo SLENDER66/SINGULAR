@@ -292,19 +292,41 @@ enum NoticeEngine {
         return "une fois sur \(String(chiffres))"
     }
 
+    /// Ce que valent ses probabilités — calculé une fois, pour tous ceux qui l'affichent.
+    ///
+    /// La vignette dorée du rapport gardait sa propre règle — « écart ≥ 15 % et
+    /// 3 verdicts » — et s'allumait donc en alerte pendant que la phrase, juste
+    /// en dessous, expliquait qu'il était trop tôt pour conclure. Deux réponses
+    /// contradictoires à la même question, sur le même écran.
+    struct CalibrationVerdict {
+        let gap: Double
+        let chance: Double
+        let conclusive: Bool
+    }
+
+    static func calibrationVerdict(_ report: Report) -> CalibrationVerdict? {
+        guard let gap = report.overconfidence, let hit = report.hitRate,
+              report.resolved >= calibrationMinimum else { return nil }
+        let hits = Int((hit * Double(report.resolved)).rounded())
+        let hasard = chanceDuHasard(report.resolvedProbabilities, hits: hits)
+        return CalibrationVerdict(
+            gap: gap, chance: hasard,
+            conclusive: abs(gap) >= calibrationGap && hasard <= calibrationHasard
+        )
+    }
+
     private static func calibrationItem(_ report: Report) -> NoticeItem? {
-        guard let gap = report.overconfidence,
+        guard let verdict = calibrationVerdict(report),
               let predicted = report.meanProbability,
               let happened = report.hitRate,
-              report.resolved >= calibrationMinimum,
-              abs(gap) >= calibrationGap else { return nil }
+              abs(verdict.gap) >= calibrationGap else { return nil }
 
-        let hits = Int((happened * Double(report.resolved)).rounded())
-        let hasard = chanceDuHasard(report.resolvedProbabilities, hits: hits)
+        let gap = verdict.gap
+        let hasard = verdict.chance
         let constat = "Tu annonces \(Numbers.percent(predicted)) en moyenne ; "
             + "il en arrive \(Numbers.percent(happened))."
 
-        if hasard > calibrationHasard {
+        if !verdict.conclusive {
             return NoticeItem(
                 severity: .info,
                 title: gap > 0 ? "Tu annonces plus que ce qui arrive"
