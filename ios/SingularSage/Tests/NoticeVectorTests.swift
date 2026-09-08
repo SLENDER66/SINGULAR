@@ -56,6 +56,10 @@ final class NoticeVectorTests: XCTestCase {
         let costHours: Double
         let horizonDays: Int
         let createdOffsetDays: Int
+        /// L'heure d'écriture dans la journée. Écrire le soir et relire le
+        /// matin est le cas où une échéance en jours, comptée en instants, se
+        /// trompe d'une journée entière.
+        let createdOffsetHours: Int
         let resolved: Bool?
 
         enum CodingKeys: String, CodingKey {
@@ -63,6 +67,7 @@ final class NoticeVectorTests: XCTestCase {
             case costHours = "cost_hours"
             case horizonDays = "horizon_days"
             case createdOffsetDays = "created_offset_days"
+            case createdOffsetHours = "created_offset_hours"
         }
     }
 
@@ -147,7 +152,8 @@ final class NoticeVectorTests: XCTestCase {
         let journal = Journal(location: location)
 
         for item in testCase.entries {
-            let created = origin.addingTimeInterval(Double(item.createdOffsetDays) * 86_400)
+            let created = origin.addingTimeInterval(
+                Double(item.createdOffsetDays) * 86_400 + Double(item.createdOffsetHours) * 3_600)
             let entry = try journal.add(
                 title: item.title, action: item.action, predicted: item.predicted,
                 probability: item.probability, tier: try XCTUnwrap(Tier(rawValue: item.tier)),

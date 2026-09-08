@@ -55,9 +55,64 @@ def test_a_decision_comes_back_when_its_horizon_passes(tmp_path):
     assert journal.due(now=NOW + timedelta(days=15)) == (entry,)
 
 
+def test_the_horizon_lands_on_a_day_and_not_at_an_hour(tmp_path):
+    """Le jour dit, dès le matin. C'est le seul geste que l'outil réclame.
+
+    Le test au-dessus vérifiait le treizième jour et le quinzième, et sautait
+    le quatorzième — la frontière même. C'est là que c'était faux.
+
+    `due_at` vaut `created_at + horizon_days`, donc il porte l'heure de
+    l'écriture. Comparé comme un instant, un horizon de 14 jours pris un soir
+    à 20 h n'échoyait qu'à 20 h le quatorzième jour. Thomas écrit ses décisions
+    le soir et ouvre son rapport le matin : le verdict lui était donc réclamé
+    le lendemain de l'échéance, à chaque fois, alors qu'`A_FAIRE.md` lui
+    promet la carte en tête « le 20 septembre ».
+
+    Sa première décision réelle est exactement ce cas : écrite le 6 septembre
+    à 20 h, horizon 14 jours, verdict attendu le 20.
+    """
+    journal = _journal(tmp_path)
+    soir = datetime(2026, 9, 6, 20, 0, tzinfo=UTC)
+    entry = journal.add(title="Postuler", action="candidature", predicted="Un entretien",
+                        probability=0.75, tier=Tier.REVENUS, cost_hours=4,
+                        horizon_days=14, now=soir)
+
+    veille_au_soir = datetime(2026, 9, 19, 23, 0, tzinfo=UTC)
+    assert journal.due(now=veille_au_soir) == (), "réclamé la veille"
+
+    le_jour_dit_au_matin = datetime(2026, 9, 20, 7, 0, tzinfo=UTC)
+    assert journal.due(now=le_jour_dit_au_matin) == (entry,), (
+        "le jour de l'échéance, au réveil, l'outil ne demande pas le verdict"
+    )
+    assert entry.overdue_days(now=le_jour_dit_au_matin) == 0
+    assert entry.is_due(now=le_jour_dit_au_matin) is True
+
+
 def test_overdue_days_are_counted(tmp_path):
     entry = _add(_journal(tmp_path), days=7)
     assert entry.overdue_days(now=NOW + timedelta(days=20)) == 13
+
+
+def test_a_late_verdict_is_counted_in_whole_days_not_in_hours(tmp_path):
+    """« Elle attend depuis 6 jours » alors que l'échéance était il y a 7.
+
+    Même cause : une soustraction d'instants, tronquée. Une demi-journée
+    manquait à chaque compte, et le seuil au-delà duquel le rapport passe en
+    CRITIQUE — sept jours — arrivait donc un jour trop tard lui aussi.
+    """
+    journal = _journal(tmp_path)
+    soir = datetime(2026, 9, 6, 20, 0, tzinfo=UTC)
+    entry = journal.add(title="Postuler", action="candidature", predicted="Un entretien",
+                        probability=0.75, tier=Tier.REVENUS, cost_hours=4,
+                        horizon_days=14, now=soir)
+
+    # Échéance le 20. Une semaine plus tard, c'est sept jours, pas six.
+    assert entry.overdue_days(now=datetime(2026, 9, 27, 8, 0, tzinfo=UTC)) == 7
+    assert entry.overdue_days(now=datetime(2026, 9, 21, 8, 0, tzinfo=UTC)) == 1
+    # Et jamais négatif avant l'heure.
+    assert entry.overdue_days(now=datetime(2026, 9, 10, 8, 0, tzinfo=UTC)) == 0
+    assert entry.days_until_due(now=datetime(2026, 9, 19, 8, 0, tzinfo=UTC)) == 1
+    assert entry.days_until_due(now=datetime(2026, 9, 20, 8, 0, tzinfo=UTC)) == 0
 
 
 def test_resolved_decisions_stop_coming_back(tmp_path):
@@ -369,3 +424,60 @@ def test_a_probability_that_is_not_a_number_is_still_refused(tmp_path):
     with pytest.raises(TypeError):
         journal.add(title="A", action="a", predicted="p", probability="0.8",
                     tier=Tier.REVENUS, cost_hours=1.0, horizon_days=14)
+
+
+# --- l'échéance ne se recalcule pas ailleurs ---------------------------------
+
+def test_no_module_does_instant_arithmetic_on_a_deadline():
+    """Un horizon en jours, comparé en instants, se trompe d'une journée.
+
+    La faute était à trois endroits à la fois — `due()`, `overdue_days()` et la
+    phrase « prochaine échéance » — parce que chacun refaisait le calcul à
+    partir de `due_at`, qui porte l'heure de l'écriture. Trois copies d'une même
+    règle : elles se sont trompées ensemble, et une correction à un seul endroit
+    en aurait laissé deux.
+
+    La règle vit désormais sur `Entry` : `due_on`, `is_due`, `days_until_due`,
+    `overdue_days`. Hors de `journal.py`, `due_at` peut être **affiché** — c'est
+    une date qu'on imprime — mais pas reconverti pour être comparé ou soustrait.
+
+    Ce test lit le source parce que c'est ce qui rend la faute impossible plutôt
+    que corrigée : le prochain module qui écrira `fromisoformat(entry.due_at) <=
+    maintenant` échouera ici, et pas dans dix jours, un matin d'échéance, sur le
+    téléphone de quelqu'un.
+    """
+    import ast
+    import pathlib
+
+    racine = pathlib.Path(__file__).resolve().parent.parent / "singular"
+    domicile = racine / "journal.py"
+
+    fautes = []
+    for source in sorted(racine.rglob("*.py")):
+        if source == domicile:
+            continue
+        arbre = ast.parse(source.read_text(encoding="utf-8"))
+
+        parent = {}
+        for noeud in ast.walk(arbre):
+            for enfant in ast.iter_child_nodes(noeud):
+                parent[enfant] = noeud
+
+        for noeud in ast.walk(arbre):
+            convertit = (isinstance(noeud, ast.Call)
+                         and isinstance(noeud.func, ast.Attribute)
+                         and noeud.func.attr == "fromisoformat"
+                         and any(isinstance(a, ast.Attribute) and a.attr == "due_at"
+                                 for a in noeud.args))
+            if not convertit:
+                continue
+            dessus = parent.get(noeud)
+            imprime = (isinstance(dessus, ast.Attribute) and dessus.attr == "strftime")
+            if not imprime:
+                fautes.append(f"{source.relative_to(racine.parent)}:{noeud.lineno}")
+
+    assert not fautes, (
+        f"{fautes} reconvertit une échéance pour la calculer. L'échéance est un "
+        "jour, pas un instant : passe par `Entry.due_on`, `is_due`, "
+        "`days_until_due` ou `overdue_days`, qui portent la règle et sa raison."
+    )

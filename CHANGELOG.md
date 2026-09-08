@@ -1,5 +1,42 @@
 # Changelog
 
+## 3.9.0 — L'échéance tombe le jour dit, pas le lendemain
+
+Le seul geste que cet outil réclame à son auteur est de rendre son verdict à
+l'échéance. Il le réclamait un jour trop tard, systématiquement.
+
+`due_at` vaut `created_at + horizon_days`, donc il porte l'heure de l'écriture.
+Comparé comme un instant, un horizon de 14 jours pris un soir à 20 h n'échoit
+qu'à 20 h le quatorzième jour. Thomas écrit ses décisions le soir et ouvre son
+rapport le matin : le matin du jour dit, le rapport se contentait d'un INFO
+« la prochaine échéance tombe aujourd'hui », noyé dans la liste. La carte
+« À trancher aujourd'hui » n'arrivait en tête que le lendemain.
+
+Deux documents promettaient l'inverse, et c'est le code qui avait tort :
+`A_FAIRE.md` — « la carte passera en haut, À trancher aujourd'hui » — et le CLI
+lui-même, qui imprime « verdict attendu le 20/09/2026 » au moment de
+l'enregistrement.
+
+- `Entry.due_on` est le jour de l'échéance ; `is_due`, `days_until_due` et
+  `overdue_days` comptent en jours de calendrier. `due()` et la phrase
+  « prochaine échéance » passent par eux.
+- Le retard se comptait en secondes tronquées : il manquait une demi-journée à
+  chaque fois. Sept jours de retard s'annonçaient comme six, et le passage en
+  CRITIQUE — « passé une semaine » — arrivait un jour après ce que sa propre
+  phrase promet.
+- La faute était à trois endroits parce que chacun refaisait le calcul. La
+  règle a maintenant un domicile, et `test_journal.py` refuse qu'un module
+  reconvertisse `due_at` pour autre chose que l'afficher.
+- Le test qui couvrait l'horizon vérifiait le treizième jour et le quinzième,
+  et sautait le quatorzième — la frontière même. C'est là que c'était faux.
+- Rien de tout cela ne touche la chaîne d'intégrité : `due_at` est dérivé et
+  n'entre pas dans l'empreinte. Les journaux existants restent vérifiables.
+- Le port Swift porte la même correction, et les vecteurs de parité couvrent
+  désormais le cas « écrite le soir, relue le matin » et son versant « la
+  veille au soir ». Ils ne le couvraient pas : tous les journaux y étaient
+  écrits et relus à la même heure, et les deux moteurs tombaient d'accord pour
+  une mauvaise raison.
+
 ## 3.8.0 — Le bouton 🔎 : chercher depuis le téléphone
 
 « Chercher pour moi » était le point 5 de sa liste et le seul qui n'existait

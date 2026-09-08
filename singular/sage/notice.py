@@ -246,7 +246,8 @@ def _quiet_item(open_entries: tuple[Entry, ...], moment: datetime) -> NoticeItem
     if not open_entries:
         return None
     nearest = min(open_entries, key=lambda entry: entry.due_at)
-    days = max((datetime.fromisoformat(nearest.due_at) - moment).days, 0)
+    # En jours de calendrier, comme l'horizon : voir `Entry.due_on`.
+    days = nearest.days_until_due(moment)
     when = "aujourd'hui" if days == 0 else f"dans {days} jour{'s' if days > 1 else ''}"
     return NoticeItem(
         "INFO",

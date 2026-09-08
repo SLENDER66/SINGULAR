@@ -33,8 +33,17 @@ ORIGIN = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
 
 def _entry(title: str, *, tier: Tier, probability: float = 0.6, hours: float = 4.0,
-           days: int = 14, created_offset: int = 0, resolved: bool | None = None,
+           days: int = 14, created_offset: int = 0, created_hour: int = 0,
+           resolved: bool | None = None,
            predicted: str = "le résultat observable") -> dict[str, Any]:
+    """Une entrée du vecteur. `created_hour` décale l'écriture dans la journée.
+
+    Sans lui, tous les journaux étaient écrits et relus à la même heure, et les
+    deux moteurs tombaient d'accord pour une mauvaise raison : l'égalité exacte
+    des instants masquait le fait qu'ils ne comptaient pas dans la même unité.
+    C'est exactement le cas de Thomas — écrire le soir, lire le matin — qui
+    manquait, et c'est là que l'échéance se trompait d'un jour.
+    """
     return {
         "title": title,
         "action": "faire la chose",
@@ -44,6 +53,7 @@ def _entry(title: str, *, tier: Tier, probability: float = 0.6, hours: float = 4
         "cost_hours": hours,
         "horizon_days": days,
         "created_offset_days": created_offset,
+        "created_offset_hours": created_hour,
         "resolved": resolved,
     }
 
@@ -102,6 +112,20 @@ CASES: list[dict[str, Any]] = [
         "why": "Le lendemain de la première ligne, aucun rang vide ne se reproche.",
         "at_offset_days": 1,
         "entries": [_entry("Postuler", tier=Tier.REVENUS, probability=0.75, days=14)],
+    },
+    {
+        "name": "ecrite_le_soir_relue_le_matin_de_l_echeance",
+        "why": "Le jour dit, dès le matin : l'horizon est en jours, il tombe un jour.",
+        "at_offset_days": 14,
+        "entries": [_entry("Postuler", tier=Tier.REVENUS, probability=0.75, hours=4.0,
+                           days=14, created_hour=11, predicted="Un entretien")],
+    },
+    {
+        "name": "ecrite_le_soir_relue_la_veille_au_soir",
+        "why": "Et pas la veille : le versant qui prouve que le seuil n'a pas glissé.",
+        "at_offset_days": 13,
+        "entries": [_entry("Postuler", tier=Tier.REVENUS, probability=0.75, hours=4.0,
+                           days=14, created_hour=11, predicted="Un entretien")],
     },
     {
         "name": "surconfiance",
@@ -182,7 +206,8 @@ def _build(case: dict[str, Any]) -> tuple[DecisionJournal, datetime]:
     journal = DecisionJournal(":memory:")
     first = None
     for item in case["entries"]:
-        created = ORIGIN + timedelta(days=item["created_offset_days"])
+        created = ORIGIN + timedelta(days=item["created_offset_days"],
+                                     hours=item.get("created_offset_hours", 0))
         entry = journal.add(
             title=item["title"], action=item["action"], predicted=item["predicted"],
             probability=item["probability"], tier=Tier(item["tier"]),

@@ -280,7 +280,8 @@ enum NoticeEngine {
 
     private static func quietItem(_ stillRunning: [Entry], at moment: Date) -> NoticeItem? {
         guard let nearest = stillRunning.min(by: { $0.dueAt < $1.dueAt }) else { return nil }
-        let days = max(0, Int(floor(nearest.dueAt.timeIntervalSince(moment) / 86_400)))
+        // En jours de calendrier, comme l'horizon : voir `Entry.dueDay`.
+        let days = nearest.daysUntilDue(at: moment)
         let when = days == 0 ? "aujourd'hui" : "dans \(days) jour\(days > 1 ? "s" : "")"
         return NoticeItem(
             severity: .info,

@@ -275,3 +275,57 @@ def test_never_settling_anything_is_still_caught_by_the_overdue_rule(tmp_path):
     notice = build_notice(journal, now=NOW + timedelta(days=40))
     assert notice.items[0].title == "À trancher aujourd'hui"
     assert notice.items[0].severity == "CRITIQUE"
+
+
+# --- le jour du verdict ------------------------------------------------------
+
+def test_le_matin_de_l_echeance_le_rapport_demande_le_verdict(tmp_path):
+    """La promesse d'`A_FAIRE.md` : « la carte passera en haut, À trancher ».
+
+    Elle ne passait pas en haut le jour dit. `due_at` portait l'heure
+    d'écriture, donc une décision prise un soir n'échoyait qu'au soir du
+    quatorzième jour ; le matin, le rapport se contentait d'un INFO « la
+    prochaine échéance tombe aujourd'hui », noyé dans la liste. Le seul geste
+    que cet outil réclame à son auteur lui était demandé un jour trop tard,
+    systématiquement.
+
+    Ce test tient la phrase d'en-tête, parce que c'est elle qu'on lit sur un
+    téléphone avant de reposer l'appareil.
+    """
+    journal = _journal(tmp_path)
+    soir = datetime(2026, 9, 6, 20, 0, tzinfo=UTC)
+    journal.add(title="Postuler", action="candidature", predicted="Un entretien",
+                probability=0.75, tier=Tier.REVENUS, cost_hours=4,
+                horizon_days=14, now=soir)
+
+    veille = build_notice(journal, now=datetime(2026, 9, 19, 8, 0, tzinfo=UTC))
+    assert "À trancher" not in veille.headline, "réclamé la veille"
+
+    jour_dit = build_notice(journal, now=datetime(2026, 9, 20, 7, 0, tzinfo=UTC))
+    assert jour_dit.headline == "Notice. À trancher aujourd'hui."
+    tranche = jour_dit.items[0]
+    assert tranche.severity == "ATTENTION"
+    assert "depuis aujourd'hui" in tranche.detail
+
+
+def test_le_passage_en_critique_arrive_bien_apres_une_semaine(tmp_path):
+    """La phrase dit « passé une semaine ». Le compte doit dire la même chose.
+
+    Il comptait une demi-journée de moins à chaque fois — assez pour que le
+    huitième jour soit annoncé comme le septième, et pour que l'escalade
+    tombe un jour après ce que la phrase promet.
+    """
+    journal = _journal(tmp_path)
+    soir = datetime(2026, 9, 6, 20, 0, tzinfo=UTC)
+    journal.add(title="Postuler", action="candidature", predicted="Un entretien",
+                probability=0.75, tier=Tier.REVENUS, cost_hours=4,
+                horizon_days=14, now=soir)
+
+    sept = build_notice(journal, now=datetime(2026, 9, 27, 8, 0, tzinfo=UTC)).items[0]
+    assert "depuis 7 jours" in sept.detail
+    assert sept.severity == "ATTENTION", "sept jours, c'est le seuil, pas au-delà"
+
+    huit = build_notice(journal, now=datetime(2026, 9, 28, 8, 0, tzinfo=UTC)).items[0]
+    assert "depuis 8 jours" in huit.detail
+    assert huit.severity == "CRITIQUE"
+    assert "Passé une semaine" in huit.detail

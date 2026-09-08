@@ -25,7 +25,7 @@ import sqlite3
 import uuid
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from math import isfinite
 from pathlib import Path
@@ -135,9 +135,44 @@ class Entry:
     def is_open(self) -> bool:
         return self.status is Status.OPEN
 
+    @property
+    def due_on(self) -> date:
+        """Le jour de l'échéance. Un horizon se donne en jours, il tombe un jour.
+
+        `due_at` porte l'heure à laquelle la décision a été écrite, parce qu'il
+        vaut `created_at + horizon_days`. Comparé comme un instant, un horizon
+        de 14 jours pris un soir à 20 h échoit le quatorzième jour à 20 h — et
+        quelqu'un qui ouvre son rapport le matin, ce que le rituel du dépôt lui
+        demande de faire, ne voit rien ce jour-là. Le verdict lui est réclamé
+        le lendemain, systématiquement, alors que `A_FAIRE.md` lui promet la
+        carte en tête « le 20 septembre ».
+
+        Ce n'est pas un détail d'affichage : rendre le verdict à l'échéance est
+        la seule chose que cet outil demande à son auteur de faire, et il la
+        demandait toujours avec un jour de retard.
+
+        Le jour est celui d'UTC, dans lequel `created_at` est écrit. Une
+        décision enregistrée entre 22 h et minuit à Paris porte donc la date
+        UTC de la veille, et son échéance sera réclamée un jour plus tôt qu'il
+        ne l'aurait compté. C'est la contrepartie, elle est étroite, et elle va
+        dans le bon sens : demander un jour trop tôt se voit et se remet à
+        demain ; demander un jour trop tard fait manquer le jour dit.
+        """
+        return datetime.fromisoformat(self.due_at).date()
+
+    def is_due(self, now: datetime | None = None) -> bool:
+        """Vrai dès que le jour de l'échéance a commencé."""
+        moment = now or datetime.now(UTC)
+        return moment.date() >= self.due_on
+
+    def days_until_due(self, now: datetime | None = None) -> int:
+        """Jours restants avant l'échéance, jamais négatif."""
+        moment = now or datetime.now(UTC)
+        return max(0, (self.due_on - moment.date()).days)
+
     def overdue_days(self, now: datetime | None = None) -> int:
         moment = now or datetime.now(UTC)
-        return max(0, (moment - datetime.fromisoformat(self.due_at)).days)
+        return max(0, (moment.date() - self.due_on).days)
 
 
 def _fingerprint(payload: dict, previous: str) -> str:
@@ -433,10 +468,13 @@ class DecisionJournal:
             return tuple(self._entry(row) for row in conn.execute(query, params).fetchall())
 
     def due(self, *, now: datetime | None = None) -> tuple[Entry, ...]:
-        """Open decisions whose horizon has passed: the activity/result detector."""
+        """Open decisions whose horizon has passed: the activity/result detector.
+
+        Le jour de l'échéance compte comme échu dès son début : voir
+        `Entry.due_on`, qui porte la raison et ce qu'elle a coûté.
+        """
         moment = now or datetime.now(UTC)
-        return tuple(e for e in self.entries(status=Status.OPEN)
-                     if datetime.fromisoformat(e.due_at) <= moment)
+        return tuple(e for e in self.entries(status=Status.OPEN) if e.is_due(moment))
 
     def _chain(self) -> tuple[Entry, ...]:
         """Entries in the order they were written, which is the order they were chained.

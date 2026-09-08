@@ -25,17 +25,43 @@ struct Entry: Codable, Identifiable, Equatable, Sendable {
 
     var isOpen: Bool { status == .open }
 
+    /// Le jour de l'échéance. Un horizon se donne en jours, il tombe un jour.
+    ///
+    /// `dueAt` vaut `createdAt + horizonDays`, donc il porte l'heure de
+    /// l'écriture. Compté en instants, un horizon de 14 jours pris un soir à
+    /// 20 h n'échoyait qu'à 20 h le quatorzième jour — et le rapport ouvert le
+    /// matin ne réclamait rien ce jour-là. Le verdict était demandé le
+    /// lendemain, systématiquement.
+    ///
+    /// Le calendrier est celui, fixe, qui a servi à écrire l'échéance : passer
+    /// par le fuseau du téléphone ferait afficher deux jours différents pour
+    /// la même décision sur deux appareils.
+    var dueDay: Date { Calendar.singular.startOfDay(for: dueAt) }
+
     /// Depuis combien de jours cette décision attend un verdict.
     ///
-    /// Des journées entières écoulées, arrondies vers le bas, et jamais
-    /// négatives — le même compte que le moteur de référence. Passer par un
-    /// calendrier ferait dépendre le résultat du fuseau du téléphone : deux
-    /// appareils afficheraient deux retards différents pour la même décision.
+    /// Des journées entières de calendrier, jamais négatives — le même compte
+    /// que le moteur de référence. Compté en secondes, il manquait une
+    /// demi-journée à chaque fois : le huitième jour s'annonçait comme le
+    /// septième, et l'escalade en CRITIQUE arrivait un jour après ce que sa
+    /// propre phrase promet.
     func overdueDays(at moment: Date) -> Int {
-        max(0, Int(floor(moment.timeIntervalSince(dueAt) / 86_400)))
+        let jours = Calendar.singular.dateComponents(
+            [.day], from: dueDay, to: Calendar.singular.startOfDay(for: moment)).day ?? 0
+        return max(0, jours)
     }
 
-    func isOverdue(at moment: Date) -> Bool { isOpen && dueAt <= moment }
+    /// Vrai dès que le jour de l'échéance a commencé.
+    func isOverdue(at moment: Date) -> Bool {
+        isOpen && Calendar.singular.startOfDay(for: moment) >= dueDay
+    }
+
+    /// Jours restants avant l'échéance, jamais négatif. Même unité que l'horizon.
+    func daysUntilDue(at moment: Date) -> Int {
+        let jours = Calendar.singular.dateComponents(
+            [.day], from: Calendar.singular.startOfDay(for: moment), to: dueDay).day ?? 0
+        return max(0, jours)
+    }
 }
 
 extension Calendar {
