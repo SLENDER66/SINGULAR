@@ -296,23 +296,35 @@ journal qu'on peut retoucher après coup n'apprend rien.
 
 ```
   OÙ VONT TES HEURES
+
   2 décisions   102h engagées
   0h ont produit le résultat attendu
   90h encore sans verdict (1 ouvertes, 0 en retard)
 
   CE QUE TA CONFIANCE VAUT
-  tu prédis en moyenne 85%   il arrive 0%
-  surconfiance de +85% — tu crois plus que ce qui arrive
-  Brier moyen 0.723  (0 = parfait, 0.25 = pile ou face)
+
+  tu prédis en moyenne 80%   il arrive 0%
+  surconfiance de +80% - tu crois plus que ce qui arrive
+  Brier moyen 0.640  (0 = parfait, 0.25 = pile ou face)
 
   PAR RANG DE LA CONSTITUTION
-  rang             décisions   heures  ont marché  sans verdict
-  stabilite                —        —           —             —
-  revenus                  1      12h          0h           12h   —
-  patrimoine               1      90h          0h            0h   0%
 
-  ⚠ Aucune décision sur stabilite — les deux premiers rangs de ta hiérarchie.
+  rang             décisions   heures  ont marché  sans verdict
+  stabilite                -        -           -             -
+  revenus                  1      12h          0h            0h   0%
+  capacites                -        -           -             -
+  opportunites             -        -           -             -
+  patrimoine               1      90h          0h           90h   -
+  liberte                  -        -           -             -
+
+  /!\ Aucune décision sur Stabilité - Ta constitution ouvre sur Stabilité → Revenus.
+      Ce rang n’a reçu aucune décision, alors que 90h sont allées ailleurs.
 ```
+
+La dernière ligne ne s'affiche que quand elle a de quoi se dire : il faut au
+moins autant de décisions que la fondation a de rangs — une ligne ne peut pas
+en occuper deux — et les heures qu'elle nomme sont celles réellement passées
+hors fondation. Le lendemain d'une première décision, elle se tait.
 
 Les deux chiffres qui comptent : **les heures sans verdict** et **l'écart de
 calibration**. Le premier mesure l'activité qui ne s'est jamais transformée en

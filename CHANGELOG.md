@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.7.1 — The report stops reproaching what could not have been done
+
+One defect, found in three places. The Sage told Thomas, the morning after he
+recorded his first decision, « Aucune décision sur Stabilité » — in ATTENTION,
+as the report's headline. He had written one line. The foundation has two
+rungs, and one line cannot occupy two: the reproach described arithmetic, not
+conduct, and nothing he could have done that morning would have avoided it.
+
+The sentence was also false. « 4h sont allées ailleurs » summed `hours_total`,
+which included the 4h he had put on Revenus — the second rung of the very
+foundation it was naming. It called « ailleurs » exactly where the hours were.
+
+- `foundation_item` now waits for at least as many decisions as the foundation
+  has rungs, and counts only the hours actually spent outside it. With no hours
+  outside, the empty rung is stated as INFO — a fact worth knowing, not a
+  reproach to make.
+- The same premature reproach had already been paid for once, on « heures
+  engagées sans verdict », and fixed in one place only. This was the second.
+  The third was `python -m singular review`, which held its own copy of the
+  rule (`list(Tier)[:2]`) and reproached from the first decision too.
+- Third occurrence, so the repository's own rule applies: stop correcting it,
+  make it impossible. The rule now has one home. `review` calls
+  `foundation_item` and prints its sentence; `tests/test_reproche_premature.py`
+  fails if any module re-derives the founding rungs or rewrites the phrase.
+- The Swift port and the committed notice vectors carry the same correction,
+  with vectors for both sides of it.
+
 ## 3.7.0 — The Sage in daily use: concurrency, business fields, faculties
 
 The journal went into real daily use on a phone. Everything below was found by

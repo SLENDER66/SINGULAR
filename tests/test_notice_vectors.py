@@ -47,6 +47,15 @@ def test_the_vectors_cover_both_sides_of_each_rule():
     assert not any("surestimes" in title for title in titles["trop_peu_de_verdicts_pour_juger"])
     assert any(title.startswith("Aucune décision sur") for title in titles["rangs_fondateurs_vides"])
     assert not any(title.startswith("Aucune décision sur") for title in titles["tout_va_bien"])
+    # Le rang vide a deux versants depuis qu'il ne se reproche plus tout seul :
+    # il se dit quand rien n'est allé ailleurs, il se tait quand une seule
+    # décision ne pouvait pas couvrir deux rangs. Le port doit tenir les deux,
+    # et un seuil déplacé d'un côté se verra ici.
+    sans_ailleurs = cases["un_rang_fondateur_vide_sans_heures_ailleurs"]["expected"]["items"]
+    dit = next(item for item in sans_ailleurs if item["title"].startswith("Aucune décision sur"))
+    assert dit["severity"] == "INFO" and "ailleurs" not in dit["detail"]
+    assert not any(title.startswith("Aucune décision sur")
+                   for title in titles["une_seule_decision_ne_peut_pas_couvrir_deux_rangs"])
     assert any("trancher" in title for title in titles["une_decision_en_retard"])
     assert not any("trancher" in title for title in titles["tout_va_bien"])
 

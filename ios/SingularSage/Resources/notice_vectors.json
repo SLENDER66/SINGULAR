@@ -47,11 +47,6 @@
             "severity": "ATTENTION",
             "title": "À trancher aujourd'hui",
             "detail": "1 décision a dépassé son horizon. Elle attend depuis 2 jours."
-          },
-          {
-            "severity": "ATTENTION",
-            "title": "Aucune décision sur Stabilité",
-            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
           }
         ]
       }
@@ -82,11 +77,6 @@
             "severity": "CRITIQUE",
             "title": "À trancher aujourd'hui",
             "detail": "1 décision a dépassé son horizon. Elle attend depuis 13 jours. Passé une semaine, un verdict qu'on ne rend pas n'est plus un oubli : c'est le résultat qu'on préfère ne pas voir."
-          },
-          {
-            "severity": "ATTENTION",
-            "title": "Aucune décision sur Stabilité",
-            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
           }
         ]
       }
@@ -132,14 +122,14 @@
           {
             "severity": "ATTENTION",
             "title": "Aucune décision sur Stabilité",
-            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 8h sont allées ailleurs."
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
           }
         ]
       }
     },
     {
       "name": "rangs_fondateurs_vides",
-      "why": "Stabilité et Revenus vides est un défaut même quand tout va bien.",
+      "why": "Stabilité et Revenus vides, avec des heures réellement passées ailleurs.",
       "at": "2026-09-07T09:00:00+00:00",
       "chain_intact": true,
       "entries": [
@@ -149,7 +139,18 @@
           "predicted": "le résultat observable",
           "probability": 0.6,
           "tier": "PATRIMOINE",
-          "cost_hours": 60.0,
+          "cost_hours": 30.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "resolved": null
+        },
+        {
+          "title": "Bourse",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "PATRIMOINE",
+          "cost_hours": 30.0,
           "horizon_days": 30,
           "created_offset_days": 0,
           "resolved": null
@@ -171,7 +172,7 @@
           },
           {
             "severity": "INFO",
-            "title": "1 décision ouverte",
+            "title": "2 décisions ouvertes",
             "detail": "La prochaine échéance tombe dans 29 jours : « le résultat observable », que tu donnes à 60%."
           }
         ]
@@ -193,6 +194,17 @@
           "horizon_days": 30,
           "created_offset_days": 0,
           "resolved": null
+        },
+        {
+          "title": "Patrimoine",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "PATRIMOINE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "resolved": null
         }
       ],
       "expected": {
@@ -206,8 +218,84 @@
           },
           {
             "severity": "INFO",
-            "title": "1 décision ouverte",
+            "title": "2 décisions ouvertes",
             "detail": "La prochaine échéance tombe dans 29 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "un_rang_fondateur_vide_sans_heures_ailleurs",
+      "why": "Rien n'est allé ailleurs : le rang manque, on le dit, on ne le reproche pas.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "resolved": null
+        },
+        {
+          "title": "Relancer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Aucune décision sur Stabilité.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision."
+          },
+          {
+            "severity": "INFO",
+            "title": "2 décisions ouvertes",
+            "detail": "La prochaine échéance tombe dans 29 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "une_seule_decision_ne_peut_pas_couvrir_deux_rangs",
+      "why": "Le lendemain de la première ligne, aucun rang vide ne se reproche.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. 1 décision ouverte.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 13 jours : « le résultat observable », que tu donnes à 75%."
           }
         ]
       }
@@ -517,14 +605,9 @@
         }
       ],
       "expected": {
-        "headline": "Notice. Aucune décision sur Stabilité.",
-        "severity": "ATTENTION",
+        "headline": "Notice. 1 décision ouverte.",
+        "severity": "INFO",
         "items": [
-          {
-            "severity": "ATTENTION",
-            "title": "Aucune décision sur Stabilité",
-            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
-          },
           {
             "severity": "INFO",
             "title": "1 décision ouverte",

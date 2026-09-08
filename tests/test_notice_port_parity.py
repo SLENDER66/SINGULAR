@@ -42,7 +42,10 @@ def _observations_python() -> set[str]:
     source = PYTHON.read_text(encoding="utf-8")
     bloc = re.search(r"candidates = \((.*?)\n    \)", source, flags=re.DOTALL)
     assert bloc, "le bloc « candidates » de build_notice n'a plus la même forme"
-    noms = set(re.findall(r"_(\w+?)_item\(", bloc.group(1)))
+    # Le tiret bas de tête est facultatif : `foundation_item` est publique
+    # depuis que `python -m singular review` l'appelle au lieu de réécrire
+    # la règle. Une observation publique reste une observation.
+    noms = set(re.findall(r"(?<![\w])_?(\w+?)_item\(", bloc.group(1)))
     assert noms, "aucune observation lue : l'analyse a changé de forme"
     return {nom.split("_")[0] + "".join(m.title() for m in nom.split("_")[1:]) + "Item"
             for nom in noms}

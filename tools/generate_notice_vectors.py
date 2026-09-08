@@ -78,15 +78,30 @@ CASES: list[dict[str, Any]] = [
     },
     {
         "name": "rangs_fondateurs_vides",
-        "why": "Stabilité et Revenus vides est un défaut même quand tout va bien.",
+        "why": "Stabilité et Revenus vides, avec des heures réellement passées ailleurs.",
         "at_offset_days": 1,
-        "entries": [_entry("Patrimoine", tier=Tier.PATRIMOINE, hours=60.0, days=30)],
+        "entries": [_entry("Patrimoine", tier=Tier.PATRIMOINE, hours=30.0, days=30),
+                    _entry("Bourse", tier=Tier.PATRIMOINE, hours=30.0, days=30)],
     },
     {
         "name": "un_seul_rang_fondateur_vide",
         "why": "Le singulier de la même observation.",
         "at_offset_days": 1,
-        "entries": [_entry("Loyer", tier=Tier.STABILITE, days=30)],
+        "entries": [_entry("Loyer", tier=Tier.STABILITE, days=30),
+                    _entry("Patrimoine", tier=Tier.PATRIMOINE, days=30)],
+    },
+    {
+        "name": "un_rang_fondateur_vide_sans_heures_ailleurs",
+        "why": "Rien n'est allé ailleurs : le rang manque, on le dit, on ne le reproche pas.",
+        "at_offset_days": 1,
+        "entries": [_entry("Postuler", tier=Tier.REVENUS, days=30),
+                    _entry("Relancer", tier=Tier.REVENUS, days=30)],
+    },
+    {
+        "name": "une_seule_decision_ne_peut_pas_couvrir_deux_rangs",
+        "why": "Le lendemain de la première ligne, aucun rang vide ne se reproche.",
+        "at_offset_days": 1,
+        "entries": [_entry("Postuler", tier=Tier.REVENUS, probability=0.75, days=14)],
     },
     {
         "name": "surconfiance",

@@ -139,25 +139,45 @@ def _overdue_item(overdue: tuple[Entry, ...], moment: datetime) -> NoticeItem | 
     )
 
 
-def _foundation_item(report: dict[str, Any]) -> NoticeItem | None:
-    """Les deux premiers rangs vides sont un défaut, même quand tout va bien.
+def foundation_item(report: dict[str, Any]) -> NoticeItem | None:
+    """Un rang fondateur vide, dit quand c'en est un — et pas avant.
 
-    Sauf sur un journal vide, où ce serait dire deux fois la même chose : rien
-    n'est renseigné nulle part, et `_empty_item` le dit déjà mieux.
+    Le lendemain de la première décision de Thomas, cette observation était la
+    phrase d'en-tête du rapport : « Aucune décision sur Stabilité », en
+    ATTENTION. Il avait écrit une ligne. Une ligne ne peut pas occuper deux
+    rangs : le constat portait sur de l'arithmétique, pas sur une conduite, et
+    aucun geste de sa part n'aurait pu l'éviter. C'est exactement le défaut
+    déjà payé une fois sur `_unresolved_hours_item` — un reproche prématuré est
+    un bug — laissé ici parce que la correction n'avait regardé qu'un endroit.
+
+    Sa phrase était fausse en plus d'être prématurée. « 4h sont allées
+    ailleurs » comptait `hours_total`, donc toutes les heures du journal, y
+    compris les 4h posées sur Revenus — un rang de la fondation. Elle appelait
+    « ailleurs » précisément l'endroit où elles étaient.
+
+    Deux conditions, une par défaut. Autant de décisions que de rangs à
+    couvrir : en dessous, le vide est une conséquence du compte, pas un choix.
+    Et les heures nommées sont celles réellement passées hors fondation ; s'il
+    n'y en a aucune, il reste un fait à savoir, pas un reproche à faire.
     """
-    if not report["decisions"]:
-        return None
     missing = [tier for tier in FOUNDATION if tier.value not in report["by_tier"]]
-    if not missing:
+    if not missing or report["decisions"] < len(FOUNDATION):
         return None
+    fondation = {tier.value for tier in FOUNDATION}
+    elsewhere = round(sum(stats["hours"] for name, stats in report["by_tier"].items()
+                          if name not in fondation), 1)
     names = " et ".join(tier.label for tier in missing)
     single = len(missing) == 1
+    constat = (
+        f"Ta constitution ouvre sur {' → '.join(tier.label for tier in FOUNDATION)}. "
+        f"{'Ce rang' if single else 'Ces rangs'} {'n’a' if single else 'n’ont'} reçu aucune décision"
+    )
+    if not elsewhere:
+        return NoticeItem("INFO", f"Aucune décision sur {names}", f"{constat}.", action="add")
     return NoticeItem(
         "ATTENTION",
         f"Aucune décision sur {names}",
-        f"Ta constitution ouvre sur {' → '.join(tier.label for tier in FOUNDATION)}. "
-        f"{'Ce rang' if single else 'Ces rangs'} {'n’a' if single else 'n’ont'} reçu aucune décision, "
-        f"alors que {report['hours_total']:g}h sont allées ailleurs.",
+        f"{constat}, alors que {elsewhere:g}h sont allées ailleurs.",
         action="add",
     )
 
@@ -324,7 +344,7 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
         _overdue_item(overdue, moment),
         _irreversible_item(overdue, open_entries),
         _empty_item(report),
-        _foundation_item(report),
+        foundation_item(report),
         _calibration_item(report),
         _unresolved_hours_item(report),
         _unpriced_item(report),
@@ -340,5 +360,5 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     )
 
 
-__all__ = ["CALIBRATION_GAP", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
+__all__ = ["CALIBRATION_GAP", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS", "foundation_item",
            "Notice", "NoticeItem", "build_notice"]

@@ -72,6 +72,9 @@ struct Report: Sendable {
     var hitRate: Double?
     var overconfidence: Double?
     var tiersWithDecisions: Set<Tier> = []
+    /// Les heures posées hors des rangs fondateurs — les seules que
+    /// `foundationItem` a le droit d'appeler « ailleurs ».
+    var hoursOutsideFoundation = 0.0
     var chainIntact = true
 
     static func build(entries: [Entry], at moment: Date, chainIntact: Bool) -> Report {
@@ -88,6 +91,9 @@ struct Report: Sendable {
         report.hoursThatWorked = Numbers.round(
             entries.filter { $0.status == .happened }.reduce(0) { $0 + $1.costHours }, places: 1)
         report.tiersWithDecisions = Set(entries.map(\.tier))
+        report.hoursOutsideFoundation = Numbers.round(
+            entries.filter { !Tier.foundation.contains($0.tier) }.reduce(0) { $0 + $1.costHours },
+            places: 1)
 
         if !settled.isEmpty {
             // Les moyennes sont arrondies pour l'affichage, mais l'écart se
@@ -196,22 +202,36 @@ enum NoticeEngine {
         )
     }
 
-    /// Les deux premiers rangs vides sont un défaut, même quand tout va bien.
+    /// Un rang fondateur vide, dit quand c'en est un — et pas avant.
     ///
-    /// Sauf sur un journal vide, où ce serait dire deux fois la même chose.
+    /// Cette observation reprochait à Thomas, le lendemain de sa première
+    /// décision, de n'avoir rien mis sur Stabilité. Il avait écrit une ligne,
+    /// et une ligne ne peut pas occuper deux rangs : le constat portait sur de
+    /// l'arithmétique, pas sur une conduite. Sa phrase était fausse en plus :
+    /// « 4h sont allées ailleurs » comptait les heures posées sur Revenus, qui
+    /// est un rang de la fondation.
+    ///
+    /// Deux conditions, une par défaut — autant de décisions que de rangs à
+    /// couvrir, et des heures réellement passées hors fondation.
     private static func foundationItem(_ report: Report) -> NoticeItem? {
-        guard report.decisions > 0 else { return nil }
         let missing = Tier.foundation.filter { !report.tiersWithDecisions.contains($0) }
-        guard !missing.isEmpty else { return nil }
+        guard !missing.isEmpty, report.decisions >= Tier.foundation.count else { return nil }
         let names = missing.map(\.label).joined(separator: " et ")
         let single = missing.count == 1
-        let detail = "Ta constitution ouvre sur \(Tier.foundation.map(\.label).joined(separator: " → ")). "
-            + "\(single ? "Ce rang" : "Ces rangs") \(single ? "n’a" : "n’ont") reçu aucune décision, "
-            + "alors que \(Numbers.compact(report.hoursTotal))h sont allées ailleurs."
+        let constat = "Ta constitution ouvre sur \(Tier.foundation.map(\.label).joined(separator: " → ")). "
+            + "\(single ? "Ce rang" : "Ces rangs") \(single ? "n’a" : "n’ont") reçu aucune décision"
+        if report.hoursOutsideFoundation == 0 {
+            return NoticeItem(
+                severity: .info,
+                title: "Aucune décision sur \(names)",
+                detail: "\(constat).",
+                action: .addDecision
+            )
+        }
         return NoticeItem(
             severity: .attention,
             title: "Aucune décision sur \(names)",
-            detail: detail,
+            detail: constat + ", alors que \(Numbers.compact(report.hoursOutsideFoundation))h sont allées ailleurs.",
             action: .addDecision
         )
     }

@@ -84,10 +84,12 @@ def test_one_overdue_decision_is_written_in_the_singular(tmp_path):
 
 def test_the_two_founding_ranks_are_named_when_empty(tmp_path):
     journal = _journal(tmp_path)
-    _add(journal, tier=Tier.PATRIMOINE, hours=60)
+    _add(journal, tier=Tier.PATRIMOINE, hours=30)
+    _add(journal, tier=Tier.PATRIMOINE, hours=30)
     notice = build_notice(journal, now=NOW)
 
     item = next(item for item in notice.items if item.title.startswith("Aucune décision sur"))
+    assert item.severity == "ATTENTION"
     assert item.title == "Aucune décision sur Stabilité et Revenus"
     assert "60h sont allées ailleurs" in item.detail
 
@@ -95,10 +97,57 @@ def test_the_two_founding_ranks_are_named_when_empty(tmp_path):
 def test_a_single_missing_rank_is_written_in_the_singular(tmp_path):
     journal = _journal(tmp_path)
     _add(journal, tier=Tier.STABILITE)
+    _add(journal, tier=Tier.PATRIMOINE)
     item = next(item for item in build_notice(journal, now=NOW).items
                 if item.title.startswith("Aucune décision sur"))
     assert item.title == "Aucune décision sur Revenus"
     assert "Ce rang n’a reçu" in item.detail
+
+
+def test_a_rank_that_could_not_have_been_filled_yet_is_not_held_against_you(tmp_path):
+    """La fondation a deux rangs ; une décision ne peut pas en occuper deux.
+
+    C'était la phrase d'en-tête du rapport, en ATTENTION, le lendemain de la
+    première décision réelle de Thomas : « Aucune décision sur Stabilité ». Il
+    venait d'écrire une ligne. Le constat ne décrivait pas sa conduite, il
+    décrivait le fait qu'on ne peut pas remplir deux cases avec un jeton — et
+    aucun geste de sa part n'aurait pu l'éviter ce matin-là.
+
+    Le même défaut avait déjà été payé sur « heures engagées sans verdict » et
+    corrigé à un seul endroit. Le voici tenu aux deux.
+    """
+    journal = _journal(tmp_path)
+    _add(journal, tier=Tier.REVENUS, hours=4.0, probability=0.75)
+
+    assert not any(item.title.startswith("Aucune décision sur")
+                   for item in build_notice(journal, now=NOW + timedelta(days=1)).items)
+
+
+def test_ailleurs_counts_only_the_hours_that_actually_went_elsewhere(tmp_path):
+    """« 4h sont allées ailleurs » nommait les heures posées sur la fondation.
+
+    Le détail comptait `hours_total`, donc tout le journal, Revenus compris —
+    alors que Revenus *est* le second rang de la fondation. La phrase appelait
+    « ailleurs » exactement l'endroit où les heures étaient.
+
+    Sans heures hors fondation, il reste un fait à savoir, pas un reproche à
+    faire : le rang manque, on le dit, en INFO, sans chiffre inventé.
+    """
+    journal = _journal(tmp_path)
+    _add(journal, tier=Tier.REVENUS, hours=4.0)
+    _add(journal, tier=Tier.REVENUS, hours=6.0)
+
+    tout_sur_la_fondation = next(item for item in build_notice(journal, now=NOW).items
+                                 if item.title.startswith("Aucune décision sur"))
+    assert tout_sur_la_fondation.severity == "INFO"
+    assert "ailleurs" not in tout_sur_la_fondation.detail
+    assert "10h" not in tout_sur_la_fondation.detail
+
+    _add(journal, tier=Tier.PATRIMOINE, hours=7.0)
+    avec_un_ailleurs = next(item for item in build_notice(journal, now=NOW).items
+                            if item.title.startswith("Aucune décision sur"))
+    assert avec_un_ailleurs.severity == "ATTENTION"
+    assert "7h sont allées ailleurs" in avec_un_ailleurs.detail, avec_un_ailleurs.detail
 
 
 def test_nothing_is_said_when_both_founding_ranks_are_served(tmp_path):
@@ -191,7 +240,10 @@ def test_the_first_decision_is_not_accused_of_confusing_activity_with_results(tm
     titles = _titles(build_notice(journal, now=NOW + timedelta(days=1)))
 
     assert not any("engagées sans verdict" in title for title in titles), titles
-    assert titles == ["Aucune décision sur Stabilité", "1 décision ouverte"]
+    # Et rien d'autre non plus : « Aucune décision sur Stabilité » tenait la
+    # même place et faisait la même faute, sur la même ligne écrite le même
+    # soir. Voir `test_a_rank_that_could_not_have_been_filled_yet...`.
+    assert titles == ["1 décision ouverte"]
 
 
 def test_hours_without_a_verdict_are_reported_once_a_verdict_exists(tmp_path):

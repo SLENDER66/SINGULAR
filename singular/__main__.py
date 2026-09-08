@@ -18,6 +18,7 @@ import sys
 from datetime import datetime
 
 from .journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
+from .sage.notice import foundation_item
 
 DIM = "\033[2m"
 BOLD = "\033[1m"
@@ -431,10 +432,16 @@ def cmd_review(journal: DecisionJournal, args) -> int:
                 f"{stats['hours_that_worked']:>11g}h{stats['hours_unresolved']:>13g}h   {hit}")
         print(line)
 
-    empty_high = [t for t in list(Tier)[:2] if t.value not in report["by_tier"]]
-    if empty_high:
-        names = " et ".join(t.value.lower() for t in empty_high)
-        print(_colour(f"\n  /!\\ Aucune décision sur {names} - les deux premiers rangs de ta hiérarchie.", RED))
+    # La règle vient de la Notice, elle ne se réécrit pas ici. Cette ligne
+    # portait sa propre version -- `list(Tier)[:2]`, reproche dès la première
+    # décision -- et c'était la troisième fois que le même défaut se payait :
+    # d'abord « heures engagées sans verdict », puis le même constat dans la
+    # Notice, puis celui-ci. Une règle recopiée est une règle qui divergera ;
+    # `test_reproche_premature.py` interdit désormais qu'elle vive à deux endroits.
+    fondation = foundation_item(report)
+    if fondation is not None:
+        print(_colour(f"\n  /!\\ {fondation.title} - {fondation.detail}",
+                      RED if fondation.severity == "ATTENTION" else DIM))
 
     if not report["chain_intact"]:
         print(_colour("\n  /!\\ La chaîne du journal est rompue : une prédiction a été réécrite.", RED))
