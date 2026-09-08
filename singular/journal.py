@@ -398,7 +398,21 @@ class DecisionJournal:
                      expected_gain_eur, reversibility)
 
     def resolve(self, entry_id: str, *, happened: bool, lesson: str = "", now: datetime | None = None) -> Entry:
-        """Record what actually happened. Scores the prediction, does not rewrite it."""
+        """Record what actually happened. Scores the prediction, does not rewrite it.
+
+        La leçon est la sienne, ou rien. Elle valait, quand il n'écrivait rien,
+        « Forecast DEC-138fee1a was incorrect: predicted 0.75, observed 0. » --
+        une phrase de machine, en anglais, dans un outil français, écrite dans
+        le champ prévu pour ce que *lui* a compris, et gravée pour de bon
+        puisque ce journal ne se réécrit pas.
+
+        Elle n'apprend rien : la probabilité, le statut et le score de Brier
+        sont déjà dans l'entrée, et cette phrase ne fait que les redire. Elle
+        coûte, en revanche, la seule chose qui compte ici -- on ne distinguait
+        plus « il n'a rien noté » de « il a noté ceci », et c'est la règle du
+        dépôt sur la provenance, celle qui lui a déjà coûté un CV faux et un
+        marché écarté.
+        """
         moment = now or datetime.now(UTC)
         with self._connect() as conn:
             # Le verrou avant la lecture, sinon le controle ne controle rien.
@@ -427,7 +441,7 @@ class DecisionJournal:
             ecrit = conn.execute(
                 "UPDATE journal_entries SET status=?, resolved_at=?, lesson=?, brier_score=?"
                 " WHERE entry_id=? AND status=?",
-                (status.value, moment.isoformat(), lesson or record.lesson, record.brier_score,
+                (status.value, moment.isoformat(), lesson, record.brier_score,
                  entry_id, Status.OPEN.value),
             )
             if ecrit.rowcount != 1:

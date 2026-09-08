@@ -426,6 +426,53 @@ def test_a_probability_that_is_not_a_number_is_still_refused(tmp_path):
                     tier=Tier.REVENUS, cost_hours=1.0, horizon_days=14)
 
 
+# --- la leçon est la sienne ---------------------------------------------------
+
+def test_the_lesson_field_holds_his_words_or_nothing(tmp_path):
+    """« Forecast DEC-138fee1a was incorrect: predicted 0.75, observed 0. »
+
+    C'est ce que le journal écrivait dans le champ « leçon » quand il n'en
+    donnait pas : une phrase de machine, en anglais, dans un outil français,
+    gravée pour de bon puisqu'une entrée tranchée ne se réécrit plus.
+
+    Elle n'apprend rien — la probabilité, le statut et le score de Brier sont
+    déjà dans l'entrée, et elle ne fait que les redire. Elle coûte, en
+    revanche, la seule chose qui compte : on ne distinguait plus « il n'a rien
+    noté » de « il a noté ceci ». C'est la règle de provenance du dépôt, celle
+    qui lui a déjà coûté un CV faux et un marché écarté, appliquée à ce que
+    l'outil écrit sur lui.
+
+    Le port Swift, lui, faisait déjà juste : `lesson.isEmpty ? nil : lesson`.
+    """
+    journal = _journal(tmp_path)
+
+    muet = _add(journal, title="Sans leçon")
+    tranche = journal.resolve(muet.entry_id, happened=False, now=NOW + timedelta(days=15))
+    assert not tranche.lesson, f"la machine a écrit à sa place : {tranche.lesson!r}"
+
+    # Ce que la phrase prétendait apprendre est déjà là, et vérifiable à la main.
+    assert tranche.brier_score == pytest.approx((0.6 - 0.0) ** 2)
+    assert tranche.status is Status.DID_NOT_HAPPEN
+    assert tranche.probability == 0.6
+
+    sienne = _add(journal, title="Avec leçon")
+    ecrite = journal.resolve(sienne.entry_id, happened=True, lesson="j'ai relancé trop tard",
+                             now=NOW + timedelta(days=15))
+    assert ecrite.lesson == "j'ai relancé trop tard"
+
+    # Et la chaîne ne bouge pas : la leçon n'entre pas dans l'empreinte.
+    assert journal.verify() is True
+
+
+def test_abandoning_still_records_the_reason_he_gave(tmp_path):
+    """Abandonner est un résultat, et la raison est la sienne : elle reste."""
+    journal = _journal(tmp_path)
+    entry = _add(journal, title="Arrêtée")
+    arretee = journal.abandon(entry.entry_id, reason="l'offre a été retirée",
+                              now=NOW + timedelta(days=3))
+    assert arretee.lesson == "l'offre a été retirée"
+
+
 # --- l'échéance ne se recalcule pas ailleurs ---------------------------------
 
 def test_no_module_does_instant_arithmetic_on_a_deadline():

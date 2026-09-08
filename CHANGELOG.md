@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.9.1 — La leçon est la sienne, ou rien
+
+Le journal écrivait dans le champ « leçon », quand Thomas n'en donnait pas :
+
+    Forecast DEC-138fee1a was incorrect: predicted 0.75, observed 0.
+
+Une phrase de machine, en anglais, dans un outil français, dans le champ prévu
+pour ce que *lui* a compris — et gravée pour de bon, puisqu'une entrée tranchée
+ne se réécrit plus. L'app lui offre pourtant un champ pour l'écrire : le
+laisser vide faisait écrire la machine à sa place.
+
+Elle n'apprenait rien : la probabilité, le statut et le score de Brier sont
+déjà dans l'entrée, et cette phrase ne fait que les redire. Elle coûtait, en
+revanche, la seule chose qui compte — on ne distinguait plus « il n'a rien
+noté » de « il a noté ceci ». C'est la règle de provenance du dépôt, celle qui
+lui a déjà coûté un CV faux et un marché écarté, appliquée cette fois à ce que
+l'outil écrit sur lui.
+
+- `resolve()` enregistre sa phrase, ou rien. `abandon()` garde la raison qu'il
+  donne, qui est déjà la sienne.
+- Le port Swift faisait déjà juste — `lesson.isEmpty ? nil : lesson`. C'est le
+  moteur de référence qui divergeait, et rien ne le disait : les vecteurs de
+  parité couvrent la Notice, pas les champs que le journal écrit.
+- La chaîne n'est pas touchée : la leçon n'entre pas dans l'empreinte.
+
 ## 3.9.0 — L'échéance tombe le jour dit, pas le lendemain
 
 Le seul geste que cet outil réclame à son auteur est de rendre son verdict à
