@@ -348,7 +348,9 @@ enum NoticeEngine {
             severity: worked == 0 ? .attention : .info,
             title: "\(Numbers.compact(unresolved))h engagées sans verdict",
             detail: "Contre \(Numbers.compact(worked))h qui ont produit ce que tu attendais. "
-                + "C'est la définition que ta constitution donne de confondre activité et résultat."
+                + "C'est ce que ce rapport appelle confondre activité et résultat : ta "
+                + "constitution nomme le piège dans sa mission, elle ne le mesure pas — la "
+                + "mesure est celle-ci, et elle vaut ce que vaut ce rapport."
         )
     }
 

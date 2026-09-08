@@ -572,7 +572,7 @@
           {
             "severity": "ATTENTION",
             "title": "4h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est ce que ce rapport appelle confondre activité et résultat : ta constitution nomme le piège dans sa mission, elle ne le mesure pas — la mesure est celle-ci, et elle vaut ce que vaut ce rapport."
           },
           {
             "severity": "INFO",
@@ -774,7 +774,7 @@
           {
             "severity": "ATTENTION",
             "title": "4h engagées sans verdict",
-            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est ce que ce rapport appelle confondre activité et résultat : ta constitution nomme le piège dans sa mission, elle ne le mesure pas — la mesure est celle-ci, et elle vaut ce que vaut ce rapport."
           },
           {
             "severity": "INFO",
@@ -949,7 +949,7 @@
           {
             "severity": "INFO",
             "title": "80h engagées sans verdict",
-            "detail": "Contre 2h qui ont produit ce que tu attendais. C'est la définition que ta constitution donne de confondre activité et résultat."
+            "detail": "Contre 2h qui ont produit ce que tu attendais. C'est ce que ce rapport appelle confondre activité et résultat : ta constitution nomme le piège dans sa mission, elle ne le mesure pas — la mesure est celle-ci, et elle vaut ce que vaut ce rapport."
           },
           {
             "severity": "INFO",

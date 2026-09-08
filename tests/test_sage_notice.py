@@ -428,3 +428,43 @@ def test_le_passage_en_critique_arrive_bien_apres_une_semaine(tmp_path):
     assert "depuis 8 jours" in huit.detail
     assert huit.severity == "CRITIQUE"
     assert "Passé une semaine" in huit.detail
+
+
+# --- ce que le rapport met dans la bouche de la constitution ------------------
+
+def test_the_report_only_attributes_to_the_constitution_what_it_says(tmp_path):
+    """Une phrase qui parle au nom de sa constitution doit dire vrai.
+
+    « C'est la définition que ta constitution donne de confondre activité et
+    résultat » : elle n'en donne aucune. Le document nomme le piège dans sa
+    mission — « sans confondre activité et résultat » — et s'arrête là. Le
+    seuil, lui, est un choix de ce rapport.
+
+    Ce n'est pas un détail de ton. Un outil qui invoque un document que son
+    auteur a écrit lui-même, pour lui prêter une règle qu'il ne contient pas,
+    rend cette règle inattaquable : on ne discute pas sa propre constitution.
+    C'est la provenance, appliquée aux phrases plutôt qu'aux données.
+    """
+    import pathlib
+    import re
+
+    racine = pathlib.Path(__file__).resolve().parent.parent
+    texte_constitution = (racine / "constitution.md").read_text(encoding="utf-8")
+    source = (racine / "singular/sage/notice.py").read_text(encoding="utf-8")
+
+    # Les affirmations restantes, et ce qui les fonde dans le document.
+    fondees = {
+        "Ta constitution ouvre sur": "Stabilité → Revenus",
+        "La constitution demande de juger une décision sur": "levier, coût",
+    }
+    for phrase, appui in fondees.items():
+        assert phrase in source, f"« {phrase} » a disparu : ce test ne la garde plus"
+        for morceau in appui.split(", "):
+            assert morceau in texte_constitution, (
+                f"« {phrase} » s'appuie sur « {morceau} », absent de constitution.md")
+
+    interdites = [r"la définition que ta constitution", r"ta constitution définit"]
+    for motif in interdites:
+        assert not re.search(motif, source), (
+            f"le rapport prête une définition à constitution.md ({motif!r}), "
+            "qui n'en donne aucune")

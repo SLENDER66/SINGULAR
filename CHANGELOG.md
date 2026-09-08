@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.10.1 — Le rapport ne parle plus au nom d'un document qui se tait
+
+« C'est la définition que ta constitution donne de confondre activité et
+résultat. » Elle n'en donne aucune : `constitution.md` nomme le piège dans sa
+mission — « sans confondre activité et résultat » — et s'arrête là. Le seuil,
+lui, est un choix de ce rapport.
+
+Ce n'est pas un détail de ton. Un outil qui invoque un document que son auteur
+a écrit lui-même, pour lui prêter une règle qu'il ne contient pas, rend cette
+règle inattaquable : on ne discute pas sa propre constitution. C'est la règle
+de provenance du dépôt, appliquée aux phrases plutôt qu'aux données.
+
+- L'observation dit désormais d'où vient la mesure, et que c'est la sienne.
+- Les deux autres phrases qui parlent au nom du document — la hiérarchie et le
+  « juger sur son levier et son coût » — sont exactes ; un test les relie
+  maintenant au texte de `constitution.md` et refuse toute attribution neuve.
+- Le port Swift porte la même phrase, et les vecteurs la figent.
+
 ## 3.10.0 — La calibration ne conclut plus avant d'en avoir le droit
 
 C'est la question pour laquelle ce journal existe : « est-ce que mes 70 %
