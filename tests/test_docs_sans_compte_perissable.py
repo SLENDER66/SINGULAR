@@ -27,7 +27,8 @@ import sys
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DOCUMENTS = ["A_FAIRE.md", "CLAUDE.md", "PROMPT_NOUVELLE_CONVERSATION.md", "proto/README.md"]
+DOCUMENTS = ["A_FAIRE.md", "CLAUDE.md", "PROMPT_NOUVELLE_CONVERSATION.md",
+             "PROMPT_RECONSTRUCTION.md", "proto/README.md"]
 
 MOTS = {
     "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "six": 6,
