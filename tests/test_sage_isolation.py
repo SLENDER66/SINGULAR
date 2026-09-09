@@ -48,13 +48,18 @@ EXECUTION_MODULES = frozenset({
 #: recopié ici, il l'a déjà été et il avait vieilli -- et le reste de l'app
 #: continue quand elle est coupée : `test_sage_parle.py` et
 #: `test_sage_offres.py` le vérifient plutôt que de le promettre.
+#: `saisie` y est entre pour que les refus soient dits dans sa langue : la
+#: regle est celle du journal, la phrase est ecrite une fois, et les deux
+#: surfaces la lisent au lieu de la reecrire. Il ne lit rien, il n'ecrit rien.
+#:
 #: `fichiers` y est entre pour une raison plus etroite encore : savoir ecrire
 #: un fichier sans pouvoir le perdre en tombant. Il n'importe que `os` et
 #: `pathlib`, il ne lit rien, il ne decide rien -- et il porte la seule
 #: ecriture atomique du depot, celle que la cle d'acces utilise pour ne pas
 #: exister un instant en clair.
 ALLOWED = frozenset({"journal", "sage", "icon", "notice", "server", "learning",
-                     "sqlite_support", "analyse", "parle", "offres", "fichiers"})
+                     "sqlite_support", "analyse", "parle", "offres", "fichiers",
+                     "saisie"})
 
 
 def _imported_modules(source: Path) -> set[str]:

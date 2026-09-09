@@ -33,6 +33,7 @@ from urllib.parse import unquote_plus, urlsplit
 
 from ..fichiers import ecrire_atomique
 from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
+from ..saisie import verifie_gain, verifie_heures, verifie_jours, verifie_probabilite
 from .icon import render_icon
 from .notice import build_notice
 
@@ -311,16 +312,36 @@ class SageApp:
     # --- écriture ------------------------------------------------------------
 
     def add(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Enregistrer une decision. Les refus sont dits dans sa langue.
+
+        Ils ne l'etaient pas : cette route laissait le journal lever, et
+        renvoyait son message tel quel. Sur son telephone, taper « -100 » dans
+        le champ du gain -- qui n'a aucune borne, exprès, pour que « vide »
+        reste possible -- rendait `expected_gain_eur cannot be negative: a cost
+        is not a gain`. Le clavier repondait deja en francais ; le formulaire
+        posait ses propres bornes en HTML. Trois ecritures de la meme regle,
+        dont une muette.
+        """
+        probabilite = _number(payload, "probability", cast=float)
+        heures = _number(payload, "cost_hours", cast=float)
+        jours = _number(payload, "horizon_days", cast=int)
+        gain = _gain(payload)
+        for valeur, verifie in ((probabilite, verifie_probabilite), (heures, verifie_heures),
+                                (jours, verifie_jours), (gain, verifie_gain)):
+            try:
+                verifie(valeur)
+            except ValueError as refus:
+                raise SageError(HTTPStatus.BAD_REQUEST, str(refus)) from None
         try:
             entry = self.journal.add(
                 title=_text(payload, "title"),
                 action=_text(payload, "action"),
                 predicted=_text(payload, "predicted"),
-                probability=_number(payload, "probability", cast=float),
+                probability=probabilite,
                 tier=_tier(payload.get("tier", Tier.REVENUS.value)),
-                cost_hours=_number(payload, "cost_hours", cast=float),
-                horizon_days=_number(payload, "horizon_days", cast=int),
-                expected_gain_eur=_gain(payload),
+                cost_hours=heures,
+                horizon_days=jours,
+                expected_gain_eur=gain,
                 reversibility=_reversibility(payload),
             )
         except ValueError as exc:

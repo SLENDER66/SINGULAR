@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.20.0 — Le téléphone parlait anglais quand il refusait
+
+Les règles de saisie sont celles du journal, et il lève en anglais — c'est son
+contrat de bibliothèque, testé comme tel. Mais ce message remontait jusqu'à
+l'écran.
+
+Chaque surface s'était mise à valider de son côté : le clavier en français, le
+formulaire par des attributs HTML, **le serveur pas du tout**. Trois écritures
+de la même règle, et c'est celle qui ne validait pas qui parlait.
+
+Le champ du gain est en texte libre, exprès — « vide » doit rester possible,
+parce que « non chiffré » et « ne rapporte rien » ne sont pas la même chose. Il
+n'a donc aucune borne dans le formulaire, et taper `-100` en pensant à un coût
+rendait, sur son téléphone :
+
+    expected_gain_eur cannot be negative: a cost is not a gain
+
+- `singular/saisie.py` est le seul endroit où la règle est dite en français.
+  Le clavier et le serveur la lisent au lieu de la réécrire.
+- `test_saisie_au_clavier.py` vérifie que les **trois** surfaces acceptent
+  exactement ce que le journal accepte, et qu'aucun message de la bibliothèque
+  n'arrive tel quel sur son écran. Un quatrième test tient les bornes du
+  formulaire HTML.
+- Ma première version lisait `1` comme « 1 % ». C'est faux — `1` veut dire la
+  certitude — et elle aurait conseillé « pour 100 %, écris 1 », un conseil que
+  la règle suivante refuse.
+- `test_windows_console.py` scanne le nouveau fichier : les messages passent
+  par sa console, la liste devait suivre les messages.
+
 ## 3.19.0 — L'app ne disait pas où elle avait regardé
 
 « Le journal est vide. » Un journal vide et un mauvais journal donnent

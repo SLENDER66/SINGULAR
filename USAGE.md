@@ -215,6 +215,33 @@ Et le fil lui-même est mis en cache jusqu'au dernier tour enregistré. Sans ça
 il est refacturé au plein tarif à chaque question, et le vingtième tour coûte
 vingt fois le premier — c'est ce qui rend une conversation continue tenable.
 
+### Ce que l'outil refuse, et comment il le dit
+
+Les règles sont celles du journal : probabilité strictement entre 0 et 1,
+heures positives, horizon d'au moins un jour, gain qui n'est pas un coût. Le
+journal les fait respecter et lève en anglais — c'est son contrat de
+bibliothèque.
+
+Mais ce message-là te remontait. Au clavier tu lisais `probability must be
+strictly between 0 and 1` ; sur ton téléphone, `expected_gain_eur cannot be
+negative: a cost is not a gain`. Chaque surface s'était mise à valider de son
+côté — le clavier en français, le formulaire par des attributs HTML, le serveur
+pas du tout — et c'est celle qui ne validait pas qui te parlait anglais.
+
+`singular/saisie.py` est le seul endroit où la règle est dite en français.
+`test_saisie_au_clavier.py` vérifie que les **trois** surfaces acceptent
+exactement ce que le journal accepte : une divergence te ferait perdre ta
+saisie, ou passer une décision que le journal refuse juste après.
+
+Ce que tu lis maintenant, des deux côtés :
+
+| Tu tapes | Il répond |
+|---|---|
+| `75` pour la probabilité | `pas en pourcents - pour 75 %, ecris 0.75` |
+| `1` | `une certitude ne peut pas avoir tort, une impossibilite non plus` |
+| `-100` en gain | `un cout n'est pas un gain : laisse vide si tu ne sais pas` |
+| `0` en horizon | `au moins un jour, sinon rien ne peut etre verifie` |
+
 ### `offres` — le premier agent
 
 ```bash

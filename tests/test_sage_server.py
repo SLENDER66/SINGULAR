@@ -132,13 +132,48 @@ def test_an_id_carrying_a_separator_matches_no_route_at_all(app, forged):
 
 
 def test_certainty_is_refused_through_the_api(app):
-    """La règle du journal doit valoir aussi par le réseau."""
+    """La règle du journal doit valoir aussi par le réseau, et se lire.
+
+    Elle valait déjà ; c'est le message qui ne se lisait pas. La route laissait
+    le journal lever et renvoyait son texte tel quel — `probability must be
+    strictly between 0 and 1` sur un téléphone, à quelqu'un qui débute en code
+    et lit le français. Le clavier, lui, répondait déjà dans sa langue.
+    """
     payload = {"title": "A", "action": "a", "predicted": "p", "probability": 1.0,
                "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7}
     with pytest.raises(SageError) as refusal:
         app.add(payload)
     assert refusal.value.status == HTTPStatus.BAD_REQUEST
-    assert "certainty" in refusal.value.message or "probability" in refusal.value.message
+    assert "certitude" in refusal.value.message
+    assert "probability must be" not in refusal.value.message
+
+
+def test_a_cost_typed_as_a_gain_is_refused_in_his_language(app):
+    """Le champ du gain n'a aucune borne dans le formulaire, et c'est voulu.
+
+    Il est en texte libre pour que « vide » reste possible — « non chiffré » et
+    « ne rapporte rien » ne sont pas la même chose. Mais taper « -100 » en
+    pensant à un coût rendait `expected_gain_eur cannot be negative: a cost is
+    not a gain`, sur son téléphone. Quatrième écriture de la même règle, et la
+    seule qui parlait anglais.
+    """
+    payload = {"title": "A", "action": "a", "predicted": "p", "probability": 0.6,
+               "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7,
+               "expected_gain_eur": "-100"}
+    with pytest.raises(SageError) as refusal:
+        app.add(payload)
+    assert refusal.value.status == HTTPStatus.BAD_REQUEST
+    assert "un cout n'est pas un gain" in refusal.value.message
+    assert "laisse vide" in refusal.value.message
+
+
+def test_percent_typed_in_the_probability_says_what_to_write(app):
+    """« 75 » pour 75 % : le refus doit donner la réponse, pas la règle."""
+    payload = {"title": "A", "action": "a", "predicted": "p", "probability": 75,
+               "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7}
+    with pytest.raises(SageError) as refusal:
+        app.add(payload)
+    assert "ecris 0.75" in refusal.value.message
 
 
 def test_blank_fields_are_refused(app):

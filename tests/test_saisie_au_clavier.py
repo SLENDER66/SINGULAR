@@ -21,12 +21,20 @@ from __future__ import annotations
 
 import pytest
 
-from singular.__main__ import (
-    _entier,
-    _nombre,
-    _verifie_heures,
-    _verifie_jours,
-    _verifie_probabilite,
+from singular.saisie import (
+    entier as _entier,
+)
+from singular.saisie import (
+    nombre as _nombre,
+)
+from singular.saisie import (
+    verifie_heures as _verifie_heures,
+)
+from singular.saisie import (
+    verifie_jours as _verifie_jours,
+)
+from singular.saisie import (
+    verifie_probabilite as _verifie_probabilite,
 )
 from singular.journal import DecisionJournal, Tier
 
@@ -121,3 +129,105 @@ def test_the_gain_question_reads_numbers_the_same_way(tmp_path, monkeypatch, cap
 
     monkeypatch.setattr("builtins.input", lambda *a: "-100")
     assert _gain_prompt() is None, "un cout n'est pas un gain"
+
+
+# --- les trois surfaces disent la meme chose ----------------------------------
+
+def _accepte_par_le_telephone(tmp_path, **champs) -> bool:
+    from singular.sage.server import SageApp, SageError
+
+    app = SageApp(DecisionJournal(tmp_path / f"t{abs(hash(tuple(champs.items())))}.db"))
+    charge = {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+              "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14}
+    try:
+        app.add({**charge, **champs})
+    except SageError:
+        return False
+    return True
+
+
+@pytest.mark.parametrize("valeur", PROBABILITES)
+def test_the_phone_and_the_journal_agree_on_a_probability(tmp_path, valeur):
+    """La route du telephone etait la seule sans verification propre.
+
+    Elle laissait le journal lever et renvoyait son message tel quel : de
+    l'anglais de machine sur un ecran de six pouces. Elle verifie maintenant,
+    et ce qu'elle accepte doit rester exactement ce que le journal accepte --
+    sinon elle refuserait une decision valable, ou en laisserait passer une que
+    le journal rejette juste apres.
+    """
+    assert _accepte_par_le_telephone(tmp_path, probability=valeur) is \
+        _accepte_par_le_journal(tmp_path, probability=valeur)
+
+
+@pytest.mark.parametrize("valeur", HEURES)
+def test_the_phone_and_the_journal_agree_on_hours(tmp_path, valeur):
+    assert _accepte_par_le_telephone(tmp_path, cost_hours=valeur) is \
+        _accepte_par_le_journal(tmp_path, cost_hours=valeur)
+
+
+@pytest.mark.parametrize("valeur", JOURS)
+def test_the_phone_and_the_journal_agree_on_a_horizon(tmp_path, valeur):
+    assert _accepte_par_le_telephone(tmp_path, horizon_days=valeur) is \
+        _accepte_par_le_journal(tmp_path, horizon_days=valeur)
+
+
+@pytest.mark.parametrize("valeur", [None, 0.0, 1500.0, -100.0, -0.01])
+def test_the_phone_and_the_journal_agree_on_a_gain(tmp_path, valeur):
+    """Le champ du gain est en texte libre, exprès : « vide » doit rester possible.
+
+    C'est ce qui le laissait sans borne, et « -100 » -- un cout, tape de bonne
+    foi -- ressortait en anglais.
+    """
+    envoye = "" if valeur is None else str(valeur)
+    assert _accepte_par_le_telephone(tmp_path, expected_gain_eur=envoye) is \
+        _accepte_par_le_journal(tmp_path, expected_gain_eur=valeur)
+
+
+def test_no_refusal_reaches_him_in_the_language_of_the_library(tmp_path):
+    """Aucun message du journal ne doit arriver tel quel sur son telephone.
+
+    Les exceptions de `journal.py` sont son contrat de bibliotheque, en anglais
+    et testees comme tel. Elles n'ont rien a faire sur un ecran.
+    """
+    from singular.sage.server import SageApp, SageError
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    charge = {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+              "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14}
+    fautifs = [{"probability": 1.0}, {"probability": 0.0}, {"probability": 75},
+               {"cost_hours": -1}, {"horizon_days": 0}, {"expected_gain_eur": "-5"}]
+
+    for faute in fautifs:
+        with pytest.raises(SageError) as refus:
+            app.add({**charge, **faute})
+        message = refus.value.message
+        for anglais in ("must be", "cannot be", "needs a horizon", "is not a forecast"):
+            assert anglais not in message, f"{faute} rend « {message} »"
+
+
+def test_the_form_can_only_produce_what_the_journal_accepts():
+    """Le formulaire est une quatrieme ecriture de la meme regle, en HTML.
+
+    Ses bornes doivent rester dans ce que le journal accepte : un curseur qui
+    irait jusqu'a 100 produirait une valeur refusee, et le refus arriverait
+    apres l'appui sur « Enregistrer ».
+    """
+    import pathlib
+    import re
+
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "singular/sage/web/index.html").read_text(encoding="utf-8")
+
+    def attribut(champ: str, nom: str) -> float:
+        balise = re.search(rf'<input name="{champ}"[^>]*>', page, re.S)
+        assert balise, f"le champ {champ} a disparu du formulaire"
+        trouve = re.search(rf'{nom}="([-\d.]+)"', balise.group(0))
+        assert trouve, f"{champ} n'a plus d'attribut {nom}"
+        return float(trouve.group(1))
+
+    # Le curseur est en pourcents ; le journal veut une fraction.
+    assert 0 < attribut("probability", "min") / 100 < 1
+    assert 0 < attribut("probability", "max") / 100 < 1
+    assert attribut("cost_hours", "min") >= 0
+    assert attribut("horizon_days", "min") >= 1

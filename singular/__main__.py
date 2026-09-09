@@ -18,6 +18,12 @@ import sys
 from datetime import datetime
 
 from .journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
+from .saisie import entier as _entier
+from .saisie import nombre as _nombre
+from .saisie import verifie_gain as _verifie_gain
+from .saisie import verifie_heures as _verifie_heures
+from .saisie import verifie_jours as _verifie_jours
+from .saisie import verifie_probabilite as _verifie_probabilite
 from .sage.notice import calibration_verdict, foundation_item
 
 DIM = "\033[2m"
@@ -45,64 +51,6 @@ def _ask(prompt: str, *, cast=str, default=None, validate=None):
             return value
         except (ValueError, KeyError) as exc:
             print(_colour(f"  {exc}", RED))
-
-
-def _nombre(brut: str) -> float:
-    """Un nombre tel qu'il le tape : « 0,75 » et « 1 500 » comptent.
-
-    Il est en France, sur un clavier français : la virgule décimale est ce qui
-    vient naturellement. `float("0,75")` lève, et le message que `_ask`
-    affichait alors était « could not convert string to float: '0,75' » — de
-    l'anglais de machine, à quelqu'un qui débute en code, pour une saisie qui
-    n'avait rien de fautif. `_gain_prompt` acceptait déjà la virgule ; les
-    autres questions non.
-    """
-    # Toutes les espaces, sans en nommer aucune : l'espace fine insécable des
-    # milliers ne s'écrit pas dans une console Windows française, et
-    # `test_windows_console.py` refuse -- à raison -- qu'un littéral de ce
-    # fichier contienne un caractère qu'elle ne sait pas afficher.
-    propre = "".join(c for c in brut if not c.isspace()).replace(",", ".")
-    try:
-        return float(propre)
-    except ValueError:
-        raise ValueError(f"« {brut} » n'est pas un nombre") from None
-
-
-def _entier(brut: str) -> int:
-    return int(_nombre(brut))
-
-
-def _verifie_probabilite(valeur: float) -> None:
-    """La même règle que le journal, dite dans sa langue et avant d'écrire.
-
-    Sans elle, taper « 75 » en pensant pourcents passait les six questions
-    suivantes, puis échouait sur `probability must be strictly between 0 and 1`
-    — en anglais, et surtout **après coup** : tout ce qu'il venait de saisir
-    était perdu, et un outil censé prendre trente secondes en redemandait
-    autant. `_ask` reboucle sur place ; il corrige un chiffre, pas huit.
-
-    `test_saisie_au_clavier.py` vérifie que ce qui est accepté ici est
-    exactement ce que `DecisionJournal.add` accepte : deux écritures d'une même
-    règle finissent par diverger, et c'est la garde qui l'empêche.
-    """
-    if valeur >= 1 and valeur <= 100:
-        raise ValueError(
-            f"entre 0.05 et 0.95, pas en pourcents - pour {valeur:g} %, ecris "
-            f"{valeur / 100:g}")
-    if not 0 < valeur < 1:
-        raise ValueError("entre 0.05 et 0.95 : une certitude ne peut pas avoir tort")
-
-
-def _verifie_heures(valeur: float) -> None:
-    if valeur < 0:
-        raise ValueError("des heures ne se comptent pas en négatif")
-    if valeur != valeur or valeur in (float("inf"), float("-inf")):
-        raise ValueError("un nombre d'heures, pas l'infini")
-
-
-def _verifie_jours(valeur: int) -> None:
-    if valeur < 1:
-        raise ValueError("au moins un jour, sinon rien ne peut être vérifié")
 
 
 def _tier_prompt() -> Tier:
@@ -156,8 +104,10 @@ def _gain_prompt() -> float | None:
     except ValueError:
         print(_colour("  Pas un nombre : laissé non chiffré.", RED))
         return None
-    if valeur < 0:
-        print(_colour("  Un coût n'est pas un gain : laissé non chiffré.", RED))
+    try:
+        _verifie_gain(valeur)
+    except ValueError as refus:
+        print(_colour(f"  {refus} : laisse non chiffre.", RED))
         return None
     return valeur
 
@@ -256,13 +206,7 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
     du texte, et rien d'autre ne se produit tant que tu n'as rien fait.
     """
     from .analyse import AnalyseIndisponible
-    from .offres import (
-        MODELE_PAR_DEFAUT,
-        RECHERCHES_MAX,
-        apercu,
-        chercher,
-        contexte_pour_recherche,
-    )
+    from .offres import MODELE_PAR_DEFAUT, RECHERCHES_MAX, apercu, chercher
     from .parle import Quota, bilan, phrase_de_bilan
 
     if args.blanc:
@@ -300,13 +244,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
     continuer à marcher sans : c'est pour ça que l'échec ici s'affiche comme
     un fait et rend 1, au lieu de remonter une trace de pile.
     """
-    from .analyse import (
-        MODELE_PAR_DEFAUT,
-        AnalyseIndisponible,
-        analyser,
-        apercu,
-        contexte_pour_analyse,
-    )
+    from .analyse import MODELE_PAR_DEFAUT, AnalyseIndisponible, analyser, apercu
     from .parle import Quota, bilan, phrase_de_bilan
     from .sage.notice import build_notice
 
