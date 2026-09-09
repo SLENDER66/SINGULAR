@@ -508,6 +508,238 @@
       }
     },
     {
+      "name": "ecart_prouve_sous_le_seuil_voyant",
+      "why": "Seize paris annoncés à 95 %, trois perdus : quatorze points d'écart, que le hasard seul produirait une fois sur vingt-trois. Sous les quinze points qui rendaient un écart voyant, et pourtant démontré — c'est le cas sur lequel le Sage se taisait.",
+      "at": "2026-09-09T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Pari 0",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 2",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 3",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 4",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 5",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 6",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 7",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 8",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 9",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 10",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 11",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 12",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 13",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 14",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 15",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Tu te surestimes de +14%.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Tu te surestimes de +14%",
+            "detail": "Tu annonces 95% en moyenne ; il en arrive 81%. Sur 16 verdicts, ce n'est plus de la malchance : le hasard seul produirait cet écart une fois sur 23. Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+          },
+          {
+            "severity": "INFO",
+            "title": "Aucune décision sur Revenus",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision."
+          }
+        ]
+      }
+    },
+    {
       "name": "surconfiance",
       "why": "Quatre paris à 90 % tous perdus : une fois sur dix mille. Là, on conclut.",
       "at": "2026-09-08T09:00:00+00:00",

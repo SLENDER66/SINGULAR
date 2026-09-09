@@ -180,6 +180,19 @@ CASES: list[dict[str, Any]] = [
         ],
     },
     {
+        "name": "ecart_prouve_sous_le_seuil_voyant",
+        "why": "Seize paris annoncés à 95 %, trois perdus : quatorze points d'écart, "
+               "que le hasard seul produirait une fois sur vingt-trois. Sous les quinze "
+               "points qui rendaient un écart voyant, et pourtant démontré — c'est le cas "
+               "sur lequel le Sage se taisait.",
+        "at_offset_days": 3,
+        "entries": [
+            _entry(f"Pari {index}", tier=Tier.STABILITE, probability=0.95, days=1,
+                   resolved=index >= 3)
+            for index in range(16)
+        ],
+    },
+    {
         "name": "surconfiance",
         "why": "Quatre paris à 90 % tous perdus : une fois sur dix mille. Là, on conclut.",
         "at_offset_days": 2,

@@ -133,6 +133,10 @@ enum NoticeEngine {
     /// Une fois sur vingt — conventionnel, écrit plutôt que sous-entendu.
     static let calibrationHasard = 0.05
 
+    /// Un demi-point : en deçà, la phrase dirait « tu te surestimes de +0% ».
+    /// Plancher d'arrondi, pas plancher de jugement.
+    static let calibrationArrondi = 0.005
+
     static func build(entries: [Entry], at moment: Date, chainIntact: Bool) -> Notice {
         let report = Report.build(entries: entries, at: moment, chainIntact: chainIntact)
         let overdue = entries.filter { $0.isOverdue(at: moment) }.sorted { $0.dueAt < $1.dueAt }
@@ -311,7 +315,7 @@ enum NoticeEngine {
         let hasard = chanceDuHasard(report.resolvedProbabilities, hits: hits)
         return CalibrationVerdict(
             gap: gap, chance: hasard,
-            conclusive: abs(gap) >= calibrationGap && hasard <= calibrationHasard
+            conclusive: hasard <= calibrationHasard && abs(gap) >= calibrationArrondi
         )
     }
 
@@ -319,7 +323,7 @@ enum NoticeEngine {
         guard let verdict = calibrationVerdict(report),
               let predicted = report.meanProbability,
               let happened = report.hitRate,
-              abs(verdict.gap) >= calibrationGap else { return nil }
+              verdict.conclusive || abs(verdict.gap) >= calibrationGap else { return nil }
 
         let gap = verdict.gap
         let hasard = verdict.chance

@@ -38,7 +38,12 @@ import pytest
 from singular.journal import DecisionJournal, Tier
 from singular.sage import build_notice
 from singular.sage import notice as notice_module
-from singular.sage.notice import CALIBRATION_GAP, CALIBRATION_MINIMUM, calibration_verdict
+from singular.sage.notice import (
+    CALIBRATION_GAP,
+    CALIBRATION_HASARD,
+    CALIBRATION_MINIMUM,
+    calibration_verdict,
+)
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 DOMICILE = RACINE / "singular/sage/notice.py"
@@ -225,3 +230,73 @@ def test_below_the_minimum_there_is_nothing_to_hand_over(tmp_path):
     journal = _journal(tmp_path, [(0.75, False)] * (CALIBRATION_MINIMUM - 1))
     assert build_notice(journal, now=NOW + timedelta(days=30)).calibration is None
     assert calibration_verdict(journal.review(now=NOW + timedelta(days=30))) is None
+
+
+# --- « conclusif » veut dire démontré, et rien d'autre -------------------------
+
+def test_un_ecart_prouve_se_dit_meme_quand_il_est_petit(tmp_path):
+    """Le cas sur lequel le Sage se taisait, et la raison d'être du journal.
+
+    Seize paris annoncés à 95 %, trois perdus : quatorze points d'écart, que le
+    hasard seul produirait une fois sur vingt-trois. Sous les quinze points de
+    `CALIBRATION_GAP`, donc rien ne s'affichait — dans l'outil construit pour
+    répondre à « est-ce que mes 70 % arrivent sept fois sur dix ? ».
+
+    Thomas a tranché le 9 septembre : le Sage parle dès que c'est prouvé.
+    """
+    journal = _journal(tmp_path, [(0.95, index >= 3) for index in range(16)])
+    notice = build_notice(journal, now=NOW + timedelta(days=40))
+    verdict = notice.calibration
+
+    assert verdict is not None
+    assert abs(verdict["gap"]) < CALIBRATION_GAP, "le cas doit rester sous l'ancien seuil"
+    assert verdict["chance"] <= CALIBRATION_HASARD, "et rester démontré"
+    assert verdict["conclusive"] is True
+
+    dit = next(item for item in notice.items if "surestimes" in item.title)
+    assert dit.severity == "ATTENTION"
+    assert "plus de la malchance" in dit.detail
+
+
+def test_un_ecart_petit_et_non_prouve_reste_muet(tmp_path):
+    """L'autre versant : sans lui, « dès que c'est prouvé » deviendrait « toujours ».
+
+    Quatre paris à 60 % dont un perdu de plus que prévu : l'écart existe, le
+    hasard l'explique une fois sur trois. Rien ne doit s'afficher.
+    """
+    journal = _journal(tmp_path, [(0.6, True), (0.6, True), (0.6, False), (0.6, False)])
+    notice = build_notice(journal, now=NOW + timedelta(days=40))
+    verdict = notice.calibration
+
+    assert verdict is not None
+    assert verdict["chance"] > CALIBRATION_HASARD
+    assert verdict["conclusive"] is False
+    assert not [item for item in notice.items if "surestimes" in item.title]
+
+
+def test_le_seuil_voyant_garde_son_autre_emploi(tmp_path):
+    """Montrer un écart voyant sans conclure : la correction précédente tient.
+
+    Trois paris à 75 %, un seul gagné. L'écart saute aux yeux, le hasard seul le
+    produit une fois sur six. On le montre, on ne conclut pas.
+    """
+    journal = _journal(tmp_path, [(0.75, True), (0.75, False), (0.75, False)])
+    notice = build_notice(journal, now=NOW + timedelta(days=40))
+
+    assert notice.calibration["conclusive"] is False
+    dit = next(item for item in notice.items if "annonces plus" in item.title)
+    assert dit.severity == "INFO"
+    assert "trop peu pour en conclure" in dit.detail
+
+
+def test_le_port_ios_applique_la_meme_condition():
+    """La règle vit deux fois : ici et en Swift. Elle doit dire la même chose.
+
+    Les vecteurs le prouvent sur un Mac ; ce test le lit ici, aujourd'hui, parce
+    qu'aucun compilateur Swift n'est installable dans cet environnement.
+    """
+    swift = (RACINE / "ios/SingularSage/Core/Notice.swift").read_text(encoding="utf-8")
+    assert "conclusive: hasard <= calibrationHasard && abs(gap) >= calibrationArrondi" in swift, (
+        "le port conclut encore sur `calibrationGap` : un écart démontré de dix "
+        "points parlerait sur le PC et se tairait sur le téléphone")
+    assert "verdict.conclusive || abs(verdict.gap) >= calibrationGap" in swift

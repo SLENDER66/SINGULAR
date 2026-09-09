@@ -24,9 +24,22 @@ from ..journal import DecisionJournal, Entry, Reversibility, Status, Tier
 #: Au-delà, un retard n'est plus un oubli : c'est une décision qu'on évite.
 LATE_DAYS = 7
 
-#: Écart de calibration à partir duquel il faut le dire. En deçà, le bruit
-#: d'échantillon explique l'écart aussi bien que la surconfiance.
+#: Écart de calibration à partir duquel un constat non démontré vaut d'être
+#: montré. Ce n'est plus la condition pour conclure : la preuve l'est.
+#:
+#: Ce seuil a longtemps decidé des deux. Un écart de dix points sur deux cents
+#: verdicts, que le hasard seul produirait une fois sur deux cents, ne
+#: s'affichait donc pas — le Sage se taisait sur ce qu'il pouvait prouver, dans
+#: l'outil construit exactement pour répondre à « est-ce que mes 70 % arrivent
+#: sept fois sur dix ? ». Thomas a tranché le 9 septembre, questionnaire à
+#: l'appui : « dès que c'est prouvé ». Le seuil ne garde que son autre emploi,
+#: montrer un écart voyant en disant qu'il n'est pas encore établi.
 CALIBRATION_GAP = 0.15
+
+#: Un demi-point : en deçà, la phrase dirait « tu te surestimes de +0% ».
+#: Plancher d'arrondi, pas plancher de jugement — la nuance est le sujet même
+#: du choix ci-dessus.
+CALIBRATION_ARRONDI = 0.005
 
 #: Nombre de verdicts en dessous duquel une calibration ne veut rien dire.
 CALIBRATION_MINIMUM = 3
@@ -257,7 +270,10 @@ def calibration_verdict(report: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "gap": gap,
         "chance": hasard,
-        "conclusive": abs(gap) >= CALIBRATION_GAP and hasard <= CALIBRATION_HASARD,
+        # « Conclusif » veut dire démontré, et rien d'autre. Il a voulu dire
+        # « démontré et d'au moins quinze points », ce qui rendait muet un écart
+        # de dix points établi sur deux cents verdicts.
+        "conclusive": hasard <= CALIBRATION_HASARD and abs(gap) >= CALIBRATION_ARRONDI,
     }
 
 
@@ -280,16 +296,17 @@ def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
     pur hasard l'ait produit. Non conclusif, on montre l'écart et on demande de
     le regarder sans le corriger ; conclusif, on peut dire de corriger.
 
-    En dessous de `CALIBRATION_GAP`, l'observation se tait entièrement, même
-    quand l'écart est statistiquement certain : 200 verdicts à 60 % dont la
-    moitié arrivent donnent dix points d'écart que le hasard seul produirait une
-    fois sur deux cents, et rien ne s'affiche. C'est un plancher de ce qui vaut
-    la peine d'être corrigé, pas un plancher de ce qui est démontré — les deux
-    ne sont pas la même question, et le second n'appartient pas au code.
+    Elle s'est longtemps tue en dessous de `CALIBRATION_GAP`, même sur un écart
+    certain : 200 verdicts à 60 % dont la moitié arrivent donnent dix points que
+    le hasard seul produirait une fois sur deux cents, et rien ne s'affichait.
+    « Ce qui vaut la peine d'être corrigé » et « ce qui est démontré » ne sont
+    pas la même question, et la première ne s'invente pas depuis le code : elle
+    lui a été posée, et il a répondu « dès que c'est prouvé ». Le seuil ne
+    commande donc plus que le second état, celui qui montre sans conclure.
     """
     verdict = calibration_verdict(report)
     gap = report["overconfidence"]
-    if verdict is None or abs(gap) < CALIBRATION_GAP:
+    if verdict is None or (not verdict["conclusive"] and abs(gap) < CALIBRATION_GAP):
         return None
     predicted = report["mean_probability"]
     happened = report["hit_rate"]
@@ -519,7 +536,7 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     )
 
 
-__all__ = ["CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
+__all__ = ["CALIBRATION_ARRONDI", "CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
            "UNPRICED_WINDOW", "foundation_item",
            "Notice", "NoticeItem", "build_notice", "calibration_verdict", "chance_du_hasard",
            "observations"]
