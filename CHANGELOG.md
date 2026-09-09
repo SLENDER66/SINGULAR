@@ -1,5 +1,40 @@
 # Changelog
 
+## 3.17.0 — Le profil qui part vers un service distant n'avait aucune provenance
+
+`proto/suivi_candidatures.py` marque chaque ligne de son profil `DIT` ou
+`DEDUIT` depuis que deux déductions non demandées lui ont coûté un CV faux et
+un marché écarté. Un test y refuse une ligne sans provenance.
+
+`singular/offres.py` décrit la même vie, plus récemment, et **l'envoie à un
+service distant**. Il n'avait ni marque ni test. Son commentaire promettait
+« rien ici n'est déduit » — une promesse, pas une garantie, et elle était
+fausse.
+
+Ce qui s'y était glissé, sur la même ligne, en deux jours :
+
+1. « il ne cherche pas d'alternance », alors qu'il a dit qu'une reprise
+   d'études l'intéressait. Corrigé avant-hier.
+2. puis, dans la correction elle-même, **« une offre d'alternance ne se retient
+   que si elle dit prendre en charge la recherche d'école »** — une règle de
+   filtrage inventée, posée au milieu de ce qu'il aurait dit. Elle écartait des
+   annonces que personne n'avait demandé d'écarter. C'est la faute déjà payée,
+   refaite dans le geste qui la corrigeait.
+
+- `CRITERES` porte les mêmes marques que `PROFIL`, et une déduction voyage
+  désormais sous son étiquette : « Ceci n'est pas vérifié, ne t'appuie pas
+  dessus », **et seulement là**.
+- Un test refuse une consigne de filtrage dans le profil : un profil dit qui il
+  est, pas ce qu'il faut écarter. Une consigne ressemble à un fait quand on la
+  pose au milieu d'une liste de faits.
+- Un test refuse que les deux profils du dépôt se contredisent : une correction
+  faite à un seul endroit laisse la contradiction ailleurs, et c'est celle qui
+  part qui compte.
+- Ma première version du test d'étiquette se contentait de trouver la déduction
+  quelque part. Une déduction posée dans le corps **et** répétée sous
+  l'étiquette passait — alors que l'agent l'aurait lue comme un fait avant
+  d'arriver à l'avertissement.
+
 ## 3.16.0 — Voir ce qui part, pour les trois facultés
 
 Trois facultés font sortir quelque chose de sa machine. Deux affichaient ce

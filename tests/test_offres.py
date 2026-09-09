@@ -229,3 +229,107 @@ def test_l_instruction_interdit_d_inventer_une_offre() -> None:
 
     assert "fabrique jamais" in INSTRUCTION
     assert "postule" in INSTRUCTION
+
+
+# --- ce que l'agent croit savoir de lui ---------------------------------------
+
+def test_chaque_ligne_du_profil_porte_sa_provenance() -> None:
+    """Le meme garde-fou que le prototype, dans le module qui transmet.
+
+    `proto/suivi_candidatures.py` marque chaque ligne DIT ou DEDUIT depuis que
+    deux deductions non demandees ont coute a Thomas un CV faux et un marche
+    ecarte. Ce fichier-ci decrit la meme vie, plus recemment, et il l'envoie a
+    un service distant -- sans marque, et sans test. Son commentaire promettait
+    « rien ici n'est deduit ». Une promesse n'est pas une garantie.
+
+    Ce qu'elle laissait passer, verifie apres coup : « une offre d'alternance
+    ne se retient que si elle dit prendre en charge la recherche d'ecole »
+    etait une regle de filtrage inventee dans ce fichier, posee au milieu de ce
+    qu'il aurait dit. Elle ecartait des annonces que personne n'avait demande
+    d'ecarter -- exactement la faute deja payee, refaite.
+    """
+    from singular.offres import CRITERES, DEDUIT, DIT
+
+    fautes = [
+        repr(entree) for entree in CRITERES
+        if not (isinstance(entree, tuple) and len(entree) == 2
+                and isinstance(entree[0], str) and entree[1] in (DIT, DEDUIT))
+    ]
+    assert not fautes, (
+        "chaque ligne de CRITERES doit dire d'ou elle vient -- DIT ou DEDUIT :\n  "
+        + "\n  ".join(fautes)
+        + "\n  Une chaine seule voudrait dire « quelqu'un l'a ecrit, on ne sait plus qui »."
+    )
+
+
+def test_une_deduction_part_avec_son_etiquette() -> None:
+    """Si une deduction entre quand meme, elle ne doit pas voyager deguisee."""
+    from singular import offres
+
+    veritables = list(offres.CRITERES)
+    try:
+        offres.CRITERES.append(("Il vise plutot l'industriel.", offres.DEDUIT))
+        texte = offres.contexte_pour_recherche()
+    finally:
+        offres.CRITERES[:] = veritables
+
+    assert "Ceci n'est pas verifie" in texte
+    assert "- Il vise plutot l'industriel." in texte
+
+    # Et **seulement** la. La premiere version de ce test se contentait de la
+    # trouver quelque part : une deduction posee dans le corps du profil ET
+    # repetee sous l'etiquette passait, alors que l'agent l'aurait lue comme un
+    # fait avant d'arriver a l'avertissement.
+    avant, _, apres = texte.partition("Ceci n'est pas verifie")
+    assert "industriel" not in avant, (
+        "la deduction apparait dans le corps du profil, avant son etiquette")
+    assert "industriel" in apres
+
+
+def test_le_profil_ne_porte_aucune_consigne_de_filtrage() -> None:
+    """Un profil dit qui il est. Il ne dit pas ce qu'il faut ecarter.
+
+    La regle inventee s'etait glissee la parce qu'une consigne ressemble a un
+    fait quand on la pose au milieu d'une liste de faits. Elle n'y a pas sa
+    place : ce que l'agent doit faire est dans `INSTRUCTION`, ce que Thomas est
+    est dans `CRITERES`, et melanger les deux fait passer une decision pour une
+    biographie.
+    """
+    from singular.offres import CRITERES
+
+    verbes = ("ne se retient que", "il faut", "tu dois", "ecarte", "ignore",
+              "ne retiens", "privilegie", "exclus")
+    fautes = [texte for texte, _ in CRITERES
+              if any(verbe in texte.lower() for verbe in verbes)]
+    assert not fautes, (
+        f"{fautes} sont des consignes, pas des faits sur lui. "
+        "Ce que l'agent doit faire va dans INSTRUCTION.")
+
+
+def test_les_deux_profils_du_depot_ne_se_contredisent_pas() -> None:
+    """Deux fichiers decrivent sa vie. Ils doivent dire la meme chose.
+
+    `proto/suivi_candidatures.py` et `singular/offres.py` portent chacun leur
+    copie. Une correction faite a l'un et pas a l'autre laisse la contradiction
+    ailleurs -- et c'est celle qui part vers le service distant qui compte.
+    """
+    import importlib.util
+    import pathlib
+
+    from singular.offres import CRITERES, DIT
+
+    chemin = pathlib.Path(__file__).resolve().parent.parent / "proto/suivi_candidatures.py"
+    spec = importlib.util.spec_from_file_location("suivi_profil", chemin)
+    suivi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(suivi)
+
+    dit_ici = " ".join(texte for texte, source in CRITERES if source == DIT).lower()
+    dit_la = " ".join(texte for texte, source in suivi.PROFIL
+                      if source == suivi.DIT).lower()
+
+    # Les faits que les deux doivent porter pareil. Chacun a coute une session.
+    for fait in ("2 ans en bureau d'etudes", "bts fluides energies domotique",
+                 "chambres froides", "alternance", "ni ecole ni"):
+        assert (fait in dit_ici) == (fait in dit_la), (
+            f"« {fait} » n'est pas dit pareil des deux cotes : "
+            "une correction n'a ete faite qu'a un endroit")

@@ -38,28 +38,46 @@ JETONS_MAX = 4000
 
 EFFORT = effort_valide("SINGULAR_OFFRES_EFFORT")
 
-#: Ce qu'il cherche, dit par lui. Rien ici n'est déduit -- même règle que le
-#: profil du prototype, et pour la même raison : deux déductions non demandées
-#: lui ont déjà coûté un CV faux et un marché écarté.
+#: Les deux seules provenances possibles pour une ligne de profil. Memes noms
+#: et meme sens que dans `proto/suivi_candidatures.py`, qui les a introduits.
+#:
+#: DIT    : il l'a ecrit lui-meme. C'est un fait.
+#: DEDUIT : personne ne l'a dit. A confirmer, et transmis comme tel.
+DIT = "dit"
+DEDUIT = "deduit"
+
+#: Ce qu'il cherche. Chaque ligne porte sa provenance, et ce n'est pas de la
+#: ceremonie.
+#:
+#: Le prototype de suivi porte ces marques depuis que deux deductions non
+#: demandees lui ont coute un CV faux et un marche ecarte. Ce fichier-ci, plus
+#: recent, decrit la meme vie et l'**envoie a un service distant** -- et il
+#: n'avait ni marque ni test. Son commentaire disait « rien ici n'est deduit » :
+#: une promesse, pas une garantie, et elle etait fausse.
+#:
+#: Ce qui s'y etait glisse en deux jours, sur la meme ligne :
+#:
+#:   - « il ne cherche pas d'alternance », alors qu'il a dit qu'une reprise
+#:     d'etudes l'interessait. Corrige.
+#:   - puis « une offre d'alternance ne se retient que si elle dit prendre en
+#:     charge la recherche d'ecole » -- une regle de filtrage inventee ici,
+#:     posee au milieu de ce qu'il aurait dit, qui ecartait des annonces que
+#:     personne n'avait demande d'ecarter. Retiree.
+#:
+#: `tests/test_offres.py` refuse desormais une ligne sans provenance, ici comme
+#: dans le prototype.
 CRITERES = [
-    "Poste vise : charge d'etudes en bureau d'etudes CVC, chiffrage et",
-    "dimensionnement.",
-    "Region : Toulouse et sa peripherie.",
-    "Experience : 2 ans en bureau d'etudes CVC, plus 5 ans de terrain dans",
-    "l'Armee -- chambres froides positif et negatif, groupes electrogenes,",
-    "bruleurs. Il dimensionne, selectionne et chiffre des centrales de",
-    "traitement d'air de 600 a 50 000 m3/h, avec recuperation par echangeur",
-    "a plaques, roue enthalpique ou batteries a eau glycolee.",
-    "Diplome : BTS Fluides Energies Domotique.",
-    # Ce qu'il a dit, mot pour mot, est plus ouvert que ce qui etait ecrit ici :
-    # « une reprise d'etudes en alternance m'interesse, mais je n'ai ni ecole
-    # ni entreprise a ce jour ». C'etait devenu « il ne cherche pas
-    # d'alternance » -- une deduction non marquee, qui faisait ecarter des
-    # annonces qu'il aurait voulu voir. La provenance de chaque ligne est dans
-    # `proto/suivi_candidatures.py`, ou celle-ci est marquee DIT.
-    "Une reprise d'etudes en alternance l'interesse, mais il n'a ni ecole ni",
-    "entreprise a ce jour : une offre d'alternance ne se retient que si elle",
-    "dit prendre en charge la recherche d'ecole, et il faut le signaler.",
+    ("Poste vise : charge d'etudes en bureau d'etudes CVC, chiffrage et", DIT),
+    ("dimensionnement.", DIT),
+    ("Region : Toulouse et sa peripherie.", DIT),
+    ("Experience : 2 ans en bureau d'etudes CVC, plus 5 ans de terrain dans", DIT),
+    ("l'Armee -- chambres froides positif et negatif, groupes electrogenes,", DIT),
+    ("bruleurs. Il dimensionne, selectionne et chiffre des centrales de", DIT),
+    ("traitement d'air de 600 a 50 000 m3/h, avec recuperation par echangeur", DIT),
+    ("a plaques, roue enthalpique ou batteries a eau glycolee.", DIT),
+    ("Diplome : BTS Fluides Energies Domotique.", DIT),
+    ("Une reprise d'etudes en alternance l'interesse, mais il n'a ni ecole ni", DIT),
+    ("entreprise a ce jour.", DIT),
 ]
 
 INSTRUCTION = """\
@@ -91,8 +109,18 @@ qu'une annonce existe, ne la cite pas. Reponds en francais, sans preambule.\
 
 
 def contexte_pour_recherche(question: str = "") -> str:
-    """Exactement ce qui quittera la machine, comme pour l'analyse."""
-    lignes = ["Voici qui je suis et ce que je cherche.", "", *CRITERES]
+    """Exactement ce qui quittera la machine, comme pour l'analyse.
+
+    Une deduction voyage avec son etiquette. Sans ca, elle sort d'ici comme un
+    fait etabli, et l'agent ecarte des annonces sur une chose que personne n'a
+    verifiee -- c'est exactement ce qui a coute un marche.
+    """
+    lignes = ["Voici qui je suis et ce que je cherche.", ""]
+    lignes += [texte for texte, source in CRITERES if source == DIT]
+    a_confirmer = [texte for texte, source in CRITERES if source != DIT]
+    if a_confirmer:
+        lignes += ["", "Ceci n'est pas verifie, ne t'appuie pas dessus :"]
+        lignes += [f"- {texte}" for texte in a_confirmer]
     if question.strip():
         lignes += ["", "Precision pour cette recherche :", question.strip()]
     return "\n".join(lignes)
@@ -168,5 +196,6 @@ def chercher(question: str = "", *, modele: str | None = None,
     return texte, _consommation(reponse)
 
 
-__all__ = ["CRITERES", "JETONS_MAX", "MODELE_PAR_DEFAUT", "RECHERCHES_MAX",
+__all__ = ["CRITERES", "DEDUIT", "DIT", "JETONS_MAX", "MODELE_PAR_DEFAUT",
+           "RECHERCHES_MAX",
            "apercu", "chercher", "contexte_pour_recherche"]
