@@ -405,3 +405,72 @@ def test_the_fast_paths_refuse_in_his_language(tmp_path, capsys, commande):
     sortie = capsys.readouterr().out
     for anglais in ("must be", "cannot be", "needs a horizon", "is not a forecast"):
         assert anglais not in sortie, f"{commande} rend « {sortie.strip()} »"
+
+
+# --- plus aucune porte ne parle la langue de la bibliotheque -------------------
+
+#: Ce qui trahit un message de bibliotheque arrive sur son ecran.
+#:
+#: La liste est faite de ce qu'on a reellement vu passer :
+#: `probability must be strictly between 0 and 1`,
+#: `expected_gain_eur cannot be negative`,
+#: `DEC-... was already resolved as HAPPENED; history is not editable`,
+#: `OperationalError: database is locked`, `file is not a database`.
+LANGUE_DE_LA_MACHINE = ("must be", "cannot be", "is not a", "was already",
+                        "not editable", "Error:", "locked", "database",
+                        "needs a horizon", "Traceback")
+
+#: Chaque route d'ecriture, avec de quoi la faire refuser.
+#:
+#: Les routes de lecture n'ont pas d'entree a refuser, et les deux facultes
+#: payantes refusent deja en francais quand la cle manque -- c'est teste
+#: ailleurs. Ce qui reste ici est ce qui ecrit dans le journal.
+REFUS_ATTENDUS = [
+    ("add", {"title": "T", "action": "a", "predicted": "p", "probability": 30,
+             "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14}),
+    ("add", {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+             "tier": "REVENUS", "cost_hours": -1, "horizon_days": 14}),
+    ("add", {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+             "tier": "REVENUS", "cost_hours": 4, "horizon_days": 0}),
+    ("add", {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+             "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14,
+             "expected_gain_eur": "-100"}),
+]
+
+
+def test_plus_aucune_ecriture_ne_refuse_dans_la_langue_de_la_bibliotheque(tmp_path):
+    """Le meme defaut a ete corrige a quatre portes : la saisie du telephone, le
+    clavier, les refus d'ecriture, les pannes imprevues. La regle du depot dit
+    qu'a la troisieme fois on cesse de corriger et on rend l'erreur impossible.
+
+    Ce test balaie ce qui ecrit dans le journal, cote serveur et cote clavier,
+    et refuse un message ou l'anglais de la bibliotheque affleure.
+    """
+    from singular.sage.server import SageApp, SageError
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    messages = []
+
+    for route, charge in REFUS_ATTENDUS:
+        with pytest.raises(SageError) as refus:
+            getattr(app, route)(charge)
+        messages.append((route, charge, refus.value.message))
+
+    # Le meme journal, la meme faute, par le clavier.
+    entree = DecisionJournal(tmp_path / "journal.db").entries()
+    assert not entree, "aucune de ces ecritures ne doit avoir abouti"
+
+    fautifs = [(route, message) for route, _, message in messages
+               if any(mot in message for mot in LANGUE_DE_LA_MACHINE)]
+    assert not fautifs, f"ces refus arrivent en anglais sur son ecran : {fautifs}"
+
+
+def test_le_balayage_declenche_bien_des_refus(tmp_path):
+    """Le temoin : une charge devenue valide ferait passer le test au vert."""
+    from singular.sage.server import SageApp, SageError
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    for route, charge in REFUS_ATTENDUS:
+        with pytest.raises(SageError):
+            getattr(app, route)(charge)
+    assert len(REFUS_ATTENDUS) >= 4
