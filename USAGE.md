@@ -289,8 +289,13 @@ en heures.
 
 Laisser le gain vide veut dire « non chiffré », **pas** « ne rapporte rien » :
 le journal garde la différence, et c'est elle que la Notice reproche au-delà de
-vingt heures. En ligne de commande : `--gain 5000` et
-`--reversibility irreversible`.
+vingt heures **sur tes dix dernières décisions**. La fenêtre compte : le journal
+ne se réécrit pas, donc un gain oublié le reste, et un total à vie ne redescend
+jamais. Le constat portait sur ce total — quinze mois à chiffrer chaque décision
+laissaient donc la même phrase tous les matins, au-dessus du même conseil sur le
+prochain enregistrement. Il porte maintenant sur l'habitude en cours, la seule
+chose que le prochain enregistrement peut changer. En ligne de commande :
+`--gain 5000` et `--reversibility irreversible`.
 
 Une décision irréversible dont l'échéance passe sans verdict devient la
 seule observation CRITIQUE avec la chaîne rompue. C'est voulu : partout
@@ -428,14 +433,24 @@ résultat. Le second mesure de combien tu te crois.
 
 ### Quand la Notice conclut sur ta calibration, et quand elle s'abstient
 
-L'écart s'affiche dès trois verdicts — c'est ce que tu veux voir. Mais dire
-« ce n'est plus de la malchance » est une affirmation, et elle doit être vraie.
+Il faut trois verdicts avant que la question ait un sens. Ensuite, dire « ce
+n'est plus de la malchance » est une affirmation, et elle doit être vraie.
 
 Le Sage calcule donc, exactement, à quelle fréquence des probabilités **justes**
 produiraient un écart au moins aussi grand, et il te donne le nombre : « une
 fois sur 6 », « une fois sur 117 ». En dessous d'une fois sur vingt, il conclut
-et te conseille de baisser tes probabilités. Au-dessus, il montre l'écart et te
-dit de le regarder sans le corriger.
+et te conseille de baisser tes probabilités — **quel que soit l'écart**. Au-dessus,
+il ne conclut pas : il montre l'écart s'il saute aux yeux (quinze points ou plus)
+et te dit de le regarder sans le corriger, et il se tait s'il est à la fois petit
+et incertain.
+
+La preuve est la seule condition depuis le 9 septembre. Avant, il fallait aussi
+quinze points d'écart, et le Sage se taisait donc sur ce qu'il pouvait démontrer :
+deux cents verdicts annoncés à 60 % dont la moitié arrivent font dix points
+d'écart que le hasard seul produirait une fois sur deux cents, et rien ne
+s'affichait. Où placer ce plancher est une question sur ce qui vaut la peine
+d'être corrigé, pas sur ce qui est établi : elle a été posée plutôt que déduite,
+et la réponse était « dès que c'est prouvé ».
 
 Ça compte, parce que la version d'avant affirmait « sur 3 verdicts, ce n'est
 plus de la malchance » et enchaînait sur « baisse tes probabilités ». Sur trois

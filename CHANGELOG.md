@@ -1,5 +1,86 @@
 # Changelog
 
+## 3.24.0 — Le Sage parle dès qu'un écart est prouvé
+
+Il se taisait sur ce qu'il pouvait démontrer. « Conclusif » voulait dire
+« démontré **et** d'au moins quinze points », donc deux cents verdicts annoncés
+à 60 % dont la moitié arrivent — dix points d'écart, que le hasard seul
+produirait une fois sur deux cents — n'affichaient rien. Dans l'outil construit
+exactement pour répondre à « est-ce que mes 70 % arrivent sept fois sur dix ? ».
+
+Où placer ce plancher n'appartient pas au code : c'est une question sur ce qui
+vaut la peine d'être corrigé, pas sur ce qui est établi. Elle a été posée en
+questionnaire, avec le cas mesuré et les quatre réponses possibles. Réponse :
+dès que c'est prouvé.
+
+- `conclusive` ne demande plus que la preuve. `CALIBRATION_GAP` garde son autre
+  emploi — montrer un écart voyant en disant qu'il n'est pas encore établi — et
+  la correction de la 3.10.0, qui refusait de conclure sur trois verdicts à
+  75 %, tient toujours.
+- Le seul plancher restant est un plancher d'arrondi : sous un demi-point, la
+  phrase dirait « tu te surestimes de +0% ».
+- Le port Swift portait la même condition et l'applique pareil, sinon un écart
+  prouvé de dix points parlerait sur le PC et se tairait sur le téléphone. Un
+  vecteur porte le cas : seize paris à 95 %, trois perdus, quatorze points
+  prouvés.
+
+## 3.23.0 — Le clavier et le serveur refusaient encore en anglais
+
+Trancher deux fois la même décision est banal : un double appui, deux onglets,
+la ligne de commande après l'app. Le journal refuse — l'histoire ne se réécrit
+pas — et ce refus arrivait sur l'écran :
+
+    DEC-24bfbaeb was already resolved as HAPPENED; history is not editable
+
+L'app avait sa traduction, écrite chez elle. Le clavier n'avait rien. Le serveur
+renvoyait `str(exc)` dans le corps JSON, et seul le remplacement côté navigateur
+sauvait l'affichage. C'est le défaut de la 3.20.0 à une autre porte.
+
+Un identifiant inconnu, lui, s'affichait `'DEC-inconnu'`, guillemets compris :
+le `repr` d'une clé absente.
+
+- `singular/saisie.py` porte `CONFLIT` et `introuvable()`. Le clavier et le
+  serveur les lisent ; l'app garde sa copie — elle doit pouvoir refuser hors
+  connexion — et un test vérifie qu'elle cite la phrase mot pour mot.
+
+## 3.22.0 — Une docstring décrivait une règle disparue
+
+`_calibration_item` expliquait que sa règle se lisait « en dessous de
+`CALIBRATION_CERTAIN` verdicts ». La constante n'existait plus. Rien ne casse,
+aucun test ne rougit, et la prochaine session lit une explication fausse écrite
+avec autorité, puis corrige le code pour le faire correspondre à la phrase.
+
+- `tests/test_docstrings_sans_citation_morte.py` relit toutes les docstrings de
+  `singular/` et `tools/` et refuse un nom en majuscules cité entre accents
+  graves qui n'existe pas dans son fichier. Il y en avait exactement un.
+
+## 3.21.0 — Un reproche qui ne s'éteignait jamais
+
+Trouvé en jouant quinze mois d'usage. « 120 h engagées sans gain attendu »
+comptait toute la vie du journal, qui est append-only : aucun geste ne peut
+faire baisser ce nombre. Chiffrer chaque décision pendant plus d'un an laissait
+la même phrase tous les matins, au-dessus du même conseil sur le prochain
+enregistrement. Un reproche prématuré fait douter d'un rapport ; un reproche
+éternel le fait fermer.
+
+- Le constat porte sur les dix dernières décisions enregistrées — l'habitude en
+  cours. Il compte toujours des heures et non des lignes.
+- En le corrigeant, une contradiction ancienne apparaît : les vecteurs de parité
+  exigeaient depuis toujours deux observations que le Swift ne produit pas. Le
+  fichier de test qui déclare cet écart le disait lui-même, dans son propre
+  message d'erreur. `build_vectors` refuse désormais d'écrire un tel vecteur.
+- `_candidates` nomme chaque observation par la fonction qui l'écrit, ce qui
+  donne enfin au test de parité et au générateur un moyen de savoir quelle
+  fonction a produit une phrase.
+
+## 3.20.1 — La ligne des retards rougissait sur son propre seuil
+
+`python -m singular due` teintait une échéance en rouge au-delà de sept jours,
+écrits en toutes lettres dans la commande, pendant que le rapport escalade en
+CRITIQUE au-delà de `LATE_DAYS`. Quatrième fois que la même règle est écrite à
+deux endroits, donc le test est écrit à la place du prochain lecteur : il
+déplace `LATE_DAYS` et exige que le rouge suive.
+
 ## 3.20.0 — Le téléphone parlait anglais quand il refusait
 
 Les règles de saisie sont celles du journal, et il lève en anglais — c'est son
