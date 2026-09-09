@@ -1,5 +1,36 @@
 # Changelog
 
+## 3.18.0 — Profil relu avec lui : la roue est hygroscopique
+
+Le test garantit qu'une ligne **porte** une provenance ; il ne peut pas
+garantir qu'elle dit vrai. Les quinze lignes étaient marquées « dit par lui »
+et rien dans le dépôt ne permettait de le vérifier — les conversations
+d'origine n'y sont pas.
+
+Alors on les lui a montrées, une par une. Une seule correction :
+
+> la roue est **hygroscopique**, pas enthalpique.
+
+C'est son métier et c'est son mot. Les deux existent et ce ne sont pas les
+mêmes ; une session qui trouverait « enthalpique » plus courant se tromperait,
+et la correction est donc écrite là où elle se relit, des deux côtés.
+
+Le reste — deux ans de bureau d'études, cinq ans d'Armée, chambres froides
+positif et négatif, CTA de 600 à 50 000 m³/h, bureau d'études et pas
+entretien, BTS FED, au chômage, ni école ni entreprise, débutant en code — il
+l'a confirmé ligne par ligne.
+
+Et, à la question posée : **les deux genres d'offre, sans hiérarchie.** Le
+profil disait « poste visé », qui rangeait l'alternance en second ; deux jours
+plus tôt il disait « il ne cherche pas d'alternance », ce qu'il n'avait jamais
+dit. Troisième formulation de la même ligne, et la première qui vient de lui.
+L'agent couvre maintenant les deux sans en mettre un devant l'autre — c'est lui
+qui trie, et une liste qui a déjà choisi à sa place lui cache la moitié du
+marché.
+
+- `test_offres.py` tient « hygroscopique » comme un fait que les deux profils
+  doivent porter pareil : une correction faite d'un seul côté échoue.
+
 ## 3.17.0 — Le profil qui part vers un service distant n'avait aucune provenance
 
 `proto/suivi_candidatures.py` marque chaque ligne de son profil `DIT` ou

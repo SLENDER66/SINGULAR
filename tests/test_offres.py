@@ -328,8 +328,12 @@ def test_les_deux_profils_du_depot_ne_se_contredisent_pas() -> None:
                       if source == suivi.DIT).lower()
 
     # Les faits que les deux doivent porter pareil. Chacun a coute une session.
+    # « roue hygroscopique » est dans la liste parce qu'il a corrige ce mot
+    # lui-meme le 9 septembre : c'est son metier, et une session qui trouverait
+    # « enthalpique » plus courant se tromperait -- les deux existent.
     for fait in ("2 ans en bureau d'etudes", "bts fluides energies domotique",
-                 "chambres froides", "alternance", "ni ecole ni"):
+                 "chambres froides", "alternance", "ni ecole ni",
+                 "hygroscopique"):
         assert (fait in dit_ici) == (fait in dit_la), (
             f"« {fait} » n'est pas dit pareil des deux cotes : "
             "une correction n'a ete faite qu'a un endroit")

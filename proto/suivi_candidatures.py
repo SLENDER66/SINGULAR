@@ -108,6 +108,10 @@ DEDUIT = "deduit"
 #: HYPOTHESIS, ESTIMATE... Ce fichier ne le faisait pas. Il le fait maintenant,
 #: et `tests/test_proto_suivi.py` refuse une ligne sans provenance : ajouter une
 #: deduction en la faisant passer pour un fait n'est plus possible en silence.
+#: Le 9 septembre 2026, relu ligne par ligne avec lui. Une seule correction :
+#: la roue est **hygroscopique**, pas enthalpique. C'est son metier, c'est son
+#: mot, et une session qui trouverait « enthalpique » plus courant se
+#: tromperait -- les deux existent et ce ne sont pas les memes.
 PROFIL = [
     ("2 ans en bureau d'etudes CVC : chiffrage, dimensionnement.", DIT),
     ("Avant cela, 5 ans de terrain dans l'Armee : chambre froide, groupe", DIT),
@@ -115,7 +119,7 @@ PROFIL = [
     ("Et du tertiaire : je dimensionne, selectionne et chiffre des centrales", DIT),
     ("de traitement d'air, de 600 a 50 000 m3/h. C'est du bureau d'etudes,", DIT),
     ("pas de l'entretien. Recuperation : echangeur a plaques, roue", DIT),
-    ("enthalpique, batteries a eau glycolee -- les trois.", DIT),
+    ("hygroscopique, batteries a eau glycolee -- les trois.", DIT),
     ("Les chambres froides etaient en positif et en negatif.", DIT),
     ("Les bruleurs : je ne me souviens plus du combustible, donc ca ne va", DIT),
     ("nulle part -- ne me le redemande pas.", DIT),

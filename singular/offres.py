@@ -55,7 +55,12 @@ DEDUIT = "deduit"
 #: n'avait ni marque ni test. Son commentaire disait « rien ici n'est deduit » :
 #: une promesse, pas une garantie, et elle etait fausse.
 #:
-#: Le 9 septembre 2026, il a tranche lui-meme, a la question posee : les deux,
+#: Le 9 septembre 2026, profil relu ligne par ligne avec lui. Une seule
+#: correction : la roue est **hygroscopique**, pas enthalpique. C'est son
+#: metier et c'est son mot ; les deux existent et ce ne sont pas les memes.
+#: Le reste, il l'a confirme.
+#:
+#: Le meme jour, il a tranche lui-meme, a la question posee : les deux,
 #: sans hierarchie. Le profil ne dit donc plus « poste vise », qui rangeait
 #: l'alternance en second.
 #:
@@ -79,7 +84,7 @@ CRITERES = [
     ("l'Armee -- chambres froides positif et negatif, groupes electrogenes,", DIT),
     ("bruleurs. Il dimensionne, selectionne et chiffre des centrales de", DIT),
     ("traitement d'air de 600 a 50 000 m3/h, avec recuperation par echangeur", DIT),
-    ("a plaques, roue enthalpique ou batteries a eau glycolee.", DIT),
+    ("a plaques, roue hygroscopique ou batteries a eau glycolee.", DIT),
     ("Diplome : BTS Fluides Energies Domotique.", DIT),
     ("Pour l'alternance : il n'a ni ecole ni entreprise a ce jour.", DIT),
 ]
