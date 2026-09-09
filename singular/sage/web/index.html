@@ -68,6 +68,14 @@
                 autocomplete="off" placeholder="je fais quoi avec ça ?"></textarea>
     </label>
 
+    <!-- Ce qui quitte le telephone, lisible avant de partir. Meme geste que
+         pour la recherche d'offres : il a le droit de relire ce qui est dit de
+         lui. C'est la faculte qui envoie le plus -- le rapport et tout le fil. -->
+    <details id="parle-contexte-bloc">
+      <summary>Ce qui part de ton téléphone</summary>
+      <pre id="parle-contexte" class="contexte"></pre>
+    </details>
+
     <p id="parle-cost" class="cost" hidden></p>
     <p class="form-error" id="parle-error" hidden></p>
     <div class="actions three">

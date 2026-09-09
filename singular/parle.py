@@ -584,6 +584,33 @@ def _messages(conversation: Conversation, question: str) -> list[dict[str, Any]]
     return messages
 
 
+def apercu(contexte: str, conversation: Conversation, question: str = "") -> str:
+    """Exactement ce qui quittera la machine, en clair et sans rien envoyer.
+
+    `analyse` et `offres` ont chacune leur `--blanc`, et une mesure montre que
+    ce qu'il affiche est au caractere pres ce que le service recoit. La
+    conversation ne l'avait pas -- alors que c'est elle qui part de son
+    telephone, et celle qui envoie le plus : le rapport du jour **plus** tout
+    le fil des tours precedents.
+
+    « Il a le droit de relire ce qui est dit de lui avant que ca parte » est la
+    regle qu'on s'est donnee pour le bouton de recherche. Elle ne valait pas
+    pour la seule faculte ou elle comptait le plus.
+
+    `test_ce_qui_part.py` compare cet apercu a ce que le client recoit
+    reellement : une promesse d'affichage qui derive de l'envoi serait pire que
+    pas d'affichage du tout.
+    """
+    morceaux = [bloc["text"] for bloc in _systeme(contexte)]
+    for tour in _messages(conversation, question):
+        contenu = tour["content"]
+        if isinstance(contenu, list):
+            contenu = "".join(bloc.get("text", "") for bloc in contenu)
+        role = "toi" if tour["role"] == "user" else "le modele"
+        morceaux.append(f"[{role}] {contenu}")
+    return "\n\n".join(morceaux)
+
+
 def repondre(
     question: str,
     contexte: str,
@@ -644,5 +671,6 @@ def repondre(
 __all__ = ["FICHIER", "FICHIER_QUOTA", "FICHIER_TARIFS", "JETONS_MAX",
            "MODELE_PAR_DEFAUT", "PLAFOND_PAR_JOUR", "TOURS_GARDES",
            "Conversation", "PlafondAtteint", "Quota", "Tarifs",
-           "bilan", "etat_de_la_faculte", "modele_de_tarifs", "modeles_qui_depensent",
+           "apercu", "bilan", "etat_de_la_faculte", "modele_de_tarifs",
+           "modeles_qui_depensent",
            "phrase_de_bilan", "repondre"]

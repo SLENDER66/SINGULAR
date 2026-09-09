@@ -342,11 +342,23 @@ class SageApp:
         Rouvrir l'app doit montrer la conversation d'hier soir : sans ça, le
         fil existe sur le disque et nulle part à l'écran.
         """
-        from ..parle import PLAFOND_PAR_JOUR, Conversation, Quota, bilan, phrase_de_bilan
+        from ..analyse import contexte_pour_analyse
+        from ..parle import (
+            PLAFOND_PAR_JOUR,
+            Conversation,
+            Quota,
+            apercu,
+            bilan,
+            phrase_de_bilan,
+        )
 
         fil = Conversation()
         compte = bilan(Quota())
         return {
+            # Ce qui partirait, en clair, sans rien envoyer -- comme le bouton
+            # de recherche le fait deja. C'est la faculte qui envoie le plus :
+            # le rapport du jour et tout le fil.
+            "apercu": apercu(contexte_pour_analyse(self.notice()), fil, "<ta question>"),
             "tours": fil.tours,
             "restants": Quota().restants(),
             "plafond": PLAFOND_PAR_JOUR,
@@ -446,14 +458,13 @@ class SageApp:
         droit de lire ce qui quitte sa machine avant que ça la quitte, et
         `python -m singular offres --blanc` le lui montre déjà au clavier.
         """
-        RECHERCHES_MAX, contexte_pour_recherche = _faculte_offres(
-            "RECHERCHES_MAX", "contexte_pour_recherche")
+        RECHERCHES_MAX, apercu = _faculte_offres("RECHERCHES_MAX", "apercu")
         from ..parle import PLAFOND_PAR_JOUR, Quota, bilan, phrase_de_bilan
 
         quota = Quota()
         compte = bilan(quota)
         return {
-            "contexte": contexte_pour_recherche(),
+            "contexte": apercu(),
             "recherches_max": RECHERCHES_MAX,
             "restants": quota.restants(),
             "plafond": PLAFOND_PAR_JOUR,

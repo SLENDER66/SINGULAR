@@ -366,6 +366,7 @@ async function openParle() {
   try {
     const etat = await api("/api/parle");
     renderThread(etat.tours);
+    $("parle-contexte").textContent = etat.apercu || "";
     renderRemaining(etat);
   } catch (error) {
     showFormError("parle-error", error.message);

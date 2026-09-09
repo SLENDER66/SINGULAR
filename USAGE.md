@@ -125,6 +125,30 @@ vérifie en fabriquant la panne, plutôt que de le promettre.
 dépôt ne se met pas à jour tout seul, et un chiffre faux ici servirait à
 décider quand s'arrêter. Un test refuse tout tarif écrit en dur dans le code.
 
+#### Voir ce qui part, avant que ça parte
+
+```bash
+python -m singular parle --blanc "ta question"
+```
+
+Les trois facultés qui sortent quelque chose de ta machine te montrent
+d'abord ce qui partirait, sans rien envoyer : `analyse --blanc`,
+`offres --blanc`, `parle --blanc`, et le même texte dans un bloc dépliable
+sous les boutons 💬 et 🔎 de l'app.
+
+L'aperçu comprend **l'instruction système**, pas seulement tes données : elle
+te nomme, elle cite ta constitution, et pour la recherche elle porte la
+garantie qui compte — « tu ne postules jamais ». Elle part à chaque appel et tu
+ne la voyais nulle part.
+
+La conversation est celle qui envoie le plus : le rapport du jour **et** tout
+le fil des tours précédents. C'était la seule sans aperçu.
+
+`test_ce_qui_part.py` capture ce que le service reçoit réellement et exige que
+l'aperçu le couvre — dans les deux sens. Un aperçu qui montre moins rassure sur
+ce qu'il cache ; un aperçu qui montre plus fait croire à une fuite qui n'existe
+pas, et la fois d'après on ne le lit plus.
+
 Tant que tu ne lui as rien dit, la conversation compte des jetons. Pour qu'elle
 parle en dollars :
 

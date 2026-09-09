@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.16.0 — Voir ce qui part, pour les trois facultés
+
+Trois facultés font sortir quelque chose de sa machine. Deux affichaient ce
+qui partirait, une non — et les deux qui l'affichaient en montraient moins que
+ce qui partait.
+
+**La conversation n'avait aucun aperçu.** C'est pourtant elle qui envoie le
+plus — le rapport du jour **et** tout le fil des tours précédents — et elle
+part de son téléphone. « Il a le droit de relire ce qui est dit de lui avant
+que ça parte » est la règle qu'on s'était donnée pour le bouton de recherche ;
+elle ne valait pas pour la seule faculté où elle comptait le plus.
+
+**`analyse` et `offres` cachaient l'instruction système.** Leur `--blanc`
+promettait « exactement ce qui quittera la machine » et montrait le contexte
+seul. L'instruction part aussi : elle le nomme, elle cite sa constitution, et
+pour la recherche elle porte la garantie qui compte — « tu ne postules jamais ».
+
+- `parle --blanc`, et un bloc dépliable sous le bouton 💬 comme sous le 🔎.
+- Les trois aperçus comprennent maintenant l'instruction.
+- `test_ce_qui_part.py` capture ce que le client reçoit réellement et exige que
+  l'aperçu le couvre **dans les deux sens** : un aperçu qui montre moins
+  rassure sur ce qu'il cache, un aperçu qui montre plus fait croire à une fuite
+  qui n'existe pas — et la fois d'après on ne le lit plus.
+- Mesure au passage, pour la rassurer : ce qui part reste la Notice et les
+  agrégats, jamais la base. Pas d'empreintes de chaîne, pas de score par
+  décision. Un test le tient.
+
 ## 3.15.0 — Un fichier d'état ne peut plus exister à moitié
 
 Trois fichiers portent quelque chose qu'il ne peut pas reconstituer : son fil

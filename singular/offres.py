@@ -98,6 +98,15 @@ def contexte_pour_recherche(question: str = "") -> str:
     return "\n".join(lignes)
 
 
+def apercu(question: str = "") -> str:
+    """Exactement ce qui quittera la machine : l'instruction et son profil.
+
+    L'instruction porte la garantie qui compte -- « tu ne postules jamais » --
+    et il ne la voyait pas. Elle part pourtant a chaque recherche.
+    """
+    return f"{INSTRUCTION}\n\n{contexte_pour_recherche(question)}"
+
+
 def chercher(question: str = "", *, modele: str | None = None,
              client: Any = None) -> tuple[str, dict[str, int]]:
     """Les offres retenues, et ce que la recherche a coute. Aucune ecriture.
@@ -160,4 +169,4 @@ def chercher(question: str = "", *, modele: str | None = None,
 
 
 __all__ = ["CRITERES", "JETONS_MAX", "MODELE_PAR_DEFAUT", "RECHERCHES_MAX",
-           "chercher", "contexte_pour_recherche"]
+           "apercu", "chercher", "contexte_pour_recherche"]

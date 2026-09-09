@@ -152,6 +152,20 @@ def _sdk():
     return anthropic
 
 
+def apercu(notice: dict[str, Any]) -> str:
+    """Exactement ce qui quittera la machine : l'instruction et le rapport.
+
+    `contexte_pour_analyse` disait deja « exactement ce qui quittera la
+    machine », et c'etait faux d'un bloc : l'instruction systeme part aussi.
+    Elle le nomme, elle cite sa constitution, et il ne la voyait nulle part.
+
+    Mesure a l'appui : `test_ce_qui_part.py` capture ce que le client recoit
+    reellement et exige que cet apercu le couvre entierement. Une promesse
+    d'affichage qui derive de l'envoi est pire que pas d'affichage.
+    """
+    return f"{INSTRUCTION}\n\n{contexte_pour_analyse(notice)}"
+
+
 def _consommation(reponse: Any) -> dict[str, int]:
     """Ce que l'appel a coûté, en jetons.
 
@@ -239,5 +253,6 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None,
 
 __all__ = [
     "EFFORT", "EFFORTS", "JETONS_MAX", "MODELE_PAR_DEFAUT",
-    "AnalyseIndisponible", "analyser", "contexte_pour_analyse", "effort_valide",
+    "AnalyseIndisponible", "analyser", "apercu", "contexte_pour_analyse",
+    "effort_valide",
 ]

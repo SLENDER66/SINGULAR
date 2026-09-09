@@ -172,6 +172,7 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
     from .analyse import AnalyseIndisponible, contexte_pour_analyse
     from .parle import (
         FICHIER_TARIFS,
+        apercu,
         modele_de_tarifs,
         MODELE_PAR_DEFAUT,
         Conversation,
@@ -200,6 +201,15 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
             return 0
 
     contexte = contexte_pour_analyse(build_notice(journal).as_dict())
+
+    if args.blanc:
+        # `analyse` et `offres` ont leur `--blanc` depuis le debut ; la
+        # conversation ne l'avait pas, alors que c'est elle qui envoie le plus
+        # -- le rapport du jour et tout le fil -- et depuis son telephone.
+        print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
+        print(apercu(contexte, fil, args.question or "<ta question>"))
+        print(_colour("\n  Rien n'a ete envoye.\n", DIM))
+        return 0
 
     def un_tour(question: str) -> bool:
         try:
@@ -246,12 +256,18 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
     du texte, et rien d'autre ne se produit tant que tu n'as rien fait.
     """
     from .analyse import AnalyseIndisponible
-    from .offres import MODELE_PAR_DEFAUT, RECHERCHES_MAX, chercher, contexte_pour_recherche
+    from .offres import (
+        MODELE_PAR_DEFAUT,
+        RECHERCHES_MAX,
+        apercu,
+        chercher,
+        contexte_pour_recherche,
+    )
     from .parle import Quota, bilan, phrase_de_bilan
 
     if args.blanc:
         print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
-        print(contexte_pour_recherche(args.precision))
+        print(apercu(args.precision))
         print(_colour(f"\n  Rien n'a ete envoye. Jusqu'a {RECHERCHES_MAX} recherches web"
                       " seraient faites.\n", DIM))
         return 0
@@ -284,7 +300,13 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
     continuer à marcher sans : c'est pour ça que l'échec ici s'affiche comme
     un fait et rend 1, au lieu de remonter une trace de pile.
     """
-    from .analyse import MODELE_PAR_DEFAUT, AnalyseIndisponible, analyser, contexte_pour_analyse
+    from .analyse import (
+        MODELE_PAR_DEFAUT,
+        AnalyseIndisponible,
+        analyser,
+        apercu,
+        contexte_pour_analyse,
+    )
     from .parle import Quota, bilan, phrase_de_bilan
     from .sage.notice import build_notice
 
@@ -292,7 +314,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
 
     if args.blanc:
         print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
-        print(contexte_pour_analyse(notice))
+        print(apercu(notice))
         print(_colour("\n  Rien n'a ete envoye.\n", DIM))
         return 0
 
@@ -619,6 +641,8 @@ def build_parser() -> argparse.ArgumentParser:
     parle.add_argument("question", nargs="?", default="")
     parle.add_argument("--oubli", action="store_true", help="effacer le fil et repartir a zero")
     parle.add_argument("--modele", default=None)
+    parle.add_argument("--blanc", action="store_true",
+                       help="montre ce qui partirait, n'envoie rien")
     parle.add_argument("--tarifs", action="store_true",
                        help="afficher le fichier de tarifs a remplir")
     parle.set_defaults(func=cmd_parle)
