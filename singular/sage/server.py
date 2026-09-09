@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote_plus, urlsplit
 
+from ..fichiers import ecrire_atomique
 from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
 from .icon import render_icon
 from .notice import build_notice
@@ -93,7 +94,10 @@ def read_token(path: Path = TOKEN_PATH) -> str:
             _restreindre(path)
             return existing
     token = secrets.token_urlsafe(18)
-    path.write_text(token, encoding="utf-8")
+    # Les droits sont poses a la creation du fichier provisoire, pas apres
+    # l'ecriture : le jeton etait ecrit en clair puis resserre a 0600, et entre
+    # les deux il etait lisible par tout le monde.
+    ecrire_atomique(path, token, permissions=0o600)
     _restreindre(path)
     return token
 

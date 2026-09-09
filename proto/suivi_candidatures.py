@@ -160,8 +160,36 @@ def charger() -> dict:
 
 
 def sauver(donnees: dict) -> None:
+    """Ecrit tout, ou rien. Le fichier n'existe jamais a moitie.
+
+    `write_text` tronque puis ecrit ; entre les deux, il n'y a rien. Une
+    interruption a cet instant -- Ctrl+C, un portable qu'on referme -- laissait
+    un JSON coupe en deux, et `charger()` refusait alors de demarrer en
+    renvoyant une erreur de parseur a quelqu'un qui debute en code. Reproduit :
+    1266 octets sains, 635 apres coupure, l'outil ne se lance plus.
+
+    Ce fichier n'importe rien de `singular/` -- c'est ce qui lui permet de
+    tourner seul, et son en-tete le promet. La copie de six lignes est donc
+    volontaire ; `singular/fichiers.py` porte la meme, et
+    `test_ecriture_atomique.py` verifie que les deux existent.
+
+    Par `pathlib` et non par `os` : ajouter `os` aux imports elargirait la
+    promesse « ce script ne contacte aucun serveur » que garde
+    `test_proto_suivi.py`, pour un gain nul -- `Path.replace` appelle
+    `os.replace`. Le nom du provisoire est fixe, faute de numero de processus :
+    ce script est interactif et n'a qu'un ecrivain a la fois, contrairement au
+    compteur du Sage que le serveur et le clavier se partagent.
+    """
     FICHIER.parent.mkdir(parents=True, exist_ok=True)
-    FICHIER.write_text(json.dumps(donnees, ensure_ascii=False, indent=2), encoding="utf-8")
+    provisoire = FICHIER.with_name(FICHIER.name + ".tmp")
+    try:
+        provisoire.write_text(json.dumps(donnees, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+    except BaseException:
+        # Y compris Ctrl+C : c'est l'interruption dont cette fonction protege.
+        provisoire.unlink(missing_ok=True)
+        raise
+    provisoire.replace(FICHIER)  # atomique, sur Windows comme ailleurs
 
 
 # --- les dates ---------------------------------------------------------------

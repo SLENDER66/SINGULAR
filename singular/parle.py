@@ -29,6 +29,7 @@ from typing import Any
 
 from .analyse import INSTRUCTION as INSTRUCTION_ANALYSE
 from .analyse import AnalyseIndisponible, _consommation, _sdk, effort_valide
+from .fichiers import ecrire_atomique
 
 #: Le fil, a cote du journal : une seule chose a sauvegarder.
 FICHIER = Path.home() / ".singular" / "conversation.json"
@@ -130,11 +131,7 @@ class Quota:
         # fixe, et deux ecrivains se marchaient dessus : le second retrouvait le
         # fichier deja deplace par le premier et levait `FileNotFoundError`.
         # Mesure sur huit processus et quarante depenses : neuf plantages.
-        self.chemin.parent.mkdir(parents=True, exist_ok=True)
-        provisoire = self.chemin.with_suffix(f".{os.getpid()}.tmp")
-        provisoire.write_text(json.dumps(donnees, ensure_ascii=False, indent=2),
-                              encoding="utf-8")
-        provisoire.replace(self.chemin)
+        ecrire_atomique(self.chemin, json.dumps(donnees, ensure_ascii=False, indent=2))
 
     @contextmanager
     def _verrou(self) -> Iterator[None]:
@@ -535,12 +532,9 @@ class Conversation:
         del self.tours[:-TOURS_GARDES * 2]
 
     def sauver(self) -> None:
-        self.chemin.parent.mkdir(parents=True, exist_ok=True)
-        self.chemin.write_text(
-            json.dumps({"tours": self.tours, "maj": datetime.now(UTC).isoformat()},
-                       ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        ecrire_atomique(self.chemin, json.dumps(
+            {"tours": self.tours, "maj": datetime.now(UTC).isoformat()},
+            ensure_ascii=False, indent=2))
 
     def oublier(self) -> None:
         self.tours = []

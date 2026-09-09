@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.15.0 — Un fichier d'état ne peut plus exister à moitié
+
+Trois fichiers portent quelque chose qu'il ne peut pas reconstituer : son fil
+de conversation, sa clé d'accès, et ses candidatures. Les trois étaient écrits
+par un `write_text`, qui tronque le fichier puis écrit dedans. **Entre les
+deux, il n'y a rien.**
+
+Reproduit sur le suivi de candidatures : 1266 octets sains, 635 après une
+coupure au milieu de l'écriture — Ctrl+C, un portable qu'on referme — et
+l'outil refuse alors de démarrer sur `Unterminated string starting at:
+line 27`. Une erreur de parseur JSON, à quelqu'un qui débute en code. Son
+historique n'est pas perdu au sens strict ; il est illisible, ce qui revient au
+même.
+
+`Quota` faisait déjà l'écriture en deux temps, exactement pour cette raison.
+C'était donc la troisième fois que le même oubli se payait : la règle a un
+domicile, et `test_ecriture_atomique.py` échoue à la place du prochain lecteur.
+
+- `singular/fichiers.py` écrit à côté, ferme, puis remplace. `os.replace` est
+  atomique sur Windows comme sur Unix : une coupure laisse soit l'ancien
+  fichier intact, soit le nouveau complet, jamais un mélange.
+- Le provisoire est nettoyé même sur `KeyboardInterrupt` — c'est précisément
+  l'interruption dont ce module protège, et un provisoire abandonné bloquerait
+  l'écriture suivante.
+- **La clé d'accès était écrite en clair, puis resserrée à 0600.** Entre les
+  deux, le secret était lisible par tout le monde. Les droits se posent
+  maintenant à la création du fichier, avant qu'il contienne quoi que ce soit.
+- Le prototype de suivi garde sa propre copie de six lignes, par `pathlib` :
+  ajouter `os` à ses imports élargirait la promesse « ce script ne contacte
+  aucun serveur » que garde `test_proto_suivi.py`, pour un gain nul.
+- Le détecteur du test ne cherche que `write_text` et `open(..., "w")`. Ma
+  première version attrapait aussi `wfile.write` — la socket HTTP du Sage — et
+  un test qui crie au loup finit désactivé.
+
 ## 3.14.0 — Deux dépenses en même temps s'écrasaient l'une l'autre
 
 Le serveur du Sage répond au téléphone ; la ligne de commande sert au clavier.
