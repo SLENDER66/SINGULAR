@@ -145,10 +145,13 @@ def test_ce_qui_part_est_ce_qu_il_a_dit_de_lui(app, client) -> None:
 
     assert "Toulouse" in envoye
     assert "pas d'industrie" in envoye
-    # Ce qu'il a dit mot pour mot, et pas la version durcie qui l'avait
-    # remplacé : « il ne cherche pas d'alternance » écartait des annonces
-    # qu'il aurait voulu voir.
-    assert "alternance l'interesse" in envoye
+    # Les deux genres d'offre, sans hierarchie : il l'a tranche lui-meme le
+    # 9 septembre. Le profil disait « poste vise », qui rangeait l'alternance
+    # en second ; avant ca il disait « il ne cherche pas d'alternance », ce
+    # qu'il n'avait jamais dit.
+    assert "alternance" in envoye
+    assert "sans preference" in envoye
+    assert "poste vise" not in envoye.lower(), "l'un ne passe plus devant l'autre"
 
 
 # --- les refus, avant la dépense ---------------------------------------------

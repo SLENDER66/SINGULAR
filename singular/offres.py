@@ -55,6 +55,10 @@ DEDUIT = "deduit"
 #: n'avait ni marque ni test. Son commentaire disait « rien ici n'est deduit » :
 #: une promesse, pas une garantie, et elle etait fausse.
 #:
+#: Le 9 septembre 2026, il a tranche lui-meme, a la question posee : les deux,
+#: sans hierarchie. Le profil ne dit donc plus « poste vise », qui rangeait
+#: l'alternance en second.
+#:
 #: Ce qui s'y etait glisse en deux jours, sur la meme ligne :
 #:
 #:   - « il ne cherche pas d'alternance », alors qu'il a dit qu'une reprise
@@ -67,8 +71,9 @@ DEDUIT = "deduit"
 #: `tests/test_offres.py` refuse desormais une ligne sans provenance, ici comme
 #: dans le prototype.
 CRITERES = [
-    ("Poste vise : charge d'etudes en bureau d'etudes CVC, chiffrage et", DIT),
-    ("dimensionnement.", DIT),
+    ("Il cherche deux choses, sans preference entre les deux : un poste de", DIT),
+    ("charge d'etudes en bureau d'etudes CVC -- chiffrage, dimensionnement --", DIT),
+    ("et une alternance en reprise d'etudes. Ne classe pas l'une avant l'autre.", DIT),
     ("Region : Toulouse et sa peripherie.", DIT),
     ("Experience : 2 ans en bureau d'etudes CVC, plus 5 ans de terrain dans", DIT),
     ("l'Armee -- chambres froides positif et negatif, groupes electrogenes,", DIT),
@@ -76,8 +81,7 @@ CRITERES = [
     ("traitement d'air de 600 a 50 000 m3/h, avec recuperation par echangeur", DIT),
     ("a plaques, roue enthalpique ou batteries a eau glycolee.", DIT),
     ("Diplome : BTS Fluides Energies Domotique.", DIT),
-    ("Une reprise d'etudes en alternance l'interesse, mais il n'a ni ecole ni", DIT),
-    ("entreprise a ce jour.", DIT),
+    ("Pour l'alternance : il n'a ni ecole ni entreprise a ce jour.", DIT),
 ]
 
 INSTRUCTION = """\
@@ -96,6 +100,10 @@ chacune de celles que tu retiens, donne :
 4. en une phrase, ce qui manque ou ce qui coince -- il n'y a pas d'offre
    parfaite, et une annonce presentee sans reserve est une annonce mal lue ;
 5. le lien.
+
+Couvre les deux -- postes et alternances -- sans mettre un genre avant
+l'autre. Il triera : c'est lui qui decide, et une liste qui a deja choisi a sa
+place lui cache la moitie du marche.
 
 Cinq offres au maximum, classees de la plus pertinente a la moins. Mieux vaut
 trois offres justes que dix approximatives.
