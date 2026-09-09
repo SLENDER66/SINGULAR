@@ -134,3 +134,93 @@ def test_le_refus_reste_lisible_sans_concurrence(tmp_path, statut: Status) -> No
 
     with pytest.raises(PermissionError, match="already resolved"):
         journal.resolve(entree.entry_id, happened=False)
+
+
+# --- écrire en même temps, et la chaîne qui doit y survivre --------------------
+
+def _course_add(tmp_path, nombre: int = 6) -> tuple[DecisionJournal, list[str]]:
+    """`nombre` processus enregistrent une décision au même instant.
+
+    Le scénario est celui de tous les jours : le Sage sert un formulaire sur le
+    téléphone pendant que la ligne de commande tourne dans une fenêtre du PC.
+    Deux écritures simultanées lisent la même tête de chaîne et se chaînent
+    toutes deux derrière elle. `verify()` rendrait alors faux sur un journal que
+    personne n'a touché -- et pour de bon, puisqu'une entrée ne se réécrit pas.
+    """
+    chemin = tmp_path / "j.db"
+    DecisionJournal(chemin)
+    depart = tmp_path / "top"
+
+    bloc = textwrap.dedent(f'''
+        import os, sys, time
+        while not os.path.exists(r"{depart}"):
+            time.sleep(0.001)
+        from singular.journal import DecisionJournal, Tier
+        journal = DecisionJournal(r"{chemin}")
+        for essai in range(40):
+            try:
+                entree = journal.add(title="Course " + sys.argv[1], action="a",
+                                     predicted="b", probability=0.6, tier=Tier.REVENUS,
+                                     cost_hours=1, horizon_days=7)
+                print("ACCEPTE", entree.entry_id)
+                break
+            except Exception as exc:
+                # SQLite rend la main occupee sous contention : reessayer est le
+                # comportement d'un client, pas le sujet du test.
+                if "locked" not in str(exc) and "busy" not in str(exc):
+                    print("ERREUR", type(exc).__name__, exc)
+                    break
+                time.sleep(0.02)
+        else:
+            print("ERREUR jamais ecrit")
+    ''')
+
+    processus = [
+        subprocess.Popen([sys.executable, "-c", bloc, str(index)], stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True)
+        for index in range(nombre)
+    ]
+    time.sleep(DELAI_DEMARRAGE)
+    depart.write_text("go", encoding="utf-8")
+    sorties = [p.communicate()[0].strip() for p in processus]
+    return DecisionJournal(chemin), sorties
+
+
+def test_ecrire_en_meme_temps_ne_casse_pas_la_chaine(tmp_path) -> None:
+    """La promesse centrale du fichier, éprouvée sous contention réelle.
+
+    `add()` ouvre sa transaction en `BEGIN IMMEDIATE` : la tête de chaîne est
+    lue et l'entrée insérée derrière elle en un seul pas sérialisé. Rien ne le
+    vérifiait -- `resolve()` avait ses tests de course, `add()` non, alors que
+    c'est lui qui construit la chaîne.
+    """
+    journal, sorties = _course_add(tmp_path)
+
+    erreurs = [s for s in sorties if "ERREUR" in s]
+    assert not erreurs, f"une écriture a échoué autrement que par contention : {erreurs}"
+
+    ecrites = [s.splitlines()[-1].split()[1] for s in sorties if "ACCEPTE" in s]
+    assert len(ecrites) == 6, f"six écritures demandées, {len(ecrites)} abouties : {sorties}"
+    assert len(set(ecrites)) == 6, "deux décisions portent le même identifiant"
+
+    entrees = journal.entries()
+    assert len(entrees) == 6, "une écriture a été perdue"
+    assert journal.verify(), (
+        "la chaîne est rompue alors que personne n'a rien réécrit : deux "
+        "écritures se sont chaînées derrière la même tête")
+
+
+def test_chaque_maillon_pointe_sur_le_precedent(tmp_path) -> None:
+    """Le témoin : `verify()` seul pourrait passer sur une chaîne dégénérée.
+
+    Une implémentation qui laisserait tout le monde chaîner sur la chaîne vide
+    produirait six entrées dont `previous_fingerprint` vaut `""`. Ce test lit
+    la chaîne dans son ordre d'insertion et exige un maillon par entrée.
+    """
+    journal, _ = _course_add(tmp_path)
+
+    chaine = journal._chain()
+    assert [entree.previous_fingerprint for entree in chaine[1:]] == \
+           [entree.fingerprint for entree in chaine[:-1]]
+    assert chaine[0].previous_fingerprint == ""
+    assert len({entree.fingerprint for entree in chaine}) == len(chaine)
