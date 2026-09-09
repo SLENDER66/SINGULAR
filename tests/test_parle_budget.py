@@ -29,6 +29,14 @@ from singular.parle import (
 
 SOURCE = pathlib.Path(__file__).resolve().parent.parent / "singular" / "parle.py"
 
+#: Les nombres a virgule de `parle.py` qui ne sont pas des tarifs, et ce qu'ils
+#: mesurent. Tout autre flottant non nul est refuse : un prix code en dur
+#: vieillirait en silence et servirait a decider quand s'arreter.
+PAS_UN_PRIX = {
+    "VERROU_PERIME": "secondes avant de reprendre un verrou abandonne",
+    "VERROU_ATTENTE": "secondes entre deux tentatives de prise du verrou",
+}
+
 COUT = {"entree": 1000, "sortie": 200, "cache_lu": 5000, "cache_ecrit": 0}
 
 
@@ -110,14 +118,39 @@ def test_aucun_prix_n_est_ecrit_dans_le_depot() -> None:
     sont a zero, donc elles ne peuvent pas se faire passer pour un prix.
     """
     arbre = ast.parse(SOURCE.read_text(encoding="utf-8"))
+
+    # Les flottants poses sur un nom declare ci-dessus ne sont pas des prix.
+    # Sans cette liste, la garde tombait sur la premiere duree venue -- elle
+    # refusait « 5.0 secondes » comme un tarif -- et une garde qui crie au loup
+    # finit desactivee. La declarer oblige a dire ce que le nombre mesure.
+    autorises = set()
+    for noeud in ast.walk(arbre):
+        cibles = []
+        if isinstance(noeud, ast.Assign):
+            cibles = [c.id for c in noeud.targets if isinstance(c, ast.Name)]
+        elif isinstance(noeud, ast.AnnAssign) and isinstance(noeud.target, ast.Name):
+            cibles = [noeud.target.id]
+        if any(nom in PAS_UN_PRIX for nom in cibles) and noeud.value is not None:
+            autorises.update(id(petit) for petit in ast.walk(noeud.value)
+                             if isinstance(petit, ast.Constant))
+
     suspects = []
     for noeud in ast.walk(arbre):
         if (isinstance(noeud, ast.Constant) and isinstance(noeud.value, float)
-                and noeud.value != 0.0):
+                and noeud.value != 0.0 and id(noeud) not in autorises):
             suspects.append(f"ligne {noeud.lineno} : {noeud.value}")
     assert not suspects, (
         "un nombre a virgule dans parle.py ressemble a un tarif code en dur :\n  "
-        + "\n  ".join(suspects))
+        + "\n  ".join(suspects)
+        + "\n\nSi ce n'est pas un prix, pose-le sur un nom et declare-le dans "
+          "PAS_UN_PRIX, en disant ce qu'il mesure.")
+
+
+def test_the_declared_exceptions_still_exist() -> None:
+    """Le temoin : une exemption pour un nom disparu affaiblirait la garde en silence."""
+    source = SOURCE.read_text(encoding="utf-8")
+    for nom in PAS_UN_PRIX:
+        assert f"\n{nom} = " in source, f"{nom} n'existe plus dans parle.py"
 
     gabarit = json.loads(modele_de_tarifs())
     prix = gabarit["modeles"]["claude-sonnet-5"]
@@ -440,3 +473,104 @@ def test_every_faculty_that_spends_writes_it_down(tmp_path, monkeypatch, capsys)
     total = sum(compte["entree"] for compte in depenses.values())
     assert total == 4321
     assert "4321 jetons envoyes" in capsys.readouterr().out
+
+
+# --- deux ecrivains sur le meme fichier ---------------------------------------
+
+def test_two_writers_at_once_lose_nothing(tmp_path) -> None:
+    """Le serveur du Sage et le clavier ecrivent le meme fichier.
+
+    Une reponse depuis le telephone pendant un `python -m singular parle` au
+    clavier, et les deux lisaient le meme total avant d'ecrire chacun le sien.
+    Mesure avant correction, huit processus et quarante depenses : neuf
+    plantages -- le fichier provisoire portait un nom fixe, le second ecrivain
+    ne le retrouvait plus -- et vingt et une depenses perdues.
+
+    Ce que ca coutait : le compte sous-estime la depense, donc la garde qui
+    refuse sur credit epuise refuse trop tard. C'est la faute deja payee sur le
+    journal, deux verdicts simultanes acceptes, transposee a son argent.
+
+    Des fils et une barriere plutot que des processus : un test doit tomber
+    quand on retire ce qu'il tient, et des processus lances par `spawn` mettent
+    si longtemps a demarrer qu'ils ne se rencontrent jamais -- la premiere
+    version de ce test passait sans le verrou, donc ne prouvait rien. La
+    barriere force la rencontre. Ce qu'elle ne prouve pas : que le verrou tient
+    entre deux processus. C'est pour ca que c'est un fichier verrou et pas un
+    verrou memoire, et le serveur du Sage est de toute facon multi-fils.
+    """
+    import threading
+
+    chemin = tmp_path / "quota.json"
+    ecrivains = 12
+    depart = threading.Barrier(ecrivains)
+    incidents: list[str] = []
+
+    def depenser() -> None:
+        quota = Quota(chemin, plafond=10_000)
+        depart.wait()
+        try:
+            quota.ajouter_depense(cout={"entree": 1, "sortie": 0, "cache_lu": 0,
+                                        "cache_ecrit": 0}, modele="claude-sonnet-5")
+        except Exception as erreur:  # noqa: BLE001 - c'est ce qu'on mesure
+            incidents.append(type(erreur).__name__)
+
+    fils = [threading.Thread(target=depenser) for _ in range(ecrivains)]
+    for fil in fils:
+        fil.start()
+    for fil in fils:
+        fil.join(timeout=30)
+
+    assert incidents == [], f"des depenses ont plante : {sorted(set(incidents))}"
+    ecrites = json.loads(chemin.read_text(encoding="utf-8"))["jetons"]
+    assert ecrites["claude-sonnet-5"]["entree"] == ecrivains, (
+        "des depenses simultanees se sont ecrasees : le compte sous-estime, "
+        "donc la garde du credit refuse trop tard")
+
+
+def test_the_daily_cap_is_not_overrun_by_simultaneous_turns(tmp_path) -> None:
+    """Le plafond se lit puis s'ecrit : sans verrou, tout le monde lit le meme.
+
+    Le degat n'est pas le meme que pour la depense -- ici c'est le plafond qui
+    saute, et il existe pour proteger d'une soiree distraite.
+    """
+    import threading
+
+    chemin = tmp_path / "quota.json"
+    plafond, ecrivains = 4, 12
+    depart = threading.Barrier(ecrivains)
+    acceptes: list[int] = []
+
+    def un_tour() -> None:
+        quota = Quota(chemin, plafond=plafond)
+        depart.wait()
+        try:
+            acceptes.append(quota.consommer(cout=COUT, modele="claude-sonnet-5"))
+        except PlafondAtteint:
+            pass
+
+    fils = [threading.Thread(target=un_tour) for _ in range(ecrivains)]
+    for fil in fils:
+        fil.start()
+    for fil in fils:
+        fil.join(timeout=30)
+
+    assert len(acceptes) == plafond, f"{len(acceptes)} tours acceptes pour un plafond de {plafond}"
+    assert sorted(acceptes) == list(range(plafond)), "deux tours ont recu le meme reste"
+
+
+def test_an_abandoned_lock_does_not_freeze_the_tool(tmp_path, monkeypatch) -> None:
+    """Un processus tue en tenant le verrou condamnerait l'outil pour toujours."""
+    from singular import parle
+
+    chemin = tmp_path / "quota.json"
+    quota = Quota(chemin, plafond=10)
+    verrou = chemin.with_suffix(".verrou")
+    verrou.parent.mkdir(parents=True, exist_ok=True)
+    verrou.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(parle, "VERROU_PERIME", 0.0)  # il est deja perime
+    quota.ajouter_depense(cout={"entree": 7, "sortie": 0, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-sonnet-5")
+
+    assert quota.depenses()["claude-sonnet-5"]["entree"] == 7
+    assert not verrou.exists(), "le verrou doit etre rendu"

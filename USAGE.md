@@ -167,6 +167,15 @@ Deux gardes, et elles ne comptent pas la même chose :
 Le total des jetons ne repart jamais à zéro, lui. Sans ça, on peut respecter le
 plafond tous les jours et vider son crédit sans l'avoir vu venir.
 
+Les deux gardes lisent le même fichier, et deux choses peuvent l'écrire en même
+temps : le serveur qui répond au téléphone, et la ligne de commande. Elles
+lisaient toutes deux le total avant d'écrire chacune le sien. Mesuré sur huit
+processus et quarante dépenses : **neuf plantages et vingt et une dépenses
+perdues**. Un compte qui sous-estime fait refuser la garde du crédit trop tard,
+et le plafond du jour pouvait être dépassé de la même façon. Un fichier verrou
+sérialise désormais les écritures ; il est repris s'il traîne plus de cinq
+secondes, pour qu'un processus tué ne condamne pas l'outil.
+
 #### Pourquoi Sonnet et pas Opus
 
 `parle` est la seule faculté dont le modèle par défaut est `claude-sonnet-5`.

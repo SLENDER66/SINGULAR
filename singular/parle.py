@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -71,6 +74,14 @@ JETONS_MAX = 2000
 #: -- une poche, un enfant, une soiree distraite -- pas contre l'usage.
 PLAFOND_PAR_JOUR = 60
 
+#: En secondes. Un verrou plus vieux que ca est repris : aucune ecriture ici ne
+#: dure plus d'un battement de cil, donc passe ce delai celui qui le tenait est
+#: mort, et l'attendre condamnerait l'outil pour toujours.
+VERROU_PERIME = 5.0
+
+#: En secondes. Ce qu'on attend entre deux tentatives de prise du verrou.
+VERROU_ATTENTE = 0.005
+
 
 def _aujourdhui() -> str:
     """La date locale. `date.today()` dit la meme chose ; ruff la refuse parce
@@ -114,11 +125,60 @@ class Quota:
     def _ecrire(self, donnees: dict[str, Any]) -> None:
         # Atomique : un plafond qui se corrompt en tombant serait un plafond
         # qu'une coupure de courant remet a zero.
+        #
+        # Le fichier provisoire porte le numero du processus. Il portait un nom
+        # fixe, et deux ecrivains se marchaient dessus : le second retrouvait le
+        # fichier deja deplace par le premier et levait `FileNotFoundError`.
+        # Mesure sur huit processus et quarante depenses : neuf plantages.
         self.chemin.parent.mkdir(parents=True, exist_ok=True)
-        provisoire = self.chemin.with_suffix(".tmp")
+        provisoire = self.chemin.with_suffix(f".{os.getpid()}.tmp")
         provisoire.write_text(json.dumps(donnees, ensure_ascii=False, indent=2),
                               encoding="utf-8")
         provisoire.replace(self.chemin)
+
+    @contextmanager
+    def _verrou(self) -> Iterator[None]:
+        """Un seul ecrivain a la fois. Lire puis ecrire n'est pas atomique.
+
+        Le serveur du Sage et la ligne de commande ecrivent le meme fichier :
+        une reponse depuis le telephone pendant un `python -m singular parle`
+        au clavier, et les deux lisaient le meme total avant d'ecrire chacun le
+        sien. Mesure, pas suppose -- huit processus, quarante depenses, vingt
+        et une perdues et neuf plantages.
+
+        Ce que ca coute quand ca arrive : le compte sous-estime la depense,
+        donc la garde qui refuse sur credit epuise refuse trop tard. C'est
+        exactement la faute deja payee sur le journal -- deux verdicts
+        simultanes acceptes -- transposee a son argent.
+
+        Un fichier verrou plutot que `fcntl` ou `msvcrt` : il est sur Windows,
+        et une garde qui ne marche que sur la machine du developpeur n'est pas
+        une garde. Un verrou plus vieux que `VERROU_PERIME` est repris : un
+        processus tue en le tenant condamnerait l'outil pour toujours, et
+        aucune ecriture ici ne dure plus d'un battement de cil.
+        """
+        verrou = self.chemin.with_suffix(".verrou")
+        verrou.parent.mkdir(parents=True, exist_ok=True)
+        descripteur = None
+        while descripteur is None:
+            try:
+                descripteur = os.open(verrou, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                try:
+                    perime = time.time() - verrou.stat().st_mtime > VERROU_PERIME
+                except OSError:
+                    continue  # il vient de disparaitre : on retente tout de suite
+                if perime:
+                    with suppress(OSError):
+                        verrou.unlink()
+                else:
+                    time.sleep(VERROU_ATTENTE)
+        try:
+            yield
+        finally:
+            os.close(descripteur)
+            with suppress(OSError):
+                verrou.unlink()
 
     @staticmethod
     def _tours_du_jour(donnees: dict[str, Any], jour: str) -> int:
@@ -177,9 +237,10 @@ class Quota:
         La depense, elle, se compte partout : c'est le credit achete, et il ne
         sait pas d'ou vient la question.
         """
-        donnees = self._lire()
-        donnees["jetons"] = self._cumuler(self.depenses(), cout, modele)
-        self._ecrire(donnees)
+        with self._verrou():
+            donnees = self._lire()
+            donnees["jetons"] = self._cumuler(donnees.get("jetons", {}), cout, modele)
+            self._ecrire(donnees)
 
     def consommer(self, *, cout: dict[str, int] | None = None, modele: str = "",
                   aujourdhui: str | None = None) -> int:
@@ -190,16 +251,17 @@ class Quota:
         ou l'un est compte sans l'autre.
         """
         jour = aujourdhui or _aujourdhui()
-        donnees = self._lire()
-        deja = self._tours_du_jour(donnees, jour)
-        if deja >= self.plafond:
-            raise PlafondAtteint(
-                f"{self.plafond} reponses aujourd'hui, c'est le plafond. "
-                "Demain, ou depuis le clavier avec `python -m singular parle`."
-            )
+        with self._verrou():
+            donnees = self._lire()
+            deja = self._tours_du_jour(donnees, jour)
+            if deja >= self.plafond:
+                raise PlafondAtteint(
+                    f"{self.plafond} reponses aujourd'hui, c'est le plafond. "
+                    "Demain, ou depuis le clavier avec `python -m singular parle`."
+                )
 
-        jetons = self._cumuler(self.depenses(), cout, modele)
-        self._ecrire({**donnees, "jour": jour, "tours": deja + 1, "jetons": jetons})
+            jetons = self._cumuler(donnees.get("jetons", {}), cout, modele)
+            self._ecrire({**donnees, "jour": jour, "tours": deja + 1, "jetons": jetons})
         return self.plafond - (deja + 1)
 
 

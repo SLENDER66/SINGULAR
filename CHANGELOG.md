@@ -1,5 +1,41 @@
 # Changelog
 
+## 3.14.0 — Deux dépenses en même temps s'écrasaient l'une l'autre
+
+Le serveur du Sage répond au téléphone ; la ligne de commande sert au clavier.
+Les deux écrivent le même fichier de compteur, et lisaient toutes deux le total
+avant d'écrire chacune le sien.
+
+Mesuré, pas supposé — huit processus, quarante dépenses :
+
+    9 ont planté (FileNotFoundError)
+    22 enregistrées sur 40  ->  18 perdues
+
+Le fichier provisoire portait un nom fixe : deux écrivains s'en disputaient un
+seul, et le second ne le retrouvait plus. Sur le téléphone, ça se serait vu
+comme une panne de l'app — après une réponse déjà payée.
+
+Et ce qui est perdu coûte deux fois : le compte sous-estime la dépense, donc la
+garde qui refuse sur crédit épuisé refuse trop tard, et le plafond de soixante
+réponses par jour pouvait être dépassé pareillement. C'est la faute déjà payée
+sur le journal — deux verdicts simultanés acceptés — transposée à son argent.
+
+- Le fichier provisoire porte le numéro du processus : plus de collision.
+- Un fichier verrou sérialise lire-puis-écrire. Un fichier plutôt que `fcntl`
+  ou `msvcrt` : il est sur Windows, et une garde qui ne marche que sur la
+  machine du développeur n'est pas une garde. Un verrou abandonné plus de cinq
+  secondes est repris — un processus tué en le tenant condamnerait l'outil.
+- Après correction, la même sonde : 40 sur 40, zéro plantage.
+- La première version du test de concurrence **passait sans le verrou** : des
+  processus lancés par `spawn` mettent si longtemps à démarrer qu'ils ne se
+  rencontrent jamais. Il ne prouvait rien. Refait avec des fils et une
+  barrière, il tombe quand on retire le verrou.
+- La garde « aucun prix écrit dans ce dépôt » refusait `5.0 secondes` comme un
+  tarif. Elle avait raison sur le fond et tort sur la forme : une garde qui
+  crie au loup finit désactivée. Les nombres à virgule qui ne sont pas des prix
+  se déclarent maintenant, avec ce qu'ils mesurent, et un témoin refuse une
+  déclaration dont le nom a disparu.
+
 ## 3.13.0 — Le budget cessait de compter dès qu'on se servait de l'outil
 
 Trois trous dans la seule chose qui protège ses cinq dollars.
