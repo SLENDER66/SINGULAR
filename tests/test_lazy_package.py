@@ -150,16 +150,59 @@ def test_un_journal_vide_dit_ou_il_a_regarde(tmp_path, capsys) -> None:
     devenue possible pour de bon -- et elle ne se signale pas toute seule :
     chacun des deux a l'air simplement neuf.
     """
-    from singular.__main__ import cmd_list, cmd_review
-    from singular.journal import DecisionJournal
+    from singular.__main__ import main
 
     chemin = tmp_path / "ailleurs.db"
-    journal = DecisionJournal(chemin)
 
-    for commande in (cmd_list, cmd_review):
+    for commande in sorted(RAPPORTENT_LE_JOURNAL):
         capsys.readouterr()
-        commande(journal, type("Args", (), {"status": None})())
-        assert str(chemin) in capsys.readouterr().out, commande.__name__
+        assert main(["--db", str(chemin), commande]) == 0
+        assert str(chemin) in capsys.readouterr().out, (
+            f"`{commande}` dit que le journal est vide sans dire ou il a regarde. "
+            "Un chemin mal tape ressemble alors a une bonne nouvelle.")
+
+
+#: Les commandes dont le travail est de rapporter le contenu du journal.
+#:
+#: `due` a longtemps manque a cette liste, et c'est la pire absence possible :
+#: c'est la commande de chaque matin, celle que le rituel d'`USAGE.md` demande
+#: de taper tous les jours. Elle repondait « Rien a trancher » sur un chemin mal
+#: tape -- une phrase qui ressemble a une bonne nouvelle.
+RAPPORTENT_LE_JOURNAL = {"due", "list", "review"}
+
+#: Et pourquoi les autres n'ont rien a dire d'un journal vide.
+SANS_RAPPORT_A_FAIRE = {
+    "add": "ecrit une ligne, il n'y a rien a rapporter avant",
+    "apply": "idem",
+    "resolve": "nomme deja l'identifiant qu'il n'a pas trouve",
+    "abandon": "idem",
+    "export": "produit du CSV pour une machine, pas une phrase pour lui",
+    "status": "une seule ligne, pour l'invite du shell : un chemin y serait du bruit",
+    "sage": "affiche l'adresse, et l'app dit le chemin dans sa carte vide",
+    "analyse": "part du rapport, pas du journal",
+    "offres": "ne lit pas le journal",
+    "parle": "idem",
+}
+
+
+def test_toute_commande_est_classee(tmp_path) -> None:
+    """Une nouvelle commande doit etre rangee d'un cote ou de l'autre.
+
+    Sans ce test, la liste ci-dessus vieillit en silence : c'est exactement
+    comme ca que `due` a manque a l'appel pendant qu'on corrigeait `list` et
+    `review`.
+    """
+    from singular.__main__ import build_parser
+
+    sous_commandes = set()
+    for action in build_parser()._actions:
+        if getattr(action, "choices", None):
+            sous_commandes |= set(action.choices)
+
+    classees = RAPPORTENT_LE_JOURNAL | set(SANS_RAPPORT_A_FAIRE)
+    assert sous_commandes == classees, (
+        f"non classees : {sorted(sous_commandes - classees)} ; "
+        f"disparues : {sorted(classees - sous_commandes)}")
 
 
 # --- ce que la paresse ne doit pas masquer -----------------------------------
@@ -245,3 +288,24 @@ def test_l_apercu_d_analyse_marche_sans_la_moindre_dependance(tmp_path) -> None:
     assert "Rien n'a ete envoye" in resultat.stdout
     assert "irréversible" in resultat.stdout
     assert "chain_intact" in resultat.stdout
+
+
+def test_un_fichier_qui_n_est_pas_une_base_ne_deroule_pas_de_pile(tmp_path, capsys) -> None:
+    """Le cas d'un fichier copie de travers, ou d'une ecriture interrompue.
+
+    `sqlite3.DatabaseError: file is not a database` arrivait sur son ecran avec
+    sa pile d'appels. Il debute en code : une pile Python ne se distingue pas
+    d'une application cassee, et le geste dangereux -- supprimer le fichier --
+    est justement celui qu'on est tente de faire quand on ne comprend pas.
+    """
+    from singular.__main__ import main
+
+    faux = tmp_path / "pas-une-base.db"
+    faux.write_text("ceci n'est pas une base" * 50, encoding="utf-8")
+
+    assert main(["--db", str(faux), "due"]) == 1
+    sortie = capsys.readouterr().out
+    assert str(faux) in sortie
+    assert "Ne le supprime pas" in sortie
+    for pile in ("Traceback", "sqlite3", "file is not a database"):
+        assert pile not in sortie, f"la pile arrive sur son ecran : {sortie}"

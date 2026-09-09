@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sqlite3
 import sys
 from datetime import datetime
 
@@ -392,6 +393,13 @@ def cmd_export(journal: DecisionJournal, args) -> int:
 def cmd_due(journal: DecisionJournal, args) -> int:
     pending = journal.due()
     if not pending:
+        # `due` est la commande de chaque matin : c'est elle qui doit dire ou
+        # elle a regarde. `list` et `review` le disaient deja ; elle non, et un
+        # chemin mal tape rendait « Rien a trancher », qui ressemble a une
+        # bonne nouvelle.
+        if not journal.entries():
+            print(_vide(journal))
+            return 0
         open_count = len(journal.entries(status=Status.OPEN))
         print(f"\n  Rien à trancher. {open_count} décision(s) encore dans les temps.\n")
         return 0
@@ -634,7 +642,16 @@ def _survive_narrow_consoles() -> None:
 def main(argv: list[str] | None = None) -> int:
     _survive_narrow_consoles()
     args = build_parser().parse_args(argv)
-    journal = DecisionJournal(args.db)
+    try:
+        journal = DecisionJournal(args.db)
+    except sqlite3.DatabaseError:
+        # Un fichier qui n'est pas une base rendait
+        # `sqlite3.DatabaseError: file is not a database`, pile comprise.
+        # Le chemin est la seule chose utile a lire : c'est lui qu'on a ouvert.
+        print(_colour(f"\n  Ce fichier n'est pas un journal SINGULAR :\n  {args.db}\n", RED))
+        print(_colour("  Verifie d'abord le chemin. Ne le supprime pas : c'est peut-etre\n"
+                      "  ton journal, ecrit par une version qui n'a pas fini d'ecrire.\n", DIM))
+        return 1
     try:
         return args.func(journal, args)
     except KeyError as exc:

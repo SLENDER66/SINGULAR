@@ -17,6 +17,7 @@ décides.
 """
 from __future__ import annotations
 
+import errno
 import importlib
 import json
 import re
@@ -849,6 +850,29 @@ def is_loopback_bind(host: str) -> bool:
     return host.strip().lower() in {"127.0.0.1", "::1", "localhost", ""}
 
 
+def _port_refuse(refus: OSError, port: int) -> int:
+    """Le systeme refuse le port. Le dire, plutot que derouler une pile Python.
+
+    Le cas est celui de tous les matins : `A_FAIRE.md` demande de lancer le
+    Sage chaque jour, et une fenetre laissee ouverte la veille tient encore le
+    port. Python deroulait alors huit lignes de pile finissant par
+    `OSError: [Errno 98] Address already in use` -- pour quelqu'un qui debute
+    en code, c'est indistinguable d'une application cassee, et la vraie reponse
+    tient en une phrase : elle tourne deja, ouvre l'adresse.
+    """
+    if refus.errno == errno.EADDRINUSE:
+        print(f"\n  Le port {port} est deja pris.")
+        print("  Le Sage tourne probablement deja dans une autre fenetre :")
+        print(f"  ouvre http://127.0.0.1:{port}/ pour verifier.")
+        print(f"\n  Sinon, choisis un autre port : --port {port + 1}\n")
+        return 1
+    if refus.errno == errno.EACCES:
+        print(f"\n  Le systeme refuse le port {port}.")
+        print(f"  Choisis un port au-dessus de 1024 : --port {max(port, 8765)}\n")
+        return 1
+    raise refus
+
+
 def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int = 8765, lan: bool = False) -> int:
     """Démarrer le Sage. Affiche l'adresse à ouvrir, y compris depuis le téléphone."""
     journal = DecisionJournal(db)
@@ -858,7 +882,10 @@ def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int =
     # expose autant que `--lan` et doit être protégé pareil.
     token = read_token() if exposed else ""
     app = SageApp(journal, token=token)
-    server = build_server(app, bind, port)
+    try:
+        server = build_server(app, bind, port)
+    except OSError as refus:
+        return _port_refuse(refus, port)
     started = datetime.now().strftime("%H:%M")
 
     print(f"\n  SINGULAR · le Sage        démarré à {started}")

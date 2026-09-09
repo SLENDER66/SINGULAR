@@ -674,3 +674,46 @@ def test_an_empty_journal_says_where_it_looked(tmp_path):
             / "singular/sage/web/app.js").read_text(encoding="utf-8")
     assert "notice.journal" in page, "l'app ne lit pas le chemin que le serveur envoie"
     assert "Cherché ici" in page
+
+
+# --- le port pris, chaque matin ----------------------------------------------
+
+def test_un_port_deja_pris_se_dit_en_une_phrase(tmp_path, capsys):
+    """`A_FAIRE.md` demande de lancer le Sage chaque matin.
+
+    Une fenetre laissee ouverte la veille tient encore le port, et Python
+    deroulait huit lignes de pile finissant par `OSError: [Errno 98] Address
+    already in use`. Pour quelqu'un qui debute en code, c'est indistinguable
+    d'une application cassee -- alors que la vraie reponse tient en une phrase :
+    elle tourne deja, ouvre l'adresse.
+    """
+    from singular.sage.server import serve
+
+    occupant = socket.socket()
+    occupant.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    occupant.bind(("127.0.0.1", 0))
+    occupant.listen(1)
+    port = occupant.getsockname()[1]
+    try:
+        code = serve(db=tmp_path / "journal.db", port=port)
+    finally:
+        occupant.close()
+
+    sortie = capsys.readouterr().out
+    assert code == 1
+    assert "deja pris" in sortie
+    assert f"http://127.0.0.1:{port}/" in sortie
+    for pile in ("Traceback", "Errno", "Address already in use", "socketserver"):
+        assert pile not in sortie, f"la pile Python arrive sur son ecran : {sortie}"
+
+
+def test_l_option_conseillee_existe_vraiment():
+    """Conseiller une option inexistante serait pire que la pile.
+
+    Le test lit le parseur plutot que le texte : c'est la seule facon que le
+    conseil vieillisse en meme temps que la commande.
+    """
+    from singular.__main__ import build_parser
+
+    args = build_parser().parse_args(["sage", "--port", "9000"])
+    assert args.port == 9000
