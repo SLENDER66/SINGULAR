@@ -183,3 +183,27 @@ def test_the_journal_itself_never_leaves(notice) -> None:
     assert "fingerprint" not in vu
     assert "previous_fingerprint" not in vu
     assert "brier_score" not in vu, "le detail par decision reste a la maison"
+
+
+def test_the_path_of_his_journal_never_leaves(tmp_path) -> None:
+    """L'app dit ou elle a regarde. Ce chemin porte son nom d'utilisateur.
+
+    Un journal vide et un mauvais journal donnent le meme ecran, et deux
+    fichiers existent -- le PC et le telephone -- qui ne se parlent pas. Dire
+    ou l'on a cherche coute une ligne et rend la confusion impossible a rater.
+
+    Mais le chemin est `C:\\Users\\<son nom>\\...`. Il s'affiche chez lui ; il
+    n'a rien a faire dans ce qui part vers un service. Il est donc pose en
+    dehors de `items` et de `report`, qui sont exactement ce que le contexte
+    recopie.
+    """
+    from singular.analyse import contexte_pour_analyse
+    from singular.journal import DecisionJournal
+    from singular.sage.server import SageApp
+
+    journal = DecisionJournal(tmp_path / "journal.db")
+    rendu = SageApp(journal).notice()
+
+    assert rendu["journal"] == str(journal.path), "l'app doit dire ou elle a regarde"
+    assert str(tmp_path) not in contexte_pour_analyse(rendu), (
+        "le chemin de son journal part vers le service")

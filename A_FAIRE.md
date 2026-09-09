@@ -152,8 +152,11 @@ Deux réserves, non vérifiées d'ici. iOS suspend les applications passées à
 l'arrière-plan : basculer vers Safari peut couper le serveur — si la page ne
 charge pas, c'est ça, dis-le. Et **le journal du téléphone n'est pas celui du
 PC** : deux fichiers, aucune synchronisation. Tant qu'il n'y en a pas, s'en
-tenir à une seule machine. C'est pour ça que « Journal vide » affiche
-maintenant le chemin où il a regardé.
+tenir à une seule machine. C'est pour ça que « Journal vide » affiche le chemin
+où il a regardé — **dans l'app comme au clavier**. Cette phrase n'était vraie
+qu'au clavier : l'app, celle que tu ouvres le matin et celle qui peut pointer
+le mauvais fichier, ne disait rien. Un journal vide et un mauvais journal
+donnaient exactement le même écran.
 
 **Sauvegarde.** Tout mon journal est dans un seul fichier :
 `C:\Users\Utilisateur\.singular\journal.db`. Le copier de temps en temps sur

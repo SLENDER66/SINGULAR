@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.19.0 — L'app ne disait pas où elle avait regardé
+
+« Le journal est vide. » Un journal vide et un mauvais journal donnent
+exactement le même écran — et deux fichiers existent, le PC et le téléphone,
+qui ne se parlent pas. Ouvrir l'app après avoir changé de branche, de dossier
+ou de machine peut donc afficher un journal neuf alors que le sien est intact
+ailleurs.
+
+La ligne de commande le disait déjà : `_vide()` affiche le chemin, et sa
+docstring explique précisément pourquoi. L'app, celle qu'il ouvre le matin et
+celle qui a le plus de chances de pointer ailleurs, ne le disait pas.
+`A_FAIRE.md` l'affirmait pourtant pour les deux.
+
+- La carte « journal vide » porte maintenant « Cherché ici : … ».
+- Le chemin est posé **en dehors** de `items` et de `report`, qui sont
+  exactement ce que `contexte_pour_analyse` recopie : il contient son nom
+  d'utilisateur Windows, il s'affiche chez lui, il ne part pas. Un test le
+  vérifie dans les deux sens — affiché, et absent de ce qui sort.
+
 ## 3.18.0 — Profil relu avec lui : la roue est hygroscopique
 
 Le test garantit qu'une ligne **porte** une provenance ; il ne peut pas

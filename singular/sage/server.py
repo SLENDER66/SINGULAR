@@ -279,7 +279,22 @@ class SageApp:
     # --- lecture -------------------------------------------------------------
 
     def notice(self) -> dict[str, Any]:
-        return build_notice(self.journal).as_dict()
+        """Le rapport, plus l'endroit ou l'on a regarde.
+
+        Un journal vide et un mauvais journal donnent exactement le meme
+        ecran. Le coeur tourne sur son PC et sur son telephone, sur deux
+        fichiers qui ne se parlent pas : il peut tres bien ouvrir l'app et voir
+        « Le journal est vide » parce que le serveur pointe ailleurs, pas parce
+        qu'il a tout perdu. La ligne de commande le disait deja -- c'est ce que
+        `_vide()` fait dans `__main__.py` -- et l'app, celle qu'il ouvre le
+        matin, ne le disait pas.
+
+        Le chemin est pose ici, en dehors de `items` et de `report` : c'est
+        exactement ce que `contexte_pour_analyse` recopie, et le chemin porte
+        son nom d'utilisateur Windows. Il s'affiche chez lui, il ne part pas.
+        `test_ce_qui_part.py` le verifie.
+        """
+        return {**build_notice(self.journal).as_dict(), "journal": str(self.journal.path)}
 
     def entries(self, status: str | None = None) -> dict[str, Any]:
         chosen = None

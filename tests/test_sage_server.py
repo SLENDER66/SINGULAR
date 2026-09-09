@@ -612,3 +612,30 @@ def test_un_jeton_deja_ecrit_est_resserre_au_passage(tmp_path) -> None:
 
     assert read_token(chemin) == "un-jeton-deja-la"
     assert stat.S_IMODE(chemin.stat().st_mode) == 0o600
+
+
+def test_an_empty_journal_says_where_it_looked(tmp_path):
+    """« Le journal est vide » ne dit pas s'il a tout perdu ou si on cherche mal.
+
+    Le coeur tourne sur son PC et sur son telephone, sur deux fichiers qui ne
+    se parlent pas. Ouvrir l'app apres avoir change de branche, de dossier ou
+    de machine peut donc afficher un journal neuf alors que le sien est intact
+    ailleurs. La ligne de commande le disait deja ; l'app, celle qu'il ouvre le
+    matin, ne le disait pas.
+    """
+    from singular.sage.server import SageApp
+
+    journal = DecisionJournal(tmp_path / "ailleurs" / "journal.db")
+    rendu = SageApp(journal).notice()
+
+    assert rendu["report"]["decisions"] == 0
+    assert rendu["journal"].endswith("journal.db")
+    assert "ailleurs" in rendu["journal"]
+
+    # Et le client l'affiche : sans ca, le serveur le dirait a personne.
+    import pathlib
+
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "singular/sage/web/app.js").read_text(encoding="utf-8")
+    assert "notice.journal" in page, "l'app ne lit pas le chemin que le serveur envoie"
+    assert "Cherché ici" in page

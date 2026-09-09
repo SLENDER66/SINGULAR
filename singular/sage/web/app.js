@@ -66,6 +66,13 @@ function renderNotice(notice) {
     card.append(el("h3", null, item.title));
     if (item.detail) card.append(el("p", null, item.detail));
     if (item.action === "add") {
+      // Un journal vide et un mauvais journal donnent le même écran. Dire où
+      // l'on a regardé coûte une ligne et rend la confusion impossible à
+      // rater : deux fichiers existent, le PC et le téléphone, et ils ne se
+      // parlent pas.
+      if (!notice.report.decisions && notice.journal) {
+        card.append(el("p", "chemin", `Cherché ici : ${notice.journal}`));
+      }
       const button = el("button", null, "Enregistrer une décision");
       button.addEventListener("click", openAdd);
       card.append(button);
