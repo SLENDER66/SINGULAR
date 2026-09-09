@@ -273,9 +273,19 @@ def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
     hasard : l'outil conseillait de corriger un jugement que rien ne montrait
     faux, et corriger un jugement juste, c'est le dérégler.
 
-    Deux états, donc, et la différence est dite plutôt que sous-entendue : en
-    dessous de `CALIBRATION_CERTAIN` verdicts on montre l'écart et on dit qu'il
-    est encore mince ; au-delà, on peut affirmer qu'il ne vient plus du hasard.
+    Deux états, donc, et la différence est dite plutôt que sous-entendue. Elle ne
+    se lit pas sur un nombre de verdicts : c'est `calibration_verdict` qui
+    tranche, en exigeant les deux à la fois — un écart d'au moins
+    `CALIBRATION_GAP`, et une probabilité d'au plus `CALIBRATION_HASARD` que le
+    pur hasard l'ait produit. Non conclusif, on montre l'écart et on demande de
+    le regarder sans le corriger ; conclusif, on peut dire de corriger.
+
+    En dessous de `CALIBRATION_GAP`, l'observation se tait entièrement, même
+    quand l'écart est statistiquement certain : 200 verdicts à 60 % dont la
+    moitié arrivent donnent dix points d'écart que le hasard seul produirait une
+    fois sur deux cents, et rien ne s'affiche. C'est un plancher de ce qui vaut
+    la peine d'être corrigé, pas un plancher de ce qui est démontré — les deux
+    ne sont pas la même question, et le second n'appartient pas au code.
     """
     verdict = calibration_verdict(report)
     gap = report["overconfidence"]
