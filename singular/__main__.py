@@ -24,6 +24,7 @@ from .saisie import verifie_gain as _verifie_gain
 from .saisie import verifie_heures as _verifie_heures
 from .saisie import verifie_jours as _verifie_jours
 from .saisie import verifie_probabilite as _verifie_probabilite
+from .sage import notice as _notice
 from .sage.notice import calibration_verdict, foundation_item
 
 DIM = "\033[2m"
@@ -381,7 +382,10 @@ def cmd_due(journal: DecisionJournal, args) -> int:
     print(_colour(f"\n  {len(pending)} décision(s) attendent un verdict\n", BOLD))
     for entry in pending:
         late = entry.overdue_days()
-        marker = _colour(f"+{late}j", RED if late > 7 else YELLOW)
+        # Le rouge dit la même chose que le CRITIQUE du rapport : au-delà de
+        # LATE_DAYS, un verdict qu'on ne rend pas n'est plus un oubli. Le seuil
+        # se lit dans le moteur, il ne se recopie pas ici.
+        marker = _colour(f"+{late}j", RED if late > _notice.LATE_DAYS else YELLOW)
         print(f"  {_colour(entry.entry_id, BOLD)}  {marker:>12}  {entry.title}")
         print(_colour(f"      attendu : {entry.predicted}  ({entry.probability:.0%}, {entry.cost_hours:g}h, {entry.tier.value.lower()})", DIM))
     print(_colour(f"\n  python -m singular resolve {pending[0].entry_id} --yes|--no\n", DIM))

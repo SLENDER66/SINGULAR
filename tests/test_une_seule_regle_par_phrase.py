@@ -16,20 +16,28 @@ corrigée, et la vignette dorée qui l'accompagne garde l'ancienne condition.
    3 verdicts » et s'allumaient en alerte pendant que la phrase, juste en
    dessous, expliquait qu'il était trop tôt pour conclure.
 
-Trois fois, donc on arrête de corriger. Le moteur calcule le verdict une fois,
+4. Le retard : `python -m singular due` passait une échéance au rouge après
+   « 7 jours », écrit en toutes lettres dans la commande, pendant que le
+   rapport escalade en CRITIQUE au-delà de `LATE_DAYS`. Deux copies du même
+   nombre : déplacer le seuil aurait teint la ligne sur l'ancien.
+
+Quatre fois, donc on arrête de corriger. Le moteur calcule le verdict une fois,
 les interfaces le lisent, et ce fichier échoue si l'une d'elles le refait.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import pathlib
 import re
+import sys
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from singular.journal import DecisionJournal, Tier
 from singular.sage import build_notice
+from singular.sage import notice as notice_module
 from singular.sage.notice import CALIBRATION_GAP, CALIBRATION_MINIMUM, calibration_verdict
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
@@ -117,6 +125,66 @@ def test_the_engine_still_owns_the_thresholds():
     """Le témoin : sans lui, le test ci-dessus passerait sur un moteur vidé."""
     source = DOMICILE.read_text(encoding="utf-8")
     assert "CALIBRATION_GAP" in source and "CALIBRATION_HASARD" in source
+    assert "LATE_DAYS" in source
+
+
+# --- le retard : le même seuil que le rapport ---------------------------------
+
+#: Une variable de retard comparée à un nombre écrit sur place.
+COMPARE_UN_RETARD = re.compile(
+    r"\b(?:late|overdue\w*|retard\w*|worst)\b\s*[<>]=?\s*(\d+)"
+    r"|(\d+)\s*[<>]=?\s*\b(?:late|overdue\w*|retard\w*|worst)\b")
+
+
+@pytest.mark.parametrize("interface", INTERFACES, ids=lambda p: p.name)
+def test_no_interface_rewrites_the_late_threshold(interface):
+    """« En retard » et « trop en retard » ne sont pas la même question.
+
+    Comparer un retard à zéro reste permis : c'est la ligne échue, que les trois
+    interfaces affichent. Le comparer à autre chose, c'est refaire l'escalade du
+    rapport avec sa propre copie du nombre.
+    """
+    for ligne in interface.read_text(encoding="utf-8").splitlines():
+        trouve = COMPARE_UN_RETARD.search(ligne)
+        if trouve is None:
+            continue
+        seuil = trouve.group(1) or trouve.group(2)
+        assert int(seuil) == 0, (
+            f"{interface.relative_to(RACINE)} compare un retard à {seuil} : "
+            f"{ligne.strip()!r}. Le seuil d'escalade appartient au moteur "
+            "(`LATE_DAYS`), sinon la ligne rougit sur un nombre et le rapport "
+            "s'alarme sur un autre.")
+
+
+def test_the_command_line_reddens_where_the_notice_escalates(tmp_path, monkeypatch, capsys):
+    """Preuve par déplacement : on bouge le seuil, les deux doivent suivre.
+
+    Le test ne vérifie pas que le rouge tombe sur sept jours — il vérifie qu'il
+    tombe au même endroit que le CRITIQUE du rapport, quel que soit l'endroit.
+    C'est ce qu'une deuxième copie du nombre ne peut pas tenir.
+    """
+    from singular import __main__ as cli
+
+    monkeypatch.setattr(notice_module, "LATE_DAYS", 3)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    maintenant = datetime.now(UTC)
+
+    for retard, attendu_rouge in ((3, False), (4, True)):
+        journal = DecisionJournal(tmp_path / f"retard{retard}.db")
+        journal.add(title="Rendre le verdict", action="trancher", predicted="oui",
+                    probability=0.5, tier=Tier.REVENUS, cost_hours=1, horizon_days=7,
+                    now=maintenant - timedelta(days=7 + retard))
+        capsys.readouterr()
+        cli.cmd_due(journal, argparse.Namespace())
+        ligne = next(texte for texte in capsys.readouterr().out.splitlines()
+                     if f"+{retard}j" in texte)
+
+        severite = next(item.severity for item in build_notice(journal, now=maintenant).items
+                        if item.title == "À trancher aujourd'hui")
+        assert (severite == "CRITIQUE") is attendu_rouge, "le rapport a changé d'avis"
+        assert (cli.RED in ligne) is attendu_rouge, (
+            f"retard de {retard} jours : le rapport dit {severite}, la commande "
+            f"affiche {'du rouge' if cli.RED in ligne else 'du jaune'}")
 
 
 # --- ce que l'interface reçoit correspond à ce que la phrase dit ---------------
