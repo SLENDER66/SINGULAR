@@ -717,3 +717,64 @@ def test_l_option_conseillee_existe_vraiment():
 
     args = build_parser().parse_args(["sage", "--port", "9000"])
     assert args.port == 9000
+
+
+# --- la derniere porte : les pannes qu'on n'a pas prevues ---------------------
+
+def test_une_panne_imprevue_ne_parle_pas_anglais_sur_son_telephone(tmp_path):
+    """Le corps JSON portait `f"{type(exc).__name__}: {exc}"`.
+
+    `OperationalError: database is locked` s'affichait donc sur son ecran. Le
+    cas est reel : le Sage sert le telephone pendant qu'une commande ecrit dans
+    une fenetre du PC. C'est le meme defaut que les refus de saisie et les refus
+    d'ecriture, a la derniere porte -- celle des pannes non prevues.
+    """
+    import sqlite3
+
+    from singular.sage.server import OCCUPE, PANNE, SageApp, _panne
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    assert app is not None
+
+    assert _panne(sqlite3.OperationalError("database is locked")) == OCCUPE
+    assert _panne(ValueError("un detail interne")) == PANNE
+    for message in (OCCUPE, PANNE):
+        for anglais in ("Error", "locked", "database", "Traceback"):
+            assert anglais not in message, f"« {message} » parle encore la langue de la machine"
+
+
+def test_la_panne_se_lit_quand_meme_sur_le_pc(tmp_path, capsys):
+    """Une phrase pour lui ne doit pas devenir un silence pour moi.
+
+    Sans la trace cote PC, la seule chose qu'il pourrait me rapporter serait
+    « ca a casse » -- et il n'y aurait rien a chercher.
+    """
+    import socket
+    import threading
+    import urllib.error
+    import urllib.request
+
+    from singular.sage.server import SageApp, build_server
+
+    journal = DecisionJournal(tmp_path / "journal.db")
+    app = SageApp(journal)
+    app.notice = lambda: (_ for _ in ()).throw(RuntimeError("panne fabriquee par le test"))
+
+    libre = socket.socket()
+    libre.bind(("127.0.0.1", 0))
+    port = libre.getsockname()[1]
+    libre.close()
+    serveur = build_server(app, "127.0.0.1", port)
+    fil = threading.Thread(target=serveur.serve_forever, daemon=True)
+    fil.start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as refus:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/notice")
+        corps = json.loads(refus.value.read())
+    finally:
+        serveur.shutdown()
+        fil.join(timeout=5)
+
+    assert refus.value.code == 500
+    assert "panne fabriquee" not in corps["message"], "le detail part sur le telephone"
+    assert "panne fabriquee" in capsys.readouterr().out, "et il ne reste nulle part"

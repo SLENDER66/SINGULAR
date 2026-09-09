@@ -20,6 +20,7 @@ from __future__ import annotations
 import errno
 import importlib
 import json
+import sqlite3
 import re
 import secrets
 import ipaddress
@@ -771,7 +772,12 @@ class SageHandler(BaseHTTPRequestHandler):
         except SageError as exc:
             self._json(exc.status, {"message": exc.message})
         except Exception as exc:  # noqa: BLE001 - un serveur personnel ne doit jamais tomber
-            self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"message": f"{type(exc).__name__}: {exc}"})
+            # La panne se lit sur le PC, ou il peut la copier ; le telephone
+            # recoit une phrase. `OperationalError: database is locked` ne dit
+            # rien a personne, et c'etait la derniere porte par ou un message
+            # de bibliotheque arrivait sur son ecran.
+            print(f"\n  [Sage] {type(exc).__name__}: {exc}", flush=True)
+            self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"message": _panne(exc)})
 
     def do_GET(self) -> None:  # noqa: N802 - signature imposée
         self._dispatch()
@@ -781,6 +787,28 @@ class SageHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         self._dispatch()
+
+
+#: Ce qu'on dit d'une panne qu'on ne sait pas nommer.
+PANNE = ("Quelque chose a casse de mon cote. Le detail est ecrit dans la fenetre "
+         "du PC ou tourne le Sage. Ton journal, lui, n'a pas bouge.")
+
+#: Et la seule panne courante qu'il peut lui-meme resoudre.
+OCCUPE = ("Le journal est occupe par une autre fenetre -- une commande en cours "
+          "sur le PC. Reessaie dans un instant.")
+
+
+def _panne(exc: Exception) -> str:
+    """Une phrase pour le telephone, dans sa langue.
+
+    Le corps JSON portait `f"{type(exc).__name__}: {exc}"`, donc
+    `OperationalError: database is locked` s'affichait sur son ecran. C'est le
+    meme defaut que les refus de saisie et les refus d'ecriture, a la derniere
+    porte : celle des pannes qu'on n'a pas prevues.
+    """
+    if isinstance(exc, sqlite3.OperationalError) and "locked" in str(exc):
+        return OCCUPE
+    return PANNE
 
 
 def build_server(app: SageApp, host: str, port: int) -> ThreadingHTTPServer:
