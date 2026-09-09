@@ -34,9 +34,18 @@ même commit que la branche par défaut, donc elle ne porte plus rien qui lui
 soit propre. Les supprimer ou les garder est ton
 choix ; ce fichier ne prétendra pas qu'elles sont supprimées.
 
+Le 9 septembre tu as autorisé la suppression de
+`claude/remote-control-feedback-ndpzle`, et la session a essayé : refusée, une
+deuxième fois, par le proxy réseau du conteneur — `HTTP 403` sur le `git push
+origin --delete`. L'API GitHub disponible ici n'offre aucun outil de
+suppression de branche. Ce qu'une session **peut** faire a été fait : plus
+personne ne pousse dessus, et plus aucun document ne dit de la cloner. Elle est
+donc figée, et sa suppression t'attend.
+
 Une session ne peut pas les supprimer : le proxy réseau des conteneurs refuse
-l'opération, vérifié. Le geste est donc le tien — sur GitHub, onglet **Branches**,
-icône corbeille — ou depuis ton PC : `git push origin --delete <nom>`.
+l'opération, vérifié deux fois. Le geste est donc le tien — sur GitHub, onglet
+**Branches**, icône corbeille — ou depuis ton PC :
+`git push origin --delete claude/remote-control-feedback-ndpzle`.
 
 Le tri a été fait le 7 septembre 2026, pour ne pas être refait. Ce tableau est
 une **analyse**, pas un inventaire : il dit ce que chaque branche portait, pas

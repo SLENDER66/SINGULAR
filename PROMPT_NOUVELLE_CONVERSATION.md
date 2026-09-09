@@ -12,7 +12,7 @@ Sa **section 0** dit pour qui tu travailles. Je l'avais écrit trois fois dans
 trois conversations avant qu'elle existe ; elle est là pour que ce soit la
 dernière. Ne me réponds pas que tu l'as bien noté — applique-la.
 
-**Branche de travail : `claude/remote-control-feedback-ndpzle`**.
+**Branche de travail : `claude/decision-companion-rebuild-3k25h3`**.
 Ne merge jamais dans `main` sans mon autorisation.
 
 **Ton conteneur part de la branche par défaut, pas de la branche de travail.**

@@ -248,3 +248,78 @@ def test_le_scan_verrait_une_commande_d_une_autre_machine() -> None:
     assert any(etiquette == ETIQUETTE_IPHONE for etiquette, _, _ in _blocs("USAGE.md")), (
         "plus aucun bloc iPhone : l'exemption ne protège plus rien, "
         "et le test ne prouve plus qu'il sait distinguer les deux machines")
+
+
+# --- aucun document ne pointe une branche que le mandat ne declare pas --------
+
+#: Un nom de branche du dépôt, tel qu'il s'écrit.
+NOM_DE_BRANCHE = re.compile(r"\bclaude/[a-z0-9][a-z0-9-]*\b")
+
+#: Les documents où une branche peut apparaître, y compris hors du dépôt Python.
+DOCUMENTS = ["A_FAIRE.md", "USAGE.md", "README.md", "CLAUDE.md",
+             "PROMPT_NOUVELLE_CONVERSATION.md", "proto/README.md"]
+
+
+def _branche_declaree() -> tuple[str, set[str]]:
+    """La branche de travail, et toutes celles que le mandat nomme.
+
+    Le mandat est la seule source hors ligne : interroger `origin` ferait
+    dependre la suite de tests du reseau, et un test qui ne peut pas s'executer
+    ne garde rien.
+    """
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from check_repo_state import declared_work_branch
+    finally:
+        sys.path.pop(0)
+    contenu = _read("CLAUDE.md")
+    return declared_work_branch(contenu), set(NOM_DE_BRANCHE.findall(contenu))
+
+
+@pytest.mark.parametrize("nom", DOCUMENTS)
+def test_une_commande_ne_nomme_que_les_branches_du_mandat(nom: str) -> None:
+    """Une branche citée dans une commande est une branche qu'il va utiliser.
+
+    `proto/README.md` faisait télécharger le suivi de candidatures depuis
+    `claude/remote-control-feedback-ndpzle` — une branche dont la suppression
+    est justement demandée, et dont l'URL brute rendra 404 le jour où il la
+    supprime. La prose peut parler d'une branche morte, et A_FAIRE.md le fait
+    exprès ; une commande, non : elle sera exécutée.
+    """
+    travail, nommees = _branche_declaree()
+    texte = _read(nom)
+    fautes = []
+    for bloc in re.finditer(r"```\w*\n(.*?)```", texte, re.DOTALL):
+        ligne = texte[:bloc.start()].count("\n") + 1
+        for branche in NOM_DE_BRANCHE.findall(bloc.group(1)):
+            if branche not in nommees:
+                fautes.append(f"{nom}:{ligne} exécute une commande sur « {branche} »")
+    assert not fautes, (
+        "\n  ".join(fautes)
+        + f"\nLe mandat ne nomme que {sorted(nommees)}, dont « {travail} » en travail.")
+
+
+@pytest.mark.parametrize("nom", DOCUMENTS)
+def test_aucun_document_ne_declare_une_autre_branche_de_travail(nom: str) -> None:
+    """Le pire cas : un mandat qui envoie la prochaine session au mauvais endroit.
+
+    `PROMPT_NOUVELLE_CONVERSATION.md` est le bloc qu'il colle dans une nouvelle
+    conversation. Il déclarait une branche de travail que `CLAUDE.md` ne déclare
+    pas — c'est-à-dire exactement la panne qu'`A_FAIRE.md` raconte avoir déjà
+    coûté une séance entière.
+    """
+    travail, _nommees = _branche_declaree()
+    for declaration in re.finditer(r"[Bb]ranche de travail[^\n]*?`([^`]+)`", _read(nom)):
+        assert declaration.group(1) == travail, (
+            f"{nom} déclare « {declaration.group(1)} » comme branche de travail, "
+            f"le mandat déclare « {travail} ».")
+
+
+def test_le_scan_lit_bien_des_branches() -> None:
+    """Le témoin : sans branche trouvée nulle part, les deux tests ci-dessus sont creux."""
+    travail, nommees = _branche_declaree()
+    assert travail and len(nommees) >= 2, "le mandat doit nommer la branche de travail et la branche par defaut"
+    trouvees = {branche for nom in DOCUMENTS for branche in NOM_DE_BRANCHE.findall(_read(nom))}
+    assert travail in trouvees

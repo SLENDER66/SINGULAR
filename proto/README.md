@@ -14,13 +14,13 @@ terminal avec Python 3 intégré, tout tourne en local.
 Une seule fois, dans a-Shell — le script est un fichier autonome, inutile de
 cloner le dépôt :
 
-```
-curl -O https://raw.githubusercontent.com/SLENDER66/SINGULAR/claude/remote-control-feedback-ndpzle/proto/suivi_candidatures.py
+```sh
+curl -O https://raw.githubusercontent.com/SLENDER66/SINGULAR/claude/decision-companion-rebuild-3k25h3/proto/suivi_candidatures.py
 ```
 
 Puis chaque matin, une seule ligne :
 
-```
+```sh
 python suivi_candidatures.py
 ```
 
