@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.28.0 — La dernière porte parlait encore anglais
+
+Le corps JSON d'une panne imprévue portait `f"{type(exc).__name__}: {exc}"`, et
+donnait sur son écran `OperationalError: database is locked`. Le cas se produit
+sans rien faire d'anormal : le Sage sert le téléphone pendant qu'une commande
+écrit dans une fenêtre du PC. SQLite attend dix secondes — le délai est bien
+celui-là, mesuré — puis rend la main.
+
+- Le téléphone reçoit une phrase ; la seule panne courante qu'il peut lui-même
+  résoudre est nommée. Le détail technique change de destinataire : il s'affiche
+  dans la fenêtre du PC, sans quoi la seule chose à me rapporter serait « ça a
+  cassé ».
+- Le même défaut a été corrigé à quatre portes en une semaine — la saisie du
+  téléphone, le clavier, les refus d'écriture, les pannes imprévues. Un balayage
+  refuse désormais un message où l'anglais de la bibliothèque affleure, sur tout
+  ce qui écrit dans le journal. Les marqueurs ne sont pas devinés : ils sont
+  faits de ce qu'on a vu passer sur son écran.
+- `add()` n'avait aucun test de course, alors que c'est lui qui construit la
+  chaîne d'intégrité. Six processus réels, une barrière par fichier, puis
+  `verify()` et un contrôle maillon par maillon. Le code tenait déjà ; rien ne
+  le prouvait.
+
 ## 3.27.0 — Trois pannes ordinaires déroulaient une pile Python
 
 Il débute en code. Une pile d'appels ne se distingue pas d'une application
