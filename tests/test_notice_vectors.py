@@ -16,7 +16,17 @@ from pathlib import Path
 
 import pytest
 
-from tools.generate_notice_vectors import CASES, VECTORS, _build, build_vectors
+from singular.journal import Tier
+from singular.sage.notice import observations
+from tools import generate_notice_vectors as generateur
+from tools.generate_notice_vectors import (
+    ABSENTES_DU_PORT,
+    CASES,
+    VECTORS,
+    _build,
+    _entry,
+    build_vectors,
+)
 
 
 def test_the_committed_vectors_match_the_engine():
@@ -109,3 +119,50 @@ def test_no_vector_expects_a_number_the_port_cannot_reach():
         assert expected == obtained, (
             f"{spec['name']} : le rapport de référence dépend d'une donnée que "
             "le vecteur ne transmet pas")
+
+
+# --- aucun vecteur ne réclame au port ce qu'il ne sait pas produire -----------
+
+#: Un cas qui déclenche `_unpriced_item` : un gros chantier sans gain estimé.
+CAS_INTERDIT = {
+    "name": "cas_qui_reclame_une_observation_absente",
+    "why": "fabriqué par le test, jamais committé",
+    "at_offset_days": 1,
+    "entries": [_entry("Chantier", tier=Tier.REVENUS, hours=40.0, days=30, gain=None)],
+}
+
+
+def test_les_vecteurs_committes_ne_reclament_rien_d_absent():
+    """Le contrat entre les deux moteurs ne doit pas contredire l'écart déclaré.
+
+    Il l'a fait longtemps : `ABSENTES_DU_PORT` déclarait deux observations
+    manquantes côté Swift pendant que cinq vecteurs committés les exigeaient.
+    La suite Swift échouait pour de bon — sur un Mac, chez quelqu'un d'autre,
+    c'est-à-dire nulle part.
+    """
+    for case in CASES:
+        journal, moment = _build(case)
+        produites = set(observations(journal, now=moment)) & set(ABSENTES_DU_PORT)
+        assert not produites, f"{case['name']} réclame {sorted(produites)}"
+
+
+def test_le_generateur_refuse_d_ecrire_un_vecteur_impossible(monkeypatch):
+    """Le garde-fou, éprouvé sur un cas qui le déclenche vraiment."""
+    monkeypatch.setattr(generateur, "CASES", [*CASES, CAS_INTERDIT])
+
+    with pytest.raises(AssertionError) as refus:
+        build_vectors()
+
+    assert CAS_INTERDIT["name"] in str(refus.value)
+    assert "_unpriced_item" in str(refus.value)
+
+
+def test_le_cas_interdit_declenche_bien_ce_qu_on_croit():
+    """Le témoin : sans lui, un cas devenu inoffensif ferait passer le test ci-dessus."""
+    journal, moment = _build(CAS_INTERDIT)
+    assert "_unpriced_item" in observations(journal, now=moment)
+
+
+def test_l_ecart_declare_n_est_pas_vide():
+    """Et le témoin du témoin : une liste vide rendrait tout ce qui précède creux."""
+    assert ABSENTES_DU_PORT

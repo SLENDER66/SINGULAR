@@ -76,7 +76,7 @@ def test_les_heures_non_chiffrees_se_reprochent_au_dela_du_seuil(journal) -> Non
 
     chiffre = next(i for i in notice.items if "sans gain attendu" in i.title)
     assert chiffre.severity == "INFO"
-    assert "100%" in chiffre.detail  # sans espace, comme partout ailleurs dans la Notice
+    assert "1 de tes 1 dernières décisions" in chiffre.detail
 
 
 def test_sous_le_seuil_la_notice_se_tait(journal) -> None:

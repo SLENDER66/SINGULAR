@@ -37,8 +37,16 @@ BINDINGS = {
                                      if c["expected"]["items"]),
 }
 
-#: Ce que le port ignore délibérément : de la provenance pour un lecteur humain.
-IGNORED_BY_DESIGN = {"VectorFile": {"generated_by", "note"}}
+#: Ce que le port ignore délibérément : de la provenance pour un lecteur humain,
+#: et un champ dont il ne se sert pas encore.
+#:
+#: `expected_gain_eur` n'existe dans les vecteurs que pour éteindre
+#: `_unpriced_item`, l'observation que le port ne produit pas — voir
+#: `ABSENTES_DU_PORT` dans `tools/generate_notice_vectors.py`. Le déclarer côté
+#: Swift ajouterait une propriété inutilisée à un port qu'aucune machine d'ici
+#: ne peut compiler. Le jour où le port portera l'observation, il lira le champ.
+IGNORED_BY_DESIGN = {"VectorFile": {"generated_by", "note"},
+                     "VectorEntry": {"expected_gain_eur"}}
 
 
 def _block(source: str, name: str) -> str:

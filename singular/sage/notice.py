@@ -381,6 +381,8 @@ def _headline(items: tuple[NoticeItem, ...]) -> str:
 #: façon de travailler qui ne dit jamais si le travail rapporte quelque chose.
 #: Le seuil est volontairement haut -- le reproche doit être rare pour être lu.
 UNPRICED_HOURS = 20.0
+#: Sur combien de décisions enregistrées se lit l'habitude en cours.
+UNPRICED_WINDOW = 10
 
 
 def _irreversible_item(overdue: tuple[Entry, ...], open_entries: tuple[Entry, ...]) -> NoticeItem | None:
@@ -417,26 +419,72 @@ def _irreversible_item(overdue: tuple[Entry, ...], open_entries: tuple[Entry, ..
     )
 
 
-def _unpriced_item(report: dict[str, Any]) -> NoticeItem | None:
+def _unpriced_item(entries: tuple[Entry, ...]) -> NoticeItem | None:
     """Des heures dont personne n'a estimé le rendement.
 
     « Non chiffré » n'est pas « ne rapporte rien » : le journal garde la
     différence, et c'est justement elle qui se reproche. Un gain estimé faux
     s'apprend en le comparant au résultat ; un gain jamais estimé ne s'apprend
     pas du tout.
+
+    Le constat porte sur les dernières décisions enregistrées, pas sur toutes.
+    Il comptait le total de la vie du journal, qu'aucun geste ne peut faire
+    baisser : le journal est append-only, un gain oublié le reste. Quinze mois à
+    chiffrer chaque décision laissaient donc la même phrase, « 120 h engagées
+    sans gain attendu », au-dessus du même conseil sur le prochain
+    enregistrement. Un reproche qu'on ne peut pas éteindre n'est plus un
+    reproche, c'est du décor, et le décor finit par masquer le reste du rapport.
     """
-    heures = report["hours_without_gain"]
+    recentes = entries[-UNPRICED_WINDOW:]
+    sans_gain = tuple(entry for entry in recentes if entry.expected_gain_eur is None)
+    heures = round(sum(entry.cost_hours for entry in sans_gain), 1)
     if heures < UNPRICED_HOURS:
         return None
-    part = heures / report["hours_total"] if report["hours_total"] else 0
     return NoticeItem(
         "INFO",
-        f"{heures:g} h engagées sans gain attendu",
-        f"Soit {part:.0%} de tes heures. La constitution demande de juger une décision sur "
-        "son levier et son coût ; sans estimation de ce qu'elle rapporte, il ne reste que le "
-        "coût, et tout finit par se valoir.",
+        f"{heures:g} h sans gain attendu, sur tes dernières décisions",
+        f"{len(sans_gain)} de tes {len(recentes)} dernières décisions n'annoncent pas ce "
+        "qu'elles rapportent. La constitution demande de juger une décision sur son levier "
+        "et son coût ; sans estimation de ce qu'elle rapporte, il ne reste que le coût, et "
+        "tout finit par se valoir.",
         action="Au prochain enregistrement, mets un ordre de grandeur même approximatif.",
     )
+
+
+def _candidates(journal: DecisionJournal, moment: datetime,
+                report: dict[str, Any]) -> dict[str, NoticeItem | None]:
+    """Chaque observation sous le nom de la fonction qui la produit.
+
+    Le nom sert à deux lecteurs qui n'ont pas d'autre moyen de savoir quelle
+    fonction a écrit une phrase : `tests/test_notice_port_parity.py`, qui compare
+    cette liste au port Swift, et `tools/generate_notice_vectors.py`, qui refuse
+    d'écrire un vecteur exigeant du port une observation qu'il n'implémente pas.
+    Sans ce nom, les deux devinaient — l'un lisait le code source, l'autre ne
+    regardait rien, et les vecteurs committés réclamaient depuis toujours deux
+    observations absentes du Swift.
+    """
+    overdue = journal.due(now=moment)
+    entries = journal.entries()
+    open_entries = tuple(entry for entry in journal.entries(status=Status.OPEN)
+                         if entry not in overdue)
+    return {
+        "_chain_item": _chain_item(report),
+        "_overdue_item": _overdue_item(overdue, moment),
+        "_irreversible_item": _irreversible_item(overdue, open_entries),
+        "_empty_item": _empty_item(report),
+        "foundation_item": foundation_item(report),
+        "_calibration_item": _calibration_item(report),
+        "_unresolved_hours_item": _unresolved_hours_item(report),
+        "_unpriced_item": _unpriced_item(entries),
+        "_quiet_item": _quiet_item(open_entries, moment),
+    }
+
+
+def observations(journal: DecisionJournal, *, now: datetime | None = None) -> dict[str, NoticeItem]:
+    """Les observations produites aujourd'hui, sous le nom de leur fonction."""
+    moment = now or datetime.now(UTC)
+    produced = _candidates(journal, moment, journal.review(now=moment))
+    return {nom: item for nom, item in produced.items() if item is not None}
 
 
 def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> Notice:
@@ -449,21 +497,8 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     """
     moment = now or datetime.now(UTC)
     report = journal.review(now=moment)
-    overdue = journal.due(now=moment)
-    open_entries = tuple(entry for entry in journal.entries(status=Status.OPEN) if entry not in overdue)
-
-    candidates = (
-        _chain_item(report),
-        _overdue_item(overdue, moment),
-        _irreversible_item(overdue, open_entries),
-        _empty_item(report),
-        foundation_item(report),
-        _calibration_item(report),
-        _unresolved_hours_item(report),
-        _unpriced_item(report),
-        _quiet_item(open_entries, moment),
-    )
-    items = tuple(item for item in candidates if item is not None)
+    candidates = _candidates(journal, moment, report)
+    items = tuple(item for item in candidates.values() if item is not None)
     ordered = tuple(sorted(items, key=lambda item: item.rank))
     return Notice(
         headline=_headline(ordered),
@@ -474,5 +509,7 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     )
 
 
-__all__ = ["CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS", "foundation_item",
-           "Notice", "NoticeItem", "build_notice", "calibration_verdict", "chance_du_hasard"]
+__all__ = ["CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
+           "UNPRICED_WINDOW", "foundation_item",
+           "Notice", "NoticeItem", "build_notice", "calibration_verdict", "chance_du_hasard",
+           "observations"]

@@ -24,6 +24,7 @@ from typing import Any
 
 from singular.journal import DecisionJournal, Tier
 from singular.sage import build_notice
+from singular.sage.notice import observations
 
 VECTORS = Path(__file__).resolve().parent.parent / "ios" / "SingularSage" / "Resources" / "notice_vectors.json"
 
@@ -31,10 +32,30 @@ VECTORS = Path(__file__).resolve().parent.parent / "ios" / "SingularSage" / "Res
 #: exécution et ne prouveraient plus rien.
 ORIGIN = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
+#: Ce que le port Swift ne sait pas encore produire, par le nom de la fonction
+#: Python qui l'écrit, et pourquoi l'absence est acceptée.
+#:
+#: Aucun compilateur Swift n'est installable dans l'environnement qui écrit ce
+#: dépôt : la passerelle refuse swift.org et les binaires GitHub, c'est vérifié.
+#: Écrire ici du Swift qu'on ne peut ni compiler ni exécuter ajouterait du code
+#: invérifiable à un port qui n'a jamais été compilé, pour une application qui ne
+#: tourne sur aucune machine disponible. L'application web, elle, tourne et sert
+#: ces deux observations aujourd'hui.
+#:
+#: La liste vit ici plutôt que dans les tests parce que c'est le générateur qui
+#: doit la respecter : un vecteur qui exige une de ces observations fait échouer
+#: la suite Swift sur un Mac, loin d'ici, sans que rien ne le dise ici.
+#: `tests/test_notice_port_parity.py` la relit pour vérifier l'autre versant :
+#: que l'écart déclaré est bien l'écart réel.
+ABSENTES_DU_PORT = {
+    "_irreversible_item": "engagement irréversible sans verdict",
+    "_unpriced_item": "heures engagées sans gain attendu",
+}
+
 
 def _entry(title: str, *, tier: Tier, probability: float = 0.6, hours: float = 4.0,
            days: int = 14, created_offset: int = 0, created_hour: int = 0,
-           resolved: bool | None = None,
+           resolved: bool | None = None, gain: float | None = 500.0,
            predicted: str = "le résultat observable") -> dict[str, Any]:
     """Une entrée du vecteur. `created_hour` décale l'écriture dans la journée.
 
@@ -43,6 +64,14 @@ def _entry(title: str, *, tier: Tier, probability: float = 0.6, hours: float = 4
     des instants masquait le fait qu'ils ne comptaient pas dans la même unité.
     C'est exactement le cas de Thomas — écrire le soir, lire le matin — qui
     manquait, et c'est là que l'échéance se trompait d'un jour.
+
+    `gain` est chiffré par défaut, et ce n'est pas un détail de fixture : sans
+    lui, la moitié des vecteurs déclenchaient `_unpriced_item`, que le port
+    Swift ne produit pas. Les vecteurs committés exigeaient donc du port des
+    phrases impossibles — le contrat entre les deux moteurs contredisait
+    l'écart déclaré, et personne ne pouvait le voir sans un Mac. Un vecteur qui
+    veut éprouver cette observation devra attendre que le port la porte : le
+    garde-fou de `build_vectors` le refusera d'ici là.
     """
     return {
         "title": title,
@@ -54,6 +83,7 @@ def _entry(title: str, *, tier: Tier, probability: float = 0.6, hours: float = 4
         "horizon_days": days,
         "created_offset_days": created_offset,
         "created_offset_hours": created_hour,
+        "expected_gain_eur": gain,
         "resolved": resolved,
     }
 
@@ -233,7 +263,8 @@ def _build(case: dict[str, Any]) -> tuple[DecisionJournal, datetime]:
         entry = journal.add(
             title=item["title"], action=item["action"], predicted=item["predicted"],
             probability=item["probability"], tier=Tier(item["tier"]),
-            cost_hours=item["cost_hours"], horizon_days=item["horizon_days"], now=created,
+            cost_hours=item["cost_hours"], horizon_days=item["horizon_days"],
+            expected_gain_eur=item.get("expected_gain_eur"), now=created,
         )
         if item["resolved"] is not None:
             journal.resolve(entry.entry_id, happened=item["resolved"],
@@ -272,6 +303,7 @@ def build_vectors() -> dict[str, Any]:
     for case in CASES:
         journal, moment = _build(case)
         notice = build_notice(journal, now=moment)
+        _refuse_les_absentes(case["name"], journal, moment)
         cases.append({
             "name": case["name"],
             "why": case["why"],
@@ -294,6 +326,25 @@ def build_vectors() -> dict[str, Any]:
                 "modification de singular/sage/notice.py.",
         "cases": cases,
     }
+
+
+def _refuse_les_absentes(nom: str, journal: DecisionJournal, moment: datetime) -> None:
+    """Un vecteur ne demande jamais au port une observation qu'il n'a pas.
+
+    C'est le garde-fou qui manquait. Les vecteurs sont générés depuis Python et
+    rejoués par la suite Swift, qui exige exactement les mêmes phrases : un
+    vecteur déclenchant une observation absente du port échoue sur un Mac, chez
+    quelqu'un d'autre, un jour indéterminé — c'est-à-dire nulle part et jamais.
+    """
+    produites = set(observations(journal, now=moment)) & set(ABSENTES_DU_PORT)
+    if not produites:
+        return
+    raisons = ", ".join(f"{nom_fonction} ({ABSENTES_DU_PORT[nom_fonction]})"
+                        for nom_fonction in sorted(produites))
+    raise AssertionError(
+        f"le vecteur « {nom} » déclenche {raisons}, que le port Swift ne produit pas. "
+        "Change les entrées du cas pour ne plus la déclencher, ou implémente "
+        "l'observation côté Swift et retire-la de ABSENTES_DU_PORT.")
 
 
 def main() -> int:

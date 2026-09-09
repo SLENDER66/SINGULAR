@@ -8,47 +8,64 @@ la forme du JSON ; rien ne couvrait la liste des observations elle-même.
 
 Ce test ne compile pas le Swift, il le lit — même limite et même raison que le
 test de schéma. Ce qu'il interdit n'est pas l'écart : c'est l'écart **non
-déclaré**. Le port est en retard, c'est un fait assumé et écrit ci-dessous ;
-ce qui ne doit pas arriver, c'est qu'une prochaine observation s'y ajoute sans
-que personne le sache.
+déclaré**. Le port est en retard, c'est un fait assumé, déclaré dans
+`ABSENTES_DU_PORT` ; ce qui ne doit pas arriver, c'est qu'une prochaine
+observation s'y ajoute sans que personne le sache.
+
+Ce fichier a longtemps porté, dans son propre message d'erreur, l'aveu que les
+vecteurs committés exigeaient déjà les deux observations manquantes : l'écart
+était déclaré ici et contredit là-bas, et la suite Swift échouait pour de bon
+sur un Mac. C'est le générateur qui refuse maintenant d'écrire un tel vecteur.
 """
 from __future__ import annotations
 
 import pathlib
 import re
 
+from tools.generate_notice_vectors import ABSENTES_DU_PORT
+
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 PYTHON = RACINE / "singular/sage/notice.py"
 SWIFT = RACINE / "ios/SingularSage/Core/Notice.swift"
 
-#: Ce que le port ne sait pas encore produire, et pourquoi c'est accepté.
-#:
-#: Aucun compilateur Swift n'est installable dans l'environnement qui écrit ce
-#: dépôt : la passerelle refuse swift.org et les binaires GitHub, c'est
-#: vérifié. Écrire ici du Swift qu'on ne peut ni compiler ni exécuter
-#: ajouterait du code invérifiable à un port qui n'a jamais été compilé, pour
-#: une application qui ne tourne sur aucune machine disponible. L'application
-#: web, elle, tourne et sert ces deux observations aujourd'hui.
-#:
-#: Retirer un nom d'ici sans l'implémenter côté Swift fait échouer ce test.
-ABSENTES_DU_PORT = {
-    "irreversibleItem",   # engagement irréversible sans verdict
-    "unpricedItem",       # heures engagées sans gain attendu
-}
+def _en_swift(nom_python: str) -> str:
+    """`_unresolved_hours_item` devient `unresolvedHoursItem`."""
+    morceaux = nom_python.lstrip("_").split("_")
+    return morceaux[0] + "".join(morceau.title() for morceau in morceaux[1:])
+
+
+#: Une ligne du dictionnaire de `_candidates` : sa clé, puis la fonction appelée.
+LIGNE = re.compile(r'"(\w+)":\s*(\w+)\(')
+
+
+def _lignes_des_candidats() -> list[tuple[str, str]]:
+    source = PYTHON.read_text(encoding="utf-8")
+    depart = source.find("def _candidates(")
+    assert depart >= 0, "`_candidates` a disparu de notice.py"
+    bloc = re.search(r"return \{\n(.*?)\n    \}", source[depart:], flags=re.DOTALL)
+    assert bloc, "le dictionnaire de `_candidates` n'a plus la même forme"
+    lignes = LIGNE.findall(bloc.group(1))
+    assert lignes, "aucune observation lue : l'analyse a changé de forme"
+    return lignes
+
+
+def test_chaque_cle_nomme_la_fonction_qu_elle_appelle() -> None:
+    """La clé est le nom de la fonction. Deux écritures, donc un test.
+
+    C'est le prix du nommage : sans lui, personne ne sait quelle fonction a
+    écrit une phrase. Une clé qui ment ferait croire au générateur de vecteurs
+    qu'une observation absente du port n'a pas été produite.
+    """
+    for cle, appelee in _lignes_des_candidats():
+        assert cle == appelee, f"la clé {cle!r} appelle {appelee!r}"
 
 
 def _observations_python() -> set[str]:
-    """Les fonctions réellement branchées dans `build_notice`, pas toutes celles définies."""
-    source = PYTHON.read_text(encoding="utf-8")
-    bloc = re.search(r"candidates = \((.*?)\n    \)", source, flags=re.DOTALL)
-    assert bloc, "le bloc « candidates » de build_notice n'a plus la même forme"
+    """Les fonctions réellement branchées dans la Notice, pas toutes celles définies."""
     # Le tiret bas de tête est facultatif : `foundation_item` est publique
     # depuis que `python -m singular review` l'appelle au lieu de réécrire
     # la règle. Une observation publique reste une observation.
-    noms = set(re.findall(r"(?<![\w])_?(\w+?)_item\(", bloc.group(1)))
-    assert noms, "aucune observation lue : l'analyse a changé de forme"
-    return {nom.split("_")[0] + "".join(m.title() for m in nom.split("_")[1:]) + "Item"
-            for nom in noms}
+    return {_en_swift(cle) for cle, _ in _lignes_des_candidats()}
 
 
 def _observations_swift() -> set[str]:
@@ -61,13 +78,16 @@ def _observations_swift() -> set[str]:
 def test_le_port_ne_prend_pas_de_retard_sans_qu_on_le_dise() -> None:
     manquantes = _observations_python() - _observations_swift()
 
-    assert manquantes == ABSENTES_DU_PORT, (
+    declarees = {_en_swift(nom) for nom in ABSENTES_DU_PORT}
+
+    assert manquantes == declarees, (
         "l'écart entre le moteur Python et le port Swift a changé.\n"
         f"  absentes du Swift : {sorted(manquantes)}\n"
-        f"  déclarées comme telles : {sorted(ABSENTES_DU_PORT)}\n"
-        "Implémente-les côté Swift, ou déclare-les dans ABSENTES_DU_PORT en "
-        "disant pourquoi. Les vecteurs committés attendent déjà ces observations : "
-        "un port en retard échoue sur un Mac, loin d'ici."
+        f"  déclarées comme telles : {sorted(declarees)}\n"
+        "Implémente-les côté Swift, ou déclare-les dans ABSENTES_DU_PORT "
+        "(`tools/generate_notice_vectors.py`) en disant pourquoi. Le générateur "
+        "refusera d'écrire un vecteur qui les déclenche : sans ça, le port "
+        "échoue sur un Mac, loin d'ici."
     )
 
 
