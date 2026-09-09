@@ -98,6 +98,28 @@ def verifie_gain(valeur: float | None) -> None:
         raise ValueError("un cout n'est pas un gain : laisse vide si tu ne sais pas")
 
 
+def verifie_decision(*, probability: float, cost_hours: float, horizon_days: int,
+                     expected_gain_eur: float | None = None) -> None:
+    """Les quatre regles d'une decision, dans l'ordre ou on les saisit.
+
+    Elles etaient appelees une par une par chaque surface, ce qui laissait a
+    chaque surface la possibilite d'en oublier. Deux l'ont fait : `sj apply`,
+    le chemin le plus rapide de l'outil et celui qu'il emprunte le plus, et
+    `sj add --title ...`. Les deux passaient directement au journal, qui refuse
+    en anglais.
+
+        $ sj apply "Boite" "Charge d'etudes" --probability 30
+          probability must be strictly between 0 and 1: certainty is not a forecast
+
+    Une seule porte, donc, et `tests/test_saisie_au_clavier.py` refuse un appel
+    a `journal.add` qui ne la traverse pas.
+    """
+    verifie_probabilite(probability)
+    verifie_heures(cost_hours)
+    verifie_jours(horizon_days)
+    verifie_gain(expected_gain_eur)
+
+
 #: Ce que voit quelqu'un qui tranche deux fois la meme decision.
 #:
 #: Le cas est banal : deux onglets ouverts, un double appui sur un telephone,
@@ -122,5 +144,5 @@ def introuvable(entry_id: str) -> str:
     return f"{entry_id} n'est dans aucune ligne de ce journal (python -m singular list)."
 
 
-__all__ = ["CONFLIT", "entier", "introuvable", "nombre", "verifie_gain", "verifie_heures",
-           "verifie_jours", "verifie_probabilite"]
+__all__ = ["CONFLIT", "entier", "introuvable", "nombre", "verifie_decision", "verifie_gain",
+           "verifie_heures", "verifie_jours", "verifie_probabilite"]

@@ -308,3 +308,100 @@ def test_the_web_copy_of_the_conflict_still_says_the_same_thing():
     assert CONFLIT in app_js, (
         "app.js ne dit plus ce que dit `singular.saisie.CONFLIT`. La phrase a "
         "un seul domicile ; la copie du navigateur doit le citer mot pour mot.")
+
+
+# --- une seule porte, et aucune ne la contourne -------------------------------
+
+#: Ce qui n'ecrit pas une decision de Thomas.
+#:
+#: `journal.py` est la porte elle-meme. `proto/` ne touche pas ce journal.
+HORS_JOURNAL = {"journal.py"}
+
+
+def _appels_a_add(source: pathlib.Path) -> list[tuple[str, int]]:
+    """Les `journal.add(...)` du fichier, avec la fonction qui les contient."""
+    import ast
+
+    arbre = ast.parse(source.read_text(encoding="utf-8"))
+    porteur: dict[int, ast.FunctionDef] = {}
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.FunctionDef | ast.AsyncFunctionDef):
+            for enfant in ast.walk(noeud):
+                porteur.setdefault(id(enfant), noeud)
+
+    trouves = []
+    for noeud in ast.walk(arbre):
+        if not (isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Attribute)):
+            continue
+        if noeud.func.attr != "add":
+            continue
+        cible = noeud.func.value
+        nom = cible.attr if isinstance(cible, ast.Attribute) else getattr(cible, "id", "")
+        if nom != "journal":
+            continue
+        fonction = porteur.get(id(noeud))
+        trouves.append((fonction.name if fonction else "<module>", noeud.lineno))
+    return trouves
+
+
+def _verifie_dans(source: pathlib.Path, nom_fonction: str) -> bool:
+    import ast
+
+    arbre = ast.parse(source.read_text(encoding="utf-8"))
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        if noeud.name != nom_fonction:
+            continue
+        for appel in ast.walk(noeud):
+            if isinstance(appel, ast.Call):
+                appelee = getattr(appel.func, "id", "") or getattr(appel.func, "attr", "")
+                if appelee.endswith("verifie_decision"):
+                    return True
+    return False
+
+
+def test_no_surface_writes_a_decision_without_crossing_the_door():
+    """Chaque surface validait de son cote, donc chacune pouvait oublier.
+
+    Deux l'ont fait, et pas les moins frequentees : `sj apply`, le chemin le
+    plus rapide de l'outil, et `sj add --title ...`. Toutes deux passaient
+    directement au journal, qui refuse en anglais. Une regle ecrite quatre fois
+    a fini par n'etre ecrite que deux fois et demie ; ce test refuse la
+    cinquieme porte plutot que d'attendre qu'on la trouve.
+    """
+    fautifs = []
+    for source in sorted((RACINE / "singular").rglob("*.py")):
+        if source.name in HORS_JOURNAL:
+            continue
+        for fonction, ligne in _appels_a_add(source):
+            if not _verifie_dans(source, fonction):
+                fautifs.append(f"{source.relative_to(RACINE)}:{ligne} dans {fonction}()")
+
+    assert not fautifs, (
+        "ces appels ecrivent une decision sans passer par "
+        "`singular.saisie.verifie_decision` :\n  " + "\n  ".join(fautifs)
+        + "\nLe journal refuserait en anglais, sur son ecran.")
+
+
+def test_the_scan_actually_sees_the_writes():
+    """Le temoin : un analyseur qui ne trouverait aucun appel passerait au vert."""
+    appels = _appels_a_add(RACINE / "singular/__main__.py")
+    assert {fonction for fonction, _ in appels} >= {"cmd_add", "cmd_apply"}
+    assert _appels_a_add(RACINE / "singular/sage/server.py")
+
+
+@pytest.mark.parametrize("commande", [
+    ["apply", "Boite", "Charge d'etudes", "--probability", "30"],
+    ["apply", "Boite", "Charge d'etudes", "--days", "0"],
+    ["apply", "Boite", "Charge d'etudes", "--hours", "-2"],
+    ["add", "--title", "T", "--action", "a", "--predicted", "p", "--probability", "30"],
+])
+def test_the_fast_paths_refuse_in_his_language(tmp_path, capsys, commande):
+    """Le cas reel : il cherche un poste, donc `sj apply` est ce qu'il tape le plus."""
+    DecisionJournal(tmp_path / "journal.db")
+
+    assert main(["--db", str(tmp_path / "journal.db"), *commande]) == 1
+    sortie = capsys.readouterr().out
+    for anglais in ("must be", "cannot be", "needs a horizon", "is not a forecast"):
+        assert anglais not in sortie, f"{commande} rend « {sortie.strip()} »"

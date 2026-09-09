@@ -33,14 +33,7 @@ from urllib.parse import unquote_plus, urlsplit
 
 from ..fichiers import ecrire_atomique
 from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
-from ..saisie import (
-    CONFLIT,
-    introuvable,
-    verifie_gain,
-    verifie_heures,
-    verifie_jours,
-    verifie_probabilite,
-)
+from ..saisie import CONFLIT, introuvable, verifie_decision
 from .icon import render_icon
 from .notice import build_notice
 
@@ -333,12 +326,11 @@ class SageApp:
         heures = _number(payload, "cost_hours", cast=float)
         jours = _number(payload, "horizon_days", cast=int)
         gain = _gain(payload)
-        for valeur, verifie in ((probabilite, verifie_probabilite), (heures, verifie_heures),
-                                (jours, verifie_jours), (gain, verifie_gain)):
-            try:
-                verifie(valeur)
-            except ValueError as refus:
-                raise SageError(HTTPStatus.BAD_REQUEST, str(refus)) from None
+        try:
+            verifie_decision(probability=probabilite, cost_hours=heures,
+                             horizon_days=jours, expected_gain_eur=gain)
+        except ValueError as refus:
+            raise SageError(HTTPStatus.BAD_REQUEST, str(refus)) from None
         try:
             entry = self.journal.add(
                 title=_text(payload, "title"),

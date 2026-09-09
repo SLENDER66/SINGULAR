@@ -20,6 +20,7 @@ from datetime import datetime
 from .journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
 from .saisie import CONFLIT as _CONFLIT
 from .saisie import entier as _entier
+from .saisie import verifie_decision as _verifie_decision
 from .saisie import introuvable as _introuvable
 from .saisie import nombre as _nombre
 from .saisie import verifie_gain as _verifie_gain
@@ -285,7 +286,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
 
 def cmd_add(journal: DecisionJournal, args) -> int:
     if args.title:
-        entry = journal.add(
+        champs = dict(
             title=args.title, action=args.action, predicted=args.predicted,
             probability=args.probability, tier=Tier(args.tier.upper()),
             cost_hours=args.hours, horizon_days=args.days,
@@ -307,9 +308,18 @@ def cmd_add(journal: DecisionJournal, args) -> int:
                     validate=_verifie_jours)
         gain = _gain_prompt()
         reversibility = _reversibility_prompt()
-        entry = journal.add(title=title, action=action, predicted=predicted, probability=probability,
-                            tier=tier, cost_hours=hours, horizon_days=days,
-                            expected_gain_eur=gain, reversibility=reversibility)
+        champs = dict(title=title, action=action, predicted=predicted, probability=probability,
+                      tier=tier, cost_hours=hours, horizon_days=days,
+                      expected_gain_eur=gain, reversibility=reversibility)
+
+    # Les deux branches passent par la meme porte. La branche interactive a
+    # deja verifie champ par champ ; celle des options ne verifiait rien, et
+    # `sj add --title ... --probability 30` laissait le journal refuser en
+    # anglais.
+    _verifie_decision(probability=champs["probability"], cost_hours=champs["cost_hours"],
+                      horizon_days=champs["horizon_days"],
+                      expected_gain_eur=champs["expected_gain_eur"])
+    entry = journal.add(**champs)
 
     due = datetime.fromisoformat(entry.due_at).strftime("%d/%m/%Y")
     print(f"\n  {_colour(entry.entry_id, BOLD)}  verdict attendu le {due}")
@@ -331,6 +341,10 @@ def cmd_apply(journal: DecisionJournal, args) -> int:
     the result you were after, and scoring yourself on replies would let you feel
     productive while nothing moves.
     """
+    # Le chemin le plus rapide etait le seul sans verification : une
+    # probabilite tapee en pourcents rendait le refus anglais du journal.
+    _verifie_decision(probability=args.probability, cost_hours=args.hours,
+                      horizon_days=args.days)
     entry = journal.add(
         title=f"{args.company} - {args.role}",
         action=args.action or "candidature envoyée",
