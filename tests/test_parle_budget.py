@@ -18,11 +18,12 @@ import pathlib
 import pytest
 
 from singular.parle import (
-    MODELE_DE_TARIFS,
     PlafondAtteint,
     Quota,
     Tarifs,
     bilan,
+    modele_de_tarifs,
+    modeles_qui_depensent,
     phrase_de_bilan,
 )
 
@@ -105,7 +106,7 @@ def test_aucun_prix_n_est_ecrit_dans_le_depot() -> None:
     """La regle, verifiee sur le source plutot que promise.
 
     Un tarif code en dur vieillirait en silence et servirait a decider quand
-    s'arreter. `MODELE_DE_TARIFS` est le gabarit qu'il remplit : ses valeurs
+    s'arreter. `modele_de_tarifs()` est le gabarit qu'il remplit : ses valeurs
     sont a zero, donc elles ne peuvent pas se faire passer pour un prix.
     """
     arbre = ast.parse(SOURCE.read_text(encoding="utf-8"))
@@ -118,7 +119,7 @@ def test_aucun_prix_n_est_ecrit_dans_le_depot() -> None:
         "un nombre a virgule dans parle.py ressemble a un tarif code en dur :\n  "
         + "\n  ".join(suspects))
 
-    gabarit = json.loads(MODELE_DE_TARIFS)
+    gabarit = json.loads(modele_de_tarifs())
     prix = gabarit["modeles"]["claude-sonnet-5"]
     assert set(prix.values()) == {0.0}, "le gabarit propose des prix inventes"
 
@@ -195,7 +196,7 @@ def test_un_tarif_qui_n_est_pas_un_nombre_est_ignore(tmp_path) -> None:
 def test_le_gabarit_est_du_json_valide() -> None:
     """Il est colle tel quel dans un fichier. S'il ne se relit pas, il ne sert
     a rien -- et l'erreur apparaitrait chez lui, pas ici."""
-    gabarit = json.loads(MODELE_DE_TARIFS)
+    gabarit = json.loads(modele_de_tarifs())
     assert set(gabarit) == {"credit_usd", "modeles"}
     assert set(next(iter(gabarit["modeles"].values()))) == set(Tarifs.POSTES)
 
@@ -260,3 +261,182 @@ def test_une_depense_du_clavier_ne_perd_pas_le_compteur_du_jour(tmp_path) -> Non
     quota.ajouter_depense(cout=COUT, modele="m")
 
     assert quota.restants(aujourdhui="2026-09-07") == 59
+
+
+# --- le budget ne doit pas s'aveugler quand on se sert de l'outil -------------
+
+def _tarifs(tmp_path, *, credit=5.0, modeles=("claude-sonnet-5",)):
+    chemin = tmp_path / "tarifs.json"
+    chemin.write_text(json.dumps({
+        "credit_usd": credit,
+        "modeles": {nom: {"entree": 3.0, "sortie": 15.0, "cache_lu": 0.3,
+                          "cache_ecrit": 3.75} for nom in modeles},
+    }), encoding="utf-8")
+    return Tarifs(chemin)
+
+
+def test_the_template_names_every_model_the_tool_can_bill(tmp_path) -> None:
+    """Le gabarit ne nommait que le modele de la conversation.
+
+    La recherche d'offres et l'analyse depensent sur un autre. Une seule
+    recherche mettait donc dans le compte un modele sans tarif, et `cout_usd`
+    rend `None` des qu'il en manque un : l'affichage en dollars disparaissait
+    pour de bon, remplace par « ecris tes tarifs » -- ce qu'il avait deja fait.
+
+    Le gabarit est desormais genere depuis les modeles reels. Ce test est ce
+    qui empeche une quatrieme faculte de depenser ailleurs sans que personne
+    le remarque.
+    """
+    gabarit = json.loads(modele_de_tarifs())
+    assert set(gabarit["modeles"]) == set(modeles_qui_depensent())
+    assert len(gabarit["modeles"]) >= 2, "au moins la conversation et la recherche"
+    for prix in gabarit["modeles"].values():
+        assert set(prix) == set(Tarifs.POSTES)
+        assert all(valeur == 0.0 for valeur in prix.values()), (
+            "le gabarit ne doit porter aucun prix : ce sont les siens qui comptent")
+
+
+def test_a_model_without_a_price_does_not_blind_the_whole_ledger(tmp_path) -> None:
+    """Le total exact se tait ; le plancher, lui, continue de compter."""
+    quota = Quota(tmp_path / "q.json", plafond=50)
+    quota.ajouter_depense(cout={"entree": 1_000_000, "sortie": 0, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-sonnet-5")
+    tarifs = _tarifs(tmp_path)
+    depenses = quota.depenses()
+
+    assert tarifs.cout_usd(depenses) == pytest.approx(3.0)
+    assert tarifs.restant_usd(depenses) == pytest.approx(2.0)
+
+    quota.ajouter_depense(cout={"entree": 1_000_000, "sortie": 0, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-inconnu")
+    depenses = quota.depenses()
+
+    assert tarifs.sans_tarif(depenses) == ["claude-inconnu"]
+    assert tarifs.cout_usd(depenses) is None, "un total partiel presente comme un total est faux"
+    assert tarifs.restant_usd(depenses) is None
+    # Mais la garde, elle, sait encore quelque chose.
+    assert tarifs.cout_connu_usd(depenses) == pytest.approx(3.0)
+    assert tarifs.restant_au_mieux_usd(depenses) == pytest.approx(2.0)
+
+
+def test_the_guard_still_refuses_when_the_credit_is_gone(tmp_path) -> None:
+    """Une garde qui s'eteint quand on s'en sert est pire que pas de garde.
+
+    C'est ce qui se passait : `restant_usd` vaut `None` des qu'un modele n'a pas
+    de tarif, et la route qui refuse une depense sur credit epuise ne se
+    declenchait plus du tout. Une seule recherche la desarmait, en silence,
+    alors qu'elle protege son argent reel.
+    """
+    quota = Quota(tmp_path / "q.json", plafond=50)
+    quota.ajouter_depense(cout={"entree": 2_000_000, "sortie": 0, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-sonnet-5")
+    quota.ajouter_depense(cout={"entree": 500_000, "sortie": 0, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-inconnu")
+    tarifs = _tarifs(tmp_path, credit=5.0)
+    depenses = quota.depenses()
+
+    assert tarifs.restant_usd(depenses) is None, "le total exact reste inconnu"
+    # 2 M de jetons d'entree a 3 $/M = 6 $, sur 5 $ de credit : fini.
+    assert tarifs.restant_au_mieux_usd(depenses) == 0.0
+    assert tarifs.restant_au_mieux_usd(depenses) <= 0, "la route doit refuser"
+
+
+def test_the_best_case_never_understates_what_is_left(tmp_path) -> None:
+    """Refuser dessus arrive tard, jamais trop tot.
+
+    Le plancher ignore ce qu'on ne sait pas chiffrer, donc il surestime ce qui
+    reste. C'est ce qui rend le refus sain : si meme en oubliant une depense le
+    credit est fini, il est fini.
+    """
+    quota = Quota(tmp_path / "q.json", plafond=50)
+    quota.ajouter_depense(cout={"entree": 100_000, "sortie": 0, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-sonnet-5")
+    tarifs = _tarifs(tmp_path)
+    complet = quota.depenses()
+    assert tarifs.restant_au_mieux_usd(complet) == tarifs.restant_usd(complet)
+
+    quota.ajouter_depense(cout={"entree": 100_000, "sortie": 0, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-inconnu")
+    partiel = quota.depenses()
+    assert tarifs.restant_au_mieux_usd(partiel) >= tarifs.restant_au_mieux_usd(complet) - 1e-9
+
+
+def test_the_sentence_names_what_is_missing_instead_of_what_he_already_did(tmp_path) -> None:
+    """« Ecris tes tarifs » l'envoyait refaire ce qu'il avait deja fait."""
+    quota = Quota(tmp_path / "q.json", plafond=50)
+    quota.ajouter_depense(cout={"entree": 1000, "sortie": 100, "cache_lu": 0,
+                                "cache_ecrit": 0}, modele="claude-inconnu")
+    phrase = phrase_de_bilan(bilan(quota, _tarifs(tmp_path)))
+
+    assert "claude-inconnu" in phrase
+    assert "ecris tes tarifs" not in phrase.lower()
+    assert "il te reste au plus" in phrase.lower()
+
+
+def test_without_any_tariff_the_sentence_still_says_where_to_write_them(tmp_path) -> None:
+    """Le temoin : quand il n'a rien ecrit, la phrase d'origine reste la bonne."""
+    quota = Quota(tmp_path / "q.json", plafond=50)
+    quota.ajouter_depense(cout=COUT, modele="claude-sonnet-5")
+    phrase = phrase_de_bilan(bilan(quota, Tarifs(tmp_path / "absent.json")))
+
+    assert "ecris tes tarifs" in phrase.lower()
+    assert "jetons envoyes" in phrase
+
+
+def test_every_faculty_that_spends_writes_it_down(tmp_path, monkeypatch, capsys) -> None:
+    """Trois facultes depensent ; une seule ne comptait rien.
+
+    `python -m singular analyse` appelait un modele et n'enregistrait pas un
+    jeton : le solde affiche sur le telephone etait faux de tout ce qui avait
+    ete analyse au clavier. Meme cause que pour la recherche d'offres la veille
+    -- la fonction ne rendait pas son cout, donc l'appelant ne pouvait pas
+    l'ecrire.
+
+    Ce test passe par la ligne de commande, pas par la fonction : c'est le
+    branchement qui manquait, et une fonction juste avec un appelant muet fait
+    exactement le meme degat.
+    """
+    from singular import parle
+    from singular.__main__ import main
+    from singular.journal import DecisionJournal, Tier
+
+    monkeypatch.setattr(parle, "FICHIER_QUOTA", tmp_path / "quota.json")
+    monkeypatch.setattr(parle, "FICHIER_TARIFS", tmp_path / "absent.json")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-pour-le-test")
+
+    db = str(tmp_path / "journal.db")
+    DecisionJournal(db).add(title="t", action="a", predicted="p", probability=0.6,
+                            tier=Tier.REVENUS, cost_hours=1, horizon_days=7)
+
+    class FauxBloc:
+        type = "text"
+        text = "Trois phrases."
+
+    class FausseConso:
+        input_tokens, output_tokens = 4321, 765
+        cache_read_input_tokens = cache_creation_input_tokens = 0
+
+    class FausseReponse:
+        content, stop_reason, usage = [FauxBloc()], "end_turn", FausseConso()
+
+    class FauxClient:
+        @property
+        def beta(self): return self
+        @property
+        def messages(self): return self
+        def create(self, **_): return FausseReponse()
+
+    from singular import analyse
+    vrai = analyse.analyser
+    monkeypatch.setattr(analyse, "analyser",
+                        lambda notice, *, modele=None, client=None:
+                        vrai(notice, modele=modele, client=client or FauxClient()))
+
+    assert Quota().depenses() == {}
+    assert main(["--db", db, "analyse"]) == 0
+
+    depenses = Quota().depenses()
+    assert depenses, "l'analyse a depense sans que rien ne l'enregistre"
+    total = sum(compte["entree"] for compte in depenses.values())
+    assert total == 4321
+    assert "4321 jetons envoyes" in capsys.readouterr().out

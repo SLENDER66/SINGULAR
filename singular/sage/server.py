@@ -393,7 +393,10 @@ class SageApp:
             # C'est une estimation, faite avec ses chiffres. S'il la trouve
             # fausse, c'est `credit_usd` dans son fichier de tarifs qu'il
             # corrige -- pas ce code.
-            restant = bilan(quota, Tarifs())["restant_usd"]
+            # `restant_au_mieux_usd` et pas `restant_usd` : le second vaut None
+            # des qu'un modele n'a pas de tarif, et la garde s'eteignait
+            # alors en silence -- une seule recherche suffisait.
+            restant = bilan(quota, Tarifs())["restant_au_mieux_usd"]
             if restant is not None and restant <= 0:
                 raise SageError(
                     HTTPStatus.PAYMENT_REQUIRED,
@@ -486,7 +489,10 @@ class SageApp:
                             "une réponse est déjà en train d'arriver. Laisse-la venir.")
         try:
             quota = Quota()
-            restant = bilan(quota, Tarifs())["restant_usd"]
+            # `restant_au_mieux_usd` et pas `restant_usd` : le second vaut None
+            # des qu'un modele n'a pas de tarif, et la garde s'eteignait
+            # alors en silence -- une seule recherche suffisait.
+            restant = bilan(quota, Tarifs())["restant_au_mieux_usd"]
             if restant is not None and restant <= 0:
                 raise SageError(
                     HTTPStatus.PAYMENT_REQUIRED,

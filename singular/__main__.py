@@ -172,7 +172,7 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
     from .analyse import AnalyseIndisponible, contexte_pour_analyse
     from .parle import (
         FICHIER_TARIFS,
-        MODELE_DE_TARIFS,
+        modele_de_tarifs,
         MODELE_PAR_DEFAUT,
         Conversation,
         Quota,
@@ -187,7 +187,7 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
         # faux ici servirait a decider quand s'arreter. Les siens, releves sur
         # la console, sont les seuls justes.
         print(_colour(f"\n  Colle ceci dans {FICHIER_TARIFS}, avec tes chiffres :\n", BOLD))
-        print(MODELE_DE_TARIFS)
+        print(modele_de_tarifs())
         print(_colour("  Les prix sont sur console.anthropic.com, en dollars par"
                       " million de jetons.\n", DIM))
         return 0
@@ -284,7 +284,8 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
     continuer à marcher sans : c'est pour ça que l'échec ici s'affiche comme
     un fait et rend 1, au lieu de remonter une trace de pile.
     """
-    from .analyse import AnalyseIndisponible, analyser, contexte_pour_analyse
+    from .analyse import MODELE_PAR_DEFAUT, AnalyseIndisponible, analyser, contexte_pour_analyse
+    from .parle import Quota, bilan, phrase_de_bilan
     from .sage.notice import build_notice
 
     notice = build_notice(journal).as_dict()
@@ -296,7 +297,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
         return 0
 
     try:
-        texte = analyser(notice, modele=args.modele)
+        texte, cout = analyser(notice, modele=args.modele)
     except AnalyseIndisponible as exc:
         print(_colour(f"\n  Analyse coupee : {exc}", DIM))
         print(_colour("  La Notice ci-dessous est calculee sans elle.\n", DIM))
@@ -306,9 +307,16 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
         print()
         return 1
 
+    # Meme raison que pour un tour de conversation et pour une recherche : ce
+    # qui n'est pas compte ne se voit pas sur le budget. Cette commande
+    # depensait sans que rien ne l'enregistre.
+    Quota().ajouter_depense(cout=cout, modele=args.modele or MODELE_PAR_DEFAUT)
+
     print(_colour(f"\n  {notice['headline']}\n", BOLD))
     print(texte)
-    print()
+    economise = f", {cout['cache_lu']} relus du cache" if cout["cache_lu"] else ""
+    print(_colour(f"\n  [{cout['entree']} jetons envoyes{economise},"
+                  f" {cout['sortie']} rendus] {phrase_de_bilan(bilan())}\n", DIM))
     return 0
 
 

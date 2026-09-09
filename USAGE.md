@@ -136,6 +136,18 @@ Colle-le dans `~/.singular/tarifs.json`, avec les prix relevés sur
 console.anthropic.com (en dollars par million de jetons) et le crédit que tu as
 acheté. À partir de là, chaque réponse dit ce qu'il te reste.
 
+Le fichier affiché liste **tous** les modèles sur lesquels l'outil peut
+dépenser — la conversation, l'analyse et la recherche d'offres n'utilisent pas
+le même. Il n'en nommait qu'un, et il suffisait d'une recherche pour mettre
+dans le compte un modèle sans tarif : le total refuse alors de répondre, parce
+qu'un total qui oublie une dépense sert quand même à décider quand s'arrêter.
+Le fichier est maintenant généré depuis les modèles réels, et un test refuse
+qu'une faculté dépense sur un modèle qui n'y figure pas.
+
+Si un modèle manque quand même — tu as changé `SINGULAR_OFFRES_MODELE`, par
+exemple — le rapport le **nomme** au lieu de te renvoyer écrire des tarifs que
+tu as déjà écrits, et il te dit ce qu'il te reste *au plus*.
+
 Deux gardes, et elles ne comptent pas la même chose :
 
 - **Soixante réponses par jour** depuis le téléphone. C'est large exprès : un
@@ -145,6 +157,12 @@ Deux gardes, et elles ne comptent pas la même chose :
   elle refuse *avant* d'appeler. Le service refuserait de toute façon, une
   requête plus tard et sans le dire aussi clairement. Si l'estimation te semble
   fausse, c'est `credit_usd` que tu corriges, pas le code.
+
+  Cette garde se désarmait dès qu'un modèle n'avait pas de tarif : elle lisait
+  le total exact, qui refuse de répondre dans ce cas, et ne refusait donc plus
+  rien. Une garde qui s'éteint quand on se sert de l'outil est pire que pas de
+  garde. Elle compte maintenant sur ce qu'elle sait — un chiffre qui surestime
+  ce qui reste, donc qui refuse tard mais jamais trop tôt.
 
 Le total des jetons ne repart jamais à zéro, lui. Sans ça, on peut respecter le
 plafond tous les jours et vider son crédit sans l'avoir vu venir.

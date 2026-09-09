@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from .analyse import INSTRUCTION as INSTRUCTION_ANALYSE
-from .analyse import AnalyseIndisponible, _sdk, effort_valide
+from .analyse import AnalyseIndisponible, _consommation, _sdk, effort_valide
 
 #: Le fil, a cote du journal : une seule chose a sauvegarder.
 FICHIER = Path.home() / ".singular" / "conversation.json"
@@ -271,9 +271,50 @@ class Tarifs:
                 total += jetons * prix.get(poste, 0.0) / 1_000_000
         return total
 
+    def sans_tarif(self, depenses: dict[str, dict[str, int]]) -> list[str]:
+        """Les modeles qu'il a fait tourner sans en avoir donne le prix."""
+        return sorted(nom for nom in depenses if nom not in self.modeles)
+
+    def cout_connu_usd(self, depenses: dict[str, dict[str, int]]) -> float | None:
+        """Ce que coute la part dont on connait le prix. Un plancher, pas un total.
+
+        `cout_usd` refuse de repondre des qu'un modele manque, et c'est juste :
+        un total partiel presente comme un total est faux. Mais ce plancher-la
+        sert a autre chose -- refuser une depense quand le credit est deja
+        epuise. Il vaut mieux refuser tard que ne plus refuser du tout.
+        """
+        if self.credit is None and not self.modeles:
+            return None
+        total = 0.0
+        for modele, compte in depenses.items():
+            prix = self.modeles.get(modele)
+            if prix is None:
+                continue
+            for poste, jetons in compte.items():
+                total += jetons * prix.get(poste, 0.0) / 1_000_000
+        return total
+
     def restant_usd(self, depenses: dict[str, dict[str, int]]) -> float | None:
         """Ce qu'il reste du credit qu'il a achete, s'il l'a ecrit."""
         depense = self.cout_usd(depenses)
+        if self.credit is None or depense is None:
+            return None
+        return max(0.0, self.credit - depense)
+
+    def restant_au_mieux_usd(self, depenses: dict[str, dict[str, int]]) -> float | None:
+        """Le plus qu'il puisse lui rester -- ce qui sert a refuser, pas a afficher.
+
+        `restant_usd` vaut `None` des qu'un modele n'a pas de tarif, et la garde
+        qui refuse une depense quand le credit est epuise ne se declenchait donc
+        plus du tout : une seule recherche sur un modele non tarife la
+        desarmait, en silence, alors qu'elle protege son argent reel. Une garde
+        qui s'eteint quand on s'en sert est pire que pas de garde.
+
+        Ce chiffre ignore ce qu'on ne sait pas chiffrer, donc il surestime ce
+        qui reste. Refuser dessus arrive tard, jamais trop tot : si meme en
+        oubliant une depense le credit est fini, il est fini.
+        """
+        depense = self.cout_connu_usd(depenses)
         if self.credit is None or depense is None:
             return None
         return max(0.0, self.credit - depense)
@@ -323,6 +364,8 @@ def bilan(quota: Quota | None = None, tarifs: Tarifs | None = None) -> dict[str,
         "usd": tarifs.cout_usd(depenses),
         "credit_usd": tarifs.credit,
         "restant_usd": tarifs.restant_usd(depenses),
+        "restant_au_mieux_usd": tarifs.restant_au_mieux_usd(depenses),
+        "sans_tarif": tarifs.sans_tarif(depenses),
         "tarifs": str(tarifs.chemin),
     }
 
@@ -336,6 +379,15 @@ def phrase_de_bilan(bilan_: dict[str, Any]) -> str:
     """
     jetons = bilan_["jetons"]
     envoyes = jetons["entree"] + jetons["cache_lu"] + jetons["cache_ecrit"]
+    manquants = bilan_.get("sans_tarif") or []
+    if bilan_["usd"] is None and manquants and bilan_["credit_usd"] is not None:
+        # Il a bien ecrit ses tarifs ; c'est un modele precis qui n'y est pas.
+        # Lui redire « ecris tes tarifs » l'envoyait refaire ce qu'il avait
+        # deja fait, sans jamais nommer ce qui manquait.
+        connu = bilan_.get("restant_au_mieux_usd")
+        reste = "" if connu is None else f" Il te reste au plus {connu:.2f} $ sur {bilan_['credit_usd']:.2f} $."
+        return (f"{', '.join(manquants)} n'a pas de tarif dans {bilan_['tarifs']} : "
+                f"ajoute-le pour revoir le total.{reste}")
     if bilan_["usd"] is None:
         return (f"{envoyes} jetons envoyes, {jetons['sortie']} rendus depuis le debut. "
                 f"Pour voir des dollars, ecris tes tarifs dans {bilan_['tarifs']}.")
@@ -346,19 +398,39 @@ def phrase_de_bilan(bilan_: dict[str, Any]) -> str:
             f"{bilan_['credit_usd']:.2f} $.")
 
 
-#: Ce qu'il colle dans `~/.singular/tarifs.json`, avec ses chiffres a lui.
-MODELE_DE_TARIFS = """{
-  "credit_usd": 5.0,
-  "modeles": {
-    "claude-sonnet-5": {
-      "entree": 0.0,
-      "sortie": 0.0,
-      "cache_lu": 0.0,
-      "cache_ecrit": 0.0
-    }
-  }
-}
-"""
+def modeles_qui_depensent() -> list[str]:
+    """Tous les modeles sur lesquels cet outil peut depenser, sans doublon.
+
+    Les imports sont tardifs : `offres` et `analyse` importent deja `parle`,
+    et les nommer en tete de fichier fermerait le cercle.
+    """
+    from . import analyse, offres
+
+    return sorted({MODELE_PAR_DEFAUT, analyse.MODELE_PAR_DEFAUT, offres.MODELE_PAR_DEFAUT})
+
+
+def modele_de_tarifs() -> str:
+    """Ce qu'il colle dans `~/.singular/tarifs.json`, avec ses chiffres a lui.
+
+    Genere depuis les modeles reels, plutot qu'ecrit a la main. La version
+    ecrite a la main ne nommait que Sonnet, celui de la conversation -- alors
+    que la recherche d'offres et l'analyse depensent sur Opus. Une seule
+    recherche suffisait donc a mettre un modele sans tarif dans le compte, et
+    `cout_usd` rend `None` des qu'il en manque un : l'affichage en dollars
+    disparaissait pour de bon, remplace par « ecris tes tarifs » -- ce qu'il
+    avait deja fait -- et la garde qui refuse quand le credit est epuise
+    cessait de se declencher.
+
+    `test_parle_budget.py` verifie que ce modele nomme tous les modeles que
+    l'outil peut facturer : une quatrieme faculte qui depenserait ailleurs
+    ferait echouer ce test au lieu d'aveugler le budget en silence.
+    """
+    postes = ",\n".join(f'      "{poste}": 0.0' for poste in Tarifs.POSTES)
+    blocs = ",\n".join(f'    "{nom}": {{\n{postes}\n    }}'
+                        for nom in modeles_qui_depensent())
+    return '{\n  "credit_usd": 5.0,\n  "modeles": {\n' + blocs + "\n  }\n}\n"
+
+
 
 
 INSTRUCTION = INSTRUCTION_ANALYSE + """
@@ -513,19 +585,8 @@ def repondre(
     return texte, _consommation(reponse)
 
 
-def _consommation(reponse: Any) -> dict[str, int]:
-    """Ce que le tour a coute, en jetons. Affiche, parce qu'on ne corrige pas
-    ce qu'on ne voit pas -- et parce que le budget est de cinq dollars."""
-    usage = getattr(reponse, "usage", None)
-    return {
-        "entree": getattr(usage, "input_tokens", 0) or 0,
-        "sortie": getattr(usage, "output_tokens", 0) or 0,
-        "cache_lu": getattr(usage, "cache_read_input_tokens", 0) or 0,
-        "cache_ecrit": getattr(usage, "cache_creation_input_tokens", 0) or 0,
-    }
-
-
 __all__ = ["FICHIER", "FICHIER_QUOTA", "FICHIER_TARIFS", "JETONS_MAX",
-           "MODELE_DE_TARIFS", "MODELE_PAR_DEFAUT", "PLAFOND_PAR_JOUR", "TOURS_GARDES",
+           "MODELE_PAR_DEFAUT", "PLAFOND_PAR_JOUR", "TOURS_GARDES",
            "Conversation", "PlafondAtteint", "Quota", "Tarifs",
-           "bilan", "etat_de_la_faculte", "phrase_de_bilan", "repondre"]
+           "bilan", "etat_de_la_faculte", "modele_de_tarifs", "modeles_qui_depensent",
+           "phrase_de_bilan", "repondre"]

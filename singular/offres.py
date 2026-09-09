@@ -23,8 +23,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .analyse import AnalyseIndisponible, _sdk, effort_valide
-from .parle import _consommation
+from .analyse import AnalyseIndisponible, _consommation, _sdk, effort_valide
 
 #: Comme pour l'analyse : le modèle est un arbitrage de celui qui paie.
 MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_OFFRES_MODELE", "claude-opus-5")

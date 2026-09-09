@@ -1,5 +1,40 @@
 # Changelog
 
+## 3.13.0 — Le budget cessait de compter dès qu'on se servait de l'outil
+
+Trois trous dans la seule chose qui protège ses cinq dollars.
+
+**Le gabarit de tarifs ne nommait qu'un modèle.** La conversation tourne sur
+Sonnet ; l'analyse et la recherche d'offres tournent sur Opus. Une seule
+recherche mettait donc dans le compte un modèle sans tarif — et `cout_usd`
+refuse de répondre dès qu'il en manque un. L'affichage en dollars disparaissait
+pour de bon, remplacé par « écris tes tarifs dans… », ce qu'il avait déjà fait.
+
+**Et la garde du crédit s'éteignait avec.** Elle lit `restant_usd`, qui vaut
+`None` dans ce cas : la route qui refuse une dépense sur crédit épuisé ne se
+déclenchait plus du tout. Une garde qui s'éteint quand on se sert de l'outil
+est pire que pas de garde — et c'est le branchement du bouton 🔎, la veille,
+qui a rendu le cas atteignable en un geste.
+
+**`python -m singular analyse` dépensait sans rien enregistrer.** Même cause
+que pour la recherche l'avant-veille : la fonction ne rendait pas son coût,
+donc l'appelant ne pouvait pas l'écrire. Le solde affiché sur le téléphone
+était faux de tout ce qui avait été analysé au clavier.
+
+- Le gabarit est généré depuis les modèles réels. `test_parle_budget.py` refuse
+  qu'une faculté dépense sur un modèle qui n'y figure pas : une quatrième
+  faculté échouera au test au lieu d'aveugler le budget en silence.
+- La garde compte sur `restant_au_mieux_usd` — ce qui reste en ignorant ce
+  qu'on ne sait pas chiffrer. Il surestime, donc il refuse tard, jamais trop
+  tôt : si même en oubliant une dépense le crédit est fini, il est fini.
+- Quand un modèle manque, la phrase le **nomme** au lieu de renvoyer écrire des
+  tarifs déjà écrits, et donne ce qui reste au plus.
+- `analyser()` rend son coût comme ses deux jumelles, et le CLI l'enregistre.
+- `_consommation` remonte dans `analyse`, que les trois facultés importent déjà.
+  Il vivait dans `parle`, ce qui forçait `offres` à emprunter un nom privé au
+  module voisin et interdisait à `analyse` de s'en servir — donc `analyse` ne
+  comptait rien. Le cercle d'imports est cassé au passage.
+
 ## 3.12.0 — Taper « 75 » ne fait plus perdre tout ce qu'on vient d'écrire
 
 `python -m singular add` pose huit questions. Deux fautes de saisie s'y payaient

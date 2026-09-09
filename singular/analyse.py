@@ -152,8 +152,32 @@ def _sdk():
     return anthropic
 
 
-def analyser(notice: dict[str, Any], *, modele: str | None = None, client: Any = None) -> str:
-    """Le commentaire du modèle sur un rapport déjà calculé.
+def _consommation(reponse: Any) -> dict[str, int]:
+    """Ce que l'appel a coûté, en jetons.
+
+    Ici plutôt que dans `parle` : les trois facultés qui dépensent le lisent, et
+    `analyse` est celle dont les deux autres dépendent déjà. Le compteur vivait
+    dans `parle`, ce qui obligeait `offres` à importer un nom privé du module
+    voisin et interdisait à `analyse` de s'en servir — donc `analyse` ne
+    comptait rien du tout, et ce qu'elle dépensait n'apparaissait nulle part.
+    """
+    usage = getattr(reponse, "usage", None)
+    return {
+        "entree": getattr(usage, "input_tokens", 0) or 0,
+        "sortie": getattr(usage, "output_tokens", 0) or 0,
+        "cache_lu": getattr(usage, "cache_read_input_tokens", 0) or 0,
+        "cache_ecrit": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+    }
+
+
+def analyser(notice: dict[str, Any], *, modele: str | None = None,
+             client: Any = None) -> tuple[str, dict[str, int]]:
+    """Le commentaire du modèle sur un rapport déjà calculé, et ce qu'il a coûté.
+
+    Le coût est rendu comme par `parle.repondre` et `offres.chercher` : cette
+    commande dépensait de l'argent réel sans que rien ne l'enregistre, donc le
+    solde affiché sur le téléphone était faux de tout ce qui avait été analysé
+    au clavier.
 
     `client` est injectable pour que les tests n'aient jamais besoin d'un
     réseau ni d'une clé : un test qui appellerait le vrai service ne testerait
@@ -209,7 +233,8 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None, client: Any =
         raise AnalyseIndisponible(
             "le modele a refuse de repondre. Rien n'a ete ecrit dans ton journal."
         )
-    return "\n".join(bloc.text for bloc in reponse.content if bloc.type == "text").strip()
+    texte = "\n".join(bloc.text for bloc in reponse.content if bloc.type == "text").strip()
+    return texte, _consommation(reponse)
 
 
 __all__ = [

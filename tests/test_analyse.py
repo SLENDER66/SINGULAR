@@ -263,7 +263,11 @@ def test_un_modele_choisi_est_respecte() -> None:
 
 def test_la_reponse_est_rendue_telle_quelle() -> None:
     client = FauxClient(FausseReponse("  Trois phrases.  "))
-    assert analyser(NOTICE, client=client) == "Trois phrases."
+    texte, cout = analyser(NOTICE, client=client)
+    assert texte == "Trois phrases."
+    # Le cout est rendu comme par `parle.repondre` et `offres.chercher` : sans
+    # lui, cette commande depensait de l'argent reel que rien n'enregistrait.
+    assert set(cout) == {"entree", "sortie", "cache_lu", "cache_ecrit"}
 
 
 # --- le contrat avec le SDK, verifie hors ligne -------------------------------
