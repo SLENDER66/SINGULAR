@@ -1,5 +1,52 @@
 # Changelog
 
+## 3.27.0 — Trois pannes ordinaires déroulaient une pile Python
+
+Il débute en code. Une pile d'appels ne se distingue pas d'une application
+cassée, et le geste dangereux — supprimer le fichier — est justement celui
+qu'on est tenté de faire quand on ne comprend pas.
+
+- **Le port déjà pris.** `A_FAIRE.md` demande de lancer le Sage chaque matin ;
+  une fenêtre laissée ouverte la veille tient encore le port. La réponse tient
+  en une phrase : il tourne déjà, ouvre l'adresse. Un test lit le parseur pour
+  vérifier que l'option conseillée existe.
+- **Un fichier qui n'est pas une base.** Le message dit le chemin, et dit
+  surtout de ne pas supprimer le fichier.
+- **`due` ne disait pas où il avait regardé** — la commande de chaque matin.
+  Sur un chemin mal tapé elle répondait « Rien à trancher ». `list` et `review`
+  le disaient depuis la 3.19.0 ; personne n'avait regardé la troisième. Le
+  garde-fou classe désormais chaque sous-commande, et une nouvelle commande non
+  classée fait échouer le test.
+
+## 3.26.0 — Le mode d'emploi donnait les commandes d'une autre machine
+
+Il est sur Windows, en PowerShell. `USAGE.md` ouvrait sur
+`cd ~/SINGULAR && python -m pip install -e ".[dev]"`, que la version de
+PowerShell installée par défaut refuse : erreur de syntaxe, avant d'avoir rien
+fait. Et la section « Le mettre devant tes yeux » — celle dont tout le propos
+est qu'un journal qu'on doit penser à ouvrir finit par ne plus s'ouvrir —
+demandait un `alias` dans `~/.bashrc`.
+
+- Le profil PowerShell, une `function` avec `@args` (un alias PowerShell ne
+  peut pas porter d'arguments), `2>$null`.
+- Deux documents portent la commande de clonage pour l'iPhone et un seul était
+  vérifié : `USAGE.md` faisait cloner une troisième branche tout en promettant
+  que c'était celle du mandat.
+- Les blocs destinés à a-Shell sur l'iPhone portent l'étiquette ```sh, seule
+  exemption, et un témoin vérifie qu'il en reste au moins un.
+
+## 3.25.0 — Le chemin le plus rapide était le seul sans vérification
+
+`sj apply` est ce qu'il tape le plus — il cherche un poste. C'était la seule
+écriture de décision qui ne vérifiait rien, et `sj add --title ...` non plus :
+seule la branche interactive de `add` validait. La règle était écrite sur
+quatre surfaces, donc deux pouvaient l'oublier.
+
+- `singular.saisie.verifie_decision` est la porte unique ; le serveur, les deux
+  branches de `add` et `apply` la traversent.
+- Le garde-fou lit l'arbre syntaxique de `singular/`, trouve chaque
+  `journal.add(...)` et exige que la fonction qui le contient appelle la porte.
+
 ## 3.24.0 — Le Sage parle dès qu'un écart est prouvé
 
 Il se taisait sur ce qu'il pouvait démontrer. « Conclusif » voulait dire
