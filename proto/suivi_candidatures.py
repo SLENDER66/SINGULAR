@@ -71,18 +71,6 @@ EN_COURS = ("a_envoyer", "envoyee", "relancee", "entretien")
 #: sur le CV. Ce qui manquait etait le cadrage, pas la matiere. Une liste qui
 #: fait refaire ce qui est fait ne se coche jamais.
 #:
-#: L'ordre compte, chaque etape se pose sur la precedente.
-ETAPES_CV = [
-    ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
-    " Les 2 ans de BE en premier, le terrain juste apres"),
-    ("Retirer toute mention d'alternance tant qu'aucune ecole n'est trouvee :"
-    " une promesse sans date inquiete un recruteur"),
-    ("Nommer le materiel au lieu d'ecrire « CVC » : chambres froides, groupes"
-    " electrogenes, bruleurs, CTA double flux. Avec les puissances et volumes"),
-    "Relire a voix haute, couper tout ce qui ne sert pas le poste vise",
-    "Faire relire par quelqu'un du metier",
-]
-
 #: Les deux seules provenances possibles pour une ligne de profil.
 #:
 #: DIT   : il l'a ecrit lui-meme, dans une conversation. C'est un fait.
@@ -90,6 +78,45 @@ ETAPES_CV = [
 #:         servir, et affiche comme tel dans le bloc colle a Claude.
 DIT = "dit"
 DEDUIT = "deduit"
+
+#: L'ordre compte, chaque etape se pose sur la precedente.
+#:
+#: Chaque etape porte sa provenance, pour la meme raison que `PROFIL` : ce sont
+#: des conseils sur sa vie, ils partent dans le bloc colle a Claude, et deux
+#: deductions non demandees lui ont deja coute un CV faux et un marche ecarte.
+#: `ETAPES_CV` n'etait pas marquee -- seul `PROFIL` l'etait, et la correction
+#: s'etait arretee la.
+ETAPES_CV = [
+    ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
+     " Les 2 ans de BE en premier, le terrain juste apres", DIT),
+    ("Retirer toute mention d'alternance tant qu'aucune ecole n'est trouvee :"
+     " une promesse sans date inquiete un recruteur", DEDUIT),
+    ("Nommer le materiel au lieu d'ecrire « CVC » : chambres froides, groupes"
+     " electrogenes, bruleurs, CTA double flux. Avec les puissances et volumes", DIT),
+    ("Relire a voix haute, couper tout ce qui ne sert pas le poste vise", DIT),
+    ("Faire relire par quelqu'un du metier", DIT),
+]
+
+#: Le texte des etapes, dans l'ordre. C'est ce que le fichier de donnees garde.
+#:
+#: Les deux lectures ci-dessous tolerent une etape sans provenance plutot que
+#: de lever a l'import. Ce n'est pas de l'indulgence : une session qui oublie
+#: la marque doit faire echouer `tests/test_proto_suivi.py`, pas empecher son
+#: outil de demarrer sur son telephone. Le refus a sa place, et ce n'est pas ici.
+TEXTES_CV = [entree[0] if isinstance(entree, tuple) else entree for entree in ETAPES_CV]
+
+#: De quoi retrouver la provenance d'une etape relue depuis le fichier.
+#:
+#: La provenance se lit ici et jamais dans le fichier : un fichier ecrit avant
+#: ce marquage n'en porte pas, et une etape dont le texte a change depuis n'est
+#: plus l'etape d'ici. Inconnue veut dire « pas de marque », pas « fait ».
+PROVENANCE_CV = {entree[0]: entree[1] for entree in ETAPES_CV
+                 if isinstance(entree, tuple) and len(entree) == 2}
+
+
+def marque(texte: str) -> str:
+    """L'etape, suivie de sa reserve quand elle n'a pas ete dite."""
+    return texte if PROVENANCE_CV.get(texte, DIT) == DIT else f"{texte} (deduit, a confirmer)"
 
 #: Ce que Claude ne peut pas deviner, et que tu ne dois pas retaper a chaque
 #: conversation.
@@ -134,7 +161,7 @@ PROFIL = [
 # --- le fichier --------------------------------------------------------------
 
 def _cv_neuf() -> list[dict]:
-    return [{"etape": etape, "fait": False} for etape in ETAPES_CV]
+    return [{"etape": texte, "fait": False} for texte in TEXTES_CV]
 
 
 def charger() -> dict:
@@ -158,7 +185,7 @@ def charger() -> dict:
     # rien a perdre. Des qu'une l'est, on ne touche plus a rien : le travail
     # deja fait vaut mieux qu'une liste a jour.
     if not any(etape["fait"] for etape in donnees["cv"]) \
-            and [etape["etape"] for etape in donnees["cv"]] != ETAPES_CV:
+            and [etape["etape"] for etape in donnees["cv"]] != TEXTES_CV:
         donnees["cv"] = _cv_neuf()
     return donnees
 
@@ -281,7 +308,7 @@ def action_du_jour(donnees: dict) -> list[str]:
         faites = len(donnees["cv"]) - len(restantes)
         return [
             f"Avancer le CV. Etape {faites + 1} sur {len(donnees['cv'])} :",
-            f"  {restantes[0]['etape']}",
+            f"  {marque(restantes[0]['etape'])}",
             ("Tant que le CV n'est pas pret, candidater brule des entreprises"
             " que tu ne pourras pas redemander."),
         ]
@@ -392,8 +419,8 @@ def afficher_cv(donnees: dict) -> None:
     ligne("LE CV")
     ligne()
     for numero, etape in enumerate(donnees["cv"], start=1):
-        marque = "[x]" if etape["fait"] else "[ ]"
-        ligne(f"{numero:>2}. {marque} {etape['etape']}")
+        coche = "[x]" if etape["fait"] else "[ ]"
+        ligne(f"{numero:>2}. {coche} {marque(etape['etape'])}")
     ligne()
 
 
@@ -525,7 +552,7 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
         faites = len(donnees["cv"]) - len(restantes)
         lignes.append(f"Mon CV n'est pas fini : {faites} etape(s) sur {len(donnees['cv'])}.")
         lignes.append("Il me reste :")
-        lignes += [f"- {e}" for e in restantes]
+        lignes += [f"- {marque(e)}" for e in restantes]
     else:
         lignes.append("Mon CV est termine.")
     lignes.append("")

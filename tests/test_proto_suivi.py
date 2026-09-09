@@ -133,7 +133,7 @@ def test_les_etapes_du_cv_se_mettent_a_jour_tant_que_rien_n_est_coche(proto, tmp
 
     donnees = proto.charger()
 
-    assert [e["etape"] for e in donnees["cv"]] == proto.ETAPES_CV
+    assert [e["etape"] for e in donnees["cv"]] == proto.TEXTES_CV
 
 
 def test_une_etape_deja_cochee_interdit_la_mise_a_jour(proto) -> None:
@@ -178,6 +178,56 @@ def test_chaque_ligne_de_profil_porte_sa_provenance(proto) -> None:
     )
 
 
+def test_chaque_etape_du_cv_porte_sa_provenance(proto) -> None:
+    """Le meme marquage, a l'endroit ou la correction s'etait arretee.
+
+    `PROFIL` portait sa provenance ; `ETAPES_CV` non. Or ce sont des conseils
+    sur sa vie exactement au meme titre -- ils s'affichent chaque matin comme
+    l'action du jour, et ils partent dans le bloc colle a Claude. Une etape
+    disait « retirer toute mention d'alternance » alors qu'il venait de
+    trancher, en questionnaire, qu'il cherche les deux sans hierarchie.
+    """
+    fautes = [
+        f"« {entree!r} »"
+        for entree in proto.ETAPES_CV
+        if not (isinstance(entree, tuple) and len(entree) == 2
+                and isinstance(entree[0], str) and entree[1] in (proto.DIT, proto.DEDUIT))
+    ]
+
+    assert not fautes, (
+        "chaque etape du CV doit dire d'ou elle vient -- DIT ou DEDUIT :\n  "
+        + "\n  ".join(fautes)
+        + "\n  Une etape conseille sa vie : elle vaut une ligne de profil."
+    )
+
+
+def test_une_etape_deduite_ne_voyage_pas_deguisee(proto) -> None:
+    """Elle s'affiche marquee partout ou elle s'affiche, y compris chez Claude."""
+    # Tolerant a une etape non marquee : c'est le test ci-dessus qui la refuse,
+    # et deux tests qui crient pour la meme faute en cachent le message.
+    deduites = [entree[0] for entree in proto.ETAPES_CV
+                if isinstance(entree, tuple) and entree[1] == proto.DEDUIT]
+    if not deduites:
+        pytest.skip("plus aucune etape deduite : rien a garder ici")
+
+    texte = deduites[0]
+    assert "(deduit" in proto.marque(texte)
+    assert proto.marque(proto.TEXTES_CV[0]) == proto.TEXTES_CV[0] or \
+        proto.ETAPES_CV[0][1] == proto.DEDUIT, "un fait dit ne se marque pas"
+
+    donnees = {"candidatures": [], "cv": [{"etape": t, "fait": False} for t in proto.TEXTES_CV]}
+    bloc = proto.texte_pour_claude(donnees, "relis mon CV")
+    ligne_deduite = next(texte_ligne for texte_ligne in bloc.splitlines() if texte[:30] in texte_ligne)
+    assert "(deduit" in ligne_deduite, (
+        "l'etape part chez Claude comme un fait acquis : c'est exactement le "
+        "mecanisme qui a produit un CV faux")
+
+
+def test_une_etape_inconnue_ne_se_marque_pas(proto) -> None:
+    """Le fichier d'avant ce marquage ne doit pas devenir suspect d'un coup."""
+    assert proto.marque("Une etape ecrite avant ce marquage") == "Une etape ecrite avant ce marquage"
+
+
 def test_une_deduction_est_affichee_comme_non_verifiee(proto) -> None:
     """Si une déduction entre quand même, elle ne doit pas voyager déguisée."""
     donnees = {"candidatures": [], "cv": [{"etape": "x", "fait": True}]}
@@ -190,7 +240,7 @@ def test_une_deduction_est_affichee_comme_non_verifiee(proto) -> None:
 
     assert "Ceci n'est pas verifie" in bloc
     assert "Il vise plutot l'industriel." in bloc
-    ligne = next(l for l in bloc.splitlines() if "industriel" in l)
+    ligne = next(texte_ligne for texte_ligne in bloc.splitlines() if "industriel" in texte_ligne)
     assert ligne.startswith("- "), "une deduction doit etre listee a part, pas fondue dans le profil"
 
 
