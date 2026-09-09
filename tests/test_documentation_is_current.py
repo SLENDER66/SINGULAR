@@ -126,14 +126,20 @@ def test_the_clone_command_names_the_branch_the_mandate_declares():
 
     a_faire = _read("A_FAIRE.md")
 
-    clonee = re.search(r"lg2 clone -b (\S+)", a_faire)
-    assert clonee, "la commande de clonage a disparu d'A_FAIRE.md ou changé de forme"
+    # Deux documents portent la commande de clonage, et un seul était vérifié.
+    # `USAGE.md` faisait cloner une troisième branche tout en promettant, la
+    # phrase juste au-dessus, que c'était celle du mandat.
+    clones = {nom: re.findall(r"lg2 clone -b (\S+)", _read(nom))
+              for nom in ("A_FAIRE.md", "USAGE.md")}
+    assert clones["A_FAIRE.md"], "la commande de clonage a disparu d'A_FAIRE.md ou changé de forme"
 
-    assert clonee.group(1) == declaree, (
-        f"A_FAIRE.md fait cloner « {clonee.group(1)} » alors que le mandat "
-        f"déclare « {declaree} » comme branche de travail.\n"
-        "Le téléphone installerait une version qui n'a pas le travail en cours."
-    )
+    for nom, branches in clones.items():
+        for branche in branches:
+            assert branche == declaree, (
+                f"{nom} fait cloner « {branche} » alors que le mandat déclare "
+                f"« {declaree} » comme branche de travail.\n"
+                "Le téléphone installerait une version qui n'a pas le travail en cours."
+            )
 
     # Le PC a la même faille, par un autre chemin : `git pull` met à jour la
     # branche où l'on est, pas celle qui porte le travail. Un clone resté sur
@@ -186,3 +192,59 @@ def test_documents_that_guide_a_session_do_not_cite_dead_things(reference: str, 
                        for line in surrounding), (
                 f"{name} cite « {reference} » ({why}) sans dire que c'est périmé : {surrounding}"
             )
+
+
+# --- les commandes du PC sont celles de sa console ---------------------------
+
+#: Ce que la console de Thomas rejette, et ce qu'il faut écrire à la place.
+#:
+#: Il est sur Windows, en PowerShell — c'est écrit dans `CLAUDE.md`, et
+#: `A_FAIRE.md` est déjà rédigé ainsi. `USAGE.md` ne l'était pas : son mode
+#: d'emploi ouvrait sur `cd ~/SINGULAR && ...`, que la version de PowerShell
+#: installée par défaut sur Windows refuse avant d'exécuter quoi que ce soit, et
+#: sa section « le mettre devant tes yeux » — celle dont tout le propos est qu'un
+#: journal qu'on doit penser à ouvrir finit par ne plus s'ouvrir — donnait un
+#: `alias` à mettre dans `~/.bashrc`.
+REJETE_PAR_POWERSHELL = {
+    "&&": "deux lignes séparées",
+    "||": "deux lignes séparées",
+    "export ": "$env:NOM = \"...\"",
+    "2>/dev/null": "2>$null",
+    "alias ": "function nom { ... @args }",
+    "source ": ". le-fichier",
+    "~/.bashrc": "$PROFILE",
+    "~/.zshrc": "$PROFILE",
+}
+
+#: Le seul shell POSIX de sa vie : a-Shell, sur l'iPhone. Les blocs qui lui
+#: sont destinés portent cette étiquette, et eux seuls.
+ETIQUETTE_IPHONE = "sh"
+
+
+def _blocs(nom: str) -> list[tuple[str, str, int]]:
+    texte = _read(nom)
+    return [(m.group(1), m.group(2), texte[:m.start()].count("\n") + 1)
+            for m in re.finditer(r"```(\w*)\n(.*?)```", texte, re.DOTALL)]
+
+
+@pytest.mark.parametrize("nom", ["USAGE.md", "A_FAIRE.md", "README.md"])
+def test_les_commandes_du_pc_tiennent_dans_sa_console(nom: str) -> None:
+    fautes = []
+    for etiquette, bloc, ligne in _blocs(nom):
+        if etiquette == ETIQUETTE_IPHONE:
+            continue
+        for rejete, remplacement in REJETE_PAR_POWERSHELL.items():
+            if rejete in bloc:
+                fautes.append(f"{nom}:{ligne} contient {rejete!r} — écris {remplacement}")
+    assert not fautes, (
+        "ces commandes ne tournent pas dans sa console :\n  " + "\n  ".join(fautes)
+        + f"\nUn bloc destiné à a-Shell sur l'iPhone porte l'étiquette ```{ETIQUETTE_IPHONE}."
+    )
+
+
+def test_le_scan_verrait_une_commande_d_une_autre_machine() -> None:
+    """Le témoin : sans lui, un lecteur qui ne trouve aucun bloc passerait au vert."""
+    assert len(_blocs("USAGE.md")) > 5
+    assert any(etiquette == ETIQUETTE_IPHONE for etiquette, _, _ in _blocs("USAGE.md")), (
+        "plus aucun bloc iPhone : l'exemption ne protège plus rien, "
+        "et le test ne prouve plus qu'il sait distinguer les deux machines")

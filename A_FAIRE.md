@@ -122,13 +122,13 @@ L'ancienne clé cesse alors de fonctionner, et l'app en redemandera une neuve.
 **Depuis le téléphone seul, sans PC.** Le cœur n'a plus aucune dépendance : il
 tourne dans **a-Shell** sans rien installer. Une fois, dans a-Shell :
 
-```
+```sh
 lg2 clone -b claude/decision-companion-rebuild-3k25h3 https://github.com/SLENDER66/SINGULAR
 ```
 
 Puis, chaque matin :
 
-```
+```sh
 cd SINGULAR && python -m singular sage
 ```
 

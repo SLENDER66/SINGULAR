@@ -7,9 +7,16 @@ demander ce qui s'est passé.
 
 ## Installation
 
-```bash
-cd ~/SINGULAR && python -m pip install -e ".[dev]"
+Dans PowerShell, sur le PC :
+
+```powershell
+cd $HOME\Documents\SINGULAR
+python -m pip install -e ".[dev]"
 ```
+
+Deux lignes et non une : `&&` n'existe pas dans la version de PowerShell
+installée par défaut sur Windows, et la commande s'arrêterait sur une erreur de
+syntaxe avant d'avoir rien fait.
 
 La base vit dans `~/.singular/journal.db`.
 
@@ -334,11 +341,11 @@ que `CLAUDE.md` désigne aujourd'hui ; `python tools/check_repo_state.py` dit
 l'état réel du jour, et il faut le croire plutôt que cette ligne — c'est
 exactement pour ça qu'il existe.
 
-```
-lg2 clone -b claude/remote-control-feedback-ndpzle https://github.com/SLENDER66/SINGULAR
+```sh
+lg2 clone -b claude/decision-companion-rebuild-3k25h3 https://github.com/SLENDER66/SINGULAR
 ```
 
-```
+```sh
 cd SINGULAR && python -m singular sage
 ```
 
@@ -358,12 +365,26 @@ neuf ressemble exactement à un journal qu'on n'a pas encore rempli. C'est pour
 
 ## Le mettre devant tes yeux
 
-Ajoute à ton `~/.bashrc` ou `~/.zshrc` :
+Ouvre ton profil PowerShell — c'est le fichier que PowerShell lit à chaque
+ouverture de fenêtre. Il n'existe pas forcément encore :
 
-```bash
-alias sj='python -m singular'
-python -m singular status 2>/dev/null
+```powershell
+if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }
+notepad $PROFILE
 ```
+
+Ajoute dedans :
+
+```powershell
+function sj { python -m singular @args }
+python -m singular status 2>$null
+```
+
+`function` et non `Set-Alias` : un alias PowerShell ne peut pas porter
+d'arguments, donc `sj add` ne marcherait pas. Cette section disait
+`alias sj='python -m singular'` dans `~/.bashrc`, ce qui est le shell d'une
+autre machine que la sienne — et c'est justement la section censée mettre
+l'outil devant ses yeux.
 
 Chaque terminal que tu ouvres affichera alors :
 
