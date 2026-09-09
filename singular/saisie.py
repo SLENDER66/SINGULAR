@@ -98,5 +98,29 @@ def verifie_gain(valeur: float | None) -> None:
         raise ValueError("un cout n'est pas un gain : laisse vide si tu ne sais pas")
 
 
-__all__ = ["entier", "nombre", "verifie_gain", "verifie_heures",
+#: Ce que voit quelqu'un qui tranche deux fois la meme decision.
+#:
+#: Le cas est banal : deux onglets ouverts, un double appui sur un telephone,
+#: ou la ligne de commande apres l'app. Le journal refuse -- c'est sa promesse
+#: centrale, l'histoire ne se reecrit pas -- et il refusait en anglais :
+#: `DEC-24bfbaeb was already resolved as HAPPENED; history is not editable`.
+#: L'app avait sa traduction, ecrite chez elle ; le clavier et le serveur
+#: n'avaient rien. La phrase vit ici, les trois la lisent, et
+#: `tests/test_saisie_au_clavier.py` verifie que la copie JavaScript -- la
+#: seule qui ne peut pas importer ce fichier -- dit encore la meme chose.
+CONFLIT = ("Cette décision a déjà été tranchée. Ferme et rouvre pour voir le "
+           "verdict enregistré.")
+
+
+def introuvable(entry_id: str) -> str:
+    """Un identifiant qui n'est dans aucune ligne du journal.
+
+    La ligne de commande affichait `'DEC-inconnu'`, guillemets compris : le
+    `repr` d'une cle absente, qui n'explique rien a quelqu'un qui vient de
+    taper de travers.
+    """
+    return f"{entry_id} n'est dans aucune ligne de ce journal (python -m singular list)."
+
+
+__all__ = ["CONFLIT", "entier", "introuvable", "nombre", "verifie_gain", "verifie_heures",
            "verifie_jours", "verifie_probabilite"]

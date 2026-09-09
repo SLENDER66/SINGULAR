@@ -18,7 +18,9 @@ import sys
 from datetime import datetime
 
 from .journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
+from .saisie import CONFLIT as _CONFLIT
 from .saisie import entier as _entier
+from .saisie import introuvable as _introuvable
 from .saisie import nombre as _nombre
 from .saisie import verifie_gain as _verifie_gain
 from .saisie import verifie_heures as _verifie_heures
@@ -621,7 +623,16 @@ def main(argv: list[str] | None = None) -> int:
     journal = DecisionJournal(args.db)
     try:
         return args.func(journal, args)
-    except (KeyError, PermissionError, ValueError) as exc:
+    except KeyError as exc:
+        print(_colour(f"\n  {_introuvable(exc.args[0])}\n", RED))
+        return 1
+    except PermissionError:
+        # Le journal refuse en anglais, c'est son contrat de bibliotheque.
+        # Ce refus-la arrive sur son ecran : il se lit dans sa langue, et la
+        # phrase est celle de `singular.saisie`, que l'app affiche deja.
+        print(_colour(f"\n  {_CONFLIT}\n", RED))
+        return 1
+    except ValueError as exc:
         print(_colour(f"\n  {exc}\n", RED))
         return 1
     except (KeyboardInterrupt, EOFError):

@@ -33,7 +33,14 @@ from urllib.parse import unquote_plus, urlsplit
 
 from ..fichiers import ecrire_atomique
 from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
-from ..saisie import verifie_gain, verifie_heures, verifie_jours, verifie_probabilite
+from ..saisie import (
+    CONFLIT,
+    introuvable,
+    verifie_gain,
+    verifie_heures,
+    verifie_jours,
+    verifie_probabilite,
+)
 from .icon import render_icon
 from .notice import build_notice
 
@@ -356,18 +363,22 @@ class SageApp:
                 entry_id, happened=payload["happened"], lesson=str(payload.get("lesson", "")).strip()
             )
         except KeyError:
-            raise SageError(HTTPStatus.NOT_FOUND, f"{entry_id} n'existe pas") from None
-        except PermissionError as exc:
-            raise SageError(HTTPStatus.CONFLICT, str(exc)) from None
+            raise SageError(HTTPStatus.NOT_FOUND, introuvable(entry_id)) from None
+        except PermissionError:
+            # `str(exc)` renvoyait « history is not editable » dans la reponse
+            # JSON. L'app remplacait la phrase de son cote ; le corps, lui,
+            # partait en anglais, et rien ne garantissait que le remplacement
+            # survive a la prochaine reecriture du client.
+            raise SageError(HTTPStatus.CONFLICT, CONFLIT) from None
         return _entry_as_dict(entry)
 
     def abandon(self, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             entry = self.journal.abandon(entry_id, reason=_text(payload, "reason"))
         except KeyError:
-            raise SageError(HTTPStatus.NOT_FOUND, f"{entry_id} n'existe pas") from None
-        except PermissionError as exc:
-            raise SageError(HTTPStatus.CONFLICT, str(exc)) from None
+            raise SageError(HTTPStatus.NOT_FOUND, introuvable(entry_id)) from None
+        except PermissionError:
+            raise SageError(HTTPStatus.CONFLICT, CONFLIT) from None
         return _entry_as_dict(entry)
 
     # --- la conversation, quand elle est allumée ------------------------------

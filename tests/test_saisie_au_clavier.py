@@ -19,8 +19,12 @@ ferait perdre sa saisie à la question suivante.
 """
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
+from singular.__main__ import main
+from singular.saisie import CONFLIT, introuvable
 from singular.saisie import (
     entier as _entier,
 )
@@ -37,6 +41,8 @@ from singular.saisie import (
     verifie_probabilite as _verifie_probabilite,
 )
 from singular.journal import DecisionJournal, Tier
+
+RACINE = pathlib.Path(__file__).resolve().parent.parent
 
 
 def _accepte_par_le_journal(tmp_path, **champs) -> bool:
@@ -231,3 +237,74 @@ def test_the_form_can_only_produce_what_the_journal_accepts():
     assert 0 < attribut("probability", "max") / 100 < 1
     assert attribut("cost_hours", "min") >= 0
     assert attribut("horizon_days", "min") >= 1
+
+
+# --- le refus d'ecrire, pas seulement le refus de saisir ----------------------
+
+def _journal_tranche(tmp_path):
+    """Un journal d'une ligne, deja tranchee : le cas du double appui."""
+    journal = DecisionJournal(tmp_path / "journal.db")
+    entree = journal.add(title="Postuler", action="envoyer", predicted="un entretien",
+                         probability=0.6, tier=Tier.REVENUS, cost_hours=2, horizon_days=1)
+    journal.resolve(entree.entry_id, happened=True)
+    return journal, entree.entry_id
+
+
+@pytest.mark.parametrize("commande", [
+    lambda eid: ["resolve", eid, "--no"],
+    lambda eid: ["abandon", eid, "plus la peine"],
+])
+def test_the_keyboard_says_a_second_verdict_in_his_language(tmp_path, capsys, commande):
+    """Deux onglets, un double appui, la commande apres l'app : le cas est banal.
+
+    Le journal refuse -- l'histoire ne se reecrit pas, c'est sa promesse -- et
+    il refusait en anglais jusque sur l'ecran : « history is not editable ».
+    L'app avait sa traduction, ecrite chez elle. Le clavier n'avait rien.
+    """
+    _, entry_id = _journal_tranche(tmp_path)
+
+    assert main(["--db", str(tmp_path / "journal.db"), *commande(entry_id)]) == 1
+    sortie = capsys.readouterr().out
+    assert CONFLIT in sortie
+    assert "history is not editable" not in sortie
+    assert "already resolved" not in sortie
+
+
+def test_the_keyboard_explains_an_unknown_identifier(tmp_path, capsys):
+    """Il affichait `'DEC-inconnu'`, guillemets compris, et rien d'autre."""
+    journal = DecisionJournal(tmp_path / "journal.db")
+    assert journal is not None
+
+    assert main(["--db", str(tmp_path / "journal.db"), "resolve", "DEC-inconnu", "--yes"]) == 1
+    sortie = capsys.readouterr().out
+    assert introuvable("DEC-inconnu") in sortie
+    assert "'DEC-inconnu'" not in sortie, "le repr d'une cle absente n'explique rien"
+
+
+@pytest.mark.parametrize("route", ["resolve", "abandon"])
+def test_the_server_answers_a_conflict_in_his_language(tmp_path, route):
+    """Le corps JSON partait en anglais ; seule l'app le remplacait, chez elle."""
+    from singular.sage.server import SageApp, SageError
+
+    journal, entry_id = _journal_tranche(tmp_path)
+    app = SageApp(journal)
+    charge = {"happened": False} if route == "resolve" else {"reason": "plus la peine"}
+
+    with pytest.raises(SageError) as refus:
+        getattr(app, route)(entry_id, charge)
+
+    assert refus.value.message == CONFLIT
+    assert "editable" not in refus.value.message
+
+
+def test_the_web_copy_of_the_conflict_still_says_the_same_thing():
+    """La seule copie qui ne peut pas importer `singular.saisie`.
+
+    L'app doit pouvoir refuser hors connexion, donc elle porte la phrase en
+    dur. Une phrase en double se corrige d'un seul cote : ce test est ce qui
+    l'empeche.
+    """
+    app_js = (RACINE / "singular/sage/web/app.js").read_text(encoding="utf-8")
+    assert CONFLIT in app_js, (
+        "app.js ne dit plus ce que dit `singular.saisie.CONFLIT`. La phrase a "
+        "un seul domicile ; la copie du navigateur doit le citer mot pour mot.")
