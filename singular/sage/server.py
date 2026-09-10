@@ -794,7 +794,7 @@ class SageHandler(BaseHTTPRequestHandler):
 
 
 #: Ce qu'on dit d'une panne qu'on ne sait pas nommer.
-PANNE = ("Quelque chose a casse de mon cote. Le detail est ecrit dans la fenetre "
+PANNE = ("Quelque chose a cassé de mon côté. Le détail est écrit dans la fenêtre "
          "du PC ou tourne le Sage. Ton journal, lui, n'a pas bouge.")
 
 #: Et la seule panne courante qu'il peut lui-meme resoudre.
@@ -893,9 +893,9 @@ def _port_refuse(refus: OSError, port: int) -> int:
     tient en une phrase : elle tourne deja, ouvre l'adresse.
     """
     if refus.errno == errno.EADDRINUSE:
-        print(f"\n  Le port {port} est deja pris.")
-        print("  Le Sage tourne probablement deja dans une autre fenetre :")
-        print(f"  ouvre http://127.0.0.1:{port}/ pour verifier.")
+        print(f"\n  Le port {port} est déjà pris.")
+        print("  Le Sage tourne probablement déjà dans une autre fenêtre :")
+        print(f"  ouvre http://127.0.0.1:{port}/ pour vérifier.")
         print(f"\n  Sinon, choisis un autre port : --port {port + 1}\n")
         return 1
     if refus.errno == errno.EACCES:

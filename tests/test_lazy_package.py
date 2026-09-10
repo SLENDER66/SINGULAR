@@ -28,6 +28,7 @@ import textwrap
 import pytest
 
 import singular
+from tests.support import sans_accents
 
 #: Ce qui n'a pas le droit d'etre charge par un simple `import singular`.
 LOURDS = ("pydantic", "pydantic_core", "anthropic", "openai", "agents")
@@ -286,7 +287,7 @@ def test_l_apercu_d_analyse_marche_sans_la_moindre_dependance(tmp_path) -> None:
         raise SystemExit(main())
     ''')
     assert resultat.returncode == 0, resultat.stderr[-800:]
-    assert "Rien n'a ete envoye" in resultat.stdout
+    assert "rien n'a ete envoye" in sans_accents(resultat.stdout)
     assert "irréversible" in resultat.stdout
     assert "chain_intact" in resultat.stdout
 

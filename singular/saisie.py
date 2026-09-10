@@ -61,29 +61,29 @@ def verifie_probabilite(valeur: float) -> None:
     qu'il venait de saisir etait perdu.
     """
     if not isfinite(valeur):
-        raise ValueError("une probabilite, pas l'infini")
+        raise ValueError("une probabilité, pas l'infini")
     # Strictement entre 1 et 100 : « 1 » veut dire la certitude, pas 1 %, et
     # « 100 » aussi. Les lire comme des pourcents faisait conseiller « pour
     # 100 %, ecris 1 » -- un conseil que la ligne suivante refuse.
     if 1 < valeur < 100:
         raise ValueError(
-            f"entre 0.05 et 0.95, pas en pourcents - pour {valeur:g} %, ecris "
+            f"entre 0.05 et 0.95, pas en pourcents -- pour {valeur:g} %, écris "
             f"{valeur / 100:g}")
     if not 0 < valeur < 1:
         raise ValueError("entre 0.05 et 0.95 : une certitude ne peut pas avoir tort, "
-                         "une impossibilite non plus")
+                         "une impossibilité non plus")
 
 
 def verifie_heures(valeur: float) -> None:
     if not isfinite(valeur):
         raise ValueError("un nombre d'heures, pas l'infini")
     if valeur < 0:
-        raise ValueError("des heures ne se comptent pas en negatif")
+        raise ValueError("des heures ne se comptent pas en négatif")
 
 
 def verifie_jours(valeur: int) -> None:
     if valeur < 1:
-        raise ValueError("au moins un jour, sinon rien ne peut etre verifie")
+        raise ValueError("au moins un jour, sinon rien ne peut être vérifié")
 
 
 def verifie_gain(valeur: float | None) -> None:
@@ -100,7 +100,7 @@ def verifie_gain(valeur: float | None) -> None:
     if not isfinite(valeur):
         raise ValueError("un montant, pas l'infini")
     if valeur < 0:
-        raise ValueError("un cout n'est pas un gain : laisse vide si tu ne sais pas")
+        raise ValueError("un coût n'est pas un gain : laisse vide si tu ne sais pas")
 
 
 def verifie_decision(*, probability: float, cost_hours: float, horizon_days: int,
@@ -145,12 +145,12 @@ CONFLIT = ("Cette décision a déjà été tranchée. Ferme et rouvre pour voir 
 #: decision a deja ete tranchee », qui est juste pour `resolve` et absurde ici.
 #: Jouer `import` deux fois de suite affichait donc cette phrase-la.
 REPRISE_REFUSEE = {
-    "source_broken": ("Le journal a reprendre a ete modifie apres coup : sa chaine ne se "
-                      "verifie plus. Le reprendre ici blanchirait la modification."),
-    "self_broken": ("Ce journal-ci a une chaine rompue. On n'ajoute rien derriere une "
-                    "chaine deja cassee : repare-la d'abord, ou repars de l'autre."),
-    "duplicates": ("Ces decisions sont deja dans ce journal. Une reprise deja faite ne se "
-                   "refait pas : le journal mentirait sur ce que tu as decide."),
+    "source_broken": ("Le journal à reprendre a été modifié après coup : sa chaîne ne se "
+                      "vérifie plus. Le reprendre ici blanchirait la modification."),
+    "self_broken": ("Ce journal-ci a une chaîne rompue. On n'ajoute rien derrière une "
+                    "chaîne déjà cassée : répare-la d'abord, ou repars de l'autre."),
+    "duplicates": ("Ces décisions sont déjà dans ce journal. Une reprise déjà faite ne se "
+                   "refait pas : le journal mentirait sur ce que tu as décidé."),
 }
 
 

@@ -33,6 +33,7 @@ from singular.sage.server import (
     read_token,
     same_origin,
 )
+from tests.support import sans_accents
 
 TOKEN = "un-jeton-de-test-suffisamment-long"
 
@@ -163,7 +164,7 @@ def test_a_cost_typed_as_a_gain_is_refused_in_his_language(app):
     with pytest.raises(SageError) as refusal:
         app.add(payload)
     assert refusal.value.status == HTTPStatus.BAD_REQUEST
-    assert "un cout n'est pas un gain" in refusal.value.message
+    assert "un cout n'est pas un gain" in sans_accents(refusal.value.message)
     assert "laisse vide" in refusal.value.message
 
 
@@ -173,7 +174,7 @@ def test_percent_typed_in_the_probability_says_what_to_write(app):
                "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7}
     with pytest.raises(SageError) as refusal:
         app.add(payload)
-    assert "ecris 0.75" in refusal.value.message
+    assert "ecris 0.75" in sans_accents(refusal.value.message)
 
 
 def test_blank_fields_are_refused(app):
@@ -701,7 +702,7 @@ def test_un_port_deja_pris_se_dit_en_une_phrase(tmp_path, capsys):
 
     sortie = capsys.readouterr().out
     assert code == 1
-    assert "deja pris" in sortie
+    assert "deja pris" in sans_accents(sortie)
     assert f"http://127.0.0.1:{port}/" in sortie
     for pile in ("Traceback", "Errno", "Address already in use", "socketserver"):
         assert pile not in sortie, f"la pile Python arrive sur son ecran : {sortie}"

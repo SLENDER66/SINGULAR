@@ -9,6 +9,7 @@ key were rejected before reaching the behaviour they assert.
 """
 from __future__ import annotations
 
+import unicodedata
 from pathlib import Path
 
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
@@ -116,3 +117,21 @@ def claimed_execution_store(
     store.set_mission_status(mission_id, MissionStatus.PLANNED)
     store.begin_execution_and_start_mission(execution_key, mission_id, action_id, lease_seconds=300)
     return store
+
+
+def sans_accents(texte: str) -> str:
+    """La phrase telle qu'on la reconnaît, pas telle qu'elle s'écrit.
+
+    Quatre tests attendaient un message de SINGULAR au caractère près -- « ecris
+    tes tarifs », « jetons envoyes », « un cout n'est pas un gain », « pour 75
+    %, ecris 0.75 ». Le jour où ces mots ont pris leurs accents, ils sont tombés
+    sans qu'aucun comportement change.
+
+    C'est le pire type de test : il ne prouve rien de plus qu'une comparaison
+    tolérante, et il punit la correction du français des messages -- donc il
+    apprend à ne plus les corriger. `test_messages_recopies.py` refuse
+    desormais qu'un test recopie un message sans ses accents ; ceci est ce
+    qu'il propose à la place.
+    """
+    decompose = unicodedata.normalize("NFD", texte.lower())
+    return "".join(c for c in decompose if not unicodedata.combining(c))

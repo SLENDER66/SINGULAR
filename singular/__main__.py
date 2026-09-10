@@ -121,7 +121,7 @@ def _gain_prompt() -> float | None:
     try:
         _verifie_gain(valeur)
     except ValueError as refus:
-        print(_colour(f"  {refus} : laisse non chiffre.", RED))
+        print(_colour(f"  {refus} : laisse non chiffré.", RED))
         return None
     return valeur
 
@@ -172,7 +172,7 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
         # -- le rapport du jour et tout le fil -- et depuis son telephone.
         print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
         print(apercu(contexte, fil, args.question or "<ta question>"))
-        print(_colour("\n  Rien n'a ete envoye.\n", DIM))
+        print(_colour("\n  Rien n'a été envoyé.\n", DIM))
         return 0
 
     def un_tour(question: str) -> bool:
@@ -226,7 +226,7 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
     if args.blanc:
         print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
         print(apercu(args.precision))
-        print(_colour(f"\n  Rien n'a ete envoye. Jusqu'a {RECHERCHES_MAX} recherches web"
+        print(_colour(f"\n  Rien n'a été envoyé. Jusqu'à {RECHERCHES_MAX} recherches web"
                       " seraient faites.\n", DIM))
         return 0
 
@@ -245,9 +245,9 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
 
     print(texte)
     economise = f", {cout['cache_lu']} relus du cache" if cout["cache_lu"] else ""
-    print(_colour(f"\n  [{cout['entree']} jetons envoyes{economise},"
+    print(_colour(f"\n  [{cout['entree']} jetons envoyés{economise},"
                   f" {cout['sortie']} rendus] {phrase_de_bilan(bilan())}", DIM))
-    print(_colour("  Rien n'a ete envoye a personne. A toi de decider.\n", DIM))
+    print(_colour("  Rien n'a été envoyé à personne. À toi de décider.\n", DIM))
     return 0
 
 
@@ -267,13 +267,13 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
     if args.blanc:
         print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
         print(apercu(notice))
-        print(_colour("\n  Rien n'a ete envoye.\n", DIM))
+        print(_colour("\n  Rien n'a été envoyé.\n", DIM))
         return 0
 
     try:
         texte, cout = analyser(notice, modele=args.modele)
     except AnalyseIndisponible as exc:
-        print(_colour(f"\n  Analyse coupee : {exc}", DIM))
+        print(_colour(f"\n  Analyse coupée : {exc}", DIM))
         print(_colour("  La Notice ci-dessous est calculee sans elle.\n", DIM))
         print(_colour(f"  {notice['headline']}", BOLD))
         for item in notice["items"]:
@@ -289,7 +289,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
     print(_colour(f"\n  {notice['headline']}\n", BOLD))
     print(texte)
     economise = f", {cout['cache_lu']} relus du cache" if cout["cache_lu"] else ""
-    print(_colour(f"\n  [{cout['entree']} jetons envoyes{economise},"
+    print(_colour(f"\n  [{cout['entree']} jetons envoyés{economise},"
                   f" {cout['sortie']} rendus] {phrase_de_bilan(bilan())}\n", DIM))
     return 0
 
@@ -400,7 +400,7 @@ def cmd_import(journal: DecisionJournal, args) -> int:
         print(_colour(f"\n  Ce fichier n'existe pas :\n  {source}\n", RED))
         return 1
     if source.resolve() == Path(journal.path).resolve():
-        print(_colour("\n  C'est le journal lui-meme. Donne l'autre.\n", RED))
+        print(_colour("\n  C'est le journal lui-même. Donne l'autre.\n", RED))
         return 1
 
     try:
@@ -409,15 +409,15 @@ def cmd_import(journal: DecisionJournal, args) -> int:
         print(_colour(f"\n  {_REPRISE_REFUSEE[refus.reason]}\n", RED))
         return 1
     if not reprises:
-        print(_colour(f"\n  {source} ne contient aucune decision. Rien repris.\n", DIM))
+        print(_colour(f"\n  {source} ne contient aucune décision. Rien repris.\n", DIM))
         return 0
 
-    print(f"\n  {len(reprises)} decision(s) reprises depuis {source}")
+    print(f"\n  {len(reprises)} décision(s) reprises depuis {source}")
     for entree in reprises:
         jour = datetime.fromisoformat(entree.created_at).strftime("%d/%m/%Y")
         print(f"  {_colour(entree.entry_id, BOLD)}  {jour}  {entree.title}")
-    print(_colour(f"\n  {len(journal.entries())} decisions en tout. "
-                  f"Chaine {'intacte' if journal.verify() else 'ROMPUE'}.\n", DIM))
+    print(_colour(f"\n  {len(journal.entries())} décisions en tout. "
+                  f"Chaîne {'intacte' if journal.verify() else 'ROMPUE'}.\n", DIM))
     return 0
 
 
@@ -621,7 +621,7 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status", help="une ligne, pour ton shell")
     status.set_defaults(func=cmd_status)
 
-    reprise = sub.add_parser("import", help="reprendre les decisions d'un autre journal")
+    reprise = sub.add_parser("import", help="reprendre les décisions d'un autre journal")
     reprise.add_argument("source", help="le fichier .db de l'autre journal")
     reprise.set_defaults(func=cmd_import)
 
@@ -655,7 +655,7 @@ def build_parser() -> argparse.ArgumentParser:
                       help="rendre l'app joignable depuis ton téléphone sur le même wifi")
     sage.set_defaults(func=cmd_sage)
 
-    analyse = sub.add_parser("analyse", help="faire commenter la Notice par un modele (consomme des jetons)")
+    analyse = sub.add_parser("analyse", help="faire commenter la Notice par un modèle (consomme des jetons)")
     analyse.add_argument("--blanc", action="store_true",
                          help="afficher ce qui serait envoye, sans rien envoyer")
     analyse.add_argument("--modele", default=None)
@@ -671,7 +671,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parle = sub.add_parser("parle", help="une conversation qui connait ton journal")
     parle.add_argument("question", nargs="?", default="")
-    parle.add_argument("--oubli", action="store_true", help="effacer le fil et repartir a zero")
+    parle.add_argument("--oubli", action="store_true", help="effacer le fil et repartir à zéro")
     parle.add_argument("--modele", default=None)
     parle.add_argument("--blanc", action="store_true",
                        help="montre ce qui partirait, n'envoie rien")
@@ -717,8 +717,8 @@ def main(argv: list[str] | None = None) -> int:
         # `sqlite3.DatabaseError: file is not a database`, pile comprise.
         # Le chemin est la seule chose utile a lire : c'est lui qu'on a ouvert.
         print(_colour(f"\n  Ce fichier n'est pas un journal SINGULAR :\n  {args.db}\n", RED))
-        print(_colour("  Verifie d'abord le chemin. Ne le supprime pas : c'est peut-etre\n"
-                      "  ton journal, ecrit par une version qui n'a pas fini d'ecrire.\n", DIM))
+        print(_colour("  Vérifie d'abord le chemin. Ne le supprime pas : c'est peut-être\n"
+                      "  ton journal, écrit par une version qui n'a pas fini d'écrire.\n", DIM))
         return 1
     try:
         return args.func(journal, args)

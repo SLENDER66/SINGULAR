@@ -41,6 +41,7 @@ from singular.saisie import (
     verifie_probabilite as _verifie_probabilite,
 )
 from singular.journal import DecisionJournal, Tier
+from tests.support import sans_accents
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
@@ -112,8 +113,9 @@ def test_the_question_and_the_journal_agree_on_a_horizon(tmp_path, valeur):
 
 def test_typing_percent_says_what_to_write_instead():
     """Le cas réel : « 75 » pour 75 %. Le refus doit donner la réponse."""
-    with pytest.raises(ValueError, match=r"pour 75 %, ecris 0\.75"):
+    with pytest.raises(ValueError) as refus:
         _verifie_probabilite(75)
+    assert "pour 75 %, ecris 0.75" in sans_accents(str(refus.value))
 
 
 def test_the_gain_question_reads_numbers_the_same_way(tmp_path, monkeypatch, capsys):
@@ -134,7 +136,7 @@ def test_the_gain_question_reads_numbers_the_same_way(tmp_path, monkeypatch, cap
     assert "Pas un nombre" in capsys.readouterr().out
 
     monkeypatch.setattr("builtins.input", lambda *a: "-100")
-    assert _gain_prompt() is None, "un cout n'est pas un gain"
+    assert _gain_prompt() is None, "un coût n'est pas un gain"
 
 
 # --- les trois surfaces disent la meme chose ----------------------------------
