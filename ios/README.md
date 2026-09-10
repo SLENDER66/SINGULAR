@@ -158,8 +158,31 @@ Quand la semaine te gênera : [developer.apple.com/programs](https://developer.a
 | `Tests/JournalTests.swift` | La chaîne, les refus, les comptes |
 | `SingularSage.xcodeproj` | Le projet : cibles, réglages, appartenance des fichiers |
 
-Le journal vit dans un fichier JSON dans l'app. Il ne part sur aucun serveur, et
-la sauvegarde iCloud de ton iPhone l'emporte avec elle.
+## Son journal démarre vide, et rien ne l'importe
+
+Le journal de l'app native vit dans un fichier JSON à l'intérieur de l'app, sur
+le téléphone. **Ce n'est pas celui du Mac.** `~/.singular/journal.db` est une
+base SQLite à chaîne d'intégrité ; l'app lit du JSON, et aucun chemin
+n'existe entre les deux. Il n'y a pas d'écran d'import, pas de « coller un
+export », rien.
+
+Autrement dit, la première ouverture de l'app native affiche « Le journal est
+vide » alors que trois mois de décisions existent ailleurs — exactement l'écran
+que le reste du dépôt s'emploie à ne jamais rendre ambigu.
+
+Ce que ça veut dire concrètement :
+
+- **Compiler et lancer `Cmd + U` vaut le coup tout de suite** : les tests
+  comparent le port Swift au moteur Python et prouvent que les deux disent la
+  même chose. C'est le vrai bénéfice de l'heure passée, et il ne dépend
+  d'aucune donnée.
+- **S'en servir tous les jours découperait ton journal en deux.** Deux journaux
+  qui divergent donnent deux calibrations fausses, et rien ne le signale. Tant
+  qu'aucun import n'existe, l'app web servie par le Mac reste le seul endroit
+  où écrire.
+
+Il ne part sur aucun serveur, et la sauvegarde iCloud de ton iPhone l'emporte
+avec elle.
 
 ## Si le projet ne s'ouvre pas
 
