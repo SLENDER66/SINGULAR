@@ -347,7 +347,7 @@ def _est_une_commande(suite: str) -> bool:
 #: La liste etait la faute. `A_FAIRE.md` et `USAGE.md` etaient gardes ; les deux
 #: commandes du chemin Mac -- `ios/README.md` et l'etape 2 d'`A_FAIRE.md` --
 #: clonaient sans `-b` et personne ne les regardait. Un depot se parcourt.
-def _tous_les_documents() -> list[pathlib.Path]:
+def _tous_les_documents() -> list[Path]:
     return [chemin for chemin in sorted(ROOT.rglob("*.md"))
             if ".git" not in chemin.parts and "node_modules" not in chemin.parts]
 
