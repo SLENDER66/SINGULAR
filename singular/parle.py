@@ -148,8 +148,9 @@ class Quota:
         exactement la faute deja payee sur le journal -- deux verdicts
         simultanes acceptes -- transposee a son argent.
 
-        Un fichier verrou plutot que `fcntl` ou `msvcrt` : il est sur Windows,
-        et une garde qui ne marche que sur la machine du developpeur n'est pas
+        Un fichier verrou plutot que `fcntl` ou `msvcrt` : le meme code tourne
+        sur son Mac, sur son telephone dans a-Shell, et tournait sur son PC
+        Windows. Une garde qui ne marche que sur une de ces machines n'est pas
         une garde. Un verrou plus vieux que `VERROU_PERIME` est repris : un
         processus tue en le tenant condamnerait l'outil pour toujours, et
         aucune ecriture ici ne dure plus d'un battement de cil.
@@ -383,17 +384,25 @@ def etat_de_la_faculte() -> tuple[bool, str]:
     """La conversation est-elle allumee, et sinon pourquoi -- en une phrase.
 
     Existe pour etre affichee au demarrage du Sage. La cle se met dans la
-    fenetre ou l'on lance le serveur, avant de le lancer, et la commande n'est
-    pas la meme en `cmd` et en PowerShell : l'oubli est silencieux, et il ne se
-    decouvre qu'une fois le telephone en main, loin du clavier.
+    fenetre ou l'on lance le serveur, **avant** de le lancer : un serveur deja
+    demarre ne la verra jamais. L'oubli est silencieux, et il ne se decouvre
+    qu'une fois le telephone en main, loin du clavier.
+
+    La phrase donne donc la commande. Elle ne la donnait pas : elle nommait la
+    variable et s'arretait la, en expliquant en commentaire que « la commande
+    n'est pas la meme en cmd et en PowerShell » -- ce qui etait vrai du PC
+    Windows, machine principale jusqu'au 10 septembre 2026. Son terminal est
+    `zsh` depuis, il n'y en a plus qu'une, et la taire coutait un aller-retour a
+    chaque fois.
 
     Le Sage ne peut pas ecrire ce diagnostic lui-meme : `test_sage_independence`
     lui interdit jusqu'au nom d'une variable de cle. La phrase vient donc d'ici,
     ou elle a le droit d'exister.
     """
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        return False, ("conversation coupee   aucune cle dans ANTHROPIC_API_KEY "
-                       "-- le bouton le dira aussi")
+        return False, ("conversation coupee   aucune cle dans ANTHROPIC_API_KEY.\n"
+                       "                        Dans cette fenetre, avant de relancer :\n"
+                       "                        export ANTHROPIC_API_KEY=\"sk-ant-...\"")
     try:
         _sdk()
     except AnalyseIndisponible as coupee:

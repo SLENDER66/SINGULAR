@@ -6,9 +6,11 @@ Safari donne une icône, le plein écran et, depuis iOS 16.4, les notifications 
 sans rien de tout ça.
 
 Pourquoi la bibliothèque standard et pas un framework : ce serveur doit démarrer
-sur un PC Windows où rien n'est installé, avec une seule commande et zéro
-`pip install`. Un outil qui demande une installation avant de servir est un
-outil qu'on n'ouvre pas.
+sur une machine où rien n'est installé, avec une seule commande et zéro
+`pip install`. C'était un PC Windows jusqu'au 10 septembre 2026, c'est un Mac
+depuis, et c'est aussi a-Shell sur l'iPhone -- la contrainte n'a pas bougé en
+changeant de machine, et c'est bien pour ça qu'elle est tenue ainsi. Un outil
+qui demande une installation avant de servir est un outil qu'on n'ouvre pas.
 
 Ce serveur lit et écrit le journal. Il n'importe rien de la frontière
 d'exécution -- un test le vérifie -- de sorte qu'aucune requête HTTP ne peut
@@ -109,18 +111,20 @@ def _restreindre(path: Path) -> None:
     """Le jeton n'est lisible que par son propriétaire.
 
     Il était créé en 0644, comme tout fichier écrit sans le dire. Sur le PC
-    Windows d'un utilisateur unique, ça ne changeait rien -- et c'est pour ça
-    que personne ne l'avait vu. Le cœur tourne désormais aussi sur le téléphone
-    et sur des machines multi-utilisateurs, où « lisible par tout le monde »
-    veut dire ce qu'il dit : la clé du journal personnel, en clair, à côté de
-    lui.
+    Windows d'un utilisateur unique -- la machine principale jusqu'au
+    10 septembre 2026 -- ça ne changeait rien, et c'est pour ça que personne ne
+    l'avait vu. Le cœur tourne désormais sur un Mac, sur le téléphone, et sur
+    des machines multi-utilisateurs où « lisible par tout le monde » veut dire
+    ce qu'il dit : la clé du journal personnel, en clair, à côté de lui.
 
     Un fichier déjà écrit est resserré au passage : sinon la correction ne
     protégerait que les installations neuves, c'est-à-dire personne.
 
-    Sur Windows, `chmod` ne sait poser que le bit lecture seule. L'échec n'est
-    donc pas une panne, et il ne doit pas empêcher le Sage de démarrer -- un
-    journal qu'on ne peut pas ouvrir serait pire que le défaut qu'on corrige.
+    Sur macOS le mode est honoré tel quel -- vérifié, le fichier sort en 0600.
+    Ailleurs il peut ne pas l'être : Windows ne sait poser que le bit lecture
+    seule. L'échec n'est donc pas une panne et ne doit pas empêcher le Sage de
+    démarrer -- un journal qu'on ne peut pas ouvrir serait pire que le défaut
+    qu'on corrige.
     """
     try:
         path.chmod(0o600)
@@ -294,7 +298,7 @@ class SageApp:
 
         Le chemin est pose ici, en dehors de `items` et de `report` : c'est
         exactement ce que `contexte_pour_analyse` recopie, et le chemin porte
-        son nom d'utilisateur Windows. Il s'affiche chez lui, il ne part pas.
+        son nom d'utilisateur. Il s'affiche chez lui, il ne part pas.
         `test_ce_qui_part.py` le verifie.
         """
         return {**build_notice(self.journal).as_dict(), "journal": str(self.journal.path)}
@@ -928,9 +932,9 @@ def serve(*, db: str | Path = DEFAULT_PATH, host: str = "127.0.0.1", port: int =
         print("\n  Pour y accéder depuis ton iPhone : relance avec --lan")
     # L'etat de la conversation, au demarrage plutot qu'au moment ou il appuie.
     # Une cle oubliee ne se voit qu'une fois le telephone en main, loin du
-    # clavier -- et la commande qui la pose n'est pas la meme en `cmd` et en
-    # PowerShell. La phrase vient de la faculte : ici, on n'a pas le droit
-    # d'ecrire le nom d'une variable de cle, et un test le verifie.
+    # clavier. La phrase vient de la faculte, et elle donne la commande : ici,
+    # on n'a pas le droit d'ecrire le nom d'une variable de cle, et un test le
+    # verifie.
     from ..parle import etat_de_la_faculte  # importe ici : le Sage marche sans
 
     print(f"\n  {etat_de_la_faculte()[1]}")

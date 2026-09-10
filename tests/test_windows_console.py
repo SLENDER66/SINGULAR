@@ -29,6 +29,7 @@ from __future__ import annotations
 import ast
 import io
 import pathlib
+import re
 
 import pytest
 
@@ -119,3 +120,39 @@ def test_the_guard_is_installed_and_does_not_explode(capsys) -> None:
     _survive_narrow_consoles()
     print("accentué : décision, résolue, échéance")
     assert "décision" in capsys.readouterr().out
+
+
+def test_aucune_source_n_affirme_qu_il_est_sur_windows() -> None:
+    """Le code portait des justifications que le changement de machine a rendues fausses.
+
+    « Ce serveur doit démarrer sur un PC Windows où rien n'est installé », « il
+    est sur Windows », « son nom d'utilisateur Windows » : trois affirmations
+    dans les modules, vraies jusqu'au 10 septembre 2026 et fausses depuis. Les
+    documents avaient été traduits ce jour-là, pas le code.
+
+    Une phrase fausse dans un commentaire ne casse rien et se lit avec autorité :
+    la prochaine session la croit, et corrige le code pour lui correspondre.
+    C'est la forme de bug que `PROMPT_NOUVELLE_CONVERSATION.md` demande de
+    retenir plutôt que le bug lui-même.
+
+    Parler de Windows reste permis -- `chmod`, `os.replace`, cp850 s'y
+    comportent autrement, et c'est une raison légitime d'écrire portable. Ce qui
+    est refusé est de dire que **c'est sa machine**.
+    """
+    fautes = []
+    for relative in SPEAKS_TO_THE_CONSOLE + ["singular/sage/server.py", "singular/parle.py"]:
+        chemin = ROOT / relative
+        if not chemin.exists():
+            continue
+        texte = re.sub(r"\s*\n\s*#?\s*", " ", chemin.read_text(encoding="utf-8"))
+        for affirmation in ("il est sur Windows", "sur un PC Windows où rien",
+                            "son nom d'utilisateur Windows", "qui est son terminal",
+                            "en `cmd` et en PowerShell"):
+            if affirmation in texte:
+                fautes.append(f"{relative} : « {affirmation} »")
+
+    assert not fautes, (
+        "ces sources affirment encore qu'il est sur Windows :\n  " + "\n  ".join(fautes)
+        + "\n  Sa machine est un Mac depuis le 10 septembre 2026. Parler de "
+        "Windows pour justifier du code portable reste permis ; dire que c'est "
+        "sa machine, non.")

@@ -428,7 +428,7 @@ def cmd_export(journal: DecisionJournal, args) -> int:
     ligne ecrite a la main pour le cas vide avait deux colonnes de retard.
 
     `lineterminator="\n"` parce que la sortie part dans une console : le module
-    csv ecrit `\r\n`, et Windows retraduit le `\n` en `\r\n`, ce qui donne
+    csv ecrit `\r\n`, et une console Windows retraduit le `\n` en `\r\n`, ce qui donne
     `\r\r\n` et une ligne blanche entre chaque decision dans le tableur. En
     laissant la console faire la traduction, le fichier est juste des deux
     cotes.
@@ -684,10 +684,12 @@ def build_parser() -> argparse.ArgumentParser:
 def _survive_narrow_consoles() -> None:
     """Ne jamais planter parce qu'un caractère ne rentre pas dans la console.
 
-    La console de Windows écrit dans la page de code du système -- cp850 en
-    France -- et Python lève `UnicodeEncodeError` sur ce qu'elle ne sait pas
-    représenter. Cela suffit à interrompre une commande au moment d'afficher
-    son résultat.
+    Une console qui n'écrit pas en UTF-8 -- celle de Windows, cp850 en France --
+    fait lever `UnicodeEncodeError` à Python sur ce qu'elle ne sait pas
+    représenter. Cela suffit à interrompre une commande au moment d'afficher son
+    résultat. Le Terminal du Mac, machine principale depuis le 10 septembre
+    2026, n'a pas ce défaut ; la tolérance ci-dessous reste parce qu'elle ne
+    coûte rien et qu'elle protège aussi ses propres mots.
 
     Les messages de ce fichier sont tenus dans ce que cp850 accepte, et un
     test le vérifie. Mais le journal contient tes mots, pas les miens : un

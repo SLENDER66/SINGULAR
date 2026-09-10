@@ -20,7 +20,10 @@ exactement ce que le journal accepte : deux ecritures d'une meme regle
 finissent par diverger, et celle qui se tromperait lui ferait perdre sa
 saisie.
 
-Les messages passent par la console de Windows : `test_windows_console.py`
+Les messages restent dans ce que cp850 accepte -- une contrainte du PC Windows,
+gardee volontairement apres le passage au Mac parce qu'elle ne coute rien et que
+le chemin iPhone n'a jamais ete mesure. La raison est ecrite en tete de
+`test_windows_console.py`, qui
 scanne ce fichier, et refuse un caractere qu'elle ne sait pas afficher.
 """
 from __future__ import annotations
@@ -35,7 +38,9 @@ def nombre(brut: object) -> float:
     vient naturellement, et le clavier iOS insere une espace fine insecable
     comme separateur de milliers -- invisible a l'oeil, fatale a `float()`.
     Toutes les espaces sont retirees par ce qu'elles sont, sans en nommer
-    aucune : la console de Windows ne sait pas ecrire la fine insecable.
+    aucune : cp850 ne sait pas ecrire la fine insecable, et la sortie y reste
+    -- voir l'en-tete de `test_windows_console.py` pour pourquoi la regle
+    survit au changement de machine.
     """
     texte = "".join(c for c in str(brut) if not c.isspace()).replace(",", ".")
     try:
