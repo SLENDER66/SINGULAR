@@ -156,7 +156,7 @@ def introuvable(entry_id: str) -> str:
     `repr` d'une cle absente, qui n'explique rien a quelqu'un qui vient de
     taper de travers.
     """
-    return f"{entry_id} n'est dans aucune ligne de ce journal (python -m singular list)."
+    return f"{entry_id} n'est dans aucune ligne de ce journal (python3 -m singular list)."
 
 
 __all__ = ["CONFLIT", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",

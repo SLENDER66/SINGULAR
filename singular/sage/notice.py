@@ -125,7 +125,7 @@ def _chain_item(report: dict[str, Any]) -> NoticeItem | None:
         "La chaîne du journal est rompue",
         "Une prédiction a été modifiée ou supprimée après coup. Tant que c'est vrai, "
         "aucune statistique de cette page ne vaut : elles portent sur un passé qui a été réécrit.",
-        action="python -m singular export  puis compare avec ce que tu croyais avoir écrit",
+        action="python3 -m singular export  puis compare avec ce que tu croyais avoir écrit",
     )
 
 

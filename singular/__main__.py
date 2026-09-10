@@ -1,11 +1,11 @@
 """Command line for the decision journal.
 
-    python -m singular add        record a decision before acting on it
-    python -m singular due        decisions whose horizon has passed
-    python -m singular resolve    record what actually happened
-    python -m singular review     where your hours went, where you are wrong
-    python -m singular list       everything
-    python -m singular sage       the same journal as an app, installable on a phone
+    python3 -m singular add        record a decision before acting on it
+    python3 -m singular due        decisions whose horizon has passed
+    python3 -m singular resolve    record what actually happened
+    python3 -m singular review     where your hours went, where you are wrong
+    python3 -m singular list       everything
+    python3 -m singular sage       the same journal as an app, installable on a phone
 
 A tool that takes more than thirty seconds to use is a tool you stop using, so
 `add` asks six questions and nothing else.
@@ -379,7 +379,7 @@ def _vide(journal: DecisionJournal) -> str:
     l'on a cherché coûte une ligne et rend la confusion impossible à rater.
     """
     return (f"\n  Journal vide : {journal.path}\n"
-            "  `python -m singular add` pour commencer.\n")
+            "  `python3 -m singular add` pour commencer.\n")
 
 
 def cmd_status(journal: DecisionJournal, args) -> int:
@@ -462,7 +462,7 @@ def cmd_due(journal: DecisionJournal, args) -> int:
         marker = _colour(f"+{late}j", RED if late > _notice.LATE_DAYS else YELLOW)
         print(f"  {_colour(entry.entry_id, BOLD)}  {marker:>12}  {entry.title}")
         print(_colour(f"      attendu : {entry.predicted}  ({entry.probability:.0%}, {entry.cost_hours:g}h, {entry.tier.value.lower()})", DIM))
-    print(_colour(f"\n  python -m singular resolve {pending[0].entry_id} --yes|--no\n", DIM))
+    print(_colour(f"\n  python3 -m singular resolve {pending[0].entry_id} --yes|--no\n", DIM))
     return 0
 
 

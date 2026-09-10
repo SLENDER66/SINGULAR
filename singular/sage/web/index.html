@@ -40,7 +40,7 @@
   <section id="unlock" class="unlock" hidden>
     <h2>Cette app a besoin de ta clé d'accès</h2>
     <p>Elle protège ton journal des autres appareils du wifi. Colle ici
-       l'adresse complète affichée par <code>python -m singular sage --lan</code>,
+       l'adresse complète affichée par <code>python3 -m singular sage --lan</code>,
        celle qui contient <code>?k=</code>.</p>
     <form id="unlock-form">
       <input id="unlock-input" type="text" inputmode="url" autocapitalize="off"
@@ -101,7 +101,7 @@
     </label>
 
     <!-- Ce qui quitte le téléphone, lisible avant de partir. Même contenu que
-         « python -m singular offres --blanc » au clavier : il a le droit de
+         « python3 -m singular offres --blanc » au clavier : il a le droit de
          relire ce qui est dit de lui. -->
     <details id="offres-contexte-bloc">
       <summary>Ce qui part de ton téléphone</summary>

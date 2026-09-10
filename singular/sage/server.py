@@ -465,7 +465,7 @@ class SageApp:
                 raise SageError(
                     HTTPStatus.TOO_MANY_REQUESTS,
                     "le plafond de réponses du jour est atteint. Demain, ou depuis "
-                    "le clavier avec « python -m singular parle ».",
+                    "le clavier avec « python3 -m singular parle ».",
                 )
             # Le fil est relu du disque a chaque tour : la ligne de commande
             # ecrit le meme fichier, et repartir de ce qu'on avait en memoire
@@ -497,7 +497,7 @@ class SageApp:
 
         Le contexte est rendu en entier parce qu'il parle de lui : il a le
         droit de lire ce qui quitte sa machine avant que ça la quitte, et
-        `python -m singular offres --blanc` le lui montre déjà au clavier.
+        `python3 -m singular offres --blanc` le lui montre déjà au clavier.
         """
         RECHERCHES_MAX, apercu = _faculte_offres("RECHERCHES_MAX", "apercu")
         from ..parle import PLAFOND_PAR_JOUR, Quota, bilan, phrase_de_bilan
@@ -560,7 +560,7 @@ class SageApp:
                 raise SageError(
                     HTTPStatus.TOO_MANY_REQUESTS,
                     "le plafond du jour est atteint. Demain, ou depuis le clavier "
-                    "avec « python -m singular offres ».",
+                    "avec « python3 -m singular offres ».",
                 )
             try:
                 texte, cout = chercher(precision)

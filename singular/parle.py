@@ -138,7 +138,7 @@ class Quota:
         """Un seul ecrivain a la fois. Lire puis ecrire n'est pas atomique.
 
         Le serveur du Sage et la ligne de commande ecrivent le meme fichier :
-        une reponse depuis le telephone pendant un `python -m singular parle`
+        une reponse depuis le telephone pendant un `python3 -m singular parle`
         au clavier, et les deux lisaient le meme total avant d'ecrire chacun le
         sien. Mesure, pas suppose -- huit processus, quarante depenses, vingt
         et une perdues et neuf plantages.
@@ -254,7 +254,7 @@ class Quota:
             if deja >= self.plafond:
                 raise PlafondAtteint(
                     f"{self.plafond} reponses aujourd'hui, c'est le plafond. "
-                    "Demain, ou depuis le clavier avec `python -m singular parle`."
+                    "Demain, ou depuis le clavier avec `python3 -m singular parle`."
                 )
 
             jetons = self._cumuler(donnees.get("jetons", {}), cout, modele)
@@ -496,7 +496,7 @@ INSTRUCTION = INSTRUCTION_ANALYSE + """
 
 Tu es maintenant dans une conversation, pas dans un rapport. Reponds a ce
 qu'il demande, brievement. S'il te demande d'enregistrer une decision, dis-lui
-la commande -- `python -m singular add` -- au lieu de pretendre l'avoir fait :
+la commande -- `python3 -m singular add` -- au lieu de pretendre l'avoir fait :
 tu n'as aucun moyen d'ecrire dans son journal, et faire semblant serait le
 pire service possible.
 """

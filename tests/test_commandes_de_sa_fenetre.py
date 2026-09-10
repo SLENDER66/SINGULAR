@@ -22,6 +22,7 @@ et lui a dû changer de camp.
 """
 from __future__ import annotations
 
+import ast
 import pathlib
 import re
 
@@ -89,3 +90,80 @@ def test_aucune_commande_ne_pose_une_variable_a_la_facon_de_cmd() -> None:
     assert not fautes, (
         "ces lignes posent une variable à la façon de `cmd`, sans le dire :\n  "
         + "\n  ".join(fautes))
+
+
+# --- ce que le programme lui donne a taper -----------------------------------
+
+#: `python` sans le 3, suivi de ce qui en fait une commande.
+#:
+#: La regle etait ecrite pour les documents et pas pour le programme. Sur le
+#: tout premier ecran d'une machine neuve -- « Journal vide » -- il lisait
+#: « `python -m singular add` pour commencer », et `python` seul n'existe plus
+#: depuis macOS 12.3 : « command not found », sur la premiere commande de sa
+#: premiere journee.
+PYTHON_NU = re.compile(r"(?<!3)\bpython (?=-m|tools/|proto/|examples/)")
+
+#: Ce que le programme affiche, ou envoie a l'ecran du telephone.
+AFFICHE_PAR_LE_PROGRAMME = [
+    *sorted((RACINE / "singular").rglob("*.py")),
+    *sorted((RACINE / "proto").rglob("*.py")),
+    RACINE / "singular/sage/web/index.html",
+    RACINE / "singular/sage/web/app.js",
+]
+
+
+def _messages(chemin: pathlib.Path) -> list[tuple[int, str]]:
+    """Les chaines affichees. Docstrings exclues : elles ne sortent pas a l'ecran.
+
+    Meme decoupage que `test_windows_console.py`, et pour la meme raison : une
+    docstring qui raconte l'histoire d'une commande n'est pas une commande
+    donnee a taper, et la confondre ferait crier au loup.
+    """
+    if chemin.suffix != ".py":
+        lignes = chemin.read_text(encoding="utf-8").splitlines()
+        return [(numero + 1, ligne) for numero, ligne in enumerate(lignes)
+                if PYTHON_NU.search(ligne)]
+
+    arbre = ast.parse(chemin.read_text(encoding="utf-8"))
+    docstrings = set()
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            premier = noeud.body[0] if noeud.body else None
+            if isinstance(premier, ast.Expr) and isinstance(premier.value, ast.Constant) \
+                    and isinstance(premier.value.value, str):
+                docstrings.add(id(premier.value))
+    return [(noeud.lineno, noeud.value) for noeud in ast.walk(arbre)
+            if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)
+            and id(noeud) not in docstrings and PYTHON_NU.search(noeud.value)]
+
+
+def test_aucun_message_ne_lui_donne_python_sans_le_trois() -> None:
+    fautes = [f"{chemin.relative_to(RACINE)}:{numero} — {' '.join(str(texte).split())[:70]}"
+              for chemin in AFFICHE_PAR_LE_PROGRAMME
+              for numero, texte in _messages(chemin)]
+
+    assert not fautes, (
+        "ces messages lui donnent `python` a taper :\n  " + "\n  ".join(fautes)
+        + "\n  Depuis macOS 12.3 la commande n'existe plus : elle rend "
+        "« command not found », ce qui ressemble a un outil casse.")
+
+
+def test_le_scan_lit_bien_les_messages() -> None:
+    """Le temoin : un analyseur qui ne trouve rien passerait au vert.
+
+    Il verifie aussi les deux versants du decoupage -- un message est vu, une
+    docstring ne l'est pas -- parce que c'est la seule chose qui distingue ce
+    test d'un `grep`.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as dossier:
+        faux = pathlib.Path(dossier) / "faux.py"
+        faux.write_text('"""Voir python -m singular add pour l\'histoire."""\n'
+                        'def dire():\n'
+                        '    print("tape python -m singular add")\n', encoding="utf-8")
+        trouves = _messages(faux)
+
+    assert len(trouves) == 1, f"un message, pas la docstring : {trouves}"
+    assert "tape python -m" in trouves[0][1]
+    assert len(AFFICHE_PAR_LE_PROGRAMME) > 10

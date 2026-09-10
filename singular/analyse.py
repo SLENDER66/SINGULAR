@@ -21,7 +21,7 @@ Cette faculté n'a aucune écriture, et c'est structurel, pas une consigne dans
 un prompt.
 
 **Elle dit ce qu'elle envoie.** `contexte_pour_analyse()` rend exactement le
-texte qui quittera la machine, et `python -m singular analyse --blanc`
+texte qui quittera la machine, et `python3 -m singular analyse --blanc`
 l'affiche sans rien envoyer. Un outil qui expédie le journal intime de
 quelqu'un vers un service distant doit pouvoir montrer quoi, avant, et pas
 sur parole.
@@ -147,7 +147,7 @@ def _sdk():
     except ImportError:
         raise AnalyseIndisponible(
             "le paquet « anthropic » n'est pas installe. "
-            "python -m pip install -e \".[analyse]\" -- ou laisse la faculte coupee."
+            "python3 -m pip install -e \".[analyse]\" -- ou laisse la faculte coupee."
         ) from None
     return anthropic
 
