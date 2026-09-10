@@ -240,3 +240,25 @@ def test_le_bloc_ne_classe_pas_un_genre_d_offre_avant_l_autre() -> None:
     # l'autre » a propos des deux CV. Un test qui crie au loup finit desactive,
     # et c'est la troisieme fois aujourd'hui que la forme substring le fait.
     assert "poste et alternance" in texte or "postes et alternances" in texte
+
+
+def test_le_bloc_ne_laisse_pas_recoller_deux_journaux() -> None:
+    """La faute la plus couteuse qu'une prochaine session puisse lui proposer.
+
+    Son journal est sur une machine hors de portee, il ecrit sur l'autre en
+    attendant, et les deux devront se rejoindre. Recoller deux bases ligne a
+    ligne rompt la chaine pour toujours -- mesure dans
+    `tests/test_deux_journaux.py`. Une session qui ne le sait pas proposera
+    exactement ca : c'est le geste evident.
+
+    Le bloc doit donc porter la commande qui le fait proprement, et l'avertir.
+    """
+    depot = (RACINE / "singular" / "journal.py").read_text(encoding="utf-8")
+    assert "def import_from" in depot, (
+        "la reprise a disparu du journal : le conseil du bloc n'a plus d'objet")
+
+    texte = PROMPT.read_text(encoding="utf-8")
+    assert "singular import" in texte, (
+        "le bloc ne nomme pas `import` : la prochaine session proposera de "
+        "recopier des lignes d'une base dans l'autre, ce qui rompt la chaine")
+    assert "recopier des lignes" in texte, "et l'avertissement doit y etre aussi"

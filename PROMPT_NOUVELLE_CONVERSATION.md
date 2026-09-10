@@ -216,10 +216,21 @@ une commande Windows qui aurait survécu quelque part est un reste, et elle est
 fausse. `tests/test_prompt_de_reprise.py` en tient la liste et fait échouer ce
 fichier si l'une d'elles y revient.
 
-**Mon journal était sur le PC, et je ne t'ai pas dit si je l'ai copié.**
-`~/.singular/journal.db` porte trois mois de décisions chaînées qu'aucune
-session ne reconstruit. `A_FAIRE.md` ouvre sur ce geste et sur la façon de le
-vérifier. Demande-le-moi avant de te fier à ce que le journal affiche : un
+**Mon journal est resté sur le PC, et je n'ai pas accès au PC.** Je ne sais pas
+quand je l'aurai. `~/.singular/journal.db` porte trois mois de décisions
+chaînées qu'aucune session ne reconstruit, et le téléphone n'en a pas de copie —
+je n'ai jamais lancé SINGULAR dans a-Shell.
+
+Ce que ça implique, et c'est déjà réglé côté code : **j'écris sur le Mac en
+attendant, et je reprendrai l'ancien journal le jour où je l'aurai.**
+`python3 -m singular import <ancien.db>` ajoute un journal à la suite d'un
+autre sans rien réécrire — les entrées d'ici gardent leur empreinte, celles
+qu'on reprend sont resignées et gardent la leur écrite à côté. Recoller deux
+bases ligne à ligne, en revanche, rompt la chaîne définitivement :
+`tests/test_deux_journaux.py` le mesure.
+
+Donc : **ne me propose pas de recopier des lignes d'une base dans l'autre**, et
+demande-moi où j'en suis avant de te fier à ce que le journal affiche. Un
 journal neuf et un journal absent donnent le même écran.
 
 Limite du chemin actuel : il faut que la machine tourne et que je sois sur mon
@@ -528,8 +539,8 @@ d'une même erreur, écrire le test au lieu de corriger.
 
 ## Ce que je dois faire moi-même
 
-Voir `A_FAIRE.md`. En résumé : copier mon journal du PC au Mac si ce n'est pas
-fait, ouvrir l'app le matin, et **trancher le 20 septembre**. Le reste attend
-ce que l'usage montrera.
+Voir `A_FAIRE.md`. En résumé : récupérer mon journal quand le PC sera de nouveau
+accessible et le reprendre avec `import`, ouvrir l'app le matin, et **trancher
+le 20 septembre**. Le reste attend ce que l'usage montrera.
 
 ---
