@@ -140,9 +140,15 @@ def test_la_commande_de_copie_extrait_bien_le_bloc() -> None:
     attendu = "\n".join(lignes[traits[0] + 1:traits[1]]).strip()
 
     entete = "\n".join(lignes[:traits[0]])
-    assert "pbcopy" in entete, "la commande de copie a disparu de l'en-tête"
-    assert "sed -n '/^---$/,/^---$/p'" in entete, "le découpage n'est plus celui-ci"
-    assert "sed '1d;$d'" in entete, "les deux traits eux-mêmes doivent être retirés"
+    assert entete.count("pbcopy") == 2, (
+        "il faut les deux commandes de copie : celle qui marche sans clone, et "
+        "celle du dépôt cloné. La première a été écrite en supposant un clone "
+        "qu'il n'avait pas.")
+    assert entete.count("sed -n '/^---$/,/^---$/p'") == 2, "le découpage n'est plus celui-ci"
+    assert entete.count("sed '1d;$d'") == 2, "les deux traits eux-mêmes doivent être retirés"
+    assert "raw.githubusercontent.com" in entete, (
+        "la commande sans clone a disparu : c'est la seule qui marche sur une "
+        "machine neuve, et c'est le cas qui s'est presenté")
 
     # Ce que la commande produirait, rejoué ici.
     debut = next(i for i, ligne in enumerate(lignes) if ligne.strip() == "---")
@@ -152,3 +158,32 @@ def test_la_commande_de_copie_extrait_bien_le_bloc() -> None:
     assert produit == attendu
     assert "POUR QUI TU TRAVAILLES" in produit, "les règles doivent être dans le bloc"
     assert "Ce que je dois faire moi-même" in produit, "et la dernière section aussi"
+
+
+def test_l_adresse_brute_nomme_la_branche_de_travail() -> None:
+    """Une URL brute pointe une branche, et la mauvaise donnerait un mandat perime.
+
+    C'est le meme defaut que le `git clone` sans `-b`, a un endroit que le
+    garde-fou des clones ne voit pas : ce n'est pas une commande de clonage.
+    """
+    import sys
+
+    sys.path.insert(0, str(RACINE / "tools"))
+    try:
+        from check_repo_state import declared_work_branch
+    finally:
+        sys.path.pop(0)
+
+    travail = declared_work_branch((RACINE / "CLAUDE.md").read_text(encoding="utf-8"))
+    entete = PROMPT.read_text(encoding="utf-8").split("\n---\n")[0]
+    # Le nom de branche contient une barre oblique : s'arreter a la premiere
+    # rendait « claude ». Le fichier vise sert de borne.
+    adresses = re.findall(
+        r"raw\.githubusercontent\.com/[^/]+/[^/]+/(.+?)/PROMPT_NOUVELLE_CONVERSATION\.md",
+        entete)
+
+    assert adresses, "plus aucune adresse brute dans l'en-tete"
+    for branche in adresses:
+        assert branche == travail, (
+            f"l'adresse brute pointe « {branche} », le mandat declare « {travail} » : "
+            "il collerait un prompt d'une autre branche")

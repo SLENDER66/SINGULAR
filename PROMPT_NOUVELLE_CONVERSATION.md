@@ -1,16 +1,25 @@
 # Prompt de reprise — à copier/coller dans une nouvelle conversation
 
-Colle **uniquement le bloc entre les deux traits**. Sur le Mac, une commande
-le met dans le presse-papiers sans que tu aies à sélectionner quoi que ce soit :
+Colle **uniquement le bloc entre les deux traits**. Il fait environ cinq cents
+lignes : le sélectionner à la main est le genre de geste où l'on en oublie un
+bout, et un prompt tronqué ne se remarque qu'après coup. Une commande le met
+dans le presse-papiers.
+
+**Sans rien avoir installé, sans clone.** `curl` est sur tous les Mac :
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/SLENDER66/SINGULAR/claude/decision-companion-rebuild-3k25h3/PROMPT_NOUVELLE_CONVERSATION.md \
+  | sed -n '/^---$/,/^---$/p' | sed '1d;$d' | pbcopy
+```
+
+**Avec le dépôt cloné**, si tu l'as :
 
 ```sh
 cd ~/Documents/SINGULAR
 sed -n '/^---$/,/^---$/p' PROMPT_NOUVELLE_CONVERSATION.md | sed '1d;$d' | pbcopy
 ```
 
-Puis Cmd+V dans la nouvelle conversation. Le bloc fait environ cinq cents
-lignes : le sélectionner à la main est le genre de geste où l'on en oublie un
-bout, et un prompt tronqué se remarque tard.
+Puis Cmd+V dans la nouvelle conversation.
 
 Les deux sections de règles y sont recopiées **en entier**, à ma demande du
 10 septembre 2026. Elles sont aussi dans `CLAUDE.md`, que Claude lit tout seul
