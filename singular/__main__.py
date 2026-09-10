@@ -70,7 +70,7 @@ def _ask(prompt: str, *, cast=str, default=None, validate=None):
 def _tier_prompt() -> Tier:
     print(_colour("\n  Quel rang de la constitution ? (Stabilité > Revenus > ... > Liberté)", DIM))
     for tier in Tier:
-        print(f"    {tier.rank}. {tier.value.title()}")
+        print(f"    {tier.rank}. {tier.label}")
     index = _ask("  Rang", cast=int, default=2, validate=lambda v: None if 1 <= v <= len(Tier) else (_ for _ in ()).throw(ValueError("1 à 6")))
     return list(Tier)[index - 1]
 
@@ -461,7 +461,7 @@ def cmd_due(journal: DecisionJournal, args) -> int:
         # se lit dans le moteur, il ne se recopie pas ici.
         marker = _colour(f"+{late}j", RED if late > _notice.LATE_DAYS else YELLOW)
         print(f"  {_colour(entry.entry_id, BOLD)}  {marker:>12}  {entry.title}")
-        print(_colour(f"      attendu : {entry.predicted}  ({entry.probability:.0%}, {entry.cost_hours:g}h, {entry.tier.value.lower()})", DIM))
+        print(_colour(f"      attendu : {entry.predicted}  ({entry.probability:.0%}, {entry.cost_hours:g}h, {entry.tier.label.lower()})", DIM))
     print(_colour(f"\n  python3 -m singular resolve {pending[0].entry_id} --yes|--no\n", DIM))
     return 0
 
@@ -498,7 +498,7 @@ def cmd_list(journal: DecisionJournal, args) -> int:
             Status.ABANDONED: _colour("abandonné", DIM),
         }[entry.status]
         print(f"  {entry.entry_id}  {state:>18}  {entry.probability:.0%}  {entry.cost_hours:>5g}h  "
-              f"{entry.tier.value.lower():<13} {entry.title}")
+              f"{entry.tier.label.lower():<13} {entry.title}")
     print()
     return 0
 
@@ -569,10 +569,10 @@ def cmd_review(journal: DecisionJournal, args) -> int:
     for tier in Tier:
         stats = report["by_tier"].get(tier.value)
         if not stats:
-            print(_colour(f"  {tier.value.lower():<16}{'-':>10}{'-':>9}{'-':>12}{'-':>14}{'-':>10}", DIM))
+            print(_colour(f"  {tier.label.lower():<16}{'-':>10}{'-':>9}{'-':>12}{'-':>14}{'-':>10}", DIM))
             continue
         hit = f"{stats['hit_rate']:.0%}" if stats["hit_rate"] is not None else "-"
-        line = (f"  {tier.value.lower():<16}{stats['decisions']:>10}{stats['hours']:>8g}h"
+        line = (f"  {tier.label.lower():<16}{stats['decisions']:>10}{stats['hours']:>8g}h"
                 f"{stats['hours_that_worked']:>11g}h{stats['hours_unresolved']:>13g}h{hit:>10}")
         print(line)
 
