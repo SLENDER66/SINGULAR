@@ -305,7 +305,9 @@ ouvert Xcode. Le projet Xcode est maintenant dans le dépôt : il n'y a plus rie
 L'ordre compte :
 
 1. Installer Xcode depuis l'App Store.
-2. `git clone` du dépôt, puis `open SINGULAR/ios/SingularSage.xcodeproj`.
+2. Cloner **en précisant la branche** — `git clone -b claude/decision-companion-rebuild-3k25h3 …` — puis
+   `open SINGULAR/ios/SingularSage.xcodeproj`. Sans `-b`, tu prends la branche
+   par défaut, qui n'est pas toujours celle qui porte le travail.
    Si Xcode propose de « mettre à jour vers les réglages recommandés » :
    **refuse**. Ce sont les réglages que le projet fixe exprès.
 3. **`Cmd + U` avant tout le reste.** Les tests comparent le portage Swift au

@@ -323,3 +323,70 @@ def test_le_scan_lit_bien_des_branches() -> None:
     assert travail and len(nommees) >= 2, "le mandat doit nommer la branche de travail et la branche par defaut"
     trouvees = {branche for nom in DOCUMENTS for branche in NOM_DE_BRANCHE.findall(_read(nom))}
     assert travail in trouvees
+
+
+# --- tout clone nomme sa branche, dans tout le depot --------------------------
+
+#: Une commande de clonage, quel que soit l'outil : `git` sur le Mac et le PC,
+#: `lg2` dans a-Shell sur l'iPhone.
+CLONE = re.compile(r"\b(?:git|lg2)\s+clone\b([^\n`]*)")
+
+
+def _est_une_commande(suite: str) -> bool:
+    """Une commande a executer, et non une phrase qui parle du clonage.
+
+    Les deux documents expliquent la regle en toutes lettres -- « un `lg2 clone`
+    sans elle prend la branche par defaut ». Un test qui compte ces phrases
+    comme des fautes crie au loup, et un test qui crie au loup finit desactive.
+    Une commande porte l'adresse du depot, ou son `-b`.
+    """
+    return "github.com" in suite or "-b " in suite
+
+#: Tous les documents, et pas une liste tenue a la main.
+#:
+#: La liste etait la faute. `A_FAIRE.md` et `USAGE.md` etaient gardes ; les deux
+#: commandes du chemin Mac -- `ios/README.md` et l'etape 2 d'`A_FAIRE.md` --
+#: clonaient sans `-b` et personne ne les regardait. Un depot se parcourt.
+def _tous_les_documents() -> list[pathlib.Path]:
+    return [chemin for chemin in sorted(ROOT.rglob("*.md"))
+            if ".git" not in chemin.parts and "node_modules" not in chemin.parts]
+
+
+def test_tout_clone_nomme_la_branche_de_travail() -> None:
+    """Cloner sans `-b` prend la branche par defaut, qui n'est pas la bonne.
+
+    Elle est deja restee trente-neuf commits en arriere, et une seance entiere
+    est partie d'un depot sans le Sage et sans `ios/`. Le chemin Mac, celui qui
+    compile l'application native, clonait ainsi -- et compiler une version d'il
+    y a un mois ferait chercher des pannes deja corrigees.
+
+    `CHANGELOG.md` est exclu : il raconte l'histoire, dont d'anciennes branches,
+    et corriger le passe serait le reecrire.
+    """
+    travail, _ = _branche_declaree()
+    fautes = []
+    for chemin in _tous_les_documents():
+        relatif = chemin.relative_to(ROOT).as_posix()
+        if relatif == "CHANGELOG.md":
+            continue
+        texte = chemin.read_text(encoding="utf-8")
+        for trouve in CLONE.finditer(texte):
+            ligne = texte[:trouve.start()].count("\n") + 1
+            if not _est_une_commande(trouve.group(1)):
+                continue
+            if f"-b {travail}" not in trouve.group(1):
+                fautes.append(f"{relatif}:{ligne} clone sans nommer « {travail} »")
+
+    assert not fautes, (
+        "\n  ".join(fautes)
+        + f"\n  Ecris `clone -b {travail} ...` : sans `-b`, c'est la branche par "
+        "defaut qui arrive, et elle n'est pas toujours celle qui porte le travail."
+    )
+
+
+def test_le_scan_voit_bien_les_clones() -> None:
+    """Le temoin : sans clone trouve nulle part, le test ci-dessus est creux."""
+    trouves = [chemin.relative_to(ROOT).as_posix() for chemin in _tous_les_documents()
+               if CLONE.search(chemin.read_text(encoding="utf-8"))]
+    assert len(trouves) >= 3, f"trop peu de clones lus : {trouves}"
+    assert "ios/README.md" in trouves, "le chemin Mac doit etre couvert"

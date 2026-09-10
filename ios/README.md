@@ -37,9 +37,15 @@ Ouvre **Terminal** (Cmd+Espace, tape « Terminal ») et colle :
 
 ```bash
 cd ~/Documents
-git clone https://github.com/SLENDER66/SINGULAR.git
+git clone -b claude/decision-companion-rebuild-3k25h3 https://github.com/SLENDER66/SINGULAR.git
 open SINGULAR/ios/SingularSage.xcodeproj
 ```
+
+**`-b` n'est pas facultatif.** Sans lui, `git clone` prend la branche par
+défaut du dépôt, qui n'est pas toujours celle qui porte le travail : elle est
+déjà restée trente-neuf commits en arrière, et une séance entière est partie
+d'un dépôt sans le Sage et sans `ios/`. Compiler une version d'il y a un mois
+et m'envoyer ses erreurs ferait chercher des pannes déjà corrigées.
 
 Xcode s'ouvre sur le projet. Il n'y a rien à créer, rien à glisser, rien à
 cocher : le projet est dans le dépôt, avec ses deux cibles, ses dix fichiers
