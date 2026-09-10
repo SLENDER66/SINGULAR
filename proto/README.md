@@ -21,7 +21,7 @@ curl -O https://raw.githubusercontent.com/SLENDER66/SINGULAR/claude/decision-com
 Puis chaque matin, une seule ligne :
 
 ```sh
-python suivi_candidatures.py
+python3 suivi_candidatures.py
 ```
 
 Il affiche où tu en es, puis **une** action pour aujourd'hui. Puis un menu à un
@@ -42,16 +42,14 @@ téléchargement par `curl` et l'exécution du fichier seul sont testés dans mo
 environnement, mais qu'a-Shell fournisse bien `curl` et `python` ne l'est pas.
 Si l'une des deux lignes ne passe pas, envoie-moi le message d'erreur.
 
-## Sur le PC — si tu y as accès
+## Sur le Mac — si tu y as accès
 
-Appuie sur **Échap** avant de coller (PowerShell fusionne les lignes collées).
-
-```powershell
-cd $HOME\Documents\SINGULAR; python proto\suivi_candidatures.py
+```sh
+cd ~/Documents/SINGULAR && python3 proto/suivi_candidatures.py
 ```
 
-Tes données vont alors dans `C:\Users\Utilisateur\.singular\candidatures.json`,
-le même dossier que `journal.db`.
+Tes données vont alors dans `~/.singular/candidatures.json`, le même dossier
+que `journal.db`.
 
 **Les deux copies ne se parlent pas.** Le fichier du téléphone et celui du PC
 sont deux fichiers séparés : tiens-toi à un seul des deux, sinon tu auras deux
@@ -59,7 +57,7 @@ suivis divergents. Tant que le PC n'est pas accessible, c'est le téléphone.
 
 ## Le Sage, lui, a besoin du PC
 
-`python -m singular sage --lan` sert l'app web depuis le PC : sans PC allumé et
+`python3 -m singular sage --lan` sert l'app web depuis le PC : sans PC allumé et
 sans le même wifi, le Sage n'est pas joignable. Ce prototype-ci ne dépend pas
 de lui et fonctionne seul.
 

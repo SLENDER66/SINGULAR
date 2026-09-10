@@ -1,8 +1,57 @@
 # Ce que je dois faire moi-même
 
 Le Sage tourne et je m'en sers. Ce qui reste tient en deux gestes par
-semaine, un clic sur GitHub, plus une chose qui attend un Mac et ne bloque
-rien.
+semaine, un clic sur GitHub, plus la compilation de l'app native — qui
+attendait un Mac, et le Mac est là depuis le 10 septembre 2026.
+
+**Les commandes de ce fichier sont celles du Terminal du Mac (zsh).** Elles
+étaient en PowerShell : le PC Windows était la machine principale jusqu'à
+cette date.
+
+---
+
+## D'abord : ton journal est sur le PC, pas sur le Mac
+
+Le 10 septembre 2026, le Mac remplace le PC. Le code se reprend d'un `git
+clone` ; **ton journal, non**. Il vit dans `~/.singular/` et il est
+irremplaçable : trois mois de prédictions chaînées, qu'aucune session ne peut
+reconstruire.
+
+Sur le PC, ce dossier est `C:\Users\Utilisateur\.singular`. Copie-le sur une
+clé USB, un partage réseau, ce que tu veux, puis sur le Mac :
+
+```sh
+mkdir -p ~/.singular
+cp /Volumes/TA_CLE/.singular/journal.db        ~/.singular/
+cp /Volumes/TA_CLE/.singular/candidatures.json ~/.singular/
+cp /Volumes/TA_CLE/.singular/tarifs.json       ~/.singular/
+cp /Volumes/TA_CLE/.singular/parle_quota.json  ~/.singular/
+```
+
+Puis vérifie, avant de faire quoi que ce soit d'autre :
+
+```sh
+python3 -m singular review
+```
+
+Il doit afficher tes décisions, et **la chaîne doit être intacte** — si elle
+était rompue, la Notice le dirait en tête, en rouge. Le déplacement lui-même ne
+la casse pas : les empreintes signent le contenu des entrées, pas leur chemin.
+C'est mesuré, pas supposé — une base copiée dans un autre dossier se vérifie
+encore, et une décision écrite après la copie se chaîne derrière les
+précédentes.
+
+Ce qu'on **ne** copie pas : `sage_token`. Une machine neuve mérite un jeton
+neuf, et il se recrée tout seul au premier `--lan`.
+
+Ce qu'on ne copie pas non plus, mais pour une autre raison : `conversation.json`
+est le fil de la faculté « parle ». Le perdre ne coûte rien — le journal, lui,
+ne se reconstruit pas.
+
+**Tant que la copie n'est pas faite, n'écris pas de décision sur le Mac.** Deux
+journaux qui divergent donnent deux calibrations fausses, et rien ne le
+signale : un journal neuf ressemble exactement à un journal qu'on n'a pas
+encore rempli.
 
 ---
 
@@ -13,8 +62,8 @@ que c'était faux, et rien ne pouvait le contredire : l'affirmation portait sur
 l'état d'un serveur, pas sur le contenu du dépôt. Il ne l'affirme plus, il te
 donne de quoi le voir :
 
-```powershell
-cd $HOME\Documents\SINGULAR; python tools/check_repo_state.py
+```sh
+cd ~/Documents/SINGULAR && python3 tools/check_repo_state.py
 ```
 
 Ce que ça a coûté, pour que personne ne le refasse : la branche par défaut
@@ -44,13 +93,13 @@ donc figée, et sa suppression t'attend.
 
 Une session ne peut pas les supprimer : le proxy réseau des conteneurs refuse
 l'opération, vérifié deux fois. Le geste est donc le tien — sur GitHub, onglet
-**Branches**, icône corbeille — ou depuis ton PC :
+**Branches**, icône corbeille — ou depuis le Terminal :
 `git push origin --delete claude/remote-control-feedback-ndpzle`.
 
 Le tri a été fait le 7 septembre 2026, pour ne pas être refait. Ce tableau est
 une **analyse**, pas un inventaire : il dit ce que chaque branche portait, pas
 lesquelles existent aujourd'hui. Pour l'inventaire, une seule source —
-`python tools/check_repo_state.py`, qui interroge le serveur. Trois des lignes
+`python3 tools/check_repo_state.py`, qui interroge le serveur. Trois des lignes
 d'origine nommaient des branches que tu as depuis supprimées ; les recopier
 ici une deuxième fois ne ferait que recommencer.
 
@@ -105,15 +154,15 @@ tu sais ce qu'elles contenaient.
 Depuis le 6 septembre 2026 au soir. Première décision enregistrée :
 « Postuler » → « Un entretien », 75 %, 4 h, Revenus, **verdict le 20 septembre**.
 
-**Depuis le PC** (il ne répond alors que si le PC tourne et que je suis sur mon
+**Depuis le Mac** (il ne répond alors que si le Mac tourne et que je suis sur mon
 wifi) :
 
-```powershell
-cd $HOME\Documents\SINGULAR; python -m singular sage --lan
+```sh
+cd ~/Documents/SINGULAR && python3 -m singular sage --lan
 ```
 
 Si l'app redemande la clé, un champ permet de la coller : l'adresse entière
-affichée par PowerShell, ou le jeton seul. Ça arrivera de temps en temps :
+affichée par le Terminal, ou le jeton seul. Ça arrivera de temps en temps :
 une app installée sur l'écran d'accueil a son propre stockage, séparé de
 Safari, et iOS le vide quand il veut. Ce n'est pas une panne.
 
@@ -122,13 +171,13 @@ n'importe quel appareil du wifi. Ne la colle jamais dans une conversation, un
 message ou une capture d'écran — pas même ici. Si ça arrive, elle se change en
 vingt secondes :
 
-```powershell
-del $HOME\.singular\sage_token; python -m singular sage --lan
+```sh
+rm ~/.singular/sage_token && python3 -m singular sage --lan
 ```
 
 L'ancienne clé cesse alors de fonctionner, et l'app en redemandera une neuve.
 
-**Depuis le téléphone seul, sans PC.** Le cœur n'a plus aucune dépendance : il
+**Depuis le téléphone seul, sans Mac.** Le cœur n'a plus aucune dépendance : il
 tourne dans **a-Shell** sans rien installer. Une fois, dans a-Shell :
 
 ```sh
@@ -138,7 +187,7 @@ lg2 clone -b claude/decision-companion-rebuild-3k25h3 https://github.com/SLENDER
 Puis, chaque matin :
 
 ```sh
-cd SINGULAR && python -m singular sage
+cd SINGULAR && python3 -m singular sage
 ```
 
 Et Safari sur `http://127.0.0.1:8765/`. Pas de jeton : rien ne sort du
@@ -160,7 +209,7 @@ appellent un modèle se déclarent coupées et le disent.
 Deux réserves, non vérifiées d'ici. iOS suspend les applications passées à
 l'arrière-plan : basculer vers Safari peut couper le serveur — si la page ne
 charge pas, c'est ça, dis-le. Et **le journal du téléphone n'est pas celui du
-PC** : deux fichiers, aucune synchronisation. Tant qu'il n'y en a pas, s'en
+Mac** : deux fichiers, aucune synchronisation. Tant qu'il n'y en a pas, s'en
 tenir à une seule machine. C'est pour ça que « Journal vide » affiche le chemin
 où il a regardé — **dans l'app comme au clavier**. Cette phrase n'était vraie
 qu'au clavier : l'app, celle que tu ouvres le matin et celle qui peut pointer
@@ -168,22 +217,23 @@ le mauvais fichier, ne disait rien. Un journal vide et un mauvais journal
 donnaient exactement le même écran.
 
 **Sauvegarde.** Tout mon journal est dans un seul fichier :
-`C:\Users\Utilisateur\.singular\journal.db`. Le copier de temps en temps sur
-une clé ou dans un dossier synchronisé, c'est toute la sauvegarde nécessaire.
-Rien ne part sur un serveur.
+`~/.singular/journal.db`. Le copier de temps en temps sur une clé ou dans un
+dossier synchronisé, c'est toute la sauvegarde nécessaire. Rien ne part sur un
+serveur, et le fichier se relit tel quel sur n'importe quelle machine — c'est
+ce qui a permis de passer du PC au Mac sans rien perdre.
 
 ## Ce qui compte maintenant
 
 1. **Ouvrir l'app le matin.** C'est le seul geste qui fait vivre le journal.
-   Depuis le PC ou depuis le téléphone, mais **toujours le même des deux** tant
+   Depuis le Mac ou depuis le téléphone, mais **toujours le même des deux** tant
    que les deux journaux ne se parlent pas.
 2. **Trancher le 20 septembre.** La carte passera en haut, « À trancher
    aujourd'hui ». Oui ou non. Un journal où l'on écrit sans jamais trancher
    n'apprend rien.
-3. **Quand une question se pose sur mon journal**, sans clé d'API et sans PC :
+3. **Quand une question se pose sur mon journal**, sans clé d'API et sans Mac :
 
    ```
-   python -m singular analyse --blanc
+   python3 -m singular analyse --blanc
    ```
 
    Il affiche le rapport en texte, sans rien envoyer. Je colle le bloc dans
@@ -193,19 +243,19 @@ Rien ne part sur un serveur.
    du jour et ce qu'on s'est dit la dernière fois. Elle ne peut pas écrire dans
    le journal : enregistrer reste le `+`.
 
-   **Rien de tout ça n'est encore sur mon PC.** Mon clone date d'avant, et
+   **Rien de tout ça n'est encore sur mon Mac.** Le clone est neuf, et
    c'est la première chose à faire — sinon il n'y a ni bouton, ni commande
    `parle`, et les étapes suivantes échouent sans dire pourquoi.
 
-   J'ai la clé et 5 $ de crédit. Une seule fois, dans PowerShell, dans
+   J'ai la clé et 5 $ de crédit. Une seule fois, dans le Terminal, dans
    l'ordre :
 
-   ```powershell
-   cd $HOME\Documents\SINGULAR
+   ```sh
+   cd ~/Documents/SINGULAR
    git fetch origin
    git checkout claude/decision-companion-rebuild-3k25h3
    git pull
-   python -m pip install -e ".[analyse]"
+   python3 -m pip install -e ".[analyse]"
    ```
 
    **`git pull` seul ne suffit pas**, et c'est le piège : il met à jour la
@@ -218,46 +268,47 @@ Rien ne part sur un serveur.
 
    Pour vérifier d'un coup que tu es au bon endroit, avant tout le reste :
 
-   ```powershell
-   python tools/check_repo_state.py
+   ```sh
+   python3 tools/check_repo_state.py
    ```
 
-   `python -m pip` et pas `pip` seul : sur Windows, `pip` n'est pas toujours
-   dans le PATH, et il peut installer pour un autre Python que celui qui lance
-   SINGULAR.
+   `python3 -m pip` et pas `pip` seul : `pip` peut viser un autre Python que
+   celui qui lance SINGULAR. Et `python3`, jamais `python` : depuis macOS 12.3
+   la commande `python` n'existe plus, seul `python3` est là.
 
    Puis, **dans cette même fenêtre**, poser la clé et vérifier tout de suite
    qu'elle est vue :
 
-   ```powershell
-   $env:ANTHROPIC_API_KEY = "sk-ant-..."
-   python -m singular parle "dis juste bonjour"
+   ```sh
+   export ANTHROPIC_API_KEY="sk-ant-..."
+   python3 -m singular parle "dis juste bonjour"
    ```
 
    S'il répond, c'est bon. S'il dit « aucune clé dans ANTHROPIC_API_KEY »,
-   c'est que la ligne du dessus n'a pas pris — en `cmd` la commande s'écrit
-   `set ANTHROPIC_API_KEY=sk-ant-...`, ce n'est pas la même.
+   c'est que la ligne du dessus n'a pas pris. `export` ne vaut que pour la
+   fenêtre en cours : dans une nouvelle fenêtre de Terminal, il faut la
+   reposer, ou l'écrire dans `~/.zshrc`.
 
    Enfin, dire à SINGULAR ce que je paie. **Il ne connaît aucun prix**, et
    c'est voulu : un tarif écrit dans le code vieillirait en silence et me
    servirait à décider quand m'arrêter.
 
-   ```powershell
-   python -m singular parle --tarifs
+   ```sh
+   python3 -m singular parle --tarifs
    ```
 
-   Il affiche un petit fichier à coller dans
-   `C:\Users\Utilisateur\.singular\tarifs.json`, avec les prix relevés sur
+   Il affiche un petit fichier à coller dans `~/.singular/tarifs.json`, avec
+   les prix relevés sur
    console.anthropic.com et mes 5 $. Sans ça il compte des jetons ; avec, il
    me dit ce qu'il me reste sous chaque réponse.
 
    **Ensuite, chaque fois**, la clé doit être posée dans la fenêtre **avant**
    de lancer le serveur — un serveur déjà démarré ne la verra jamais :
 
-   ```powershell
-   cd $HOME\Documents\SINGULAR
-   $env:ANTHROPIC_API_KEY = "sk-ant-..."
-   python -m singular sage --lan
+   ```sh
+   cd ~/Documents/SINGULAR
+   export ANTHROPIC_API_KEY="sk-ant-..."
+   python3 -m singular sage --lan
    ```
 
    Le démarrage écrit maintenant « conversation allumée » ou « conversation

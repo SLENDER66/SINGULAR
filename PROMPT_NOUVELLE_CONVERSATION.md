@@ -25,7 +25,7 @@ délibéré.
 À relancer à la main seulement si ce bloc n'est pas apparu :
 
 ```bash
-python tools/check_repo_state.py    # doit sortir 0 et dire « Accord »
+python3 tools/check_repo_state.py    # doit sortir 0 et dire « Accord »
 ```
 
 Pourquoi cette commande existe : une séance a démarré sans `singular/sage/`,
@@ -74,7 +74,7 @@ facultés qui appellent un modèle et vérifie qu'aucune ne peut laisser
 ## Ce qui tourne — l'état réel, pas un plan
 
 **Le Sage est sur mon iPhone et je m'en sers depuis le 6 septembre 2026 au
-soir.** `python -m singular sage --lan` sur mon PC Windows sert une app web
+soir.** `python3 -m singular sage --lan` sur mon PC Windows sert une app web
 installée sur mon écran d'accueil, en plein écran. Bibliothèque standard
 seule, aucun `pip install`, aucun jeton d'API consommé.
 
@@ -86,7 +86,7 @@ wifi. C'est la seule chose que l'application native lèverait.
 
 **Mais le PC n'est plus une dépendance de code.** `singular/__init__.py`
 importait tout le moteur historique au chargement, et `pydantic` avec :
-`python -m singular` exigeait donc un `pip install` pour afficher un journal
+`python3 -m singular` exigeait donc un `pip install` pour afficher un journal
 qui n'utilise que la bibliothèque standard. Les noms sont résolus à la demande
 depuis (PEP 562). Journal, chaîne d'intégrité, Notice, ligne de commande et
 serveur du Sage tournent maintenant sans rien installer — donc dans a-Shell sur
@@ -104,7 +104,7 @@ C'est délibéré : je ne candidate pas encore, et un suivi qui me réclamerait
 des candidatures serait vide toute la semaine d'essai.
 
 **Troisième chose, depuis le 7 septembre au soir : la conversation.**
-`python -m singular parle` au clavier, et le bouton 💬 dans l'app du téléphone
+`python3 -m singular parle` au clavier, et le bouton 💬 dans l'app du téléphone
 — au-dessus du `+`. Elle connaît le rapport du jour et le fil précédent, et
 elle **ne peut pas écrire dans le journal** : ce n'est pas une consigne, c'est
 une absence d'import, vérifiée par un test. Enregistrer reste le `+`.
@@ -112,12 +112,12 @@ une absence d'import, vérifiée par un test. Enregistrer reste le `+`.
 **Où j'en suis exactement, et c'est la première chose à me demander.** J'ai
 acheté une clé d'API le 7 septembre, 5 $ de crédit, et j'étais en train de
 l'installer quand la session s'est arrêtée. Dernier point connu : le
-`python -m pip install -e ".[analyse]"` était l'étape qui manquait, et je ne
+`python3 -m pip install -e ".[analyse]"` était l'étape qui manquait, et je ne
 t'ai pas dit si elle a abouti. **Ne suppose rien** — demande-moi ce
 qu'affiche :
 
-```powershell
-python -m singular parle "dis juste bonjour"
+```sh
+python3 -m singular parle "dis juste bonjour"
 ```
 
 S'il répond, tout est en place. S'il parle du paquet `anthropic`, l'install
@@ -137,48 +137,52 @@ pas ça : **regarde ce qui tourne avant de réparer ce qui ne tourne pas.**
 ```bash
 # Les deux lignes suivantes sont deja faites par le hook de demarrage :
 # ne les relance que si son bloc n'est pas apparu dans le contexte.
-python tools/check_repo_state.py  # d'ou part ce conteneur ? doit sortir 0
-python -m pip install -e ".[dev]"           # pytest n'est pas installe dans un conteneur neuf
-python -m pytest -q              # tout vert, zéro échec
+python3 tools/check_repo_state.py  # d'ou part ce conteneur ? doit sortir 0
+python3 -m pip install -e ".[dev]"           # pytest n'est pas installe dans un conteneur neuf
+python3 -m pytest -q              # tout vert, zéro échec
 python -c "from singular.execution_boundary_audit import ExecutionBoundaryAuditor; print(ExecutionBoundaryAuditor().audit().clean)"
-python tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer
-python tools/check_xcode_project.py                          # le projet Xcode tient
+python3 tools/generate_notice_vectors.py && git diff --stat   # doit ne rien changer
+python3 tools/check_xcode_project.py                          # le projet Xcode tient
 python proto/suivi_candidatures.py < /dev/null               # le proto s'affiche
 ```
 
 ## Mes commandes s'écrivent dans MA fenêtre
 
-**Je suis sur Windows, dans PowerShell.** Deux fois le 7 septembre, une
-commande écrite pour moi a échoué pour une raison qui n'avait rien à voir avec
-SINGULAR :
+**Je suis sur Mac, dans le Terminal — donc `zsh`.** Depuis le 10 septembre
+2026 ; avant, c'était un PC Windows et PowerShell, et tout le dépôt était
+écrit pour lui. Ne me redonne pas de PowerShell.
 
-- `set ANTHROPIC_API_KEY=...` ne fait rien en PowerShell. La forme est
-  `$env:ANTHROPIC_API_KEY = "..."`.
+- La variable se pose avec `export ANTHROPIC_API_KEY="..."`, et elle ne vaut
+  que pour la fenêtre en cours.
+- **`python3`, jamais `python`** : depuis macOS 12.3 la commande `python` seule
+  n'existe plus, et elle rend « command not found », ce qui ressemble à un
+  outil cassé.
 - `pip install` suppose que `pip` est dans le PATH et vise le bon Python.
-  Aucune des deux n'est acquise ici. La forme est `python -m pip install`.
+  Aucune des deux n'est acquise. La forme est `python3 -m pip install`.
 
-Les deux échouent en silence ou de travers, et je les découvre seul sans
-pouvoir faire le lien. `tests/test_commandes_de_sa_fenetre.py` tient la règle
-maintenant : toute commande écrite pour moi doit marcher dans `cmd`, dans
-PowerShell et sous Unix sans être réécrite.
+Ces fautes échouent en silence ou de travers, et je les découvre seul sans
+pouvoir faire le lien. Deux tests tiennent la règle plutôt que ta vigilance :
+`tests/test_commandes_de_sa_fenetre.py` pour ce qui ne marche nulle part, et
+`tests/test_documentation_is_current.py` pour ce qui dépend de la machine —
+celui-là a dû changer de camp le jour du Mac.
 
-Mon clone est dans `C:\Users\Utilisateur\Documents\SINGULAR`. **Il ne se met
-pas à jour tout seul** : si tu viens de pousser quelque chose, la première
-chose que je dois faire est `git pull` — sinon rien de ce que tu as écrit
-n'existe chez moi, et les étapes suivantes échouent sans dire pourquoi.
+Mon clone est dans `~/Documents/SINGULAR`. **Il ne se met pas à jour tout
+seul** : si tu viens de pousser quelque chose, la première chose que je dois
+faire est `git pull` — sinon rien de ce que tu as écrit n'existe chez moi, et
+les étapes suivantes échouent sans dire pourquoi.
 
 ## Contraintes — ne les redécouvre pas
 
-- **Je suis sur Windows, en français.** Toute sortie console doit tenir dans
-  **cp850** : ni flèche, ni tiret cadratin, ni points de suspension
-  typographiques. Les accents passent. `tests/test_windows_console.py` le
+- **Je suis en français.** Toute sortie console reste dans ce que **cp850**
+  accepte : ni flèche, ni tiret cadratin, ni points de suspension
+  typographiques. Les accents passent. C'était une contrainte du PC Windows ;
+  le Mac ne l'impose plus, et la règle reste parce qu'elle ne coûte rien et que
+  le téléphone, lui, n'a pas été mesuré. `tests/test_windows_console.py` le
   vérifie, et la sortie tolère l'irreprésentable pour que mes propres mots ne
   fassent jamais échouer une commande.
-- **PowerShell fusionne les lignes collées.** Donne-moi **une seule ligne à la
-  fois**, et dis-moi d'appuyer sur Échap avant de coller. Trois allers-retours
-  ont été perdus là-dessus.
-- **`core.autocrlf`** recrée sans fin une modification locale et bloque
-  `git checkout`. Réglé chez moi à `false`.
+- **Le Terminal du Mac colle les lignes multiples telles quelles**, contrairement
+  à PowerShell qui les fusionnait. Un bloc de plusieurs lignes est donc redevenu
+  possible ; trois allers-retours avaient été perdus là-dessus.
 - **Aucun compilateur Swift dans ton environnement, impossible à installer** :
   la passerelle refuse swift.org et les binaires GitHub. Vérifié.
 - CI ignore `**/*.md` et `docs/**` : un commit de doc ne déclenche aucun run.
@@ -290,7 +294,7 @@ séparées. **J'ai acheté une clé, 5 $ de crédit**, le 7 septembre 2026.
 Les seuls chiffres justes sont sur console.anthropic.com et sur ma facture.
 Ce dépôt n'écrit aucun prix, et un test l'interdit : un tarif codé en dur
 vieillirait en silence et servirait à décider quand s'arrêter. Mes tarifs à moi
-vivent dans `~/.singular/tarifs.json`, que `python -m singular parle --tarifs`
+vivent dans `~/.singular/tarifs.json`, que `python3 -m singular parle --tarifs`
 prépare — et tant qu'il est vide, la conversation compte des jetons et ne parle
 jamais d'argent.
 

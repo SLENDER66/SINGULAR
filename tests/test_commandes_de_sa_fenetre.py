@@ -3,20 +3,22 @@
 Deux fois dans la même journée, une commande écrite ici a échoué chez lui pour
 une raison qui n'avait rien à voir avec SINGULAR :
 
-- `set ANTHROPIC_API_KEY=...` ne fait rien en PowerShell, qui est son terminal.
+- `set ANTHROPIC_API_KEY=...` ne pose la variable dans aucun de ses terminaux.
   La clé n'était pas posée, le serveur démarrait sans elle, et le bouton disait
   « coupée » sans que rien relie les deux.
 - `pip install -e '.[analyse]'` suppose que `pip` est dans le PATH et vise le
-  même Python que celui qui lance SINGULAR. Sur Windows, ni l'un ni l'autre
-  n'est acquis.
+  même Python que celui qui lance SINGULAR. Ni l'un ni l'autre n'est acquis.
 
 À chaque fois l'échec est silencieux ou trompeur, et il le découvre seul, sans
 moyen de faire le lien. C'est le pire genre de faute : elle ne casse pas le
 code, elle casse la personne qui suit les instructions.
 
-Ce fichier tient la règle plutôt que de compter sur la vigilance : toute
-commande écrite pour lui doit fonctionner dans `cmd`, dans PowerShell et dans
-un terminal Unix, sans être réécrite.
+Sa fenêtre a changé de machine le 10 septembre 2026 : le Mac remplace le PC,
+donc c'est `zsh`. Les deux règles de ce fichier ont survécu au changement sans
+être touchées, et ce n'est pas un hasard — elles interdisent une forme qui ne
+marche nulle part, pas une forme qui marche ailleurs. C'est
+`tests/test_documentation_is_current.py` qui porte ce qui dépend de la machine,
+et lui a dû changer de camp.
 """
 from __future__ import annotations
 
@@ -51,10 +53,13 @@ def test_la_lecture_voit_bien_les_fichiers() -> None:
 
 
 def test_aucune_commande_pip_ne_suppose_le_chemin_ni_l_interpreteur() -> None:
-    """`python -m pip` vise le Python qui lance SINGULAR, et existe partout.
+    """`python3 -m pip` vise le Python qui lance SINGULAR, et existe partout.
 
-    `pip` seul suppose deux choses fausses sur Windows : qu'il est dans le
-    PATH, et qu'il installe pour le bon interpréteur.
+    `pip` seul suppose deux choses fausses : qu'il est dans le PATH, et qu'il
+    installe pour le bon interpréteur. Sur un Mac ou plusieurs Python
+    cohabitent -- celui du systeme, celui de python.org, celui de Homebrew --
+    la seconde est la plus couteuse : l'installation reussit, et SINGULAR ne
+    trouve rien.
     """
     # `\s+\S` exige un argument : c'est ce qui distingue une commande d'une
     # mention en prose -- « aucun `pip install` » ferme son accent grave tout
@@ -66,11 +71,12 @@ def test_aucune_commande_pip_ne_suppose_le_chemin_ni_l_interpreteur() -> None:
 
 
 def test_aucune_commande_ne_pose_une_variable_a_la_facon_de_cmd() -> None:
-    """`set X=...` ne fait rien d'utile en PowerShell, qui est son terminal.
+    """`set X=...` ne pose la variable dans aucun de ses terminaux.
 
-    La forme PowerShell est `$env:X = "..."`. La mention de `set` reste permise
-    quand elle est là pour lui faire reconnaître son erreur -- elle est alors
-    nommée comme la commande de l'autre fenêtre.
+    La forme de `zsh`, son terminal depuis que le Mac remplace le PC, est
+    `export X="..."`. La mention de `set` reste permise quand elle est là pour
+    lui faire reconnaître son erreur -- elle est alors nommée comme la commande
+    d'une autre fenêtre.
     """
     fautes = []
     for chemin, numero, ligne in _lignes():

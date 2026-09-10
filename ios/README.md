@@ -1,7 +1,7 @@
 # L'application native — le Sage hors ligne, partout
 
 > **Le Sage est déjà sur ton iPhone sans rien de ce document.**
-> `python -m singular sage --lan` sur ton PC, l'adresse ouverte dans Safari,
+> `python3 -m singular sage --lan` sur ton PC, l'adresse ouverte dans Safari,
 > Partager → « Sur l'écran d'accueil » : icône, plein écran, même journal,
 > même Notice. La marche à suivre est dans `A_FAIRE.md`, elle prend dix
 > minutes et ne demande ni Mac, ni compte Apple, ni un euro.
@@ -193,7 +193,7 @@ Le moteur Python reste la référence. Après toute modification de
 `singular/sage/notice.py` :
 
 ```bash
-python tools/generate_notice_vectors.py
+python3 tools/generate_notice_vectors.py
 ```
 
 Le fichier est écrit à sa place dans le projet ; il n'y a rien à remplacer

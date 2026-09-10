@@ -7,27 +7,38 @@ demander ce qui s'est passé.
 
 ## Installation
 
-Dans PowerShell, sur le PC :
+Dans le **Terminal** du Mac (Cmd+Espace, tape « Terminal ») :
 
-```powershell
-cd $HOME\Documents\SINGULAR
-python -m pip install -e ".[dev]"
+```sh
+python3 --version
 ```
 
-Deux lignes et non une : `&&` n'existe pas dans la version de PowerShell
-installée par défaut sur Windows, et la commande s'arrêterait sur une erreur de
-syntaxe avant d'avoir rien fait.
+Il faut **3.11 ou plus**. Le `python3` livré avec macOS est souvent en 3.9, et
+l'installation refusera alors de se faire — le message le dira. Dans ce cas,
+installe une version récente depuis [python.org](https://www.python.org/downloads/macos/)
+et rouvre le Terminal.
+
+Ensuite :
+
+```sh
+cd ~/Documents/SINGULAR
+python3 -m pip install -e ".[dev]"
+```
+
+`python3` et jamais `python` : depuis macOS 12.3 la commande `python` seule
+n'existe plus. `python3 -m pip` et jamais `pip` seul : `pip` peut viser un
+autre Python que celui qui lancera SINGULAR.
 
 La base vit dans `~/.singular/journal.db`.
 
 ## Les cinq commandes
 
 ```bash
-python -m singular apply "Anthropic" "Ingénieur agents"   # une candidature, 5 s
-python -m singular add                                    # une décision, 30 s
-python -m singular due                                    # ce qui attend un verdict
-python -m singular resolve DEC-xxxxxxx --yes|--no         # ce qui s'est passé
-python -m singular review                                 # où vont tes heures
+python3 -m singular apply "Anthropic" "Ingénieur agents"   # une candidature, 5 s
+python3 -m singular add                                    # une décision, 30 s
+python3 -m singular due                                    # ce qui attend un verdict
+python3 -m singular resolve DEC-xxxxxxx --yes|--no         # ce qui s'est passé
+python3 -m singular review                                 # où vont tes heures
 ```
 
 Plus `list`, `abandon DEC-xxx "raison"`, `export` (CSV), `status` (une ligne).
@@ -35,8 +46,8 @@ Plus `list`, `abandon DEC-xxx "raison"`, `export` (CSV), `status` (une ligne).
 ### `analyse` — la seule commande qui coûte de l'argent
 
 ```bash
-python -m singular analyse --blanc     # montre ce qui partirait, n'envoie rien
-python -m singular analyse             # fait commenter la Notice par un modele
+python3 -m singular analyse --blanc     # montre ce qui partirait, n'envoie rien
+python3 -m singular analyse             # fait commenter la Notice par un modele
 ```
 
 **`--blanc` ne coûte rien et ne demande rien.** Pas de SDK, pas de clé, pas de
@@ -50,7 +61,7 @@ l'environnement, elle le dit et affiche la Notice calculée sans elle. Tout le r
 — journal, chaîne d'intégrité, Notice, calibration — n'a jamais besoin d'elle,
 et `tests/test_sage_independence.py` le vérifie plutôt que de le promettre.
 
-Pour l'allumer : `python -m pip install -e ".[analyse]"`, puis une clé depuis
+Pour l'allumer : `python3 -m pip install -e ".[analyse]"`, puis une clé depuis
 console.anthropic.com (compte séparé de l'abonnement Claude, deux facturations).
 Mets un plafond mensuel dès le premier jour.
 
@@ -70,9 +81,9 @@ commente un rapport déjà calculé. Elle ne décide jamais à ta place.
 ### `parle` — la conversation qui connaît ton journal
 
 ```bash
-python -m singular parle                     # une conversation, tu tapes, elle répond
-python -m singular parle "je fais quoi ?"    # une seule question, une seule réponse
-python -m singular parle --oubli             # efface le fil, garde le journal
+python3 -m singular parle                     # une conversation, tu tapes, elle répond
+python3 -m singular parle "je fais quoi ?"    # une seule question, une seule réponse
+python3 -m singular parle --oubli             # efface le fil, garde le journal
 ```
 
 C'est la différence exacte entre parler à Claude dans son application et parler
@@ -101,14 +112,19 @@ valent pour elle ce que leurs équivalents valent pour `analyse`.
 #### Depuis le téléphone
 
 Le Sage sert la conversation dans l'app : le bouton 💬, au-dessus du `+`. Le
-serveur tourne sur le PC, donc ça marche aux mêmes conditions que le reste de
-l'app — PC allumé, même wifi.
+serveur tourne sur le Mac, donc ça marche aux mêmes conditions que le reste de
+l'app — Mac allumé, même wifi.
 
 La clé se met **dans la fenêtre où tu lances le serveur, avant de le lancer** ;
-un serveur déjà démarré ne la verra jamais. Et la commande diffère selon la
-fenêtre : `set ANTHROPIC_API_KEY=...` en `cmd`, `$env:ANTHROPIC_API_KEY="..."`
-en PowerShell. Pour vérifier avant de lancer quoi que ce soit :
-`python -m singular parle "bonjour"` dans cette même fenêtre.
+un serveur déjà démarré ne la verra jamais :
+
+```sh
+export ANTHROPIC_API_KEY="sk-ant-..."
+python3 -m singular parle "bonjour"
+```
+
+`export` ne vaut que pour la fenêtre en cours. Pour ne plus y penser, la même
+ligne dans `~/.zshrc` — au prix d'avoir la clé en clair dans un fichier.
 
 C'est la **seule route du Sage qui coûte de l'argent**, et trois choses
 tiennent la facture :
@@ -135,7 +151,7 @@ décider quand s'arrêter. Un test refuse tout tarif écrit en dur dans le code.
 #### Voir ce qui part, avant que ça parte
 
 ```bash
-python -m singular parle --blanc "ta question"
+python3 -m singular parle --blanc "ta question"
 ```
 
 Les trois facultés qui sortent quelque chose de ta machine te montrent
@@ -160,7 +176,7 @@ Tant que tu ne lui as rien dit, la conversation compte des jetons. Pour qu'elle
 parle en dollars :
 
 ```bash
-python -m singular parle --tarifs     # affiche le fichier à remplir
+python3 -m singular parle --tarifs     # affiche le fichier à remplir
 ```
 
 Colle-le dans `~/.singular/tarifs.json`, avec les prix relevés sur
@@ -252,9 +268,9 @@ Ce que tu lis maintenant, des deux côtés :
 ### `offres` — le premier agent
 
 ```bash
-python -m singular offres --blanc          # montre ce qui partirait, n'envoie rien
-python -m singular offres                  # cherche des offres BE dans la region
-python -m singular offres "jusqu'a Albi"   # avec une precision
+python3 -m singular offres --blanc          # montre ce qui partirait, n'envoie rien
+python3 -m singular offres                  # cherche des offres BE dans la region
+python3 -m singular offres "jusqu'a Albi"   # avec une precision
 ```
 
 Il cherche sur le web, écarte, et propose cinq offres au maximum, chacune avec
@@ -311,8 +327,8 @@ ailleurs, le temps mal placé peut encore être réaffecté.
 ## Le même journal, en app
 
 ```bash
-python -m singular sage          # ouvre http://127.0.0.1:8765/
-python -m singular sage --lan    # joignable depuis ton téléphone, avec un jeton
+python3 -m singular sage          # ouvre http://127.0.0.1:8765/
+python3 -m singular sage --lan    # joignable depuis ton téléphone, avec un jeton
 ```
 
 `sage` sert le journal comme une application web, installable sur l'écran
@@ -337,7 +353,7 @@ et serveur du Sage tournent en bibliothèque standard pure. Donc dans **a-Shell*
 
 **Précise la branche.** Un `lg2 clone` sans elle prend la branche par défaut,
 qui n'est pas toujours celle qui porte le travail. Le nom ci-dessous est celui
-que `CLAUDE.md` désigne aujourd'hui ; `python tools/check_repo_state.py` dit
+que `CLAUDE.md` désigne aujourd'hui ; `python3 tools/check_repo_state.py` dit
 l'état réel du jour, et il faut le croire plutôt que cette ligne — c'est
 exactement pour ça qu'il existe.
 
@@ -346,7 +362,7 @@ lg2 clone -b claude/decision-companion-rebuild-3k25h3 https://github.com/SLENDER
 ```
 
 ```sh
-cd SINGULAR && python -m singular sage
+cd SINGULAR && python3 -m singular sage
 ```
 
 Puis Safari sur `http://127.0.0.1:8765/`.
@@ -365,26 +381,22 @@ neuf ressemble exactement à un journal qu'on n'a pas encore rempli. C'est pour
 
 ## Le mettre devant tes yeux
 
-Ouvre ton profil PowerShell — c'est le fichier que PowerShell lit à chaque
-ouverture de fenêtre. Il n'existe pas forcément encore :
+Ajoute à ton `~/.zshrc` — c'est le fichier que le Terminal lit à chaque
+ouverture de fenêtre :
 
-```powershell
-if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }
-notepad $PROFILE
+```sh
+alias sj='python3 -m singular'
+python3 -m singular status 2>/dev/null
 ```
 
-Ajoute dedans :
+Pour l'ouvrir : `open -e ~/.zshrc`. Le fichier n'existe pas forcément encore ;
+`open -e` le crée.
 
-```powershell
-function sj { python -m singular @args }
-python -m singular status 2>$null
-```
-
-`function` et non `Set-Alias` : un alias PowerShell ne peut pas porter
-d'arguments, donc `sj add` ne marcherait pas. Cette section disait
-`alias sj='python -m singular'` dans `~/.bashrc`, ce qui est le shell d'une
-autre machine que la sienne — et c'est justement la section censée mettre
-l'outil devant ses yeux.
+`zsh` est le shell du Mac depuis Catalina. Cette section a été écrite deux fois
+de travers : d'abord pour `~/.bashrc`, puis pour le profil PowerShell quand le
+PC Windows était la machine principale. C'est justement la section censée
+mettre l'outil devant les yeux, donc celle où se tromper de machine coûte le
+plus.
 
 Chaque terminal que tu ouvres affichera alors :
 

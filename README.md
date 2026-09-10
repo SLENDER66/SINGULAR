@@ -45,8 +45,8 @@ unless the artifact fingerprint still matches the code being handed control.
 ## Run it
 
 ```bash
-python -m pip install -e ".[dev]"
-python examples/governed_http_effect.py
+python3 -m pip install -e ".[dev]"
+python3 examples/governed_http_effect.py
 ```
 
 ```

@@ -1,10 +1,17 @@
-"""Les commandes doivent survivre à une console Windows.
+"""Les commandes doivent survivre à une console étroite en encodage.
 
-Ce projet vise explicitement un PC Windows où rien n'est installé — c'est
-écrit dans l'en-tête du serveur. Or la console de Windows n'écrit pas en
-UTF-8 : elle écrit dans la page de code du système, cp850 en France. Python
-lève `UnicodeEncodeError` sur ce qu'elle ne sait pas représenter, et la
-commande s'arrête au moment d'afficher son résultat.
+La contrainte vient d'un PC Windows, la machine principale jusqu'au
+10 septembre 2026. Sa console n'écrit pas en UTF-8 : elle écrit dans la page de
+code du système, cp850 en France. Python lève `UnicodeEncodeError` sur ce
+qu'elle ne sait pas représenter, et la commande s'arrête au moment d'afficher
+son résultat.
+
+**Le Mac a remplacé le PC, et son Terminal est en UTF-8.** Cette règle n'est
+donc plus obligatoire. Elle reste pour deux raisons, et une session future a le
+droit de la retirer si elles cessent de valoir : elle ne coûte rien -- aucun de
+ces messages n'a besoin d'une flèche -- et le chemin iPhone, dans a-Shell,
+n'a jamais été mesuré. Une contrainte gratuite qui garde la sortie portable
+vaut mieux qu'un caractère qu'on ne peut plus tester.
 
 La panne était réelle et bien placée : la ligne qui explique comment ajouter
 le Sage à l'écran d'accueil de l'iPhone contenait une flèche. Elle est la

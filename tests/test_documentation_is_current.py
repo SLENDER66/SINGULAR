@@ -54,12 +54,17 @@ def test_every_path_in_the_readme_layout_exists():
 def _documented_commands(text: str) -> set[str]:
     """Une commande est documentée si son nom apparaît comme du code.
 
-    Deux formes comptent : la ligne complète `python -m singular <cmd>`, et le
+    Deux formes comptent : la ligne complète `python3 -m singular <cmd>`, et le
     premier mot d'un fragment entre accents graves — `abandon DEC-xxx "raison"`
     documente bien `abandon`, et exiger le nom seul rejetait toute commande
     montrée avec ses arguments.
+
+    `python3` depuis que le Mac remplace le PC. Ce motif portait `python` sans
+    le 3, et il a cesse de reconnaitre trois commandes -- `apply`, `due` et
+    `resolve` -- au moment ou USAGE.md a ete traduit. Le test a bien echoue :
+    c'est le seul endroit ou ce nom etait ecrit deux fois.
     """
-    invoked = set(re.findall(r"python -m singular (\w+)", text))
+    invoked = set(re.findall(r"python3? -m singular (\w+)", text))
     inline = {span.split()[0] for span in re.findall(r"`([^`\n]+)`", text) if span.split()}
     return invoked | inline
 
@@ -196,61 +201,38 @@ def test_documents_that_guide_a_session_do_not_cite_dead_things(reference: str, 
 
 # --- les commandes du PC sont celles de sa console ---------------------------
 
-#: Ce que la console de Thomas rejette, et ce qu'il faut écrire à la place.
+#: Ce que le Terminal de Thomas rejette, et ce qu'il faut écrire à la place.
 #:
-#: Il est sur Windows, en PowerShell — c'est écrit dans `CLAUDE.md`, et
-#: `A_FAIRE.md` est déjà rédigé ainsi. `USAGE.md` ne l'était pas : son mode
-#: d'emploi ouvrait sur `cd ~/SINGULAR && ...`, que la version de PowerShell
-#: installée par défaut sur Windows refuse avant d'exécuter quoi que ce soit, et
-#: sa section « le mettre devant tes yeux » — celle dont tout le propos est qu'un
-#: journal qu'on doit penser à ouvrir finit par ne plus s'ouvrir — donnait un
-#: `alias` à mettre dans `~/.bashrc`.
-REJETE_PAR_POWERSHELL = {
-    "&&": "deux lignes séparées",
-    "||": "deux lignes séparées",
-    "export ": "$env:NOM = \"...\"",
-    "2>/dev/null": "2>$null",
-    "alias ": "function nom { ... @args }",
-    "source ": ". le-fichier",
-    "~/.bashrc": "$PROFILE",
-    "~/.zshrc": "$PROFILE",
+#: Le 10 septembre 2026, le Mac remplace le PC Windows. Ce garde-fou existait
+#: déjà, avec la liste inverse : il refusait `&&`, `export` et `~/.bashrc`
+#: parce que PowerShell les rejette. Il change de camp, il ne disparaît pas —
+#: la faute qu'il garde est la même, écrire pour une machine que la personne
+#: n'a pas, et elle s'est produite dans les deux sens en deux jours.
+#:
+#: `python` seul est dans la liste et ce n'est pas un détail de style : depuis
+#: macOS 12.3 la commande n'existe plus. Elle rend « command not found », ce
+#: qui ressemble à un outil cassé plutôt qu'à un nom de commande.
+#:
+#: Les deux commandes -- `del` et `notepad` -- sont ancrees en debut de
+#: commande et pas cherchees comme des morceaux de mot : « the faculties that
+#: call a model » contient « del ». Un test qui crie au loup finit desactive,
+#: et celui-la l'a fait des sa premiere execution.
+REJETE_PAR_LE_MAC = {
+    re.compile(r"\$env:"): 'export NOM="..."',
+    re.compile(r"\bTest-Path\b"): "test -e",
+    re.compile(r"\bNew-Item\b"): "touch",
+    re.compile(r"\bSet-Alias\b"): "alias",
+    re.compile(r"\$PROFILE\b"): "~/.zshrc",
+    re.compile(r"(?:^|[;&|]\s*)notepad\s", re.MULTILINE): "open -e",
+    re.compile(r"(?:^|[;&|]\s*)del\s", re.MULTILINE): "rm",
+    re.compile(r"C:\\"): "un chemin en ~/…",
+    re.compile(r"\\Documents\\"): "~/Documents/…",
+    re.compile(r"~/\.bashrc\b"): "~/.zshrc",
 }
 
-#: Le seul shell POSIX de sa vie : a-Shell, sur l'iPhone. Les blocs qui lui
-#: sont destinés portent cette étiquette, et eux seuls.
-ETIQUETTE_IPHONE = "sh"
+#: `python` sans le 3, ailleurs que dans `python3`.
+PYTHON_NU = re.compile(r"\bpython(?!3)\b")
 
-
-def _blocs(nom: str) -> list[tuple[str, str, int]]:
-    texte = _read(nom)
-    return [(m.group(1), m.group(2), texte[:m.start()].count("\n") + 1)
-            for m in re.finditer(r"```(\w*)\n(.*?)```", texte, re.DOTALL)]
-
-
-@pytest.mark.parametrize("nom", ["USAGE.md", "A_FAIRE.md", "README.md"])
-def test_les_commandes_du_pc_tiennent_dans_sa_console(nom: str) -> None:
-    fautes = []
-    for etiquette, bloc, ligne in _blocs(nom):
-        if etiquette == ETIQUETTE_IPHONE:
-            continue
-        for rejete, remplacement in REJETE_PAR_POWERSHELL.items():
-            if rejete in bloc:
-                fautes.append(f"{nom}:{ligne} contient {rejete!r} — écris {remplacement}")
-    assert not fautes, (
-        "ces commandes ne tournent pas dans sa console :\n  " + "\n  ".join(fautes)
-        + f"\nUn bloc destiné à a-Shell sur l'iPhone porte l'étiquette ```{ETIQUETTE_IPHONE}."
-    )
-
-
-def test_le_scan_verrait_une_commande_d_une_autre_machine() -> None:
-    """Le témoin : sans lui, un lecteur qui ne trouve aucun bloc passerait au vert."""
-    assert len(_blocs("USAGE.md")) > 5
-    assert any(etiquette == ETIQUETTE_IPHONE for etiquette, _, _ in _blocs("USAGE.md")), (
-        "plus aucun bloc iPhone : l'exemption ne protège plus rien, "
-        "et le test ne prouve plus qu'il sait distinguer les deux machines")
-
-
-# --- aucun document ne pointe une branche que le mandat ne declare pas --------
 
 #: Un nom de branche du dépôt, tel qu'il s'écrit.
 NOM_DE_BRANCHE = re.compile(r"\bclaude/[a-z0-9][a-z0-9-]*\b")
@@ -323,6 +305,41 @@ def test_le_scan_lit_bien_des_branches() -> None:
     assert travail and len(nommees) >= 2, "le mandat doit nommer la branche de travail et la branche par defaut"
     trouvees = {branche for nom in DOCUMENTS for branche in NOM_DE_BRANCHE.findall(_read(nom))}
     assert travail in trouvees
+
+
+def _blocs(nom: str) -> list[tuple[str, str, int]]:
+    texte = _read(nom)
+    return [(m.group(1), m.group(2), texte[:m.start()].count("\n") + 1)
+            for m in re.finditer(r"```(\w*)\n(.*?)```", texte, re.DOTALL)]
+
+
+@pytest.mark.parametrize("nom", ["USAGE.md", "A_FAIRE.md", "README.md",
+                                 "proto/README.md", "ios/README.md"])
+def test_les_commandes_tiennent_dans_son_terminal(nom: str) -> None:
+    fautes = []
+    for _etiquette, bloc, ligne in _blocs(nom):
+        for rejete, remplacement in REJETE_PAR_LE_MAC.items():
+            trouve = rejete.search(bloc)
+            if trouve:
+                fautes.append(f"{nom}:{ligne} contient {trouve.group(0).strip()!r} "
+                              f"— écris {remplacement}")
+        if PYTHON_NU.search(bloc):
+            fautes.append(f"{nom}:{ligne} appelle `python` — écris `python3`, "
+                          "`python` seul n'existe plus depuis macOS 12.3")
+    assert not fautes, "ces commandes ne tournent pas dans son Terminal :\n  " + "\n  ".join(fautes)
+
+
+def test_le_scan_verrait_une_commande_d_une_autre_machine() -> None:
+    """Le témoin : sans lui, un lecteur qui ne trouve aucun bloc passerait au vert."""
+    assert len(_blocs("USAGE.md")) > 5
+    assert PYTHON_NU.search("python -m singular due")
+    assert not PYTHON_NU.search("python3 -m singular due")
+    assert any(rejete.search('$env:ANTHROPIC_API_KEY = "x"') for rejete in REJETE_PAR_LE_MAC)
+    # Le faux positif qui a fait echouer ce test a sa premiere execution.
+    assert not any(rejete.search("the faculties that call a model --")
+                   for rejete in REJETE_PAR_LE_MAC)
+    assert any(rejete.search("del $HOME\\.singular\\sage_token")
+               for rejete in REJETE_PAR_LE_MAC)
 
 
 # --- tout clone nomme sa branche, dans tout le depot --------------------------
