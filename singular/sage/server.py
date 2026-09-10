@@ -412,6 +412,47 @@ class SageApp:
             "restant_usd": compte["restant_usd"],
         }
 
+    @staticmethod
+    def _garde_le_budget(quota: Any, bilan: Any, tarifs: Any, *, commande: str) -> None:
+        """Ce qui protège ses cinq dollars, écrit une fois pour les deux routes.
+
+        La vraie garde, quand il a donné ses tarifs : l'argent. Le plafond de
+        tours protège d'un emballement -- une poche, une soirée distraite --
+        mais c'est le crédit qui s'épuise pour de bon, et le service refuserait
+        de toute façon, une requête plus tard et sans le dire aussi clairement.
+
+        C'est une estimation, faite avec ses chiffres. S'il la trouve fausse,
+        c'est `credit_usd` dans son fichier de tarifs qu'il corrige, pas ce
+        code.
+
+        `restant_au_mieux_usd` et pas `restant_usd` : le second vaut None dès
+        qu'un modèle n'a pas de tarif, et la garde s'éteignait alors en
+        silence -- une seule recherche suffisait.
+
+        Ces deux refus vivaient en double, commentaire compris, dans la route
+        de la conversation et dans celle des offres. Deux copies d'une garde
+        qui compte de l'argent : corriger l'une laisse l'autre payer. Le seul
+        écart légitime entre elles est la commande à taper depuis le clavier,
+        alors c'est le seul paramètre.
+
+        Le quota est le même fichier pour les deux facultés, d'où « le plafond
+        du jour » : c'est bien un seul plafond, partagé.
+        """
+        restant = bilan(quota, tarifs())["restant_au_mieux_usd"]
+        if restant is not None and restant <= 0:
+            raise SageError(
+                HTTPStatus.PAYMENT_REQUIRED,
+                "d'après tes tarifs, ton crédit est épuisé. Recharge sur "
+                "console.anthropic.com, puis corrige « credit_usd » dans "
+                "ton fichier de tarifs.",
+            )
+        if quota.restants() <= 0:
+            raise SageError(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                "le plafond du jour est atteint. Demain, ou depuis le clavier "
+                f"avec « python3 -m singular {commande} ».",
+            )
+
     def parle(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Un tour de conversation. La seule route qui coûte de l'argent.
 
@@ -445,32 +486,7 @@ class SageApp:
                             "une réponse est déjà en train d'arriver. Laisse-la venir.")
         try:
             quota = Quota()
-            # La vraie garde, quand il a donne ses tarifs : l'argent. Le
-            # plafond de tours protege d'un emballement -- une poche, une
-            # soiree distraite -- mais c'est le credit qui s'epuise pour de
-            # bon, et le service refuserait de toute facon, une requete plus
-            # tard et sans le dire aussi clairement.
-            #
-            # C'est une estimation, faite avec ses chiffres. S'il la trouve
-            # fausse, c'est `credit_usd` dans son fichier de tarifs qu'il
-            # corrige -- pas ce code.
-            # `restant_au_mieux_usd` et pas `restant_usd` : le second vaut None
-            # des qu'un modele n'a pas de tarif, et la garde s'eteignait
-            # alors en silence -- une seule recherche suffisait.
-            restant = bilan(quota, Tarifs())["restant_au_mieux_usd"]
-            if restant is not None and restant <= 0:
-                raise SageError(
-                    HTTPStatus.PAYMENT_REQUIRED,
-                    "d'apres tes tarifs, ton credit est epuise. Recharge sur "
-                    "console.anthropic.com, puis corrige « credit_usd » dans "
-                    "ton fichier de tarifs.",
-                )
-            if quota.restants() <= 0:
-                raise SageError(
-                    HTTPStatus.TOO_MANY_REQUESTS,
-                    "le plafond de réponses du jour est atteint. Demain, ou depuis "
-                    "le clavier avec « python3 -m singular parle ».",
-                )
+            self._garde_le_budget(quota, bilan, Tarifs, commande="parle")
             # Le fil est relu du disque a chaque tour : la ligne de commande
             # ecrit le meme fichier, et repartir de ce qu'on avait en memoire
             # ferait disparaitre ce qui s'est dit ailleurs.
@@ -549,23 +565,7 @@ class SageApp:
                             "une réponse est déjà en train d'arriver. Laisse-la venir.")
         try:
             quota = Quota()
-            # `restant_au_mieux_usd` et pas `restant_usd` : le second vaut None
-            # des qu'un modele n'a pas de tarif, et la garde s'eteignait
-            # alors en silence -- une seule recherche suffisait.
-            restant = bilan(quota, Tarifs())["restant_au_mieux_usd"]
-            if restant is not None and restant <= 0:
-                raise SageError(
-                    HTTPStatus.PAYMENT_REQUIRED,
-                    "d'apres tes tarifs, ton credit est epuise. Recharge sur "
-                    "console.anthropic.com, puis corrige « credit_usd » dans "
-                    "ton fichier de tarifs.",
-                )
-            if quota.restants() <= 0:
-                raise SageError(
-                    HTTPStatus.TOO_MANY_REQUESTS,
-                    "le plafond du jour est atteint. Demain, ou depuis le clavier "
-                    "avec « python3 -m singular offres ».",
-                )
+            self._garde_le_budget(quota, bilan, Tarifs, commande="offres")
             try:
                 texte, cout = chercher(precision)
             except AnalyseIndisponible as exc:
