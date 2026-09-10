@@ -663,7 +663,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     offres = sub.add_parser("offres", help="chercher des offres d'emploi (consomme des jetons)")
     offres.add_argument("--blanc", action="store_true",
-                        help="afficher ce qui serait envoye, sans rien envoyer")
+                        help="afficher ce qui serait envoyé, sans rien envoyer")
     offres.add_argument("--modele", default=None)
     offres.add_argument("precision", nargs="?", default="",
                         help="une précision pour cette recherche, facultative")

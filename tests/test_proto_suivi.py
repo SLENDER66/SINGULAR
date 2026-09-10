@@ -117,8 +117,8 @@ def test_le_bloc_ne_revele_pas_les_candidatures_classees(proto) -> None:
     bloc = proto.texte_pour_claude(donnees, "et maintenant ?")
 
     assert "Refusee SA" not in bloc
-    assert "je n'ai pas encore commence" in bloc
-    assert "Mes deux CV sont termines." in bloc
+    assert "je n'ai pas encore commence" in sans_accents(bloc)
+    assert "mes deux cv sont termines." in sans_accents(bloc)
 
 
 def test_les_etapes_du_cv_se_mettent_a_jour_tant_que_rien_n_est_coche(proto, tmp_path) -> None:
@@ -225,13 +225,13 @@ def test_une_etape_deduite_ne_voyage_pas_deguisee(proto) -> None:
         proto.ETAPES_CV[proto.CV_POSTE].append((invente, proto.DEDUIT))
         proto.PROVENANCE_CV[invente] = proto.DEDUIT
 
-        assert "(deduit" in proto.marque(invente)
+        assert "(deduit" in sans_accents(proto.marque(invente))
         donnees = {"candidatures": [],
                    "cv": {nom: [{"etape": invente, "fait": False}]
                           for nom in proto.TEXTES_CV}}
         bloc = proto.texte_pour_claude(donnees, "relis mon CV")
         ligne_deduite = next(texte for texte in bloc.splitlines() if invente in texte)
-        assert "(deduit" in ligne_deduite, (
+        assert "(deduit" in sans_accents(ligne_deduite), (
             "l'etape part chez Claude comme un fait acquis : c'est exactement le "
             "mecanisme qui a produit un CV faux")
     finally:
@@ -263,7 +263,7 @@ def test_une_deduction_est_affichee_comme_non_verifiee(proto) -> None:
     finally:
         proto.PROFIL[:] = veritable
 
-    assert "Ceci n'est pas verifie" in bloc
+    assert "ceci n'est pas verifie" in sans_accents(bloc)
     assert "Il vise plutot l'industriel." in bloc
     ligne = next(texte_ligne for texte_ligne in bloc.splitlines() if "industriel" in texte_ligne)
     assert ligne.startswith("- "), "une deduction doit etre listee a part, pas fondue dans le profil"
@@ -276,7 +276,7 @@ def test_un_fait_dit_n_est_pas_marque_comme_incertain(proto) -> None:
 
     bloc = proto.texte_pour_claude(donnees, "une question")
 
-    assert "Ceci n'est pas verifie" not in bloc
+    assert "ceci n'est pas verifie" not in sans_accents(bloc)
     # Un fragment stable de PROFIL plutot qu'une phrase entiere : le profil
     # change des qu'il precise quelque chose, et un test qui casse a chaque
     # precision apprend a ignorer les tests.

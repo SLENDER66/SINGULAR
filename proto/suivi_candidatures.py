@@ -48,7 +48,7 @@ JOURS_SANS_AJOUT = 7
 COLONNES = 62
 
 STATUTS = {
-    "a_envoyer": "a envoyer",
+    "a_envoyer": "à envoyer",
     "envoyee": "envoyee",
     "relancee": "relancee",
     "entretien": "entretien",
@@ -106,12 +106,12 @@ CV_ALTERNANCE = "alternance"
 #: Le nom de chaque CV tel qu'il s'affiche.
 NOMS_CV = {CV_POSTE: "CV poste", CV_ALTERNANCE: "CV alternance"}
 
-_TITRE = ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
-          " Les 2 ans de BE en premier, le terrain juste apres", DIT)
-_MATERIEL = ("Nommer le materiel au lieu d'ecrire « CVC » : chambres froides, groupes"
-             " electrogenes, bruleurs, CTA double flux. Avec les puissances et volumes", DIT)
-_VOIX_HAUTE = ("Relire a voix haute, couper tout ce qui ne sert pas le poste vise", DIT)
-_RELECTURE = ("Faire relire par quelqu'un du metier", DIT)
+_TITRE = ("Titre : « Chargé d'études CVC - chiffrage & dimensionnement »."
+          " Les 2 ans de BE en premier, le terrain juste après", DIT)
+_MATERIEL = ("Nommer le matériel au lieu d'écrire « CVC » : chambres froides, groupes"
+             " électrogènes, brûleurs, CTA double flux. Avec les puissances et volumes", DIT)
+_VOIX_HAUTE = ("Relire à voix haute, couper tout ce qui ne sert pas le poste visé", DIT)
+_RELECTURE = ("Faire relire par quelqu'un du métier", DIT)
 
 ETAPES_CV = {
     CV_POSTE: [
@@ -123,8 +123,8 @@ ETAPES_CV = {
     ],
     CV_ALTERNANCE: [
         _TITRE,
-        ("Assumer l'alternance : dire que c'est une reprise d'etudes, et que"
-         " l'ecole reste a trouver", DIT),
+        ("Assumer l'alternance : dire que c'est une reprise d'études, et que"
+         " l'école reste à trouver", DIT),
         _MATERIEL,
         _VOIX_HAUTE,
         _RELECTURE,
@@ -165,7 +165,7 @@ def restantes_par_cv(donnees: dict) -> dict[str, list[dict]]:
 
 def marque(texte: str) -> str:
     """L'etape, suivie de sa reserve quand elle n'a pas ete dite."""
-    return texte if PROVENANCE_CV.get(texte, DIT) == DIT else f"{texte} (deduit, a confirmer)"
+    return texte if PROVENANCE_CV.get(texte, DIT) == DIT else f"{texte} (déduit, à confirmer)"
 
 #: Ce que Claude ne peut pas deviner, et que tu ne dois pas retaper a chaque
 #: conversation.
@@ -242,7 +242,7 @@ def charger() -> dict:
     except (OSError, json.JSONDecodeError) as erreur:
         print(f"  Fichier illisible : {erreur}")
         print(f"  Il est ici : {FICHIER}")
-        print("  Rien n'a ete efface. Corrige-le ou renomme-le, puis relance.")
+        print("  Rien n'a été effacé. Corrige-le ou renomme-le, puis relance.")
         raise SystemExit(1) from None
     donnees.setdefault("candidatures", [])
     donnees["cv"] = _cv_relu(donnees.get("cv"))
@@ -335,8 +335,8 @@ def action_du_jour(donnees: dict) -> list[str]:
     if entretiens:
         c = entretiens[0]
         return [
-            f"Preparer l'entretien : {c['entreprise']} ({c['poste']}).",
-            "Relis l'annonce, prepare deux questions sur leurs affaires en cours,",
+            f"Préparer l'entretien : {c['entreprise']} ({c['poste']}).",
+            "Relis l'annonce, prépare deux questions sur leurs affaires en cours,",
             "et un exemple de chantier que tu sais raconter en trois minutes.",
         ]
 
@@ -346,8 +346,8 @@ def action_du_jour(donnees: dict) -> list[str]:
         c = a_envoyer[0]
         attente = depuis(c["date_statut"])
         return [
-            f"Envoyer la candidature preparee pour {c['entreprise']} ({c['poste']}).",
-            f"Elle attend depuis {jours(attente)}. Une candidature non envoyee ne compte pas.",
+            f"Envoyer la candidature préparée pour {c['entreprise']} ({c['poste']}).",
+            f"Elle attend depuis {jours(attente)}. Une candidature non envoyée ne compte pas.",
         ]
 
     relancer = sorted(
@@ -359,8 +359,8 @@ def action_du_jour(donnees: dict) -> list[str]:
         c = relancer[0]
         return [
             f"Relancer {c['entreprise']} ({c['poste']}).",
-            f"Envoyee il y a {jours(depuis(c['date_statut']))}, sans reponse.",
-            ("Un mail court : rappel de la candidature, disponibilite, une phrase"
+            f"Envoyée il y a {jours(depuis(c['date_statut']))}, sans réponse.",
+            ("Un mail court : rappel de la candidature, disponibilité, une phrase"
             " sur ce que tu peux leur apporter."),
         ]
 
@@ -370,8 +370,8 @@ def action_du_jour(donnees: dict) -> list[str]:
         c = a_classer[0]
         return [
             f"Classer {c['entreprise']} sans suite.",
-            f"Relancee il y a {jours(depuis(c['date_statut']))}, toujours rien.",
-            "Ce n'est pas un echec, c'est de la place libre dans ta liste.",
+            f"Relancée il y a {jours(depuis(c['date_statut']))}, toujours rien.",
+            "Ce n'est pas un échec, c'est de la place libre dans ta liste.",
         ]
 
     restantes = restantes_par_cv(donnees)
@@ -386,29 +386,29 @@ def action_du_jour(donnees: dict) -> list[str]:
             nom = en_retard[0]
             place = len(donnees["cv"][nom]) - len(restantes[nom]) + 1
             portee = "des deux CV" if len(en_retard) == 2 else f"du {NOMS_CV[nom]}"
-            dit = [f"Avancer le CV. Etape {place} sur {len(donnees['cv'][nom])}, {portee} :",
+            dit = [f"Avancer le CV. Étape {place} sur {len(donnees['cv'][nom])}, {portee} :",
                    f"  {marque(prochaines[nom])}"]
         else:
-            dit = ["Avancer les deux CV. Ils ne demandent pas la meme chose :"]
+            dit = ["Avancer les deux CV. Ils ne demandent pas la même chose :"]
             for nom in en_retard:
                 dit.append(f"  {NOMS_CV[nom]} : {marque(prochaines[nom])}")
-        dit.append("Tant que le CV n'est pas pret, candidater brule des entreprises"
+        dit.append("Tant que le CV n'est pas prêt, candidater brûle des entreprises"
                    " que tu ne pourras pas redemander.")
         return dit
 
     if not candidatures:
         return [
-            "Le CV est pret. Ajouter la premiere candidature.",
-            ("Vise trois bureaux d'etudes fluides de la region toulousaine :"
+            "Le CV est prêt. Ajouter la première candidature.",
+            ("Vise trois bureaux d'études fluides de la région toulousaine :"
             " un gros, un moyen, un petit."),
-            "Le petit repond souvent le premier.",
+            "Le petit répond souvent le premier.",
         ]
 
     dernier = max(depuis(c["date_ajout"]) for c in candidatures)
     if dernier >= JOURS_SANS_AJOUT:
         return [
-            f"Ajouter une candidature. La derniere date d'il y a {jours(dernier)}.",
-            "Une recherche qui s'arrete une semaine met un mois a repartir.",
+            f"Ajouter une candidature. La dernière date d'il y a {jours(dernier)}.",
+            "Une recherche qui s'arrête une semaine met un mois à repartir.",
         ]
 
     ouvertes = [c for c in candidatures if c["statut"] in EN_COURS]
@@ -417,11 +417,11 @@ def action_du_jour(donnees: dict) -> list[str]:
             "Rien d'urgent aujourd'hui.",
             (f"{len(ouvertes)} candidature(s) en cours, aucune ne demande de relance"
             " pour l'instant."),
-            ("Si tu as une heure : prepare la suivante plutot que de verifier"
+            ("Si tu as une heure : prépare la suivante plutôt que de vérifier"
             " tes mails."),
         ]
 
-    return ["Rien en cours et le CV est pret. Ajoute une candidature."]
+    return ["Rien en cours et le CV est prêt. Ajoute une candidature."]
 
 
 # --- affichage ---------------------------------------------------------------
@@ -447,7 +447,7 @@ def afficher_point(donnees: dict) -> None:
     ouvertes = [c for c in candidatures if c["statut"] in EN_COURS]
 
     ligne()
-    ligne(f"OU J'EN SUIS      {aujourdhui().strftime('%d/%m/%Y')}")
+    ligne(f"OÙ J'EN SUIS      {aujourdhui().strftime('%d/%m/%Y')}")
     ligne()
 
     if not ouvertes:
@@ -467,14 +467,14 @@ def afficher_point(donnees: dict) -> None:
     if closes or restantes:
         ligne()
     if closes:
-        ligne(f"({closes} classee(s) : refus ou sans suite)")
+        ligne(f"({closes} classée(s) : refus ou sans suite)")
     if restantes:
         # Le CV reste sous les yeux tant qu'il n'est pas fini, meme quand
         # l'action du jour porte sur autre chose : c'est lui qui decide de la
         # qualite de tout ce qui part ensuite.
         for nom, etapes in donnees["cv"].items():
             faites = sum(1 for e in etapes if e["fait"])
-            ligne(f"({NOMS_CV[nom]} : {faites} etape(s) sur {len(etapes)})")
+            ligne(f"({NOMS_CV[nom]} : {faites} étape(s) sur {len(etapes)})")
 
     ligne()
     ligne("AUJOURD'HUI")
@@ -491,7 +491,7 @@ def afficher_tout(donnees: dict) -> None:
     ligne()
     for numero, c in enumerate(donnees["candidatures"], start=1):
         ligne(f"{numero:>2}. {c['entreprise']}  -  {c['poste']}")
-        ligne(f"    {STATUTS[c['statut']]}  |  ajoutee le {en_francais(c['date_ajout'])}"
+        ligne(f"    {STATUTS[c['statut']]}  |  ajoutée le {en_francais(c['date_ajout'])}"
               f"  |  maj {en_francais(c['date_statut'])}")
         for note in c.get("notes", []):
             ligne(f"    note : {note}")
@@ -527,8 +527,8 @@ def ajouter(donnees: dict) -> None:
     if not entreprise:
         ligne("Annule.")
         return
-    poste = demander("Poste :") or "poste non precise"
-    envoyee = demander("Deja envoyee ? (o/N) :").lower().startswith("o")
+    poste = demander("Poste :") or "poste non précisé"
+    envoyee = demander("Déjà envoyée ? (o/N) :").lower().startswith("o")
     note = demander("Une note (facultatif) :")
 
     jour = aujourdhui().isoformat()
@@ -541,7 +541,7 @@ def ajouter(donnees: dict) -> None:
         "notes": [note] if note else [],
     })
     sauver(donnees)
-    ligne(f"Ajoutee : {entreprise}.")
+    ligne(f"Ajoutée : {entreprise}.")
 
 
 def choisir(donnees: dict) -> dict | None:
@@ -549,9 +549,9 @@ def choisir(donnees: dict) -> dict | None:
         ligne("Aucune candidature.")
         return None
     afficher_tout(donnees)
-    brut = demander("Numero :")
+    brut = demander("Numéro :")
     if not brut.isdigit() or not 1 <= int(brut) <= len(donnees["candidatures"]):
-        ligne("Numero inconnu.")
+        ligne("Numéro inconnu.")
         return None
     return donnees["candidatures"][int(brut) - 1]
 
@@ -584,12 +584,12 @@ def noter(donnees: dict) -> None:
         return
     candidature.setdefault("notes", []).append(note)
     sauver(donnees)
-    ligne("Note ajoutee.")
+    ligne("Note ajoutée.")
 
 
 def cocher_cv(donnees: dict) -> None:
     afficher_cv(donnees)
-    brut = demander("Numero de l'etape faite (vide pour revenir) :")
+    brut = demander("Numéro de l'étape faite (vide pour revenir) :")
     toutes = etapes_a_plat(donnees)
     if not brut.isdigit() or not 1 <= int(brut) <= len(toutes):
         return
@@ -611,14 +611,14 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
     l'API ferait la meme chose en coutant de l'argent tous les mois, alors que
     l'app Claude est deja sur le telephone.
     """
-    lignes = ["Voici ma situation. Reponds en francais, droit au but.", ""]
+    lignes = ["Voici ma situation. Réponds en français, droit au but.", ""]
     lignes += [texte for texte, source in PROFIL if source == DIT]
     a_confirmer = [texte for texte, source in PROFIL if source != DIT]
     if a_confirmer:
         # L'incertitude voyage avec le fait. Sans ca, une deduction collee dans
         # une conversation en ressort comme une chose etablie.
         lignes.append("")
-        lignes.append("Ceci n'est pas verifie, ne t'appuie pas dessus sans me demander :")
+        lignes.append("Ceci n'est pas vérifié, ne t'appuie pas dessus sans me demander :")
         lignes += [f"- {texte}" for texte in a_confirmer]
     lignes.append("")
 
@@ -633,7 +633,7 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
             for note in c.get("notes", []):
                 lignes.append(f"  note : {note}")
     else:
-        lignes.append("Aucune candidature en cours : je n'ai pas encore commence.")
+        lignes.append("Aucune candidature en cours : je n'ai pas encore commencé.")
     lignes.append("")
 
     restantes = restantes_par_cv(donnees)
@@ -644,11 +644,11 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
             if not reste:
                 lignes.append(f"Mon {NOMS_CV[nom]} est termine.")
                 continue
-            lignes.append(f"Mon {NOMS_CV[nom]} : {total - len(reste)} etape(s) sur {total}."
+            lignes.append(f"Mon {NOMS_CV[nom]} : {total - len(reste)} étape(s) sur {total}."
                           " Il me reste :")
             lignes += [f"- {marque(e['etape'])}" for e in reste]
     else:
-        lignes.append("Mes deux CV sont termines.")
+        lignes.append("Mes deux CV sont terminés.")
     lignes.append("")
 
     lignes.append("Ma question :")
@@ -658,9 +658,9 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
 
 def preparer_question(donnees: dict) -> None:
     ligne("Ta question, en une phrase. Par exemple :")
-    ligne("  relis l'etape 1 de mon CV")
-    ligne("  ecris-moi un mail de relance pour telle entreprise")
-    ligne("  prepare mon entretien de jeudi")
+    ligne("  relis l'étape 1 de mon CV")
+    ligne("  écris-moi un mail de relance pour telle entreprise")
+    ligne("  prépare mon entretien de jeudi")
     ligne()
     question = demander("Question :")
     if not question:
@@ -669,7 +669,7 @@ def preparer_question(donnees: dict) -> None:
     # Volontairement sans indentation ni repli : ce bloc est fait pour etre
     # selectionne et colle, pas pour etre joli dans le terminal.
     print()
-    print("----- copie a partir d'ici -----")
+    print("----- copie à partir d'ici -----")
     print(texte_pour_claude(donnees, question))
     print("----- jusqu'ici -----")
     print()
@@ -685,7 +685,7 @@ CHOIX = {
     "3": ("Ajouter une note", noter),
     "4": ("Le CV", cocher_cv),
     "5": ("Tout voir", afficher_tout),
-    "6": ("Preparer une question pour Claude", preparer_question),
+    "6": ("Préparer une question pour Claude", preparer_question),
 }
 
 

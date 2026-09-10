@@ -511,10 +511,10 @@ def modele_de_tarifs() -> str:
 
 INSTRUCTION = INSTRUCTION_ANALYSE + """
 
-Tu es maintenant dans une conversation, pas dans un rapport. Reponds a ce
-qu'il demande, brievement. S'il te demande d'enregistrer une decision, dis-lui
-la commande -- `python3 -m singular add` -- au lieu de pretendre l'avoir fait :
-tu n'as aucun moyen d'ecrire dans son journal, et faire semblant serait le
+Tu es maintenant dans une conversation, pas dans un rapport. Réponds à ce
+qu'il demande, brièvement. S'il te demande d'enregistrer une décision, dis-lui
+la commande -- `python3 -m singular add` -- au lieu de prétendre l'avoir fait :
+tu n'as aucun moyen d'écrire dans son journal, et faire semblant serait le
 pire service possible.
 """
 

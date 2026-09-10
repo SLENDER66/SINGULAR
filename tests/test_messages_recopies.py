@@ -27,6 +27,7 @@ from __future__ import annotations
 import ast
 import functools
 import pathlib
+import re
 import unicodedata
 
 import pytest
@@ -171,4 +172,84 @@ def test_aucun_test_ne_recopie_un_message_sans_ses_accents(fichier: str) -> None
         f"{fichier} attend un message de SINGULAR au caractere pres :\n  "
         + "\n  ".join(fautes)
         + "\nRecopie les accents, ou compare via `sans_accents()` de tests/support.py."
+    )
+
+
+# --- et le programme lui-meme ecrit en francais -------------------------------
+
+#: Les mots qui existent des deux façons, et qui ne sont pas la même chose.
+#:
+#: Un dictionnaire ne serait ni installable ni honnête ici : le dépôt n'a
+#: aucune dépendance et le garde-fou doit tourner sans réseau. La règle se
+#: découvre donc dans le dépôt lui-même — **un mot que le programme écrit
+#: accentué quelque part ne doit pas s'écrire sans accents ailleurs.** Ce qui
+#: se compare est le dépôt à lui-même, pas le français à une norme.
+#:
+#: Restent les vrais homographes, où les deux graphies sont deux mots : « il
+#: marche » et « le marché », « il donne » et « c'est donné ». Ils sont ici,
+#: nommés un par un, parce qu'aucune règle mécanique ne les distingue. Une
+#: liste courte qu'on relit vaut mieux qu'une heuristique qui se trompe en
+#: silence.
+DEUX_MOTS_VRAIMENT = {
+    "annonce", "arrive", "chiffre", "decide", "donne", "laisse", "marche",
+    "parle", "analyse", "demande", "corrige", "compte", "cherche", "efface",
+    "bouge", "route", "des", "cote", "precise", "installe", "vise", "refuse",
+    "sur", "entree", "cree", "note", "reste", "trouve", "pense", "ecarte",
+    # Noms de champs et de colonnes : ils sont écrits dans le fichier de
+    # Thomas et relus tels quels. Les accentuer casserait ses données.
+    "decision", "decisions", "precision", "credit", "ete", "envoye", "etape",
+    "envoyee", "deduit", "modele", "modeles", "ecrire", "reponds",
+}
+
+
+def _mot(texte: str) -> list[str]:
+    return re.findall(r"[A-Za-zÀ-ÿ]{3,}", texte)
+
+
+def _porte_un_accent(mot: str) -> bool:
+    """Sans passer par `_sans_accents`, qui met aussi en minuscules.
+
+    Le premier jet comparait `_sans_accents(mot) != mot` : « Les » devenait
+    « les », donc different, donc « accentue ». Le garde-fou accusait alors
+    « pas », « dans » et « une » d'exister en deux graphies.
+    """
+    return any(unicodedata.combining(c)
+               for c in unicodedata.normalize("NFD", mot))
+
+
+def test_le_programme_n_ecrit_pas_le_meme_mot_de_deux_facons() -> None:
+    """Sa moitié d'écran ne peut pas être en français et l'autre pas.
+
+    Le menu des rangs listait « Stabilite » sous un titre qui disait
+    « Stabilité ». Le refus répondait « une probabilite » à une question qui
+    demandait une « Probabilité ». Le Sage annonçait « credit epuise » pendant
+    que la page web affichait « crédit épuisé ». Chaque fois, les deux
+    graphies étaient dans le même dépôt, souvent dans le même fichier.
+    """
+    accentues = {
+        _sans_accents(mot).lower()
+        for phrase in _phrases_affichees()
+        for mot in _mot(phrase)
+        if _porte_un_accent(mot)
+    }
+    fautes = []
+    for nom in AFFICHENT:
+        arbre = ast.parse((RACINE / nom).read_text(encoding="utf-8"))
+        docs = _docstrings(arbre)
+        for noeud in ast.walk(arbre):
+            if not (isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)):
+                continue
+            if id(noeud) in docs or noeud.value.count(" ") < 1:
+                continue
+            for mot in _mot(noeud.value):
+                nu = mot.lower()
+                if nu in DEUX_MOTS_VRAIMENT or _porte_un_accent(mot):
+                    continue
+                if nu in accentues:
+                    fautes.append(f"{nom}:{noeud.lineno} : « {mot} » "
+                                  f"-- ecrit avec ses accents ailleurs")
+    assert not fautes, (
+        "le programme ecrit le meme mot de deux facons :\n  " + "\n  ".join(sorted(set(fautes)))
+        + "\nAccentue-le, ou ajoute-le a DEUX_MOTS_VRAIMENT si les deux graphies"
+          " sont deux mots differents."
     )
