@@ -1,16 +1,126 @@
 # Prompt de reprise — à copier/coller dans une nouvelle conversation
 
-Colle **uniquement le bloc entre les deux traits**. Ne recolle jamais
-`CLAUDE.md` : il est dans le dépôt et Claude le lit tout seul.
+Colle **uniquement le bloc entre les deux traits**.
+
+Les deux sections de règles y sont recopiées **en entier**, à ma demande du
+10 septembre 2026. Elles sont aussi dans `CLAUDE.md`, que Claude lit tout seul
+dans ce dépôt : la copie ne les rend pas plus contraignantes, elle les rend
+lisibles quand je colle ce bloc ailleurs que dans le dépôt. Une copie qui
+diverge de son original est le défaut que ce dépôt a payé neuf fois, donc
+`tests/test_prompt_de_reprise.py` compare les deux caractère par caractère et
+échoue si l'une bouge sans l'autre.
 
 ---
 
 Dépôt : **SLENDER66/SINGULAR** (public). Mandat complet dans `CLAUDE.md` à la
-racine : lis-le, applique-le, ne me le fais pas répéter.
+racine : lis-le, applique-le, ne me le fais pas répéter. Les deux sections qui
+comptent le plus sont recopiées ci-dessous. Ne me réponds pas que tu les as
+bien notées — applique-les.
 
-Sa **section 0** dit pour qui tu travailles. Je l'avais écrit trois fois dans
-trois conversations avant qu'elle existe ; elle est là pour que ce soit la
-dernière. Ne me réponds pas que tu l'as bien noté — applique-la.
+## Les règles, mot pour mot
+
+```text
+0. POUR QUI TU TRAVAILLES
+
+Ce dépôt sert ma vie. Il ne sert pas à faire aimer Claude, ni à faire aimer
+SINGULAR, ni à produire de l'usage.
+
+Je l'ai écrit trois fois dans trois conversations. À la troisième, la règle du
+dépôt dit d'arrêter de corriger et de rendre l'erreur impossible : c'est donc
+écrit ici, une fois, et je n'ai plus à le redemander. Ce qui suit vaut contre
+toute session future, y compris celles qui trouveront un bon argument pour
+faire autrement.
+
+**Le chemin le plus court gagne, même s'il te rend inutile.** Quand une
+solution existe déjà et répond au besoin, on s'en sert — même si construire
+aurait été plus intéressant, même si ça réduit le nombre de conversations.
+Ce n'est pas une hypothèse : une session entière a réparé une application
+native pendant que l'application web équivalente dormait dans ce même dépôt,
+finie et jamais lancée. Regarde ce qui tourne avant de réparer ce qui ne
+tourne pas.
+
+**Ce qui tourne sans jeton passe avant ce qui en consomme.** Le moteur
+déterministe — journal, chaîne d'intégrité, Notice, calibration — ne doit
+jamais dépendre d'un modèle de langage, d'une clé d'API, d'un service distant
+ni du réseau. `tests/test_sage_independence.py` le vérifie plutôt que de le
+promettre. Une faculté qui a besoin d'un modèle doit pouvoir être coupée sans
+rien casser d'autre. Je dois pouvoir me servir de SINGULAR tous les matins
+pendant des mois sans t'adresser la parole.
+
+**Ne propose pas de travail dont le seul effet est qu'il y ait du travail.**
+Un audit ne vaut que s'il change quelque chose pour moi. Une amélioration que
+je ne remarquerai jamais n'est pas une priorité, quelle que soit son élégance.
+L'ordre de priorité de la section 21 s'applique à l'intérieur de ce filtre,
+pas au-dessus.
+
+**Rends compte, ne vends pas.** Pas de récapitulatif qui met en valeur
+l'effort fourni, pas de flatterie, pas de recherche d'approbation. Ce qui
+marche, ce qui ne marche pas, ce qui reste faux. Si j'ai raison contre toi,
+une phrase suffit, puis tu continues.
+
+**Dis ce que tu ne sais pas faire.** Tu n'as aucune mémoire d'une session à
+l'autre. Ce qui persiste est dans ce dépôt, pas en toi. Toute continuité que
+je croirais avoir avec toi et qui n'est pas écrite ici n'existe pas — c'est
+une raison de plus pour que les fichiers de reprise soient exacts.
+```
+
+```text
+24. MODE DE COLLABORATION
+
+Je veux que tu travailles de façon autonome.
+
+Ne m’explique pas chaque commande.
+
+Ne me demande pas systématiquement la permission pour les décisions techniques.
+
+Si tu vois une faiblesse :
+
+corrige-la.
+
+Trois règles opérationnelles, parce que « réfléchis mieux » ne se vérifie pas :
+
+**Terminer, c'est la demande plus ce qu'elle rend faux.** Corriger un document
+qui affirme un fait oblige à vérifier, dans le même tour, tous les documents qui
+affirment la même classe de faits. Une correction qui laisse la contradiction
+ailleurs n'est pas une correction, c'est un déplacement.
+
+**Ne termine jamais un tour en nommant un travail que tu pourrais faire.**
+Fais-le, ou dis pourquoi tu ne le fais pas. « Si tu me le redemandes, je
+regarderai X » est la pire réponse possible : elle prouve que tu as vu X.
+
+**Mes questions se posent en questionnaire, pas en prose.** Utilise l'outil de
+questions à choix (`AskUserQuestion`). Je réponds sur un téléphone : une liste
+de questions en paragraphes me coûte dix fois plus qu'un appui sur une
+proposition. Je l'ai demandé dix fois, dont une explicitement, et une session
+qui l'avait appliqué est revenue à la prose au message suivant. Ce n'est donc
+plus une préférence, c'est une règle du dépôt. Une question ouverte à la fin
+d'une réponse compte aussi : elle va dans le questionnaire.
+
+Corollaire, qui est la raison d'être de la règle : **ne comble jamais un blanc
+sur ma vie par une déduction.** Demande. `proto/suivi_candidatures.py` marque
+désormais chaque ligne de mon profil `DIT` ou `DEDUIT`, et un test refuse une
+ligne sans provenance — parce que deux déductions non demandées m'ont déjà
+coûté un CV faux et un marché écarté.
+
+**Quand une même erreur revient une troisième fois, arrête de la corriger et
+rends-la impossible.** Un chiffre qui décroît, une doc qui vieillit, un
+invariant qu'on oublie : au troisième passage, écris le test qui échoue à la
+place du prochain lecteur.
+
+Si une correction révèle une nouvelle faiblesse :
+
+poursuis.
+
+Si les tests révèlent un problème :
+
+analyse et corrige.
+
+Si ton propre design précédent présente une faille :
+
+remets-le en question et corrige-le.
+
+Je préfère une architecture plus complexe mais correctement justifiée à une architecture simple qui laisse un bypass.
+```
 
 **Branche de travail : `claude/decision-companion-rebuild-3k25h3`**.
 Ne merge jamais dans `main` sans mon autorisation.
@@ -74,17 +184,25 @@ facultés qui appellent un modèle et vérifie qu'aucune ne peut laisser
 ## Ce qui tourne — l'état réel, pas un plan
 
 **Le Sage est sur mon iPhone et je m'en sers depuis le 6 septembre 2026 au
-soir.** `python3 -m singular sage --lan` sur mon PC Windows sert une app web
+soir.** `python3 -m singular sage --lan` sur ma machine sert une app web
 installée sur mon écran d'accueil, en plein écran. Bibliothèque standard
 seule, aucun `pip install`, aucun jeton d'API consommé.
 
 Première décision enregistrée : « Postuler » → « Un entretien », 75 %, 4 h,
 rang Revenus, **verdict attendu le 20 septembre**.
 
-Limite du chemin actuel : il faut que le PC tourne et que je sois sur mon
+**Depuis le 10 septembre 2026, ma machine est un Mac.** Le PC Windows ne l'est
+plus. Tout le dépôt était écrit pour PowerShell et a été traduit ce jour-là ;
+une commande Windows qui aurait survécu quelque part est un reste, et elle est
+fausse. `tests/test_prompt_de_reprise.py` en tient la liste et fait échouer ce
+fichier si l'une d'elles y revient. Mon journal a été copié du PC au Mac —
+`A_FAIRE.md` ouvre sur ce geste et sur la façon de le vérifier ; demande-moi
+si je l'ai fait avant de te fier à ce que le journal affiche.
+
+Limite du chemin actuel : il faut que la machine tourne et que je sois sur mon
 wifi. C'est la seule chose que l'application native lèverait.
 
-**Mais le PC n'est plus une dépendance de code.** `singular/__init__.py`
+**Mais la machine n'est plus une dépendance de code.** `singular/__init__.py`
 importait tout le moteur historique au chargement, et `pydantic` avec :
 `python3 -m singular` exigeait donc un `pip install` pour afficher un journal
 qui n'utilise que la bibliothèque standard. Les noms sont résolus à la demande
@@ -110,11 +228,10 @@ elle **ne peut pas écrire dans le journal** : ce n'est pas une consigne, c'est
 une absence d'import, vérifiée par un test. Enregistrer reste le `+`.
 
 **Où j'en suis exactement, et c'est la première chose à me demander.** J'ai
-acheté une clé d'API le 7 septembre, 5 $ de crédit, et j'étais en train de
-l'installer quand la session s'est arrêtée. Dernier point connu : le
-`python3 -m pip install -e ".[analyse]"` était l'étape qui manquait, et je ne
-t'ai pas dit si elle a abouti. **Ne suppose rien** — demande-moi ce
-qu'affiche :
+acheté une clé d'API le 7 septembre, 5 $ de crédit. Le
+`python3 -m pip install -e ".[analyse]"` était l'étape qui manquait, et rien
+dans le dépôt ne dit si elle a abouti — encore moins depuis que la machine a
+changé. **Ne suppose rien** — demande-moi ce qu'affiche :
 
 ```sh
 python3 -m singular parle "dis juste bonjour"
@@ -126,11 +243,22 @@ n'a pas abouti. S'il parle de `ANTHROPIC_API_KEY`, j'ai changé de fenêtre.
 Ces trois outils sont la seule chose qui décide de la suite. **Ne construis
 rien de neuf tant que je ne t'ai pas dit ce qui me manque en m'en servant.**
 
-**L'application native Swift n'est pas la priorité et ne bloque rien.** Le
-port existe, `ios/SingularSage.xcodeproj` est livré, mais il n'a jamais été
-compilé — je n'ai pas de Mac. Une session précédente a passé son temps à le
-réparer pendant que l'app web dormait, finie, dans le même dépôt. Ne refais
-pas ça : **regarde ce qui tourne avant de réparer ce qui ne tourne pas.**
+**L'application native Swift n'est toujours pas la priorité.** Le port existe,
+`ios/SingularSage.xcodeproj` est livré et vérifié par
+`tools/check_xcode_project.py`. Il n'avait jamais été compilé faute de Mac ;
+j'en ai un depuis le 10 septembre et j'ai lancé Xcode ce jour-là. **Demande-moi
+ce qu'a donné `Cmd + U`** plutôt que de le supposer : c'est la seule chose qui
+dise si le port Swift et le moteur Python parlent pareil.
+
+Deux choses à ne pas refaire, chacune payée une fois :
+
+- une session a passé son temps à réparer le port pendant que l'app web
+  dormait, finie, dans le même dépôt. **Regarde ce qui tourne avant de réparer
+  ce qui ne tourne pas** ;
+- l'app native a **son propre journal**, un JSON dans l'app, sans aucun import
+  depuis `~/.singular/journal.db`. Elle s'ouvre donc sur « Le journal est
+  vide ». Compiler et lancer les tests vaut le coup ; m'en servir tous les
+  jours découperait mon journal en deux. `ios/README.md` le dit maintenant.
 
 ## Vérifie l'état en 90 secondes
 
@@ -211,7 +339,7 @@ vaut mieux que ce que tu peux déduire d'ici.** Quand je te donne une capture
 d'écran ou un message d'erreur, c'est la meilleure donnée de la session.
 
 Une cinquième, trouvée le 6 septembre en relisant le serveur, pas à l'usage :
-n'importe quelle page web ouverte dans un navigateur sur mon PC pouvait
+n'importe quelle page web ouverte dans un navigateur sur ma machine pouvait
 écrire dans mon journal et **rendre un verdict à ma place**, sans connaître le
 jeton, y compris en mode `127.0.0.1`. `authorised()` accordait tout à la
 boucle locale « parce qu'il n'y a personne d'autre dessus » : il y a le
@@ -315,8 +443,8 @@ calibration continuent. Ce n'est pas une intention, c'est ce que vérifient
 
 ## Contexte personnel (ne me le redemande pas)
 
-Débutant en code. iPhone + PC Windows ; le Mac est chez ma sœur et n'est pas
-requis. Explique les commandes pas à pas, **une ligne à la fois**.
+Débutant en code. iPhone + **Mac** depuis le 10 septembre 2026 ; le PC Windows
+ne sert plus. Explique les commandes pas à pas.
 
 **Pose-moi tes questions en questionnaire** (`AskUserQuestion`), jamais en
 paragraphes : je réponds sur un téléphone. C'est écrit dans `CLAUDE.md` §24,
