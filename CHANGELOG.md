@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.29.0 — Deux CV, deux listes
+
+Le suivi de candidatures portait une seule liste d'étapes, et l'une d'elles
+disait « retirer toute mention d'alternance tant qu'aucune école n'est
+trouvée ». Personne dans le dépôt ne montrait qu'il l'avait dite, et elle
+contredisait sa réponse du même jour sur les offres : postes et alternances,
+sans hiérarchie. Il a tranché en questionnaire : deux CV.
+
+- Deux listes complètes, pas une liste commune plus deux variantes. Ce sont deux
+  documents : relire à voix haute le CV « poste » ne relit pas l'autre.
+- L'action du jour ne trie pas les deux. Même étape, elle se dit une fois ;
+  étapes différentes, les deux sont nommées. Un ordre arbitraire aurait
+  contredit « sans hiérarchie » en silence chaque matin.
+- `ETAPES_CV` porte enfin sa provenance, comme `PROFIL`. Ce sont des conseils
+  sur sa vie au même titre : ils s'affichent chaque matin et partent dans le
+  bloc collé à Claude, où une étape non marquée voyage comme un fait acquis —
+  le mécanisme exact qui a produit un CV faux.
+- La migration ne perd rien : un fichier d'avant devient la liste « poste »,
+  cases comprises, et la liste « alternance » démarre à zéro.
+- `test_docs_sans_compte_perissable.py` comptait `len(ETAPES_CV)` et annonçait
+  donc « le CV compte 2 étapes » — le nombre de CV. Un garde-fou qui compte la
+  mauvaise chose accuse le document au lieu de lui-même.
+
 ## 3.28.0 — La dernière porte parlait encore anglais
 
 Le corps JSON d'une panne imprévue portait `f"{type(exc).__name__}: {exc}"`, et
