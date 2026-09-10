@@ -484,9 +484,10 @@ terminer c'est la demande **plus ce qu'elle rend faux** ; ne jamais finir un
 tour en nommant un travail qu'on pourrait faire ; à la troisième occurrence
 d'une même erreur, écrire le test au lieu de corriger.
 
----
-
 ## Ce que je dois faire moi-même
 
-Voir `A_FAIRE.md`. En résumé : ouvrir l'app le matin, et **trancher le
-20 septembre**. Le reste attend ce que l'usage montrera.
+Voir `A_FAIRE.md`. En résumé : copier mon journal du PC au Mac si ce n'est pas
+fait, ouvrir l'app le matin, et **trancher le 20 septembre**. Le reste attend
+ce que l'usage montrera.
+
+---

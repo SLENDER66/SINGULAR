@@ -99,3 +99,29 @@ def test_le_prompt_dit_de_quelle_machine_il_parle() -> None:
     texte = PROMPT.read_text(encoding="utf-8")
     assert re.search(r"\bMac\b", texte), "le bloc ne nomme plus sa machine"
     assert "zsh" in texte, "ni son terminal"
+
+
+# --- rien d'utile ne tombe hors du bloc qu'il colle ---------------------------
+
+def test_le_bloc_a_deux_traits_et_rien_apres() -> None:
+    """« Colle uniquement le bloc entre les deux traits » — encore faut-il qu'il
+    contienne tout.
+
+    La section « Ce que je dois faire moi-même » était écrite **après** le
+    second trait. Elle n'était donc jamais collée : elle existait pour un
+    lecteur du dépôt, et le dépôt, Claude le lit déjà tout seul. C'est le piège
+    de la forme — une session qui ajoute une section à la fin d'un fichier
+    l'ajoute hors de ce qui voyage.
+    """
+    lignes = PROMPT.read_text(encoding="utf-8").splitlines()
+    traits = [numero for numero, ligne in enumerate(lignes) if ligne.strip() == "---"]
+
+    assert len(traits) == 2, (
+        f"{len(traits)} trait(s) au lieu de deux : le début et la fin du bloc à "
+        "coller ne sont plus repérables.")
+
+    apres = [ligne for ligne in lignes[traits[1] + 1:] if ligne.strip()]
+    assert not apres, (
+        "ces lignes sont après le second trait, donc jamais collées :\n  "
+        + "\n  ".join(apres[:5])
+        + "\n  Remonte-les avant le trait, ou retire-les.")
