@@ -135,8 +135,17 @@ def verifie_decision(*, probability: float, cost_hours: float, horizon_days: int
 #: n'avaient rien. La phrase vit ici, les trois la lisent, et
 #: `tests/test_saisie_au_clavier.py` verifie que la copie JavaScript -- la
 #: seule qui ne peut pas importer ce fichier -- dit encore la meme chose.
-CONFLIT = ("Cette décision a déjà été tranchée. Ferme et rouvre pour voir le "
-           "verdict enregistré.")
+#: Le fait est le même partout, le geste qui suit ne l'est pas. La phrase
+#: entière était écrite pour la page, et le clavier la recevait telle quelle :
+#: « Ferme et rouvre pour voir le verdict enregistré » n'a rien à fermer dans
+#: un terminal. Un conseil qu'on ne peut pas suivre se lit comme une panne.
+CONFLIT = "Cette décision a déjà été tranchée."
+
+#: Une page affiche un état daté d'avant le verdict ; la rouvrir suffit.
+CONFLIT_PAGE = f"{CONFLIT} Ferme et rouvre pour voir le verdict enregistré."
+
+#: Le clavier n'a rien à rouvrir. Il a une commande.
+CONFLIT_CLAVIER = f"{CONFLIT} `python3 -m singular list` montre le verdict enregistré."
 
 
 #: Les trois refus possibles d'une reprise de journal, dans sa langue.
@@ -164,6 +173,6 @@ def introuvable(entry_id: str) -> str:
     return f"{entry_id} n'est dans aucune ligne de ce journal (python3 -m singular list)."
 
 
-__all__ = ["CONFLIT", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",
+__all__ = ["CONFLIT", "CONFLIT_CLAVIER", "CONFLIT_PAGE", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",
            "verifie_decision", "verifie_gain",
            "verifie_heures", "verifie_jours", "verifie_probabilite"]

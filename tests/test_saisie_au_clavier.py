@@ -24,7 +24,7 @@ import pathlib
 import pytest
 
 from singular.__main__ import main
-from singular.saisie import CONFLIT, introuvable
+from singular.saisie import CONFLIT, CONFLIT_CLAVIER, CONFLIT_PAGE, introuvable
 from singular.saisie import (
     entier as _entier,
 )
@@ -270,6 +270,12 @@ def test_the_keyboard_says_a_second_verdict_in_his_language(tmp_path, capsys, co
     assert CONFLIT in sortie
     assert "history is not editable" not in sortie
     assert "already resolved" not in sortie
+    # Ce que la sortie doit dire, et pas seulement la constante : brancher le
+    # clavier sur `CONFLIT_PAGE` passait tous les autres tests, puisque les
+    # deux phrases partagent leur premier tiers.
+    assert "Ferme et rouvre" not in sortie, (
+        "le clavier n'a pas d'onglet a rouvrir : il doit lire `CONFLIT_CLAVIER`")
+    assert "singular list" in sortie
 
 
 def test_the_keyboard_explains_an_unknown_identifier(tmp_path, capsys):
@@ -295,7 +301,7 @@ def test_the_server_answers_a_conflict_in_his_language(tmp_path, route):
     with pytest.raises(SageError) as refus:
         getattr(app, route)(entry_id, charge)
 
-    assert refus.value.message == CONFLIT
+    assert refus.value.message == CONFLIT_PAGE
     assert "editable" not in refus.value.message
 
 
@@ -307,9 +313,25 @@ def test_the_web_copy_of_the_conflict_still_says_the_same_thing():
     l'empeche.
     """
     app_js = (RACINE / "singular/sage/web/app.js").read_text(encoding="utf-8")
-    assert CONFLIT in app_js, (
-        "app.js ne dit plus ce que dit `singular.saisie.CONFLIT`. La phrase a "
-        "un seul domicile ; la copie du navigateur doit le citer mot pour mot.")
+    assert CONFLIT_PAGE in app_js, (
+        "app.js ne dit plus ce que dit `singular.saisie.CONFLIT_PAGE`. La phrase "
+        "a un seul domicile ; la copie du navigateur doit le citer mot pour mot.")
+
+
+def test_the_keyboard_is_not_told_to_close_and_reopen():
+    """Le fait est partagé, le geste qui suit ne l'est pas.
+
+    La phrase entière était écrite pour la page, et le clavier la recevait
+    telle quelle : « Ferme et rouvre pour voir le verdict enregistré » n'a rien
+    à fermer dans un terminal. Un conseil qu'on ne peut pas suivre se lit comme
+    une panne, et c'est la sixième porte par où un message écrit ailleurs
+    arrivait sur son écran.
+    """
+    assert CONFLIT_CLAVIER.startswith(CONFLIT) and CONFLIT_PAGE.startswith(CONFLIT), (
+        "les deux doivent dire le même fait avant de diverger sur le geste")
+    assert "Ferme et rouvre" not in CONFLIT_CLAVIER
+    assert "singular list" in CONFLIT_CLAVIER, "le clavier a une commande, pas un onglet"
+    assert "Ferme et rouvre" in CONFLIT_PAGE
 
 
 # --- une seule porte, et aucune ne la contourne -------------------------------

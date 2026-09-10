@@ -37,7 +37,7 @@ from urllib.parse import unquote_plus, urlsplit
 
 from ..fichiers import ecrire_atomique
 from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
-from ..saisie import CONFLIT, introuvable, verifie_decision
+from ..saisie import CONFLIT_PAGE, introuvable, verifie_decision
 from .icon import render_icon
 from .notice import build_notice
 
@@ -367,7 +367,7 @@ class SageApp:
             # JSON. L'app remplacait la phrase de son cote ; le corps, lui,
             # partait en anglais, et rien ne garantissait que le remplacement
             # survive a la prochaine reecriture du client.
-            raise SageError(HTTPStatus.CONFLICT, CONFLIT) from None
+            raise SageError(HTTPStatus.CONFLICT, CONFLIT_PAGE) from None
         return _entry_as_dict(entry)
 
     def abandon(self, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -376,7 +376,7 @@ class SageApp:
         except KeyError:
             raise SageError(HTTPStatus.NOT_FOUND, introuvable(entry_id)) from None
         except PermissionError:
-            raise SageError(HTTPStatus.CONFLICT, CONFLIT) from None
+            raise SageError(HTTPStatus.CONFLICT, CONFLIT_PAGE) from None
         return _entry_as_dict(entry)
 
     # --- la conversation, quand elle est allumée ------------------------------

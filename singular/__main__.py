@@ -27,7 +27,7 @@ from .journal import (
     Status,
     Tier,
 )
-from .saisie import CONFLIT as _CONFLIT
+from .saisie import CONFLIT_CLAVIER as _CONFLIT
 from .saisie import REPRISE_REFUSEE as _REPRISE_REFUSEE
 from .saisie import entier as _entier
 from .saisie import verifie_decision as _verifie_decision
