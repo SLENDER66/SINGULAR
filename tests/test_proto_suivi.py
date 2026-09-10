@@ -84,8 +84,9 @@ def test_le_bloc_pour_claude_porte_la_situation(proto) -> None:
              "statut": "envoyee", "date_ajout": "2026-08-26",
              "date_statut": "2026-08-26", "notes": ["Vu sur Indeed"]},
         ],
-        "cv": [{"etape": "Changer le titre", "fait": False},
-               {"etape": "Traduire trois chantiers", "fait": True}],
+        "cv": {"poste": [{"etape": "Changer le titre", "fait": False},
+                         {"etape": "Traduire trois chantiers", "fait": True}],
+               "alternance": [{"etape": "Assumer l'alternance", "fait": False}]},
     }
 
     bloc = proto.texte_pour_claude(donnees, "relis le titre de mon CV")
@@ -107,14 +108,15 @@ def test_le_bloc_ne_revele_pas_les_candidatures_classees(proto) -> None:
             {"entreprise": "Refusee SA", "poste": "Chiffreur", "statut": "refus",
              "date_ajout": "2026-08-01", "date_statut": "2026-08-20", "notes": []},
         ],
-        "cv": [{"etape": "Changer le titre", "fait": True}],
+        "cv": {"poste": [{"etape": "Changer le titre", "fait": True}],
+               "alternance": [{"etape": "Assumer l'alternance", "fait": True}]},
     }
 
     bloc = proto.texte_pour_claude(donnees, "et maintenant ?")
 
     assert "Refusee SA" not in bloc
     assert "je n'ai pas encore commence" in bloc
-    assert "Mon CV est termine." in bloc
+    assert "Mes deux CV sont termines." in bloc
 
 
 def test_les_etapes_du_cv_se_mettent_a_jour_tant_que_rien_n_est_coche(proto, tmp_path) -> None:
@@ -133,7 +135,8 @@ def test_les_etapes_du_cv_se_mettent_a_jour_tant_que_rien_n_est_coche(proto, tmp
 
     donnees = proto.charger()
 
-    assert [e["etape"] for e in donnees["cv"]] == proto.TEXTES_CV
+    assert {nom: [e["etape"] for e in etapes] for nom, etapes in donnees["cv"].items()} \
+        == proto.TEXTES_CV
 
 
 def test_une_etape_deja_cochee_interdit_la_mise_a_jour(proto) -> None:
@@ -147,7 +150,12 @@ def test_une_etape_deja_cochee_interdit_la_mise_a_jour(proto) -> None:
 
     donnees = proto.charger()
 
-    assert [e["etape"] for e in donnees["cv"]] == ["Une etape d'avant", "Une autre"]
+    assert [e["etape"] for e in donnees["cv"][proto.CV_POSTE]] \
+        == ["Une etape d'avant", "Une autre"], "le travail deja fait ne se perd pas"
+    assert [e["etape"] for e in donnees["cv"][proto.CV_ALTERNANCE]] \
+        == proto.TEXTES_CV[proto.CV_ALTERNANCE], "la seconde liste demarre a zero"
+    assert not any(e["fait"] for e in donnees["cv"][proto.CV_ALTERNANCE]), (
+        "personne n'a jamais coche une etape de la seconde liste")
 
 
 # --- rien sur sa vie qui ne vienne de lui ------------------------------------
@@ -189,7 +197,7 @@ def test_chaque_etape_du_cv_porte_sa_provenance(proto) -> None:
     """
     fautes = [
         f"« {entree!r} »"
-        for entree in proto.ETAPES_CV
+        for etapes in proto.ETAPES_CV.values() for entree in etapes
         if not (isinstance(entree, tuple) and len(entree) == 2
                 and isinstance(entree[0], str) and entree[1] in (proto.DIT, proto.DEDUIT))
     ]
@@ -202,25 +210,39 @@ def test_chaque_etape_du_cv_porte_sa_provenance(proto) -> None:
 
 
 def test_une_etape_deduite_ne_voyage_pas_deguisee(proto) -> None:
-    """Elle s'affiche marquee partout ou elle s'affiche, y compris chez Claude."""
-    # Tolerant a une etape non marquee : c'est le test ci-dessus qui la refuse,
-    # et deux tests qui crient pour la meme faute en cachent le message.
-    deduites = [entree[0] for entree in proto.ETAPES_CV
-                if isinstance(entree, tuple) and entree[1] == proto.DEDUIT]
-    if not deduites:
-        pytest.skip("plus aucune etape deduite : rien a garder ici")
+    """Le mecanisme, eprouve meme quand aucune etape reelle n'est deduite.
 
-    texte = deduites[0]
-    assert "(deduit" in proto.marque(texte)
-    assert proto.marque(proto.TEXTES_CV[0]) == proto.TEXTES_CV[0] or \
-        proto.ETAPES_CV[0][1] == proto.DEDUIT, "un fait dit ne se marque pas"
+    Une etape l'a ete : « retirer toute mention d'alternance », que personne ne
+    montrait qu'il avait dite. Il a tranche depuis, donc plus rien n'est marque
+    -- et un test qui se contenterait de parcourir les etapes reelles ne
+    garderait alors plus rien. Celui-ci en injecte une.
+    """
+    veritables = {nom: list(etapes) for nom, etapes in proto.ETAPES_CV.items()}
+    invente = "Ne postuler qu'aux grosses boites"
+    try:
+        proto.ETAPES_CV[proto.CV_POSTE].append((invente, proto.DEDUIT))
+        proto.PROVENANCE_CV[invente] = proto.DEDUIT
 
-    donnees = {"candidatures": [], "cv": [{"etape": t, "fait": False} for t in proto.TEXTES_CV]}
-    bloc = proto.texte_pour_claude(donnees, "relis mon CV")
-    ligne_deduite = next(texte_ligne for texte_ligne in bloc.splitlines() if texte[:30] in texte_ligne)
-    assert "(deduit" in ligne_deduite, (
-        "l'etape part chez Claude comme un fait acquis : c'est exactement le "
-        "mecanisme qui a produit un CV faux")
+        assert "(deduit" in proto.marque(invente)
+        donnees = {"candidatures": [],
+                   "cv": {nom: [{"etape": invente, "fait": False}]
+                          for nom in proto.TEXTES_CV}}
+        bloc = proto.texte_pour_claude(donnees, "relis mon CV")
+        ligne_deduite = next(texte for texte in bloc.splitlines() if invente in texte)
+        assert "(deduit" in ligne_deduite, (
+            "l'etape part chez Claude comme un fait acquis : c'est exactement le "
+            "mecanisme qui a produit un CV faux")
+    finally:
+        for nom, etapes in veritables.items():
+            proto.ETAPES_CV[nom][:] = etapes
+        proto.PROVENANCE_CV.pop(invente, None)
+
+
+def test_un_fait_dit_ne_porte_aucune_marque(proto) -> None:
+    """L'inverse : tout marquer affaiblirait ce que la marque veut dire."""
+    for textes in proto.TEXTES_CV.values():
+        for texte in textes:
+            assert proto.marque(texte) == texte
 
 
 def test_une_etape_inconnue_ne_se_marque_pas(proto) -> None:
@@ -230,7 +252,8 @@ def test_une_etape_inconnue_ne_se_marque_pas(proto) -> None:
 
 def test_une_deduction_est_affichee_comme_non_verifiee(proto) -> None:
     """Si une déduction entre quand même, elle ne doit pas voyager déguisée."""
-    donnees = {"candidatures": [], "cv": [{"etape": "x", "fait": True}]}
+    donnees = {"candidatures": [], "cv": {"poste": [{"etape": "x", "fait": True}],
+                                          "alternance": [{"etape": "y", "fait": True}]}}
     veritable = list(proto.PROFIL)
     try:
         proto.PROFIL.append(("Il vise plutot l'industriel.", proto.DEDUIT))
@@ -246,7 +269,8 @@ def test_une_deduction_est_affichee_comme_non_verifiee(proto) -> None:
 
 def test_un_fait_dit_n_est_pas_marque_comme_incertain(proto) -> None:
     """L'inverse : signaler tout affaiblirait ce que le signal veut dire."""
-    donnees = {"candidatures": [], "cv": [{"etape": "x", "fait": True}]}
+    donnees = {"candidatures": [], "cv": {"poste": [{"etape": "x", "fait": True}],
+                                          "alternance": [{"etape": "y", "fait": True}]}}
 
     bloc = proto.texte_pour_claude(donnees, "une question")
 
@@ -255,3 +279,76 @@ def test_un_fait_dit_n_est_pas_marque_comme_incertain(proto) -> None:
     # change des qu'il precise quelque chose, et un test qui casse a chaque
     # precision apprend a ignorer les tests.
     assert proto.PROFIL[0][0] in bloc
+
+
+# --- deux CV, et aucun ne passe devant l'autre --------------------------------
+
+def _donnees(proto, faites_poste: int = 0, faites_alternance: int = 0) -> dict:
+    cv = {}
+    for nom, textes in proto.TEXTES_CV.items():
+        faites = faites_poste if nom == proto.CV_POSTE else faites_alternance
+        cv[nom] = [{"etape": texte, "fait": index < faites}
+                   for index, texte in enumerate(textes)]
+    return {"candidatures": [], "cv": cv}
+
+
+def test_les_deux_cv_existent_et_different_par_l_alternance(proto) -> None:
+    """Ce qu'il a tranche le 9 septembre : un CV par marche, sans hierarchie."""
+    poste = proto.TEXTES_CV[proto.CV_POSTE]
+    alternance = proto.TEXTES_CV[proto.CV_ALTERNANCE]
+
+    assert len(poste) == len(alternance)
+    differentes = [(a, b) for a, b in zip(poste, alternance) if a != b]
+    assert len(differentes) == 1, "les deux CV ne different que sur l'alternance"
+    dit_poste, dit_alternance = differentes[0]
+    assert "Retirer" in dit_poste and "alternance" in dit_poste
+    assert "Assumer" in dit_alternance and "alternance" in dit_alternance
+
+
+def test_quand_les_deux_cv_attendent_la_meme_etape_elle_se_dit_une_fois(proto) -> None:
+    """Sinon le matin repete deux fois la meme phrase, et on cesse de la lire."""
+    dit = proto.action_du_jour(_donnees(proto))
+
+    assert sum(1 for texte in dit if "Titre :" in texte) == 1
+    assert "des deux CV" in dit[0]
+
+
+def test_quand_ils_divergent_aucun_ne_passe_devant(proto) -> None:
+    """« Postes et alternances, sans hierarchie » -- sa reponse, appliquee ici.
+
+    Un tri arbitraire entre les deux listes la contredirait en silence chaque
+    matin, et c'est le genre de contradiction que personne ne remarque.
+    """
+    dit = proto.action_du_jour(_donnees(proto, faites_poste=1))
+
+    assert any(proto.NOMS_CV[proto.CV_POSTE] in texte for texte in dit)
+    assert any(proto.NOMS_CV[proto.CV_ALTERNANCE] in texte for texte in dit)
+    ordre = [texte for texte in dit if "CV " in texte]
+    assert len(ordre) >= 2, f"les deux CV doivent etre nommes : {dit}"
+
+
+def test_un_seul_cv_fini_laisse_l_autre_visible(proto) -> None:
+    """Terminer le CV poste ne doit pas eteindre le rappel de l'autre."""
+    dit = proto.action_du_jour(_donnees(proto, faites_poste=len(proto.TEXTES_CV[proto.CV_POSTE])))
+
+    assert "Avancer le CV" in dit[0]
+    assert proto.NOMS_CV[proto.CV_ALTERNANCE] in dit[0]
+
+
+def test_le_numero_a_l_ecran_coche_la_bonne_liste(proto, capsys) -> None:
+    """Les etapes sont numerotees d'un bout a l'autre des deux listes.
+
+    Un numero qui cocherait la mauvaise ligne serait invisible : les quatre
+    etapes communes ont le meme texte des deux cotes.
+    """
+    donnees = _donnees(proto)
+    premiere_alternance = len(proto.TEXTES_CV[proto.CV_POSTE]) + 1
+    proto.input = lambda _="": str(premiere_alternance)
+    try:
+        proto.cocher_cv(donnees)
+    finally:
+        del proto.input
+
+    assert not any(e["fait"] for e in donnees["cv"][proto.CV_POSTE])
+    assert donnees["cv"][proto.CV_ALTERNANCE][0]["fait"]
+    assert proto.NOMS_CV[proto.CV_ALTERNANCE] in capsys.readouterr().out

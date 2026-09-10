@@ -10,10 +10,13 @@ Ce qu'il fait a chaque lancement : rappeler l'etat des candidatures, puis
 proposer UNE action, la plus importante. Une seule, parce qu'une liste de
 douze choses a faire est une liste qu'on ne fait pas.
 
-La forme vient d'un fait : les candidatures n'ont pas encore commence, le CV
-n'est pas pret. Un outil qui reclamerait des candidatures serait vide et
-agacant pendant toute la semaine d'essai, et ne prouverait rien. Tant que le
-CV n'est pas fini, l'action du jour porte sur le CV.
+La forme vient d'un fait : les candidatures n'ont pas encore commence, les CV
+ne sont pas prets. Un outil qui reclamerait des candidatures serait vide et
+agacant pendant toute la semaine d'essai, et ne prouverait rien. Tant qu'un CV
+n'est pas fini, l'action du jour porte sur lui.
+
+Il y a deux CV depuis le 9 septembre 2026 -- un pour les postes, un pour les
+alternances -- et aucun ne passe devant l'autre.
 
 Sortie volontairement sans fleche, sans tiret cadratin et sans emoji : la
 console de Windows ecrit en cp850 et s'arrete sur le reste.
@@ -86,32 +89,78 @@ DEDUIT = "deduit"
 #: deductions non demandees lui ont deja coute un CV faux et un marche ecarte.
 #: `ETAPES_CV` n'etait pas marquee -- seul `PROFIL` l'etait, et la correction
 #: s'etait arretee la.
-ETAPES_CV = [
-    ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
-     " Les 2 ans de BE en premier, le terrain juste apres", DIT),
-    ("Retirer toute mention d'alternance tant qu'aucune ecole n'est trouvee :"
-     " une promesse sans date inquiete un recruteur", DEDUIT),
-    ("Nommer le materiel au lieu d'ecrire « CVC » : chambres froides, groupes"
-     " electrogenes, bruleurs, CTA double flux. Avec les puissances et volumes", DIT),
-    ("Relire a voix haute, couper tout ce qui ne sert pas le poste vise", DIT),
-    ("Faire relire par quelqu'un du metier", DIT),
-]
-
-#: Le texte des etapes, dans l'ordre. C'est ce que le fichier de donnees garde.
 #:
-#: Les deux lectures ci-dessous tolerent une etape sans provenance plutot que
-#: de lever a l'import. Ce n'est pas de l'indulgence : une session qui oublie
-#: la marque doit faire echouer `tests/test_proto_suivi.py`, pas empecher son
-#: outil de demarrer sur son telephone. Le refus a sa place, et ce n'est pas ici.
-TEXTES_CV = [entree[0] if isinstance(entree, tuple) else entree for entree in ETAPES_CV]
+#: **Deux CV, deux listes.** Il l'a tranche lui-meme, en questionnaire, le
+#: 9 septembre 2026 : un CV pour les postes, sans mention d'alternance, et un
+#: CV pour les alternances qui l'assume. La liste unique portait une etape
+#: -- « retirer toute mention d'alternance » -- que personne ne montrait qu'il
+#: avait dite, et qui contredisait sa reponse du meme jour sur les offres :
+#: postes et alternances, sans hierarchie.
+#:
+#: Les quatre etapes communes figurent dans les deux listes, et ce n'est pas
+#: une redondance de comptabilite : ce sont deux documents. Relire a voix haute
+#: le CV « poste » ne relit pas le CV « alternance ».
+CV_POSTE = "poste"
+CV_ALTERNANCE = "alternance"
+
+#: Le nom de chaque CV tel qu'il s'affiche.
+NOMS_CV = {CV_POSTE: "CV poste", CV_ALTERNANCE: "CV alternance"}
+
+_TITRE = ("Titre : « Charge d'etudes CVC - chiffrage & dimensionnement »."
+          " Les 2 ans de BE en premier, le terrain juste apres", DIT)
+_MATERIEL = ("Nommer le materiel au lieu d'ecrire « CVC » : chambres froides, groupes"
+             " electrogenes, bruleurs, CTA double flux. Avec les puissances et volumes", DIT)
+_VOIX_HAUTE = ("Relire a voix haute, couper tout ce qui ne sert pas le poste vise", DIT)
+_RELECTURE = ("Faire relire par quelqu'un du metier", DIT)
+
+ETAPES_CV = {
+    CV_POSTE: [
+        _TITRE,
+        ("Retirer toute mention d'alternance : ce CV vise un poste", DIT),
+        _MATERIEL,
+        _VOIX_HAUTE,
+        _RELECTURE,
+    ],
+    CV_ALTERNANCE: [
+        _TITRE,
+        ("Assumer l'alternance : dire que c'est une reprise d'etudes, et que"
+         " l'ecole reste a trouver", DIT),
+        _MATERIEL,
+        _VOIX_HAUTE,
+        _RELECTURE,
+    ],
+}
+
+#: Le texte des etapes, par CV. C'est ce que le fichier de donnees garde.
+#:
+#: La lecture tolere une etape sans provenance plutot que de lever a l'import.
+#: Ce n'est pas de l'indulgence : une session qui oublie la marque doit faire
+#: echouer `tests/test_proto_suivi.py`, pas empecher son outil de demarrer sur
+#: son telephone. Le refus a sa place, et ce n'est pas ici.
+TEXTES_CV = {
+    nom: [entree[0] if isinstance(entree, tuple) else entree for entree in etapes]
+    for nom, etapes in ETAPES_CV.items()
+}
 
 #: De quoi retrouver la provenance d'une etape relue depuis le fichier.
 #:
 #: La provenance se lit ici et jamais dans le fichier : un fichier ecrit avant
 #: ce marquage n'en porte pas, et une etape dont le texte a change depuis n'est
 #: plus l'etape d'ici. Inconnue veut dire « pas de marque », pas « fait ».
-PROVENANCE_CV = {entree[0]: entree[1] for entree in ETAPES_CV
-                 if isinstance(entree, tuple) and len(entree) == 2}
+PROVENANCE_CV = {
+    entree[0]: entree[1]
+    for etapes in ETAPES_CV.values() for entree in etapes
+    if isinstance(entree, tuple) and len(entree) == 2
+}
+
+
+def etapes_a_plat(donnees: dict) -> list[tuple[str, dict]]:
+    """Les etapes des deux CV, dans l'ordre ou elles sont numerotees a l'ecran."""
+    return [(nom, etape) for nom in TEXTES_CV for etape in donnees["cv"][nom]]
+
+
+def restantes_par_cv(donnees: dict) -> dict[str, list[dict]]:
+    return {nom: [e for e in etapes if not e["fait"]] for nom, etapes in donnees["cv"].items()}
 
 
 def marque(texte: str) -> str:
@@ -160,8 +209,28 @@ PROFIL = [
 
 # --- le fichier --------------------------------------------------------------
 
-def _cv_neuf() -> list[dict]:
-    return [{"etape": texte, "fait": False} for texte in TEXTES_CV]
+def _cv_neuf() -> dict[str, list[dict]]:
+    return {nom: [{"etape": texte, "fait": False} for texte in textes]
+            for nom, textes in TEXTES_CV.items()}
+
+
+def _cv_relu(brut: object) -> dict[str, list[dict]]:
+    """Le CV du fichier, ramene a deux listes quoi qu'il contienne.
+
+    Un fichier ecrit avant le 9 septembre 2026 porte une seule liste. Elle a ete
+    ecrite pour le CV « poste » -- c'est elle qui disait de retirer la mention
+    d'alternance -- donc elle le devient, avec ses cases cochees, et la liste
+    « alternance » demarre a zero. Rien de coche ne se perd, et rien n'est
+    invente : personne n'a jamais coche une etape de la seconde liste.
+    """
+    if isinstance(brut, dict):
+        return {nom: brut.get(nom) or [{"etape": texte, "fait": False} for texte in textes]
+                for nom, textes in TEXTES_CV.items()}
+    if isinstance(brut, list):
+        return {CV_POSTE: brut,
+                CV_ALTERNANCE: [{"etape": texte, "fait": False}
+                                for texte in TEXTES_CV[CV_ALTERNANCE]]}
+    return _cv_neuf()
 
 
 def charger() -> dict:
@@ -176,7 +245,7 @@ def charger() -> dict:
         print("  Rien n'a ete efface. Corrige-le ou renomme-le, puis relance.")
         raise SystemExit(1) from None
     donnees.setdefault("candidatures", [])
-    donnees.setdefault("cv", _cv_neuf())
+    donnees["cv"] = _cv_relu(donnees.get("cv"))
     # Les etapes ont ete ecrites sur une lecture fausse du profil -- une
     # reconversion depuis le terrain, alors que les 2 ans de bureau d'etudes
     # etaient deja faits -- puis corrigees. Un fichier deja cree gardait
@@ -184,9 +253,11 @@ def charger() -> dict:
     # ete d'effacer ses donnees. Tant qu'aucune etape n'est cochee, il n'y a
     # rien a perdre. Des qu'une l'est, on ne touche plus a rien : le travail
     # deja fait vaut mieux qu'une liste a jour.
-    if not any(etape["fait"] for etape in donnees["cv"]) \
-            and [etape["etape"] for etape in donnees["cv"]] != TEXTES_CV:
-        donnees["cv"] = _cv_neuf()
+    for nom, etapes in donnees["cv"].items():
+        if not any(etape["fait"] for etape in etapes) \
+                and [etape["etape"] for etape in etapes] != TEXTES_CV[nom]:
+            donnees["cv"][nom] = [{"etape": texte, "fait": False}
+                                  for texte in TEXTES_CV[nom]]
     return donnees
 
 
@@ -303,15 +374,27 @@ def action_du_jour(donnees: dict) -> list[str]:
             "Ce n'est pas un echec, c'est de la place libre dans ta liste.",
         ]
 
-    restantes = [e for e in donnees["cv"] if not e["fait"]]
-    if restantes:
-        faites = len(donnees["cv"]) - len(restantes)
-        return [
-            f"Avancer le CV. Etape {faites + 1} sur {len(donnees['cv'])} :",
-            f"  {marque(restantes[0]['etape'])}",
-            ("Tant que le CV n'est pas pret, candidater brule des entreprises"
-            " que tu ne pourras pas redemander."),
-        ]
+    restantes = restantes_par_cv(donnees)
+    en_retard = [nom for nom, reste in restantes.items() if reste]
+    if en_retard:
+        # Les deux CV sont a egalite : ni l'un ni l'autre ne passe devant. C'est
+        # sa reponse du 9 septembre -- postes et alternances, sans hierarchie --
+        # et un tri arbitraire ici la contredirait en silence chaque matin.
+        # Quand les deux attendent la meme etape, elle se dit une fois.
+        prochaines = {nom: restantes[nom][0]["etape"] for nom in en_retard}
+        if len(set(prochaines.values())) == 1:
+            nom = en_retard[0]
+            place = len(donnees["cv"][nom]) - len(restantes[nom]) + 1
+            portee = "des deux CV" if len(en_retard) == 2 else f"du {NOMS_CV[nom]}"
+            dit = [f"Avancer le CV. Etape {place} sur {len(donnees['cv'][nom])}, {portee} :",
+                   f"  {marque(prochaines[nom])}"]
+        else:
+            dit = ["Avancer les deux CV. Ils ne demandent pas la meme chose :"]
+            for nom in en_retard:
+                dit.append(f"  {NOMS_CV[nom]} : {marque(prochaines[nom])}")
+        dit.append("Tant que le CV n'est pas pret, candidater brule des entreprises"
+                   " que tu ne pourras pas redemander.")
+        return dit
 
     if not candidatures:
         return [
@@ -380,7 +463,7 @@ def afficher_point(donnees: dict) -> None:
             ligne(f"    note : {note}")
 
     closes = len(candidatures) - len(ouvertes)
-    restantes = sum(1 for e in donnees["cv"] if not e["fait"])
+    restantes = sum(len(reste) for reste in restantes_par_cv(donnees).values())
     if closes or restantes:
         ligne()
     if closes:
@@ -389,8 +472,9 @@ def afficher_point(donnees: dict) -> None:
         # Le CV reste sous les yeux tant qu'il n'est pas fini, meme quand
         # l'action du jour porte sur autre chose : c'est lui qui decide de la
         # qualite de tout ce qui part ensuite.
-        faites = len(donnees["cv"]) - restantes
-        ligne(f"(CV : {faites} etape(s) sur {len(donnees['cv'])})")
+        for nom, etapes in donnees["cv"].items():
+            faites = sum(1 for e in etapes if e["fait"])
+            ligne(f"({NOMS_CV[nom]} : {faites} etape(s) sur {len(etapes)})")
 
     ligne()
     ligne("AUJOURD'HUI")
@@ -416,11 +500,15 @@ def afficher_tout(donnees: dict) -> None:
 
 def afficher_cv(donnees: dict) -> None:
     ligne()
-    ligne("LE CV")
-    ligne()
-    for numero, etape in enumerate(donnees["cv"], start=1):
-        coche = "[x]" if etape["fait"] else "[ ]"
-        ligne(f"{numero:>2}. {coche} {marque(etape['etape'])}")
+    ligne("LES DEUX CV")
+    numero = 0
+    for nom, etapes in donnees["cv"].items():
+        ligne()
+        ligne(NOMS_CV[nom].upper())
+        for etape in etapes:
+            numero += 1
+            coche = "[x]" if etape["fait"] else "[ ]"
+            ligne(f"{numero:>2}. {coche} {marque(etape['etape'])}")
     ligne()
 
 
@@ -502,12 +590,13 @@ def noter(donnees: dict) -> None:
 def cocher_cv(donnees: dict) -> None:
     afficher_cv(donnees)
     brut = demander("Numero de l'etape faite (vide pour revenir) :")
-    if not brut.isdigit() or not 1 <= int(brut) <= len(donnees["cv"]):
+    toutes = etapes_a_plat(donnees)
+    if not brut.isdigit() or not 1 <= int(brut) <= len(toutes):
         return
-    etape = donnees["cv"][int(brut) - 1]
+    nom, etape = toutes[int(brut) - 1]
     etape["fait"] = not etape["fait"]
     sauver(donnees)
-    ligne("Fait." if etape["fait"] else "Remis a faire.")
+    ligne(f"{NOMS_CV[nom]} : fait." if etape["fait"] else f"{NOMS_CV[nom]} : remis a faire.")
 
 # --- parler a Claude, sans que ce script parle a personne -------------------
 
@@ -547,14 +636,19 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
         lignes.append("Aucune candidature en cours : je n'ai pas encore commence.")
     lignes.append("")
 
-    restantes = [e["etape"] for e in donnees["cv"] if not e["fait"]]
-    if restantes:
-        faites = len(donnees["cv"]) - len(restantes)
-        lignes.append(f"Mon CV n'est pas fini : {faites} etape(s) sur {len(donnees['cv'])}.")
-        lignes.append("Il me reste :")
-        lignes += [f"- {marque(e)}" for e in restantes]
+    restantes = restantes_par_cv(donnees)
+    if any(restantes.values()):
+        lignes.append("J'ai deux CV : un pour les postes, un pour les alternances.")
+        for nom, reste in restantes.items():
+            total = len(donnees["cv"][nom])
+            if not reste:
+                lignes.append(f"Mon {NOMS_CV[nom]} est termine.")
+                continue
+            lignes.append(f"Mon {NOMS_CV[nom]} : {total - len(reste)} etape(s) sur {total}."
+                          " Il me reste :")
+            lignes += [f"- {marque(e['etape'])}" for e in reste]
     else:
-        lignes.append("Mon CV est termine.")
+        lignes.append("Mes deux CV sont termines.")
     lignes.append("")
 
     lignes.append("Ma question :")

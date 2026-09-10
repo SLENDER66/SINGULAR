@@ -41,13 +41,24 @@ def _valeur(brut: str) -> int:
     return int(brut) if brut.isdigit() else MOTS[brut.lower()]
 
 
-def _etapes_du_cv() -> list[str]:
+def _longueur_du_cv() -> int:
+    """Le nombre d'etapes d'un CV. Il y en a deux, de meme longueur.
+
+    Le compte portait sur `ETAPES_CV` directement. Depuis qu'il y a deux
+    listes, `len()` rendait deux -- le nombre de CV -- et le test annoncait
+    « le CV compte 2 etapes ». Un garde-fou qui compte la mauvaise chose est
+    pire qu'aucun : il accuse le document au lieu de lui-meme.
+    """
     source = ROOT / "proto" / "suivi_candidatures.py"
     spec = importlib.util.spec_from_file_location("proto_etapes", source)
     module = importlib.util.module_from_spec(spec)
     sys.modules["proto_etapes"] = module
     spec.loader.exec_module(module)
-    return module.ETAPES_CV
+    longueurs = {len(etapes) for etapes in module.ETAPES_CV.values()}
+    assert len(longueurs) == 1, (
+        f"les deux CV n'ont plus le meme nombre d'etapes ({longueurs}) : "
+        "un document ne peut plus annoncer un seul nombre")
+    return longueurs.pop()
 
 
 #: Un document est replié à la main : « huit branches traînent encore\nsur
@@ -74,7 +85,7 @@ def _trouver(relative: str, nom: str, proche: str):
 @pytest.mark.parametrize("relative", DOCUMENTS)
 def test_un_compte_d_etapes_annonce_est_le_vrai(relative: str) -> None:
     """Si un document dit combien d'étapes compte le CV, il doit avoir raison."""
-    attendu = len(_etapes_du_cv())
+    attendu = _longueur_du_cv()
     fautes = [ou for ou, valeur in _trouver(relative, "étapes", "CV") if valeur != attendu]
 
     assert not fautes, (

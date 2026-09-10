@@ -71,7 +71,7 @@ L'ordre est tout l'intérêt du script. Il ne donne jamais deux choses à faire.
 2. **Une candidature préparée mais pas envoyée** depuis 2 jours.
 3. **Une candidature sans réponse** depuis 10 jours : relancer.
 4. **Une relance sans réponse** depuis 14 jours : classer sans suite.
-5. **Le CV pas fini** : l'étape suivante.
+5. **Un CV pas fini** : l'étape suivante.
 6. **Rien ajouté depuis 7 jours** : en ajouter une.
 
 Le CV passe avant les nouvelles candidatures, et c'est délibéré : tu ne
@@ -79,12 +79,25 @@ candidates pas encore. Un outil qui te réclamerait des candidatures cette
 semaine serait vide et agaçant, et ne t'aurait rien appris — c'est exactement
 le reproche que le Sage t'a fait à tort le premier soir.
 
-Les étapes du CV sont pré-remplies pour un profil qui **a déjà 2 ans de
-bureau d'études** derrière lui, plus 5 ans de terrain Armée (chambre froide,
-groupe électrogène, brûleur). Elles ont d'abord été écrites pour une
-reconversion depuis le terrain : c'était faux, et le tableau de bord a propagé
-l'erreur deux jours. Elles sont dans le fichier, en haut, avec le profil :
-change-les si elles ne correspondent plus.
+**Il y a deux CV**, et deux listes d'étapes : un CV pour les postes, sans
+mention d'alternance, et un CV pour les alternances qui l'assume. Thomas l'a
+tranché lui-même le 9 septembre 2026. Avant, une liste unique portait l'étape
+« retirer toute mention d'alternance » — que personne ne montrait qu'il avait
+dite, et qui contredisait sa réponse du même jour sur les offres : postes et
+alternances, sans hiérarchie.
+
+Les étapes communes figurent dans les deux listes. Ce sont deux
+documents : relire à voix haute le CV « poste » ne relit pas l'autre. Quand les
+deux attendent la même étape, elle se dit une fois ; quand elles divergent, les
+deux sont nommées et **aucune ne passe devant**.
+
+Les étapes sont pré-remplies pour un profil qui **a déjà 2 ans de bureau
+d'études** derrière lui, plus 5 ans de terrain Armée (chambre froide, groupe
+électrogène, brûleur). Elles ont d'abord été écrites pour une reconversion
+depuis le terrain : c'était faux, et le tableau de bord a propagé l'erreur deux
+jours. Elles sont dans le fichier, en haut, avec le profil, et chacune porte sa
+provenance — `DIT` ou `DEDUIT` — comme les lignes du profil : change-les si
+elles ne correspondent plus.
 
 Tant qu'aucune étape n'est cochée, un changement de cette liste se propage
 automatiquement à ton fichier de données. Dès que tu en coches une, ta liste
