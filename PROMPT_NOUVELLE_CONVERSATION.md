@@ -277,23 +277,27 @@ n'a pas abouti. S'il parle de `ANTHROPIC_API_KEY`, j'ai changé de fenêtre.
 Ces trois outils sont la seule chose qui décide de la suite. **Ne construis
 rien de neuf tant que je ne t'ai pas dit ce qui me manque en m'en servant.**
 
-**L'application native Swift n'est toujours pas la priorité.** Le port existe,
-`ios/SingularSage.xcodeproj` est livré et vérifié par
-`tools/check_xcode_project.py`. Il n'avait jamais été compilé faute de Mac ;
-j'en ai un depuis le 10 septembre et j'ai dit ce jour-là que je lançais Xcode.
-**Demande-moi ce qu'a donné `Cmd + U`** plutôt que de le supposer — personne
-n'a écrit le résultat ici, et c'est la seule chose qui dise si le port Swift et
-le moteur Python parlent pareil.
+**L'application native Swift est écartée, et c'est moi qui l'ai écartée.**
+Le 10 septembre 2026, en questionnaire : l'App Store a refusé Xcode sur ce Mac,
+la question était « on cherche une version plus ancienne ou on laisse tomber »,
+et j'ai laissé tomber. Le port existe toujours, `ios/` est livré et vérifié par
+`tools/check_xcode_project.py`, et les tests de parité continuent de tourner
+ici. **Ne me la repropose pas** : ce n'est pas une tâche en attente.
 
-Deux choses à ne pas refaire, chacune payée une fois :
+Ce que ça ne change pas : l'app web sur mon iPhone fait déjà tout. La seule
+chose que l'app native ajouterait est de marcher Mac éteint.
+
+Trois choses à ne pas refaire, chacune payée une fois :
 
 - une session a passé son temps à réparer le port pendant que l'app web
   dormait, finie, dans le même dépôt. **Regarde ce qui tourne avant de réparer
   ce qui ne tourne pas** ;
 - l'app native a **son propre journal**, un JSON dans l'app, sans aucun import
-  depuis `~/.singular/journal.db`. Elle s'ouvre donc sur « Le journal est
-  vide ». Compiler et lancer les tests vaut le coup ; m'en servir tous les
-  jours découperait mon journal en deux. `ios/README.md` le dit maintenant.
+  depuis `~/.singular/journal.db`. Elle s'ouvrirait sur « Le journal est
+  vide », et m'en servir tous les jours découperait mon journal en deux ;
+- le projet exige iOS 17 alors que le code n'a besoin que d'iOS 16 — mesuré le
+  10 septembre, `NavigationStack` est le plancher réel. Si la question se
+  repose un jour, c'est le premier levier. Elle ne se repose pas aujourd'hui.
 
 ## Vérifie l'état en 90 secondes
 

@@ -1,8 +1,7 @@
 # Ce que je dois faire moi-même
 
-Le Sage tourne et je m'en sers. Ce qui reste tient en deux gestes par
-semaine, un clic sur GitHub, plus la compilation de l'app native — qui
-attendait un Mac, et le Mac est là depuis le 10 septembre 2026.
+Le Sage tourne et je m'en sers. Ce qui reste tient en deux gestes par semaine
+et un clic sur GitHub.
 
 **Les commandes de ce fichier sont celles du Terminal du Mac (zsh).** Elles
 étaient en PowerShell : le PC Windows était la machine principale jusqu'à
@@ -438,9 +437,27 @@ C'est ça qui décidera de la faculté suivante — pas une liste écrite d'avan
 
 ---
 
-## En attente d'un Mac — l'app native, hors ligne et partout
+## L'app native — mise de côté le 10 septembre 2026
 
-### Compiler l'app iPhone  (≈ 1 h, dont 40 min de téléchargement)
+**Je l'ai écartée moi-même**, en questionnaire, le jour où le Mac est arrivé.
+L'App Store a refusé Xcode — pas compatible avec cette machine — et la question
+posée était : on cherche une version plus ancienne, ou on laisse tomber ?
+
+J'ai laissé tomber, et c'est ce que la section 0 du mandat recommande. L'app
+web sur mon iPhone fait déjà tout. La seule chose que l'app native ajouterait
+est de marcher Mac éteint, et une séance entière a déjà été perdue à réparer ce
+port pendant que l'app web dormait, finie, dans le même dépôt.
+
+Ce qui suit reste écrit pour le jour où la question se reposerait. **Ce n'est
+pas une tâche en attente : c'est une porte fermée dont on garde la clé.**
+
+Une chose a été mesurée ce jour-là et vaut d'être notée : **le projet exige
+iOS 17 alors que le code n'a besoin que d'iOS 16.** Le plancher réel est
+`NavigationStack` ; rien dans les sources n'utilise d'API iOS 17. Abaisser la
+cible élargirait les iPhone compatibles et permettrait à un Xcode plus ancien
+de construire le projet. Ça n'a pas été fait, faute d'objet.
+
+### Si la question se repose : compiler l'app iPhone  (≈ 1 h, dont 40 min de téléchargement)
 
 Suis **`ios/README.md`**. Cinq étapes, écrites pour quelqu'un qui n'a jamais
 ouvert Xcode. Le projet Xcode est maintenant dans le dépôt : il n'y a plus rien

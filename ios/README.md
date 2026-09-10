@@ -6,10 +6,23 @@
 > même Notice. La marche à suivre est dans `A_FAIRE.md`, elle prend dix
 > minutes et ne demande ni Mac, ni compte Apple, ni un euro.
 
+> **Écartée le 10 septembre 2026, par Thomas lui-même.** L'App Store a refusé
+> Xcode sur son Mac. La question lui a été posée en questionnaire — chercher une
+> version plus ancienne, ou laisser tomber — et il a laissé tomber. Ce document
+> reste écrit pour le jour où la question se reposerait ; **ce n'est pas une
+> tâche en attente.**
+
 Ce document concerne l'application **native**, qui lève une limite précise et
-une seule : l'app web a besoin que ton PC tourne et que tu sois sur ton wifi.
-L'app native marche hors ligne, partout, PC éteint. C'est le seul avantage, et
-il coûte un Mac.
+une seule : l'app web a besoin que ta machine tourne et que tu sois sur ton
+wifi. L'app native marche hors ligne, partout, machine éteinte. C'est le seul
+avantage, et il coûte un Mac capable de faire tourner Xcode.
+
+**Si la question se repose, commence par là :** le projet déclare
+`IPHONEOS_DEPLOYMENT_TARGET = 17.0`, et le code n'en a pas besoin. Le plancher
+réel est `NavigationStack`, donc **iOS 16** ; aucune source n'utilise d'API
+iOS 17 — vérifié le 10 septembre 2026. Abaisser la cible élargit les iPhone
+compatibles et permet à un Xcode plus ancien de construire le projet, ce qui
+est exactement le blocage rencontré. Ça n'a pas été fait faute d'objet.
 
 Tout le code est écrit. Il reste à le compiler, ce que seul un Mac peut faire.
 Compte **une heure la première fois**, dont quarante minutes de téléchargement
