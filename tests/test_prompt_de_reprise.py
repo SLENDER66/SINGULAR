@@ -187,3 +187,56 @@ def test_l_adresse_brute_nomme_la_branche_de_travail() -> None:
         assert branche == travail, (
             f"l'adresse brute pointe « {branche} », le mandat declare « {travail} » : "
             "il collerait un prompt d'une autre branche")
+
+
+# --- le bloc ne contredit pas le code qu'il decrit ----------------------------
+
+def test_le_bloc_ne_promet_pas_une_dette_de_vecteurs_qui_n_existe_plus() -> None:
+    """Il annoncait un `Cmd + U` rouge comme normal. Il ne l'est plus.
+
+    Pendant des semaines, les vecteurs committes exigeaient du port Swift deux
+    observations qu'il ne produit pas : l'ecart etait declare d'un cote et
+    contredit de l'autre. Corrige le 9 septembre 2026 -- le generateur refuse
+    d'ecrire un tel vecteur. Le bloc, lui, disait encore « le premier Mac qui
+    compilera verra ces vecteurs echouer », ce qui ferait prendre un vrai
+    defaut pour une dette connue le jour ou il compile.
+    """
+    generateur = (RACINE / "tools" / "generate_notice_vectors.py").read_text(encoding="utf-8")
+    assert "_refuse_les_absentes" in generateur, (
+        "le garde-fou du generateur a disparu : cette regle ne garde plus rien")
+
+    texte = PROMPT.read_text(encoding="utf-8")
+    for promesse in ("vecteurs committés les attendent",
+                     "verra ces vecteurs échouer",
+                     "vecteurs committes les attendent"):
+        assert promesse not in texte, (
+            f"le bloc annonce « {promesse} » alors que le generateur refuse "
+            "desormais d'ecrire un vecteur qui declenche une observation absente "
+            "du port. Un Cmd+U rouge est un vrai defaut.")
+
+
+def test_le_bloc_ne_classe_pas_un_genre_d_offre_avant_l_autre() -> None:
+    """« Postes et alternances, sans hierarchie » -- sa reponse du 9 septembre.
+
+    Le bloc disait « chercher un poste classique passe devant », et la faculte
+    `offres` classait l'alternance en second. Les deux venaient d'une deduction
+    que personne ne lui avait demande de confirmer, et c'est la classe de faute
+    qui lui a deja coute un CV faux et un marche ecarte.
+    """
+    faculte = (RACINE / "singular" / "offres.py").read_text(encoding="utf-8")
+    assert "sans mettre un genre avant" in faculte, (
+        "la faculte `offres` ne dit plus de couvrir les deux sans hierarchie : "
+        "verifie laquelle des deux sources a change avant de corriger l'autre")
+
+    texte = PROMPT.read_text(encoding="utf-8")
+    assert "sans hiérarchie" in texte, (
+        "le bloc ne porte plus sa reponse du 9 septembre. Un lecteur qui ne la "
+        "trouve pas la rededuira, et la deduction precedente lui a coute un CV "
+        "faux et un marche ecarte.")
+
+    # On verifie ce que le bloc affirme, pas ce qu'il evite de dire. Chercher
+    # « poste classique passe devant » accusait deux phrases : celle qui cite
+    # l'ancienne formulation pour la corriger, et « aucune ne passe devant
+    # l'autre » a propos des deux CV. Un test qui crie au loup finit desactive,
+    # et c'est la troisieme fois aujourd'hui que la forme substring le fait.
+    assert "poste et alternance" in texte or "postes et alternances" in texte

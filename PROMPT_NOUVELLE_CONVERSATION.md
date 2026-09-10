@@ -214,9 +214,13 @@ rang Revenus, **verdict attendu le 20 septembre**.
 plus. Tout le dépôt était écrit pour PowerShell et a été traduit ce jour-là ;
 une commande Windows qui aurait survécu quelque part est un reste, et elle est
 fausse. `tests/test_prompt_de_reprise.py` en tient la liste et fait échouer ce
-fichier si l'une d'elles y revient. Mon journal a été copié du PC au Mac —
-`A_FAIRE.md` ouvre sur ce geste et sur la façon de le vérifier ; demande-moi
-si je l'ai fait avant de te fier à ce que le journal affiche.
+fichier si l'une d'elles y revient.
+
+**Mon journal était sur le PC, et je ne t'ai pas dit si je l'ai copié.**
+`~/.singular/journal.db` porte trois mois de décisions chaînées qu'aucune
+session ne reconstruit. `A_FAIRE.md` ouvre sur ce geste et sur la façon de le
+vérifier. Demande-le-moi avant de te fier à ce que le journal affiche : un
+journal neuf et un journal absent donnent le même écran.
 
 Limite du chemin actuel : il faut que la machine tourne et que je sois sur mon
 wifi. C'est la seule chose que l'application native lèverait.
@@ -265,9 +269,10 @@ rien de neuf tant que je ne t'ai pas dit ce qui me manque en m'en servant.**
 **L'application native Swift n'est toujours pas la priorité.** Le port existe,
 `ios/SingularSage.xcodeproj` est livré et vérifié par
 `tools/check_xcode_project.py`. Il n'avait jamais été compilé faute de Mac ;
-j'en ai un depuis le 10 septembre et j'ai lancé Xcode ce jour-là. **Demande-moi
-ce qu'a donné `Cmd + U`** plutôt que de le supposer : c'est la seule chose qui
-dise si le port Swift et le moteur Python parlent pareil.
+j'en ai un depuis le 10 septembre et j'ai dit ce jour-là que je lançais Xcode.
+**Demande-moi ce qu'a donné `Cmd + U`** plutôt que de le supposer — personne
+n'a écrit le résultat ici, et c'est la seule chose qui dise si le port Swift et
+le moteur Python parlent pareil.
 
 Deux choses à ne pas refaire, chacune payée une fois :
 
@@ -313,10 +318,14 @@ pouvoir faire le lien. Deux tests tiennent la règle plutôt que ta vigilance :
 `tests/test_documentation_is_current.py` pour ce qui dépend de la machine —
 celui-là a dû changer de camp le jour du Mac.
 
-Mon clone est dans `~/Documents/SINGULAR`. **Il ne se met pas à jour tout
-seul** : si tu viens de pousser quelque chose, la première chose que je dois
-faire est `git pull` — sinon rien de ce que tu as écrit n'existe chez moi, et
-les étapes suivantes échouent sans dire pourquoi.
+**Je n'ai peut-être pas encore de clone sur le Mac** : la machine est neuve
+du 10 septembre 2026, et au moment où ce fichier a été écrit je n'en avais pas.
+Demande-le-moi avant de me donner une commande qui commence par `cd`.
+
+S'il existe, il est dans `~/Documents/SINGULAR` et **il ne se met pas à jour
+tout seul** : si tu viens de pousser quelque chose, la première chose que je
+dois faire est `git pull` — sinon rien de ce que tu as écrit n'existe chez moi,
+et les étapes suivantes échouent sans dire pourquoi.
 
 ## Contraintes — ne les redécouvre pas
 
@@ -427,11 +436,15 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
    et la liste des observations produites de part et d'autre par
    `tests/test_notice_port_parity.py`.
    **Le port est en retard de deux observations**, `irreversibleItem` et
-   `unpricedItem`, déclarées dans `ABSENTES_DU_PORT` avec la raison. Les
-   vecteurs committés les attendent déjà : le premier Mac qui compilera le port
-   verra ces vecteurs échouer, et ce n'est pas une surprise mais une dette
-   écrite. Retirer un nom de cette liste sans écrire le Swift fait échouer le
-   test ici, tout de suite.
+   `unpricedItem`, déclarées dans `ABSENTES_DU_PORT` — qui vit désormais dans
+   `tools/generate_notice_vectors.py`, parce que c'est le générateur qui doit
+   la respecter. Retirer un nom de cette liste sans écrire le Swift fait
+   échouer le test ici, tout de suite.
+   **Les vecteurs ne les exigent plus.** Ils l'ont fait pendant des semaines :
+   l'écart était déclaré ici et contredit là-bas, et le premier Mac à compiler
+   aurait vu cinq vecteurs échouer. Corrigé le 9 septembre 2026 — le générateur
+   refuse maintenant d'écrire un vecteur qui déclenche une observation absente
+   du port. Un `Cmd + U` rouge est donc un vrai défaut, pas une dette connue.
 
 ## Coût, pour ne pas le recalculer
 
@@ -488,12 +501,22 @@ déduction, et c'était faux. **BTS Fluides Énergies Domotique.** Actuellement 
 chômage, je cherche un poste en bureau d'études **dans la région toulousaine**.
 
 Je ne suis donc **pas en reconversion** : le bureau d'études est déjà mon
-métier. Une reprise d'études en alternance m'intéresse, mais au 7 septembre
-2026 je n'ai **ni école ni entreprise** — la rentrée 2026 est hors d'atteinte,
-et chercher un poste classique passe devant.
+métier. Une reprise d'études en alternance m'intéresse, et je n'ai **ni école
+ni entreprise** à ce jour.
 
-Je ne candidate pas encore : je dois d'abord retravailler mon CV, et c'est pour
-ça que le prototype fait passer le CV avant les candidatures.
+**Je cherche les deux — poste et alternance — sans hiérarchie entre eux.** Je
+l'ai tranché le 9 septembre 2026, en questionnaire. Ce fichier a dit l'inverse
+(« chercher un poste classique passe devant ») et la faculté `offres` classait
+l'alternance en second : les deux venaient d'une déduction que personne ne
+m'avait demandé de confirmer. Ne la refais pas.
+
+J'ai donc **deux CV**, tranché le même jour : un pour les postes, sans mention
+d'alternance, et un pour les alternances qui l'assume.
+`proto/suivi_candidatures.py` porte les deux listes d'étapes, et aucune ne
+passe devant l'autre.
+
+Je ne candidate pas encore : je dois d'abord retravailler mes CV, et c'est pour
+ça que le prototype les fait passer avant les candidatures.
 
 ## Méthode
 
