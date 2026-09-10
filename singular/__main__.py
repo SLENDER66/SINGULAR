@@ -17,9 +17,18 @@ import csv
 import sqlite3
 import sys
 from datetime import datetime
+from pathlib import Path
 
-from .journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
+from .journal import (
+    DEFAULT_PATH,
+    DecisionJournal,
+    ImportRefused,
+    Reversibility,
+    Status,
+    Tier,
+)
 from .saisie import CONFLIT as _CONFLIT
+from .saisie import REPRISE_REFUSEE as _REPRISE_REFUSEE
 from .saisie import entier as _entier
 from .saisie import verifie_decision as _verifie_decision
 from .saisie import introuvable as _introuvable
@@ -379,6 +388,39 @@ def cmd_status(journal: DecisionJournal, args) -> int:
     return 0
 
 
+def cmd_import(journal: DecisionJournal, args) -> int:
+    """Reprendre les decisions d'un autre journal, a la suite de celui-ci.
+
+    Le cas : la machine change, l'ancienne est hors de portee, et il faut
+    pouvoir ecrire en attendant. Les decisions ecrites entre-temps se reprennent
+    ensuite derriere les anciennes, sans que les anciennes bougent.
+    """
+    source = Path(args.source)
+    if not source.exists():
+        print(_colour(f"\n  Ce fichier n'existe pas :\n  {source}\n", RED))
+        return 1
+    if source.resolve() == Path(journal.path).resolve():
+        print(_colour("\n  C'est le journal lui-meme. Donne l'autre.\n", RED))
+        return 1
+
+    try:
+        reprises = journal.import_from(source)
+    except ImportRefused as refus:
+        print(_colour(f"\n  {_REPRISE_REFUSEE[refus.reason]}\n", RED))
+        return 1
+    if not reprises:
+        print(_colour(f"\n  {source} ne contient aucune decision. Rien repris.\n", DIM))
+        return 0
+
+    print(f"\n  {len(reprises)} decision(s) reprises depuis {source}")
+    for entree in reprises:
+        jour = datetime.fromisoformat(entree.created_at).strftime("%d/%m/%Y")
+        print(f"  {_colour(entree.entry_id, BOLD)}  {jour}  {entree.title}")
+    print(_colour(f"\n  {len(journal.entries())} decisions en tout. "
+                  f"Chaine {'intacte' if journal.verify() else 'ROMPUE'}.\n", DIM))
+    return 0
+
+
 def cmd_export(journal: DecisionJournal, args) -> int:
     """Tout le journal en CSV, y compris quand il est vide.
 
@@ -578,6 +620,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = sub.add_parser("status", help="une ligne, pour ton shell")
     status.set_defaults(func=cmd_status)
+
+    reprise = sub.add_parser("import", help="reprendre les decisions d'un autre journal")
+    reprise.add_argument("source", help="le fichier .db de l'autre journal")
+    reprise.set_defaults(func=cmd_import)
 
     export = sub.add_parser("export", help="tout le journal en CSV sur la sortie standard")
     export.set_defaults(func=cmd_export)

@@ -41,7 +41,8 @@ python3 -m singular resolve DEC-xxxxxxx --yes|--no         # ce qui s'est passé
 python3 -m singular review                                 # où vont tes heures
 ```
 
-Plus `list`, `abandon DEC-xxx "raison"`, `export` (CSV), `status` (une ligne).
+Plus `list`, `abandon DEC-xxx "raison"`, `export` (CSV), `status` (une ligne),
+et `import` (reprendre un autre journal, voir plus bas).
 
 ### `analyse` — la seule commande qui coûte de l'argent
 
@@ -371,6 +372,38 @@ Puis Safari sur `http://127.0.0.1:8765/`.
 applications passées à l'arrière-plan. Basculer d'a-Shell vers Safari peut
 couper le serveur. Si la page ne charge pas, c'est ça — dis-le, il y a d'autres
 chemins.
+
+## Reprendre un journal venu d'ailleurs
+
+Tu changes de machine, ou l'ancienne est hors de portée un moment. Tu écris en
+attendant, et un jour tu récupères l'ancien fichier. Les deux histoires se
+recollent alors en une seule :
+
+```sh
+python3 -m singular import /chemin/vers/ancien-journal.db
+```
+
+Les décisions de l'autre journal sont ajoutées **à la fin du tien**, dans leur
+ordre d'origine. Les tiennes ne bougent pas : elles gardent exactement
+l'empreinte qu'elles avaient. Seules les reprises sont resignées, parce qu'une
+décision ne peut pas suivre deux décisions différentes — et l'empreinte qu'elles
+portaient là-bas reste écrite à côté, comme preuve que rien n'a été réécrit.
+
+Ce n'est pas la même chose que recoller deux fichiers. Insérer les lignes d'une
+base dans l'autre donne bien toutes les entrées, et la chaîne rend **faux** :
+`tests/test_deux_journaux.py` le mesure plutôt que de le supposer.
+
+Trois refus, et aucun n'écrit quoi que ce soit :
+
+- l'autre journal a été modifié après coup — le reprendre y blanchirait la
+  modification ;
+- le tien a déjà une chaîne rompue — on n'ajoute rien derrière ;
+- une décision est déjà des deux côtés — elle compterait deux fois, et le
+  journal mentirait sur ce que tu as décidé.
+
+**Sens de la reprise.** Reprends le petit dans le grand : ce sont les entrées
+reprises qui sont resignées. Si tes trois mois sont dans l'ancien fichier, c'est
+lui le grand, et c'est dedans qu'on reprend les quelques décisions récentes.
 
 **Un journal par machine, et ils ne se parlent pas.** `~/.singular/journal.db`
 sur le PC et sur le téléphone sont deux fichiers différents. Deux journaux

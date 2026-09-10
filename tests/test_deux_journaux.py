@@ -21,6 +21,8 @@ import shutil
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from singular.journal import DecisionJournal, Tier
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
@@ -90,3 +92,170 @@ def test_a_faire_porte_bien_ce_conseil() -> None:
     texte = (RACINE / "A_FAIRE.md").read_text(encoding="utf-8")
     assert "Deux journaux ne se fusionnent pas" in texte
     assert "N'enregistre pas de décision sur le Mac" in texte
+
+
+# --- reprendre, ce n'est pas recoller -----------------------------------------
+
+def test_reprendre_ajoute_a_la_suite_sans_toucher_a_l_ancien(tmp_path) -> None:
+    """Le cas réel : la machine change, l'ancienne revient plus tard.
+
+    Les trois mois gardent leur empreinte d'origine — c'est ce qui compte, ils
+    sont irremplaçables. Seules les décisions écrites entre-temps sont resignées,
+    parce qu'une entrée ne peut pas suivre deux entrées différentes.
+    """
+    ancien = _journal(tmp_path / "pc.db", "PC", 3)
+    tranchee = ancien.entries()[0]
+    ancien.resolve(tranchee.entry_id, happened=True, lesson="ils ont répondu")
+    avant = {entree.entry_id: entree.fingerprint for entree in ancien.entries()}
+    entre_temps = _journal(tmp_path / "mac.db", "Mac", 2, decalage=100)
+    origine = {e.entry_id: e.fingerprint for e in entre_temps.entries()}
+
+    reprises = ancien.import_from(tmp_path / "mac.db")
+
+    assert len(reprises) == 2
+    assert len(ancien.entries()) == 5
+    assert ancien.verify(), "la chaîne tient, contrairement au recollage"
+    for entree in ancien.entries():
+        if entree.entry_id in avant:
+            assert entree.fingerprint == avant[entree.entry_id], (
+                "une entrée ancienne a été resignée : les trois mois doivent "
+                "garder exactement l'empreinte qu'ils avaient")
+    for entree in reprises:
+        assert entree.imported_fingerprint == origine[entree.entry_id], (
+            "l'empreinte d'origine doit rester écrite à côté : c'est la preuve "
+            "que la reprise n'a rien réécrit")
+        assert entree.fingerprint != entree.imported_fingerprint
+
+
+def test_le_verdict_et_la_lecon_traversent_la_reprise(tmp_path) -> None:
+    """Ce que la charge signée ne porte pas doit quand même être repris."""
+    ancien = _journal(tmp_path / "pc.db", "PC", 1)
+    entre_temps = _journal(tmp_path / "mac.db", "Mac", 1, decalage=100)
+    cible = entre_temps.entries()[0]
+    entre_temps.resolve(cible.entry_id, happened=False, lesson="ils ne répondent pas en août")
+
+    reprise = ancien.import_from(tmp_path / "mac.db")[0]
+
+    assert reprise.status.value == "DID_NOT_HAPPEN"
+    assert reprise.lesson == "ils ne répondent pas en août"
+    assert reprise.brier_score is not None
+
+
+def test_l_ordre_des_decisions_est_conserve(tmp_path) -> None:
+    ancien = _journal(tmp_path / "pc.db", "PC", 1)
+    _journal(tmp_path / "mac.db", "Mac", 4, decalage=100)
+
+    reprises = ancien.import_from(tmp_path / "mac.db")
+
+    assert [entree.title for entree in reprises] == [f"Mac {index}" for index in range(4)]
+    chaine = ancien._chain()
+    assert [entree.title for entree in chaine] == ["PC 0", "Mac 0", "Mac 1", "Mac 2", "Mac 3"]
+
+
+def test_reprendre_deux_fois_est_refuse(tmp_path) -> None:
+    """Sinon la même décision compte deux fois, et le journal ment sur son coût."""
+    from singular.journal import ImportRefused
+
+    ancien = _journal(tmp_path / "pc.db", "PC", 1)
+    _journal(tmp_path / "mac.db", "Mac", 2, decalage=100)
+    ancien.import_from(tmp_path / "mac.db")
+
+    with pytest.raises(ImportRefused) as refus:
+        ancien.import_from(tmp_path / "mac.db")
+    assert refus.value.reason == "duplicates"
+    assert len(ancien.entries()) == 3, "et rien n'a été écrit au passage"
+
+
+def test_reprendre_un_journal_falsifie_est_refuse(tmp_path) -> None:
+    """Reprendre un journal modifié après coup y blanchirait la modification."""
+    from singular.journal import ImportRefused
+
+    ancien = _journal(tmp_path / "pc.db", "PC", 1)
+    falsifie = _journal(tmp_path / "mac.db", "Mac", 2, decalage=100)
+    cible = falsifie.entries()[0]
+    base = sqlite3.connect(tmp_path / "mac.db")
+    base.execute("UPDATE journal_entries SET probability=0.99 WHERE entry_id=?",
+                 (cible.entry_id,))
+    base.commit()
+    base.close()
+
+    with pytest.raises(ImportRefused) as refus:
+        ancien.import_from(tmp_path / "mac.db")
+    assert refus.value.reason == "source_broken"
+    assert len(ancien.entries()) == 1, "rien n'a été écrit"
+
+
+def test_on_n_ajoute_rien_derriere_une_chaine_rompue(tmp_path) -> None:
+    from singular.journal import ImportRefused
+
+    rompu = _journal(tmp_path / "pc.db", "PC", 2)
+    _journal(tmp_path / "mac.db", "Mac", 1, decalage=100)
+    base = sqlite3.connect(tmp_path / "pc.db")
+    base.execute("UPDATE journal_entries SET title='réécrit' WHERE entry_id=?",
+                 (rompu.entries()[0].entry_id,))
+    base.commit()
+    base.close()
+
+    with pytest.raises(ImportRefused) as refus:
+        rompu.import_from(tmp_path / "mac.db")
+    assert refus.value.reason == "self_broken"
+
+
+def test_le_refus_ne_parle_pas_de_verdict_deja_rendu(tmp_path, capsys) -> None:
+    """Le defaut trouve en jouant la commande deux fois de suite.
+
+    `main()` traduit `PermissionError` par « cette decision a deja ete
+    tranchee » -- juste pour `resolve`, absurde pour une reprise. Trois refus,
+    trois phrases, et `ImportRefused` les distingue.
+    """
+    from singular.__main__ import main
+    from singular.saisie import CONFLIT, REPRISE_REFUSEE
+
+    _journal(tmp_path / "pc.db", "PC", 1)
+    _journal(tmp_path / "mac.db", "Mac", 1, decalage=100)
+    assert main(["--db", str(tmp_path / "pc.db"), "import", str(tmp_path / "mac.db")]) == 0
+    capsys.readouterr()
+
+    assert main(["--db", str(tmp_path / "pc.db"), "import", str(tmp_path / "mac.db")]) == 1
+    sortie = capsys.readouterr().out
+    assert REPRISE_REFUSEE["duplicates"] in sortie
+    assert CONFLIT not in sortie, "le message de `resolve` n'a rien a faire ici"
+    assert set(REPRISE_REFUSEE) == {"source_broken", "self_broken", "duplicates"}
+
+
+def test_une_base_d_avant_migre_et_reste_verifiable(tmp_path) -> None:
+    """Son journal a trois mois : il a été écrit par le schéma d'avant.
+
+    `CREATE TABLE IF NOT EXISTS` ne migre rien — `CLAUDE.md` §13 l'interdit
+    explicitement. Sans la migration, sa base s'ouvrirait sans la colonne neuve
+    et la première lecture échouerait, sur le fichier le moins remplaçable
+    qu'il possède.
+    """
+    from singular.journal import SCHEMA_VERSION
+
+    chemin = tmp_path / "ancienne.db"
+    base = sqlite3.connect(chemin)
+    base.execute("CREATE TABLE journal_schema (version INTEGER NOT NULL)")
+    base.execute("INSERT INTO journal_schema(version) VALUES(2)")
+    base.execute("""CREATE TABLE journal_entries (
+      entry_id TEXT PRIMARY KEY, title TEXT NOT NULL, action TEXT NOT NULL,
+      predicted TEXT NOT NULL, probability REAL NOT NULL, tier TEXT NOT NULL,
+      cost_hours REAL NOT NULL, horizon_days INTEGER NOT NULL, created_at TEXT NOT NULL,
+      due_at TEXT NOT NULL, status TEXT NOT NULL, resolved_at TEXT, lesson TEXT,
+      brier_score REAL, previous_fingerprint TEXT NOT NULL, fingerprint TEXT NOT NULL,
+      expected_gain_eur REAL, reversibility TEXT)""")
+    base.commit()
+    base.close()
+
+    journal = DecisionJournal(chemin)
+
+    relu = sqlite3.connect(chemin)
+    assert relu.execute("SELECT version FROM journal_schema").fetchone()[0] == SCHEMA_VERSION
+    colonnes = {ligne[1] for ligne in relu.execute("PRAGMA table_info(journal_entries)")}
+    relu.close()
+    assert "imported_fingerprint" in colonnes
+
+    entree = journal.add(title="Après migration", action="a", predicted="b", probability=0.6,
+                         tier=Tier.REVENUS, cost_hours=1, horizon_days=7)
+    assert entree.imported_fingerprint is None, "une décision écrite ici ne vient d'ailleurs"
+    assert journal.verify()

@@ -134,6 +134,21 @@ CONFLIT = ("Cette décision a déjà été tranchée. Ferme et rouvre pour voir 
            "verdict enregistré.")
 
 
+#: Les trois refus possibles d'une reprise de journal, dans sa langue.
+#:
+#: `PermissionError` seul ne suffisait pas : le clavier le traduit par « cette
+#: decision a deja ete tranchee », qui est juste pour `resolve` et absurde ici.
+#: Jouer `import` deux fois de suite affichait donc cette phrase-la.
+REPRISE_REFUSEE = {
+    "source_broken": ("Le journal a reprendre a ete modifie apres coup : sa chaine ne se "
+                      "verifie plus. Le reprendre ici blanchirait la modification."),
+    "self_broken": ("Ce journal-ci a une chaine rompue. On n'ajoute rien derriere une "
+                    "chaine deja cassee : repare-la d'abord, ou repars de l'autre."),
+    "duplicates": ("Ces decisions sont deja dans ce journal. Une reprise deja faite ne se "
+                   "refait pas : le journal mentirait sur ce que tu as decide."),
+}
+
+
 def introuvable(entry_id: str) -> str:
     """Un identifiant qui n'est dans aucune ligne du journal.
 
@@ -144,5 +159,6 @@ def introuvable(entry_id: str) -> str:
     return f"{entry_id} n'est dans aucune ligne de ce journal (python -m singular list)."
 
 
-__all__ = ["CONFLIT", "entier", "introuvable", "nombre", "verifie_decision", "verifie_gain",
+__all__ = ["CONFLIT", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",
+           "verifie_decision", "verifie_gain",
            "verifie_heures", "verifie_jours", "verifie_probabilite"]

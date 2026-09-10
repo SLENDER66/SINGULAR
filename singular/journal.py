@@ -33,7 +33,7 @@ from pathlib import Path
 from .learning import Forecast, ForecastKind, LearningEngine
 from .sqlite_support import SqliteLocation
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DEFAULT_PATH = Path.home() / ".singular" / "journal.db"
 
 
@@ -78,6 +78,22 @@ class Status(str, Enum):
     HAPPENED = "HAPPENED"
     DID_NOT_HAPPEN = "DID_NOT_HAPPEN"
     ABANDONED = "ABANDONED"
+
+
+class ImportRefused(PermissionError):
+    """Une reprise refusée, et laquelle des trois raisons.
+
+    Sous-classe de `PermissionError` pour ne rien casser de ce qui l'attrape
+    déjà, mais distincte : `python -m singular` traduit `PermissionError` par
+    « cette décision a déjà été tranchée », qui est la bonne phrase pour
+    `resolve` et une absurdité ici. Jouer la commande deux fois de suite l'a
+    montré tout de suite.
+    """
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        #: `source_broken`, `self_broken` ou `duplicates`.
+        self.reason = reason
 
 
 class Reversibility(str, Enum):
@@ -130,6 +146,14 @@ class Entry:
     #: confondre effacerait justement ce que la Notice doit reprocher.
     expected_gain_eur: float | None = None
     reversibility: Reversibility | None = None
+    #: L'empreinte que cette entrée portait dans le journal d'où elle vient.
+    #:
+    #: `None` pour une décision écrite ici. Non nulle pour une décision reprise
+    #: d'un autre journal : son contenu n'a pas bougé -- la charge signée est
+    #: la même -- mais elle est resignée derrière une autre entrée, donc son
+    #: empreinte change. L'ancienne reste écrite à côté, comme preuve que la
+    #: reprise n'a rien réécrit.
+    imported_fingerprint: str | None = None
 
     @property
     def is_open(self) -> bool:
@@ -266,7 +290,8 @@ class DecisionJournal:
                     previous_fingerprint TEXT NOT NULL,
                     fingerprint TEXT NOT NULL,
                     expected_gain_eur REAL,
-                    reversibility TEXT
+                    reversibility TEXT,
+                    imported_fingerprint TEXT
                 )
                 """
             )
@@ -300,6 +325,16 @@ class DecisionJournal:
                 if "reversibility" not in colonnes:
                     conn.execute("ALTER TABLE journal_entries ADD COLUMN reversibility TEXT")
             version = 2
+
+        if version == 2:
+            tables = {r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "journal_entries" in tables:
+                colonnes = {r["name"] for r in conn.execute("PRAGMA table_info(journal_entries)")}
+                if "imported_fingerprint" not in colonnes:
+                    conn.execute(
+                        "ALTER TABLE journal_entries ADD COLUMN imported_fingerprint TEXT")
+            version = 3
 
         conn.execute("UPDATE journal_schema SET version=?", (version,))
 
@@ -468,6 +503,96 @@ class DecisionJournal:
                 raise PermissionError(f"{entry_id} a ete tranche par quelqu'un d'autre entre-temps")
             row = conn.execute("SELECT * FROM journal_entries WHERE entry_id=?", (entry_id,)).fetchone()
         return self._entry(row)
+
+    def import_from(self, source: str | Path) -> tuple[Entry, ...]:
+        """Reprendre les décisions d'un autre journal, à la suite de celui-ci.
+
+        Le cas est celui du 10 septembre 2026 : la machine change, l'ancienne
+        est hors de portée pour une durée inconnue, et il faut pouvoir écrire en
+        attendant sans avoir à choisir plus tard laquelle des deux histoires
+        garder.
+
+        Recoller deux bases ligne à ligne ne marche pas, et c'est mesuré :
+        `tests/test_deux_journaux.py` insère les lignes de l'une dans l'autre et
+        `verify()` rend faux. Chaque empreinte signe la précédente, donc une
+        entrée glissée au milieu rompt la chaîne de toutes les suivantes.
+
+        Reprendre, ce n'est pas recoller. Les entrées de la source sont
+        **ajoutées à la fin**, dans leur ordre d'origine, et resignées derrière
+        la dernière entrée d'ici. Ce qui est signé ne change pas -- la charge
+        d'empreinte porte la prédiction, pas le verdict, et elle est recalculée
+        à l'identique. Ce qui change est le maillon, parce qu'une entrée ne peut
+        pas suivre deux entrées différentes.
+
+        L'empreinte d'origine est écrite à côté, dans `imported_fingerprint`.
+        C'est ce qui distingue une reprise d'une réécriture : la preuve que le
+        contenu repris est exactement celui qui avait été signé là-bas reste
+        dans la base, et se revérifie.
+
+        Refuse, et ne écrit rien, si :
+
+        * la source ne se vérifie pas -- reprendre un journal falsifié y
+          blanchirait la falsification ;
+        * ce journal-ci ne se vérifie pas -- on n'ajoute pas derrière une chaîne
+          déjà rompue ;
+        * un identifiant existe des deux côtés -- ce serait la même décision
+          comptée deux fois, et le journal ment alors sur ce qu'il a coûté.
+
+        Rend les entrées reprises, telles qu'elles sont désormais écrites ici.
+        """
+        autre = DecisionJournal(source)
+        if not autre.verify():
+            raise ImportRefused(
+                "source_broken", f"the journal to import does not verify: {autre.path}")
+        if not self.verify():
+            raise ImportRefused(
+                "self_broken", f"this journal does not verify: {self.path}")
+
+        a_reprendre = autre._chain()
+        if not a_reprendre:
+            return ()
+        deja = {entree.entry_id for entree in self.entries()}
+        collisions = sorted(e.entry_id for e in a_reprendre if e.entry_id in deja)
+        if collisions:
+            raise ImportRefused(
+                "duplicates",
+                f"{len(collisions)} entries are already here: {', '.join(collisions[:3])}")
+
+        with self._connect() as conn:
+            # Meme raison que `add` : lire la tete et ecrire derriere doit etre
+            # un seul pas serialise, sinon deux ecrivains se chainent au meme
+            # endroit et la chaine casse pour de bon.
+            conn.execute("BEGIN IMMEDIATE")
+            previous = self._head(conn)
+            for entree in a_reprendre:
+                payload = _payload(
+                    entry_id=entree.entry_id, title=entree.title, action=entree.action,
+                    predicted=entree.predicted, probability=entree.probability,
+                    tier=entree.tier.value, cost_hours=entree.cost_hours,
+                    horizon_days=entree.horizon_days, created_at=entree.created_at,
+                    expected_gain_eur=entree.expected_gain_eur,
+                    reversibility=None if entree.reversibility is None
+                    else entree.reversibility.value,
+                )
+                fingerprint = _fingerprint(payload, previous)
+                conn.execute(
+                    "INSERT INTO journal_entries(entry_id,title,action,predicted,probability,"
+                    "tier,cost_hours,horizon_days,created_at,due_at,status,resolved_at,lesson,"
+                    "brier_score,previous_fingerprint,fingerprint,expected_gain_eur,"
+                    "reversibility,imported_fingerprint)"
+                    " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (entree.entry_id, entree.title, entree.action, entree.predicted,
+                     entree.probability, entree.tier.value, entree.cost_hours,
+                     entree.horizon_days, entree.created_at, entree.due_at,
+                     entree.status.value, entree.resolved_at, entree.lesson,
+                     entree.brier_score, previous, fingerprint, entree.expected_gain_eur,
+                     None if entree.reversibility is None else entree.reversibility.value,
+                     entree.imported_fingerprint or entree.fingerprint),
+                )
+                previous = fingerprint
+
+        reprises = {entree.entry_id for entree in a_reprendre}
+        return tuple(e for e in self._chain() if e.entry_id in reprises)
 
     # --- reading -------------------------------------------------------------
 
@@ -660,6 +785,7 @@ class DecisionJournal:
             row["previous_fingerprint"], row["fingerprint"],
             None if row["expected_gain_eur"] is None else float(row["expected_gain_eur"]),
             None if row["reversibility"] is None else Reversibility(row["reversibility"]),
+            row["imported_fingerprint"] if "imported_fingerprint" in row.keys() else None,
         )
 
 

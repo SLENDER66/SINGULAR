@@ -177,6 +177,7 @@ SANS_RAPPORT_A_FAIRE = {
     "resolve": "nomme deja l'identifiant qu'il n'a pas trouve",
     "abandon": "idem",
     "export": "produit du CSV pour une machine, pas une phrase pour lui",
+    "import": "ecrit dans le journal, et nomme deja le fichier qu'il n'a pas trouve",
     "status": "une seule ligne, pour l'invite du shell : un chemin y serait du bruit",
     "sage": "affiche l'adresse, et l'app dit le chemin dans sa carte vide",
     "analyse": "part du rapport, pas du journal",
