@@ -23,7 +23,14 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .analyse import AnalyseIndisponible, _consommation, _sdk, effort_valide
+from .analyse import (
+    REFUS,
+    AnalyseIndisponible,
+    _consommation,
+    client_par_defaut,
+    effort_valide,
+    traduit_les_pannes,
+)
 
 #: Comme pour l'analyse : le modèle est un arbitrage de celui qui paie.
 MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_OFFRES_MODELE", "claude-opus-5")
@@ -162,16 +169,8 @@ def chercher(question: str = "", *, modele: str | None = None,
     de cle : un test qui appellerait le vrai service testerait la meteo, et
     coûterait de l'argent a chaque execution du CI.
     """
-    if client is None:
-        cle = os.environ.get("ANTHROPIC_API_KEY")
-        if not cle:
-            raise AnalyseIndisponible(
-                "aucune cle dans ANTHROPIC_API_KEY. Le reste de SINGULAR marche sans."
-            )
-        client = _sdk().Anthropic(api_key=cle)
-
-    anthropic = _sdk()
-    try:
+    client = client_par_defaut(client)
+    with traduit_les_pannes():
         reponse = client.beta.messages.create(
             model=modele or MODELE_PAR_DEFAUT,
             max_tokens=JETONS_MAX,
@@ -187,24 +186,9 @@ def chercher(question: str = "", *, modele: str | None = None,
             fallbacks="default",
             messages=[{"role": "user", "content": contexte_pour_recherche(question)}],
         )
-    except anthropic.AuthenticationError:
-        raise AnalyseIndisponible("la cle est refusee. Verifie ANTHROPIC_API_KEY.") from None
-    except anthropic.RateLimitError:
-        raise AnalyseIndisponible("trop de requetes. Reessaie dans une minute.") from None
-    except anthropic.APIConnectionError:
-        raise AnalyseIndisponible("pas de reseau. Le reste de SINGULAR marche sans.") from None
-    except anthropic.APIStatusError as erreur:
-        raise AnalyseIndisponible(f"le service a repondu {erreur.status_code}.") from None
-    except anthropic.AnthropicError:
-        # Le filet. Les quatre familles ci-dessus ne couvrent pas tout l'arbre
-        # du SDK, et ce qui s'echappe remonte tel quel jusqu'a l'ecran :
-        # l'explication est dans `analyse.py`, au meme endroit.
-        raise AnalyseIndisponible(
-            "le service a echoue d'une facon imprevue. Rien n'a ete ecrit."
-        ) from None
 
     if reponse.stop_reason == "refusal":
-        raise AnalyseIndisponible("le modele a refuse de repondre. Rien n'a ete enregistre.")
+        raise AnalyseIndisponible(REFUS["refus_du_modele"])
     texte = "\n".join(b.text for b in reponse.content if b.type == "text").strip()
     return texte, _consommation(reponse)
 

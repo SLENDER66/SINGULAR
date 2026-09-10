@@ -25,6 +25,54 @@ PAQUET = pathlib.Path(__file__).resolve().parent.parent / "singular"
 ATTRIBUTS_PERMIS = {"status_code"}
 
 
+def _tables_de_phrases() -> dict[str, dict[str, str]]:
+    """Les dictionnaires de messages fixes du paquet, resolus par leur nom.
+
+    Les six refus des facultes vivaient en double, mot pour mot, dans
+    `analyse.py` et dans `parle.py`. Les reunir sous un nom -- `REFUS["cle"]`
+    -- ne pouvait pas passer ce fichier, qui n'acceptait que des litteraux.
+
+    Il avait raison de refuser : ce qu'il empeche, c'est qu'un detail
+    d'exception se glisse dans une phrase lue puis recollee ailleurs. Une
+    indirection nommee ne rend pas ce risque possible **a condition qu'on la
+    suive** -- alors on la suit, au lieu de la croire. Une table n'est retenue
+    que si ses cles et ses valeurs sont toutes des chaines litterales ; un
+    dictionnaire qui contiendrait une f-string n'entre pas ici, et son usage
+    redevient une faute.
+    """
+    tables: dict[str, dict[str, str]] = {}
+    for fichier in sorted(PAQUET.rglob("*.py")):
+        for noeud in ast.walk(ast.parse(fichier.read_text(encoding="utf-8"))):
+            if not (isinstance(noeud, ast.Assign) and isinstance(noeud.value, ast.Dict)):
+                continue
+            if len(noeud.targets) != 1 or not isinstance(noeud.targets[0], ast.Name):
+                continue
+            paires = list(zip(noeud.value.keys, noeud.value.values))
+            litteral = all(
+                isinstance(cle, ast.Constant) and isinstance(cle.value, str)
+                and isinstance(valeur, ast.Constant) and isinstance(valeur.value, str)
+                for cle, valeur in paires
+            )
+            if paires and litteral:
+                nom = noeud.targets[0].id
+                # Deux tables du meme nom rendraient la resolution ambigue :
+                # on prefere refuser les deux plutot que deviner laquelle.
+                tables[nom] = None if nom in tables else {
+                    cle.value: valeur.value for cle, valeur in paires
+                }
+    return {nom: table for nom, table in tables.items() if table is not None}
+
+
+def _phrase_fixe(argument: ast.expr) -> bool:
+    """`REFUS["sans_reseau"]` : un nom, une cle litterale, une valeur litterale."""
+    if not (isinstance(argument, ast.Subscript)
+            and isinstance(argument.value, ast.Name)
+            and isinstance(argument.slice, ast.Constant)):
+        return False
+    table = _tables_de_phrases().get(argument.value.id)
+    return table is not None and argument.slice.value in table
+
+
 def _facultes() -> dict[str, ast.Module]:
     """Tout module du paquet qui refuse par `AnalyseIndisponible`.
 
@@ -58,6 +106,8 @@ def _fautes(arbre: ast.Module) -> list[str]:
         for argument in noeud.exc.args:
             if isinstance(argument, ast.Constant):
                 continue  # texte fixe : rien a interpoler
+            if _phrase_fixe(argument):
+                continue  # texte fixe range sous un nom, et suivi jusqu'a lui
             if not isinstance(argument, ast.JoinedStr):
                 fautes.append(f"ligne {noeud.lineno} : argument non litteral")
                 continue
@@ -194,3 +244,89 @@ def test_aucune_erreur_du_sdk_ne_remonte_telle_quelle(chemin: str) -> None:
             f"{chemin} laisse remonter le texte d'une exception du SDK"
         )
         assert "sk-ant" not in str(leve.value)
+
+
+def test_le_detour_par_un_nom_reste_verifie() -> None:
+    """Sans ce temoin, `_phrase_fixe` pourrait tout accepter en silence.
+
+    Les trois refus qu'il doit rendre : la vraie table, une cle absente, et un
+    nom qui ne designe aucune table de phrases fixes.
+    """
+    def expression(code: str) -> ast.expr:
+        return ast.parse(code, mode="eval").body
+
+    assert "REFUS" in _tables_de_phrases()
+    assert _phrase_fixe(expression('REFUS["sans_reseau"]'))
+    assert not _phrase_fixe(expression('REFUS["cle_inventee"]'))
+    assert not _phrase_fixe(expression('AUTRE_CHOSE["sans_reseau"]'))
+    assert not _phrase_fixe(expression('str(erreur)'))
+
+
+def test_une_table_qui_interpole_n_est_pas_une_phrase_fixe() -> None:
+    """C'est la seule chose que le detour pourrait laisser passer.
+
+    Une f-string dans la table ferait rentrer par la porte de derriere ce que
+    ce fichier interdit par la grande : `_tables_de_phrases` ne la retient pas.
+    """
+    module = ast.parse('PIEGE = {"fuite": f"erreur : {exc}"}')
+    dictionnaire = module.body[0].value
+    assert not all(isinstance(valeur, ast.Constant) for valeur in dictionnaire.values)
+
+
+# --- une phrase, un domicile --------------------------------------------------
+
+def test_aucune_faculte_n_ecrit_son_propre_refus() -> None:
+    """Les memes six phrases vivaient dans trois fichiers.
+
+    `analyse.py`, `parle.py`, `offres.py` : la meme echelle de `except`, mot
+    pour mot, recopiee a chaque faculte nouvelle. Et elles avaient deja
+    diverge, ce qui est la preuve et pas la crainte -- un modele qui refuse
+    disait « Rien n'a ete ecrit dans ton journal. » dans l'une, « Rien n'a ete
+    ecrit. » dans la deuxieme, « Rien n'a ete enregistre. » dans la troisieme.
+    Trois ecrans, trois phrases, un seul evenement.
+
+    C'est la troisieme fois, donc on ne corrige plus : les phrases vivent dans
+    `analyse.REFUS` et ce test refuse qu'une faculte en ecrive une a elle.
+
+    Le code HTTP garde son droit d'interpolation -- `ATTRIBUTS_PERMIS` le dit
+    deja plus haut, et c'est le seul detail qui varie legitimement d'un refus a
+    l'autre.
+    """
+    inventees = []
+    for chemin, arbre in _facultes().items():
+        for noeud in ast.walk(arbre):
+            if not (isinstance(noeud, ast.Raise) and isinstance(noeud.exc, ast.Call)):
+                continue
+            if getattr(noeud.exc.func, "id", None) != "AnalyseIndisponible":
+                continue
+            for argument in noeud.exc.args:
+                if _phrase_fixe(argument) or isinstance(argument, ast.JoinedStr):
+                    continue
+                inventees.append(f"{chemin}:{noeud.lineno} -> {ast.unparse(argument)[:60]}")
+    assert not inventees, (
+        "une faculte ecrit son propre refus au lieu de le prendre dans REFUS :\n  "
+        + "\n  ".join(inventees)
+        + "\nAjoute la phrase a `singular.analyse.REFUS` et nomme-la ici."
+    )
+
+
+def test_les_phrases_de_refus_sont_toutes_employees() -> None:
+    """Une phrase que plus personne ne leve n'a pas a rester ecrite.
+
+    Le domicile unique a le defaut de sa qualite : il survit a ses usages. Ce
+    temoin fait le compte dans l'autre sens.
+    """
+    from singular.analyse import REFUS
+
+    citees = {
+        argument.slice.value
+        for arbre in _facultes().values()
+        for noeud in ast.walk(arbre)
+        if isinstance(noeud, ast.Raise) and isinstance(noeud.exc, ast.Call)
+        for argument in noeud.exc.args
+        if _phrase_fixe(argument)
+    }
+    assert set(REFUS) == citees, (
+        f"phrases jamais levees : {sorted(set(REFUS) - citees)} ; "
+        f"cles inconnues : {sorted(citees - set(REFUS))}"
+    )

@@ -28,7 +28,15 @@ from pathlib import Path
 from typing import Any
 
 from .analyse import INSTRUCTION as INSTRUCTION_ANALYSE
-from .analyse import AnalyseIndisponible, _consommation, _sdk, effort_valide
+from .analyse import (
+    REFUS,
+    AnalyseIndisponible,
+    _consommation,
+    _sdk,
+    client_par_defaut,
+    effort_valide,
+    traduit_les_pannes,
+)
 from .fichiers import ecrire_atomique
 
 #: Le fil, a cote du journal : une seule chose a sauvegarder.
@@ -254,7 +262,7 @@ class Quota:
             deja = self._tours_du_jour(donnees, jour)
             if deja >= self.plafond:
                 raise PlafondAtteint(
-                    f"{self.plafond} reponses aujourd'hui, c'est le plafond. "
+                    f"{self.plafond} réponses aujourd'hui, c'est le plafond. "
                     "Demain, ou depuis le clavier avec `python3 -m singular parle`."
                 )
 
@@ -400,14 +408,14 @@ def etat_de_la_faculte() -> tuple[bool, str]:
     ou elle a le droit d'exister.
     """
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        return False, ("conversation coupee   aucune cle dans ANTHROPIC_API_KEY.\n"
-                       "                        Dans cette fenetre, avant de relancer :\n"
+        return False, ("conversation coupée   aucune clé dans ANTHROPIC_API_KEY.\n"
+                       "                        Dans cette fenêtre, avant de relancer :\n"
                        "                        export ANTHROPIC_API_KEY=\"sk-ant-...\"")
     try:
         _sdk()
     except AnalyseIndisponible as coupee:
-        return False, f"conversation coupee   {coupee}"
-    return True, f"conversation allumee  {MODELE_PAR_DEFAUT}, {PLAFOND_PAR_JOUR} reponses par jour"
+        return False, f"conversation coupée   {coupee}"
+    return True, f"conversation allumée  {MODELE_PAR_DEFAUT}, {PLAFOND_PAR_JOUR} réponses par jour"
 
 
 def bilan(quota: Quota | None = None, tarifs: Tarifs | None = None) -> dict[str, Any]:
@@ -457,11 +465,11 @@ def phrase_de_bilan(bilan_: dict[str, Any]) -> str:
         return (f"{', '.join(manquants)} n'a pas de tarif dans {bilan_['tarifs']} : "
                 f"ajoute-le pour revoir le total.{reste}")
     if bilan_["usd"] is None:
-        return (f"{envoyes} jetons envoyes, {jetons['sortie']} rendus depuis le debut. "
-                f"Pour voir des dollars, ecris tes tarifs dans {bilan_['tarifs']}.")
+        return (f"{envoyes} jetons envoyés, {jetons['sortie']} rendus depuis le début. "
+                f"Pour voir des dollars, écris tes tarifs dans {bilan_['tarifs']}.")
     if bilan_["restant_usd"] is None:
-        return f"environ {bilan_['usd']:.2f} $ depenses depuis le debut."
-    return (f"environ {bilan_['usd']:.2f} $ depenses, "
+        return f"environ {bilan_['usd']:.2f} $ dépensés depuis le début."
+    return (f"environ {bilan_['usd']:.2f} $ dépensés, "
             f"il te reste environ {bilan_['restant_usd']:.2f} $ sur "
             f"{bilan_['credit_usd']:.2f} $.")
 
@@ -629,17 +637,9 @@ def repondre(
     client: Any = None,
 ) -> tuple[str, dict[str, int]]:
     """Un tour de conversation. Rend la reponse et ce qu'elle a consomme."""
-    if client is None:
-        cle = os.environ.get("ANTHROPIC_API_KEY")
-        if not cle:
-            raise AnalyseIndisponible(
-                "aucune cle dans ANTHROPIC_API_KEY. Le reste de SINGULAR marche sans."
-            )
-        client = _sdk().Anthropic(api_key=cle)
-
-    anthropic = _sdk()
+    client = client_par_defaut(client)
     messages = _messages(conversation, question)
-    try:
+    with traduit_les_pannes():
         reponse = client.beta.messages.create(
             model=modele or MODELE_PAR_DEFAUT,
             max_tokens=JETONS_MAX,
@@ -652,24 +652,9 @@ def repondre(
             fallbacks="default",
             messages=messages,
         )
-    except anthropic.AuthenticationError:
-        raise AnalyseIndisponible("la cle est refusee. Verifie ANTHROPIC_API_KEY.") from None
-    except anthropic.RateLimitError:
-        raise AnalyseIndisponible("trop de requetes. Reessaie dans une minute.") from None
-    except anthropic.APIConnectionError:
-        raise AnalyseIndisponible("pas de reseau. Le reste de SINGULAR marche sans.") from None
-    except anthropic.APIStatusError as erreur:
-        raise AnalyseIndisponible(f"le service a repondu {erreur.status_code}.") from None
-    except anthropic.AnthropicError:
-        # Le filet. Les quatre familles ci-dessus ne couvrent pas tout l'arbre
-        # du SDK, et ce qui s'echappe remonte tel quel jusqu'a l'ecran :
-        # l'explication est dans `analyse.py`, au meme endroit.
-        raise AnalyseIndisponible(
-            "le service a echoue d'une facon imprevue. Rien n'a ete ecrit."
-        ) from None
 
     if reponse.stop_reason == "refusal":
-        raise AnalyseIndisponible("le modele a refuse de repondre.")
+        raise AnalyseIndisponible(REFUS["refus_du_modele"])
 
     texte = "\n".join(b.text for b in reponse.content if b.type == "text").strip()
     conversation.ajouter("user", question)

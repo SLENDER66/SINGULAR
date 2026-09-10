@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 import json
 import pathlib
+import unicodedata
 
 import pytest
 
@@ -36,6 +37,19 @@ PAS_UN_PRIX = {
     "VERROU_PERIME": "secondes avant de reprendre un verrou abandonne",
     "VERROU_ATTENTE": "secondes entre deux tentatives de prise du verrou",
 }
+
+def _sans_accents(texte: str) -> str:
+    """La phrase telle qu'on la reconnait, pas telle qu'elle s'ecrit.
+
+    Ces tests attendaient « ecris tes tarifs » et « jetons envoyes » au
+    caractere pres. Le jour ou ces mots ont pris leurs accents -- ils sont
+    affiches, et le reste de l'ecran est en francais correct -- deux tests sont
+    tombes sans qu'aucun comportement ait change. Un test qui punit la
+    correction d'un message apprend a ne plus corriger les messages.
+    """
+    decompose = unicodedata.normalize("NFD", texte.lower())
+    return "".join(c for c in decompose if not unicodedata.combining(c))
+
 
 COUT = {"entree": 1000, "sortie": 200, "cache_lu": 5000, "cache_ecrit": 0}
 
@@ -402,7 +416,7 @@ def test_the_sentence_names_what_is_missing_instead_of_what_he_already_did(tmp_p
     phrase = phrase_de_bilan(bilan(quota, _tarifs(tmp_path)))
 
     assert "claude-inconnu" in phrase
-    assert "ecris tes tarifs" not in phrase.lower()
+    assert "ecris tes tarifs" not in _sans_accents(phrase)
     assert "il te reste au plus" in phrase.lower()
 
 
@@ -412,8 +426,8 @@ def test_without_any_tariff_the_sentence_still_says_where_to_write_them(tmp_path
     quota.ajouter_depense(cout=COUT, modele="claude-sonnet-5")
     phrase = phrase_de_bilan(bilan(quota, Tarifs(tmp_path / "absent.json")))
 
-    assert "ecris tes tarifs" in phrase.lower()
-    assert "jetons envoyes" in phrase
+    assert "ecris tes tarifs" in _sans_accents(phrase)
+    assert "jetons envoyes" in _sans_accents(phrase)
 
 
 def test_every_faculty_that_spends_writes_it_down(tmp_path, monkeypatch, capsys) -> None:

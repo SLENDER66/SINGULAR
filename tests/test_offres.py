@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import sys
 
 import pytest
 
-from singular.analyse import AnalyseIndisponible
+from singular.analyse import REFUS, AnalyseIndisponible
 from singular.offres import (
     JETONS_MAX,
     MODELE_PAR_DEFAUT,
@@ -214,8 +215,9 @@ def test_le_modele_et_le_repli_sont_ceux_attendus() -> None:
 
 
 def test_un_refus_ne_devient_pas_une_liste_vide() -> None:
+    """La phrase se cherche a son domicile plutot que de se recopier ici."""
     client = FauxClient(FausseReponse("", stop_reason="refusal"))
-    with pytest.raises(AnalyseIndisponible, match="refuse"):
+    with pytest.raises(AnalyseIndisponible, match=re.escape(REFUS["refus_du_modele"])):
         chercher(client=client)
 
 

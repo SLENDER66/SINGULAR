@@ -28,6 +28,7 @@ sur parole.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from typing import Any
@@ -145,11 +146,72 @@ def _sdk():
     try:
         import anthropic
     except ImportError:
-        raise AnalyseIndisponible(
-            "le paquet « anthropic » n'est pas installe. "
-            "python3 -m pip install -e \".[analyse]\" -- ou laisse la faculte coupee."
-        ) from None
+        raise AnalyseIndisponible(REFUS["paquet"]) from None
     return anthropic
+
+#: Ce que Thomas lit quand une faculté qui a besoin d'un modèle s'arrête.
+#:
+#: Les six phrases vivaient en double, mot pour mot, dans `analyse.py` et dans
+#: `parle.py`. Une copie a déjà divergé -- « le modèle a refusé de répondre. »
+#: d'un côté, la même phrase suivie de « Rien n'a été écrit dans ton journal. »
+#: de l'autre -- ce qui est exactement ce qu'une règle recopiée finit par faire.
+#: Elles ont maintenant un seul domicile, et `test_refus_des_facultes.py`
+#: interdit qu'un deuxième s'ouvre.
+REFUS = {
+    "paquet": ("le paquet « anthropic » n'est pas installé. "
+               "python3 -m pip install -e \".[analyse]\" -- ou laisse la faculté coupée."),
+    "sans_cle": "aucune clé dans ANTHROPIC_API_KEY. Le reste de SINGULAR marche sans.",
+    "cle_refusee": "la clé est refusée. Vérifie ANTHROPIC_API_KEY.",
+    "trop_vite": "trop de requêtes. Réessaie dans une minute.",
+    "sans_reseau": "pas de réseau. Le reste de SINGULAR marche sans.",
+    # Message fixe, sans interpolation : voir `traduit_les_pannes`.
+    "imprevu": "le service a échoué d'une façon imprévue. Rien n'a été écrit.",
+    "refus_du_modele": "le modèle a refusé de répondre. Rien n'a été écrit dans ton journal.",
+}
+
+
+@contextlib.contextmanager
+def traduit_les_pannes():
+    """Les pannes du SDK, dites en français, une fois pour les deux facultés.
+
+    Le filet final est le plus important, et c'est lui qu'on oublie : les
+    quatre familles nommées ne couvrent pas tout l'arbre du SDK --
+    `APIResponseValidationError` descend d'`APIError` sans passer par
+    `APIStatusError` ni `APIConnectionError`, et s'échappait donc d'ici. Ce qui
+    s'échappe remonte tel quel : en traceback dans la console, et en clair dans
+    le corps JSON du Sage, qui renvoie `f"{type(exc).__name__}: {exc}"` sur
+    toute exception imprévue. Le texte brut d'une exception du SDK peut porter
+    l'en-tête d'authentification selon les versions -- d'où un message fixe :
+    le détail qu'on afficherait est exactement celui qu'on ne veut pas voir
+    sortir.
+    """
+    anthropic = _sdk()
+    try:
+        yield
+    except anthropic.AuthenticationError:
+        raise AnalyseIndisponible(REFUS["cle_refusee"]) from None
+    except anthropic.RateLimitError:
+        raise AnalyseIndisponible(REFUS["trop_vite"]) from None
+    except anthropic.APIConnectionError:
+        raise AnalyseIndisponible(REFUS["sans_reseau"]) from None
+    except anthropic.APIStatusError as erreur:
+        raise AnalyseIndisponible(f"le service a répondu {erreur.status_code}.") from None
+    except anthropic.AnthropicError:
+        raise AnalyseIndisponible(REFUS["imprevu"]) from None
+
+
+def client_par_defaut(client: Any) -> Any:
+    """Le client injecté, ou celui que la clé d'environnement permet.
+
+    Les deux facultés ouvrent pareil : `client` injecté par les tests, sinon
+    une clé lue dans l'environnement, sinon un refus.
+    """
+    if client is not None:
+        return client
+    cle = os.environ.get("ANTHROPIC_API_KEY")
+    if not cle:
+        raise AnalyseIndisponible(REFUS["sans_cle"])
+    return _sdk().Anthropic(api_key=cle)
 
 
 def apercu(notice: dict[str, Any]) -> str:
@@ -197,17 +259,8 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None,
     réseau ni d'une clé : un test qui appellerait le vrai service ne testerait
     pas ce fichier, il testerait la météo.
     """
-    if client is None:
-        cle = os.environ.get("ANTHROPIC_API_KEY")
-        if not cle:
-            raise AnalyseIndisponible(
-                "aucune cle dans ANTHROPIC_API_KEY. Le reste de SINGULAR marche sans."
-            )
-        client = _sdk().Anthropic(api_key=cle)
-
-    anthropic = _sdk()
-
-    try:
+    client = client_par_defaut(client)
+    with traduit_les_pannes():
         reponse = client.beta.messages.create(
             model=modele or MODELE_PAR_DEFAUT,
             max_tokens=JETONS_MAX,
@@ -219,34 +272,9 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None,
             fallbacks="default",
             messages=[{"role": "user", "content": contexte_pour_analyse(notice)}],
         )
-    except anthropic.AuthenticationError:
-        raise AnalyseIndisponible("la cle est refusee. Verifie ANTHROPIC_API_KEY.") from None
-    except anthropic.RateLimitError:
-        raise AnalyseIndisponible("trop de requetes. Reessaie dans une minute.") from None
-    except anthropic.APIConnectionError:
-        raise AnalyseIndisponible("pas de reseau. Le reste de SINGULAR marche sans.") from None
-    except anthropic.APIStatusError as erreur:
-        raise AnalyseIndisponible(f"le service a repondu {erreur.status_code}.") from None
-    except anthropic.AnthropicError:
-        # Le filet, et il en faut un. Les quatre familles ci-dessus ne couvrent
-        # pas tout l'arbre du SDK -- `APIResponseValidationError` descend
-        # d'`APIError` sans passer par `APIStatusError` ni `APIConnectionError`,
-        # et s'echappait donc d'ici. Ce qui s'echappe remonte tel quel : en
-        # traceback dans la console, et en clair dans le corps JSON du Sage,
-        # qui renvoie `f"{type(exc).__name__}: {exc}"` sur toute exception
-        # imprevue. Le texte brut d'une exception du SDK peut porter l'entete
-        # d'authentification selon les versions.
-        #
-        # Message fixe, sans interpolation : le detail qu'on afficherait est
-        # exactement celui qu'on ne veut pas voir sortir.
-        raise AnalyseIndisponible(
-            "le service a echoue d'une facon imprevue. Rien n'a ete ecrit."
-        ) from None
 
     if reponse.stop_reason == "refusal":
-        raise AnalyseIndisponible(
-            "le modele a refuse de repondre. Rien n'a ete ecrit dans ton journal."
-        )
+        raise AnalyseIndisponible(REFUS["refus_du_modele"])
     texte = "\n".join(bloc.text for bloc in reponse.content if bloc.type == "text").strip()
     return texte, _consommation(reponse)
 

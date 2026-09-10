@@ -18,12 +18,14 @@ from __future__ import annotations
 import ast
 import builtins
 import pathlib
+import re
 import sys
 
 import pytest
 
 from singular.analyse import (
     MODELE_PAR_DEFAUT,
+    REFUS,
     AnalyseIndisponible,
     analyser,
     contexte_pour_analyse,
@@ -100,8 +102,14 @@ def test_le_module_s_importe_sans_le_paquet(monkeypatch) -> None:
 
 
 def test_un_refus_du_modele_ne_devient_pas_une_reponse_vide() -> None:
+    """La phrase se cherche a son domicile plutot que de se recopier ici.
+
+    Elle etait attendue par le fragment « refuse », qui est tombe le jour ou
+    elle a gagne son accent. Un test qui recopie un morceau de message casse
+    des qu'on corrige le message, et pousse a ne plus le corriger.
+    """
     client = FauxClient(FausseReponse("", stop_reason="refusal"))
-    with pytest.raises(AnalyseIndisponible, match="refuse"):
+    with pytest.raises(AnalyseIndisponible, match=re.escape(REFUS["refus_du_modele"])):
         analyser(NOTICE, client=client)
 
 
