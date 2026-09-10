@@ -380,13 +380,21 @@ def cmd_status(journal: DecisionJournal, args) -> int:
 
 
 def cmd_export(journal: DecisionJournal, args) -> int:
-    rows = journal.export_rows()
-    if not rows:
-        print("entry_id,created_at,due_at,tier,title,action,predicted,probability,cost_hours,status,resolved_at,brier_score,lesson")
-        return 0
-    writer = csv.DictWriter(sys.stdout, fieldnames=list(rows[0]))
+    """Tout le journal en CSV, y compris quand il est vide.
+
+    Les colonnes se lisent sur le journal et ne se recopient plus ici : la
+    ligne ecrite a la main pour le cas vide avait deux colonnes de retard.
+
+    `lineterminator="\n"` parce que la sortie part dans une console : le module
+    csv ecrit `\r\n`, et Windows retraduit le `\n` en `\r\n`, ce qui donne
+    `\r\r\n` et une ligne blanche entre chaque decision dans le tableur. En
+    laissant la console faire la traduction, le fichier est juste des deux
+    cotes.
+    """
+    writer = csv.DictWriter(sys.stdout, fieldnames=list(DecisionJournal.EXPORT_COLUMNS),
+                            lineterminator="\n")
     writer.writeheader()
-    writer.writerows(rows)
+    writer.writerows(journal.export_rows())
     return 0
 
 

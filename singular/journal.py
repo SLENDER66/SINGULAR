@@ -539,6 +539,20 @@ class DecisionJournal:
             parts.append(f"calibration {report['overconfidence']:+.0%}")
         return "SINGULAR · " + " · ".join(parts)
 
+    #: The columns of `export_rows`, in order, so callers need not guess.
+    #:
+    #: La ligne d'en-tete etait recopiee a la main dans `python -m singular
+    #: export` pour le cas du journal vide. Les colonnes `expected_gain_eur` et
+    #: `reversibility` ont ete ajoutees ici et pas la : un journal vide
+    #: exportait donc treize colonnes, un journal rempli quinze. Une feuille de
+    #: calcul montee sur le premier decalait ses colonnes au premier export
+    #: suivant.
+    EXPORT_COLUMNS = (
+        "entry_id", "created_at", "due_at", "tier", "title", "action", "predicted",
+        "probability", "cost_hours", "expected_gain_eur", "reversibility", "status",
+        "resolved_at", "brier_score", "lesson",
+    )
+
     def export_rows(self) -> list[dict]:
         """Every entry, flat, for a spreadsheet or anything else."""
         return [

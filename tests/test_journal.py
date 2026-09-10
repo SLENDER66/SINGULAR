@@ -376,7 +376,56 @@ def test_export_of_an_empty_journal_is_still_valid_csv(tmp_path, capsys):
 
     assert main(["--db", str(tmp_path / "journal.db"), "export"]) == 0
     header = capsys.readouterr().out.strip()
-    assert header.startswith("entry_id,") and "brier_score" in header
+    assert header.split(",") == list(DecisionJournal.EXPORT_COLUMNS)
+
+
+def test_the_header_is_the_same_whether_the_journal_is_empty_or_not(tmp_path, capsys):
+    """La ligne du cas vide etait recopiee a la main, et avait deux colonnes de retard.
+
+    `expected_gain_eur` et `reversibility` ont ete ajoutees a `export_rows` et
+    pas a la copie. Un journal vide exportait treize colonnes, un journal rempli
+    quinze : une feuille de calcul montee sur le premier decalait ses colonnes
+    au premier export suivant, sans rien dire.
+    """
+    from singular.__main__ import main
+
+    chemin = tmp_path / "journal.db"
+    journal = _journal(tmp_path)
+    assert main(["--db", str(chemin), "export"]) == 0
+    vide = capsys.readouterr().out.splitlines()[0]
+
+    _add(journal, title="une decision")
+    assert main(["--db", str(chemin), "export"]) == 0
+    rempli = capsys.readouterr().out.splitlines()
+
+    assert vide == rempli[0]
+    assert vide.split(",") == list(DecisionJournal.EXPORT_COLUMNS)
+    assert len(rempli[1].split(",")) == len(DecisionJournal.EXPORT_COLUMNS)
+
+
+def test_the_columns_are_those_the_rows_actually_carry(tmp_path):
+    """Le temoin : une liste figee pourrait mentir aussi bien que la copie."""
+    journal = _journal(tmp_path)
+    _add(journal, title="une decision")
+
+    assert list(journal.export_rows()[0]) == list(DecisionJournal.EXPORT_COLUMNS)
+
+
+def test_the_export_leaves_the_line_endings_to_the_console(tmp_path, capsys):
+    """Sur Windows, `\r\n` ecrit par csv devient `\r\r\n` en sortie standard.
+
+    Le tableur affiche alors une ligne blanche entre chaque decision. On ecrit
+    donc `\n` et on laisse la console traduire : le fichier est juste des deux
+    cotes. Ce test verifie ce qui est verifiable ici -- aucun retour chariot
+    dans ce que la commande ecrit ; c'est Windows qui ajoute le sien.
+    """
+    from singular.__main__ import main
+
+    journal = _journal(tmp_path)
+    _add(journal, title="une decision")
+
+    assert main(["--db", str(tmp_path / "journal.db"), "export"]) == 0
+    assert "\r" not in capsys.readouterr().out
 
 
 def test_concurrent_entries_keep_one_unbroken_chain(tmp_path):
