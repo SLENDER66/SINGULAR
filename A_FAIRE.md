@@ -17,20 +17,71 @@ clone` ; **ton journal, non**. Il vit dans `~/.singular/` et il est
 irremplaçable : trois mois de prédictions chaînées, qu'aucune session ne peut
 reconstruire.
 
-Sur le PC, ce dossier est `C:\Users\Utilisateur\.singular`. Copie-le sur une
-clé USB, un partage réseau, ce que tu veux, puis sur le Mac :
+### Ce qu'il y a dans ce dossier
+
+Quatre fichiers comptent, et un ne doit pas être copié.
+
+| fichier | ce que c'est | si tu le perds |
+|---|---|---|
+| `journal.db` | toutes tes décisions et leurs verdicts | **irremplaçable** |
+| `candidatures.json` | le suivi de tes candidatures | **irremplaçable** |
+| `tarifs.json` | les prix que tu as relevés toi-même | à retaper, une fois |
+| `parle_quota.json` | ce que tu as déjà dépensé en jetons | le compteur repart à zéro |
+| `sage_token` | la clé d'accès de l'app depuis le téléphone | **ne le copie pas** |
+
+Le jeton ne se copie pas exprès : une machine neuve mérite une clé neuve, et
+elle se recrée toute seule au premier démarrage du Sage.
+
+### Étape 1 — sur le PC, trouver le dossier
+
+Ouvre l'Explorateur de fichiers, clique dans la barre d'adresse tout en haut,
+efface ce qu'il y a, et colle exactement ceci :
+
+```text
+%USERPROFILE%\.singular
+```
+
+Entrée. Tu dois voir les fichiers du tableau ci-dessus. Sélectionne-les tous
+(Ctrl+A), copie (Ctrl+C), et colle sur une clé USB.
+
+Un dossier dont le nom commence par un point n'est pas caché sous Windows : il
+s'affiche normalement. C'est sur le Mac que ça change, et c'est l'étape 3.
+
+### Étape 2 — de la clé au Mac
+
+Branche la clé sur le Mac. Elle apparaît dans le Finder, dans la colonne de
+gauche.
+
+### Étape 3 — sur le Mac, ouvrir le dossier de destination
+
+**Sur le Mac, un dossier dont le nom commence par un point est caché** : tu ne
+le verras pas en cliquant dans le Finder. C'est une convention Unix, pas une
+protection.
+
+Deux façons d'y aller :
+
+- dans le Finder, **Cmd + Maj + G**, puis tape `~/.singular` et Entrée ;
+- ou, si le dossier n'existe pas encore, ouvre le Terminal et tape
+  `mkdir -p ~/.singular` avant de refaire Cmd + Maj + G.
+
+Puis glisse les quatre fichiers de la clé dans cette fenêtre.
+
+**Ou tout par le Terminal**, si tu préfères une seule commande. Remplace
+`TA_CLE` par le nom de ta clé — le Terminal le complète si tu tapes
+`/Volumes/` puis Tab :
 
 ```sh
 mkdir -p ~/.singular
-cp /Volumes/TA_CLE/.singular/journal.db        ~/.singular/
-cp /Volumes/TA_CLE/.singular/candidatures.json ~/.singular/
-cp /Volumes/TA_CLE/.singular/tarifs.json       ~/.singular/
-cp /Volumes/TA_CLE/.singular/parle_quota.json  ~/.singular/
+cp /Volumes/TA_CLE/journal.db        ~/.singular/
+cp /Volumes/TA_CLE/candidatures.json ~/.singular/
+cp /Volumes/TA_CLE/tarifs.json       ~/.singular/
+cp /Volumes/TA_CLE/parle_quota.json  ~/.singular/
 ```
 
-Puis vérifie que la copie est arrivée entière, **avant de faire quoi que ce
-soit d'autre**. Cette commande ne demande ni clone ni installation — `python3`
-suffit :
+### Étape 4 — vérifier que tout est arrivé
+
+**Avant de faire quoi que ce soit d'autre.** Cette commande ne demande ni
+clone ni installation — le `python3` du Mac suffit. Colle-la dans le Terminal :
 
 ```sh
 python3 -c "import sqlite3; b=sqlite3.connect('$HOME/.singular/journal.db'); \
