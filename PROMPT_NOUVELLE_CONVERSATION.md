@@ -1,6 +1,16 @@
 # Prompt de reprise — à copier/coller dans une nouvelle conversation
 
-Colle **uniquement le bloc entre les deux traits**.
+Colle **uniquement le bloc entre les deux traits**. Sur le Mac, une commande
+le met dans le presse-papiers sans que tu aies à sélectionner quoi que ce soit :
+
+```sh
+cd ~/Documents/SINGULAR
+sed -n '/^---$/,/^---$/p' PROMPT_NOUVELLE_CONVERSATION.md | sed '1d;$d' | pbcopy
+```
+
+Puis Cmd+V dans la nouvelle conversation. Le bloc fait environ cinq cents
+lignes : le sélectionner à la main est le genre de geste où l'on en oublie un
+bout, et un prompt tronqué se remarque tard.
 
 Les deux sections de règles y sont recopiées **en entier**, à ma demande du
 10 septembre 2026. Elles sont aussi dans `CLAUDE.md`, que Claude lit tout seul

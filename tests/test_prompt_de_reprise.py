@@ -125,3 +125,30 @@ def test_le_bloc_a_deux_traits_et_rien_apres() -> None:
         "ces lignes sont après le second trait, donc jamais collées :\n  "
         + "\n  ".join(apres[:5])
         + "\n  Remonte-les avant le trait, ou retire-les.")
+
+
+def test_la_commande_de_copie_extrait_bien_le_bloc() -> None:
+    """La commande donnée en tête doit rendre exactement ce qui est entre les traits.
+
+    Elle est écrite en `sed` dans un document, donc invérifiable à la lecture :
+    une commande fausse donnerait un bloc tronqué, et un prompt tronqué se
+    remarque tard -- après que la session a travaillé sur un mandat partiel.
+    Ce test rejoue le découpage en Python et compare.
+    """
+    lignes = PROMPT.read_text(encoding="utf-8").splitlines()
+    traits = [numero for numero, ligne in enumerate(lignes) if ligne.strip() == "---"]
+    attendu = "\n".join(lignes[traits[0] + 1:traits[1]]).strip()
+
+    entete = "\n".join(lignes[:traits[0]])
+    assert "pbcopy" in entete, "la commande de copie a disparu de l'en-tête"
+    assert "sed -n '/^---$/,/^---$/p'" in entete, "le découpage n'est plus celui-ci"
+    assert "sed '1d;$d'" in entete, "les deux traits eux-mêmes doivent être retirés"
+
+    # Ce que la commande produirait, rejoué ici.
+    debut = next(i for i, ligne in enumerate(lignes) if ligne.strip() == "---")
+    fin = next(i for i, ligne in enumerate(lignes[debut + 1:], start=debut + 1)
+               if ligne.strip() == "---")
+    produit = "\n".join(lignes[debut + 1:fin]).strip()
+    assert produit == attendu
+    assert "POUR QUI TU TRAVAILLES" in produit, "les règles doivent être dans le bloc"
+    assert "Ce que je dois faire moi-même" in produit, "et la dernière section aussi"
