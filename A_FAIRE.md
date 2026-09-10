@@ -17,6 +17,32 @@ clone` ; **ton journal, non**. Il vit dans `~/.singular/` et il est
 irremplaçable : trois mois de prédictions chaînées, qu'aucune session ne peut
 reconstruire.
 
+### Si tu n'as pas accès au PC
+
+C'est le cas au 10 septembre 2026. Trois choses sont vraies, et une seule
+compte pour aujourd'hui.
+
+**Rien n'est perdu.** Le fichier est sur le disque du PC et n'en bouge pas. Ne
+pas pouvoir l'atteindre n'est pas la même chose que l'avoir perdu.
+
+**Regarde d'abord le téléphone.** Si tu as lancé SINGULAR dans a-Shell, il y a
+un journal là aussi, et il est peut-être suffisant. Dans a-Shell :
+
+```sh
+python3 -c "import sqlite3, os; c=os.path.expanduser('~/.singular/journal.db'); \
+print(sqlite3.connect(c).execute('select count(*) from journal_entries').fetchone()[0], 'décisions') if os.path.exists(c) else print('aucun journal ici')"
+```
+
+**N'enregistre pas de décision sur le Mac tant que la question n'est pas
+tranchée.** Deux journaux ne se fusionnent pas : c'est mesuré, pas supposé.
+Recopier les lignes d'une base dans l'autre donne bien toutes les entrées, et
+`verify()` rend **faux** — chaque empreinte signe la précédente, donc une
+entrée insérée au milieu rompt la chaîne de toutes celles qui suivent, pour
+toujours. Il faudrait alors en jeter un.
+
+Tant que tu n'écris rien sur le Mac, tu gardes le choix. Dès que tu y écris une
+décision, tu devras choisir laquelle des deux histoires garder.
+
 ### Ce qu'il y a dans ce dossier
 
 Quatre fichiers comptent, et un ne doit pas être copié.
