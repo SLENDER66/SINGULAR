@@ -27,6 +27,8 @@ import sys
 
 import pytest
 
+from tests.support import sans_accents
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "proto" / "suivi_candidatures.py"
 
@@ -91,7 +93,7 @@ def test_le_bloc_pour_claude_porte_la_situation(proto) -> None:
 
     bloc = proto.texte_pour_claude(donnees, "relis le titre de mon CV")
 
-    assert "BTS Fluides Energies Domotique" in bloc     # qui je suis
+    assert "bts fluides energies domotique" in sans_accents(bloc)   # qui je suis
     assert "BE Fluides Occitanie" in bloc               # ou j'en suis
     assert "Vu sur Indeed" in bloc                      # ce que j'avais note
     assert "Changer le titre" in bloc                   # ce qu'il me reste

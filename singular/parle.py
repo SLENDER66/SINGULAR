@@ -236,7 +236,7 @@ class Quota:
 
         C'est ce que fait le clavier. Les deux surfaces ecrivent le meme
         fichier, et faire passer les tours du clavier par `consommer` revenait
-        a leur faire manger le plafond du telephone : trois questions au PC, et
+        a leur faire manger le plafond du telephone : trois questions au clavier, et
         le telephone n'en avait plus que cinquante-sept -- alors que la
         documentation promet au clavier de ne pas etre plafonne.
 
@@ -623,7 +623,7 @@ def apercu(contexte: str, conversation: Conversation, question: str = "") -> str
         contenu = tour["content"]
         if isinstance(contenu, list):
             contenu = "".join(bloc.get("text", "") for bloc in contenu)
-        role = "toi" if tour["role"] == "user" else "le modele"
+        role = "toi" if tour["role"] == "user" else "le modèle"
         morceaux.append(f"[{role}] {contenu}")
     return "\n\n".join(morceaux)
 

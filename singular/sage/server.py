@@ -289,7 +289,7 @@ class SageApp:
         """Le rapport, plus l'endroit ou l'on a regarde.
 
         Un journal vide et un mauvais journal donnent exactement le meme
-        ecran. Le coeur tourne sur son PC et sur son telephone, sur deux
+        ecran. Le coeur tourne sur son Mac et sur son telephone, sur deux
         fichiers qui ne se parlent pas : il peut tres bien ouvrir l'app et voir
         « Le journal est vide » parce que le serveur pointe ailleurs, pas parce
         qu'il a tout perdu. La ligne de commande le disait deja -- c'est ce que
@@ -776,7 +776,7 @@ class SageHandler(BaseHTTPRequestHandler):
         except SageError as exc:
             self._json(exc.status, {"message": exc.message})
         except Exception as exc:  # noqa: BLE001 - un serveur personnel ne doit jamais tomber
-            # La panne se lit sur le PC, ou il peut la copier ; le telephone
+            # La panne se lit dans la fenetre du serveur, ou il peut la copier ; le telephone
             # recoit une phrase. `OperationalError: database is locked` ne dit
             # rien a personne, et c'etait la derniere porte par ou un message
             # de bibliotheque arrivait sur son ecran.
@@ -795,11 +795,11 @@ class SageHandler(BaseHTTPRequestHandler):
 
 #: Ce qu'on dit d'une panne qu'on ne sait pas nommer.
 PANNE = ("Quelque chose a cassé de mon côté. Le détail est écrit dans la fenêtre "
-         "du PC ou tourne le Sage. Ton journal, lui, n'a pas bouge.")
+         "où tourne le Sage. Ton journal, lui, n'a pas bougé.")
 
 #: Et la seule panne courante qu'il peut lui-meme resoudre.
-OCCUPE = ("Le journal est occupe par une autre fenetre -- une commande en cours "
-          "sur le PC. Reessaie dans un instant.")
+OCCUPE = ("Le journal est occupé par une autre fenêtre -- une commande en cours "
+          "sur ton Mac. Réessaie dans un instant.")
 
 
 def _panne(exc: Exception) -> str:
@@ -899,7 +899,7 @@ def _port_refuse(refus: OSError, port: int) -> int:
         print(f"\n  Sinon, choisis un autre port : --port {port + 1}\n")
         return 1
     if refus.errno == errno.EACCES:
-        print(f"\n  Le systeme refuse le port {port}.")
+        print(f"\n  Le système refuse le port {port}.")
         print(f"  Choisis un port au-dessus de 1024 : --port {max(port, 8765)}\n")
         return 1
     raise refus

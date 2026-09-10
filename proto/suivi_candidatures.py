@@ -189,21 +189,21 @@ def marque(texte: str) -> str:
 #: mot, et une session qui trouverait « enthalpique » plus courant se
 #: tromperait -- les deux existent et ce ne sont pas les memes.
 PROFIL = [
-    ("2 ans en bureau d'etudes CVC : chiffrage, dimensionnement.", DIT),
-    ("Avant cela, 5 ans de terrain dans l'Armee : chambre froide, groupe", DIT),
-    ("electrogene, bruleur -- froid, energie, combustion.", DIT),
-    ("Et du tertiaire : je dimensionne, selectionne et chiffre des centrales", DIT),
-    ("de traitement d'air, de 600 a 50 000 m3/h. C'est du bureau d'etudes,", DIT),
-    ("pas de l'entretien. Recuperation : echangeur a plaques, roue", DIT),
-    ("hygroscopique, batteries a eau glycolee -- les trois.", DIT),
-    ("Les chambres froides etaient en positif et en negatif.", DIT),
-    ("Les bruleurs : je ne me souviens plus du combustible, donc ca ne va", DIT),
+    ("2 ans en bureau d'études CVC : chiffrage, dimensionnement.", DIT),
+    ("Avant cela, 5 ans de terrain dans l'Armée : chambre froide, groupe", DIT),
+    ("électrogène, brûleur -- froid, énergie, combustion.", DIT),
+    ("Et du tertiaire : je dimensionne, sélectionne et chiffre des centrales", DIT),
+    ("de traitement d'air, de 600 à 50 000 m3/h. C'est du bureau d'études,", DIT),
+    ("pas de l'entretien. Récupération : échangeur à plaques, roue", DIT),
+    ("hygroscopique, batteries à eau glycolée -- les trois.", DIT),
+    ("Les chambres froides étaient en positif et en négatif.", DIT),
+    ("Les brûleurs : je ne me souviens plus du combustible, donc ça ne va", DIT),
     ("nulle part -- ne me le redemande pas.", DIT),
-    ("BTS Fluides Energies Domotique. Actuellement au chomage.", DIT),
-    ("Je cherche un poste en bureau d'etudes dans la region toulousaine.", DIT),
-    ("Une reprise d'etudes en alternance m'interesse, mais je n'ai ni ecole", DIT),
-    ("ni entreprise a ce jour.", DIT),
-    ("Debutant en code, j'utilise un iPhone.", DIT),
+    ("BTS Fluides Énergies Domotique. Actuellement au chômage.", DIT),
+    ("Je cherche un poste en bureau d'études dans la région toulousaine.", DIT),
+    ("Une reprise d'études en alternance m'intéresse, mais je n'ai ni école", DIT),
+    ("ni entreprise à ce jour.", DIT),
+    ("Débutant en code, j'utilise un iPhone.", DIT),
 ]
 
 

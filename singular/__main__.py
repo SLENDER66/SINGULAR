@@ -374,7 +374,7 @@ def _vide(journal: DecisionJournal) -> str:
 
     Un journal vide et un mauvais journal donnent exactement le même écran.
     Depuis que le coeur tourne sans rien installer, la même personne peut en
-    ouvrir un sur son PC et un autre sur son téléphone, et les deux
+    ouvrir un sur son Mac et un autre sur son téléphone, et les deux
     divergeraient en silence -- chacun ayant l'air simplement neuf. Dire où
     l'on a cherché coûte une ligne et rend la confusion impossible à rater.
     """
@@ -550,7 +550,7 @@ def cmd_review(journal: DecisionJournal, args) -> int:
         gap = report["overconfidence"]
         verdict = calibration_verdict(report)
         if verdict is None or not verdict["conclusive"]:
-            print(_colour(f"  ecart de {gap:+.0%} sur {report['resolved']} verdict"
+            print(_colour(f"  écart de {gap:+.0%} sur {report['resolved']} verdict"
                           f"{'s' if report['resolved'] > 1 else ''}"
                           " - le hasard seul en produit autant, rien a conclure", DIM))
         elif gap > 0:
@@ -657,7 +657,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     analyse = sub.add_parser("analyse", help="faire commenter la Notice par un modèle (consomme des jetons)")
     analyse.add_argument("--blanc", action="store_true",
-                         help="afficher ce qui serait envoye, sans rien envoyer")
+                         help="afficher ce qui serait envoyé, sans rien envoyer")
     analyse.add_argument("--modele", default=None)
     analyse.set_defaults(func=cmd_analyse)
 
@@ -666,10 +666,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="afficher ce qui serait envoye, sans rien envoyer")
     offres.add_argument("--modele", default=None)
     offres.add_argument("precision", nargs="?", default="",
-                        help="une precision pour cette recherche, facultative")
+                        help="une précision pour cette recherche, facultative")
     offres.set_defaults(func=cmd_offres)
 
-    parle = sub.add_parser("parle", help="une conversation qui connait ton journal")
+    parle = sub.add_parser("parle", help="une conversation qui connaît ton journal")
     parle.add_argument("question", nargs="?", default="")
     parle.add_argument("--oubli", action="store_true", help="effacer le fil et repartir à zéro")
     parle.add_argument("--modele", default=None)

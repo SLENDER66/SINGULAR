@@ -29,6 +29,7 @@ from singular.offres import (
     chercher,
     contexte_pour_recherche,
 )
+from tests.support import sans_accents
 
 SOURCE = pathlib.Path(__file__).resolve().parent.parent / "singular" / "offres.py"
 
@@ -275,14 +276,14 @@ def test_une_deduction_part_avec_son_etiquette() -> None:
     finally:
         offres.CRITERES[:] = veritables
 
-    assert "Ceci n'est pas verifie" in texte
+    assert "ceci n'est pas verifie" in sans_accents(texte)
     assert "- Il vise plutot l'industriel." in texte
 
     # Et **seulement** la. La premiere version de ce test se contentait de la
     # trouver quelque part : une deduction posee dans le corps du profil ET
     # repetee sous l'etiquette passait, alors que l'agent l'aurait lue comme un
     # fait avant d'arriver a l'avertissement.
-    avant, _, apres = texte.partition("Ceci n'est pas verifie")
+    avant, _, apres = sans_accents(texte).partition("ceci n'est pas verifie")
     assert "industriel" not in avant, (
         "la deduction apparait dans le corps du profil, avant son etiquette")
     assert "industriel" in apres
@@ -325,17 +326,22 @@ def test_les_deux_profils_du_depot_ne_se_contredisent_pas() -> None:
     suivi = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(suivi)
 
-    dit_ici = " ".join(texte for texte, source in CRITERES if source == DIT).lower()
-    dit_la = " ".join(texte for texte, source in suivi.PROFIL
-                      if source == suivi.DIT).lower()
+    # Compare sans accents des deux cotes : le jour ou son profil a ete ecrit
+    # en francais correct, cette liste de faits ne correspondait plus a aucun
+    # des deux, et le test passait en ne comparant plus rien -- « absent ici »
+    # == « absent la ». Un garde-fou qui s'eteint en silence est pire que pas
+    # de garde-fou, parce qu'on croit encore l'avoir.
+    dit_ici = sans_accents(" ".join(texte for texte, source in CRITERES if source == DIT))
+    dit_la = sans_accents(" ".join(texte for texte, source in suivi.PROFIL
+                                   if source == suivi.DIT))
 
     # Les faits que les deux doivent porter pareil. Chacun a coute une session.
     # « roue hygroscopique » est dans la liste parce qu'il a corrige ce mot
     # lui-meme le 9 septembre : c'est son metier, et une session qui trouverait
     # « enthalpique » plus courant se tromperait -- les deux existent.
-    for fait in ("2 ans en bureau d'etudes", "bts fluides energies domotique",
-                 "chambres froides", "alternance", "ni ecole ni",
+    for fait in ("2 ans en bureau d'études", "bts fluides énergies domotique",
+                 "chambres froides", "alternance", "ni école ni",
                  "hygroscopique"):
-        assert (fait in dit_ici) == (fait in dit_la), (
-            f"« {fait} » n'est pas dit pareil des deux cotes : "
-            "une correction n'a ete faite qu'a un endroit")
+        nu = sans_accents(fait)
+        assert nu in dit_ici, f"« {fait} » a disparu du profil qui part au service"
+        assert nu in dit_la, f"« {fait} » a disparu du profil du prototype"

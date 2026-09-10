@@ -83,48 +83,48 @@ DEDUIT = "deduit"
 #: `tests/test_offres.py` refuse desormais une ligne sans provenance, ici comme
 #: dans le prototype.
 CRITERES = [
-    ("Il cherche deux choses, sans preference entre les deux : un poste de", DIT),
-    ("charge d'etudes en bureau d'etudes CVC -- chiffrage, dimensionnement --", DIT),
-    ("et une alternance en reprise d'etudes. Ne classe pas l'une avant l'autre.", DIT),
-    ("Region : Toulouse et sa peripherie.", DIT),
-    ("Experience : 2 ans en bureau d'etudes CVC, plus 5 ans de terrain dans", DIT),
-    ("l'Armee -- chambres froides positif et negatif, groupes electrogenes,", DIT),
-    ("bruleurs. Il dimensionne, selectionne et chiffre des centrales de", DIT),
-    ("traitement d'air de 600 a 50 000 m3/h, avec recuperation par echangeur", DIT),
-    ("a plaques, roue hygroscopique ou batteries a eau glycolee.", DIT),
-    ("Diplome : BTS Fluides Energies Domotique.", DIT),
-    ("Pour l'alternance : il n'a ni ecole ni entreprise a ce jour.", DIT),
+    ("Il cherche deux choses, sans préférence entre les deux : un poste de", DIT),
+    ("chargé d'études en bureau d'études CVC -- chiffrage, dimensionnement --", DIT),
+    ("et une alternance en reprise d'études. Ne classe pas l'une avant l'autre.", DIT),
+    ("Région : Toulouse et sa périphérie.", DIT),
+    ("Expérience : 2 ans en bureau d'études CVC, plus 5 ans de terrain dans", DIT),
+    ("l'Armée -- chambres froides positif et négatif, groupes électrogènes,", DIT),
+    ("brûleurs. Il dimensionne, sélectionne et chiffre des centrales de", DIT),
+    ("traitement d'air de 600 à 50 000 m3/h, avec récupération par échangeur", DIT),
+    ("à plaques, roue hygroscopique ou batteries à eau glycolée.", DIT),
+    ("Diplôme : BTS Fluides Énergies Domotique.", DIT),
+    ("Pour l'alternance : il n'a ni école ni entreprise à ce jour.", DIT),
 ]
 
 INSTRUCTION = """\
 Tu cherches des offres d'emploi pour Thomas, et tu ne postules jamais.
 
-Tu lis, tu ecartes, tu proposes. Il decide. Tu n'as aucun moyen d'agir et tu
-ne dois pas faire comme si : pas de « j'ai envoye », pas de « je te recommande
+Tu lis, tu écartes, tu proposes. Il décide. Tu n'as aucun moyen d'agir et tu
+ne dois pas faire comme si : pas de « j'ai envoyé », pas de « je te recommande
 de laisser faire ». Une proposition, et lui tranche.
 
-Utilise la recherche web pour trouver des offres reelles et actuelles. Pour
+Utilise la recherche web pour trouver des offres réelles et actuelles. Pour
 chacune de celles que tu retiens, donne :
 
-1. l'intitule et l'employeur ;
+1. l'intitulé et l'employeur ;
 2. le lieu, et la distance approximative de Toulouse si ce n'est pas Toulouse ;
-3. en une phrase, ce qui correspond a son profil ;
+3. en une phrase, ce qui correspond à son profil ;
 4. en une phrase, ce qui manque ou ce qui coince -- il n'y a pas d'offre
-   parfaite, et une annonce presentee sans reserve est une annonce mal lue ;
+   parfaite, et une annonce présentée sans réserve est une annonce mal lue ;
 5. le lien.
 
 Couvre les deux -- postes et alternances -- sans mettre un genre avant
-l'autre. Il triera : c'est lui qui decide, et une liste qui a deja choisi a sa
-place lui cache la moitie du marche.
+l'autre. Il triera : c'est lui qui décide, et une liste qui a déjà choisi à sa
+place lui cache la moitié du marché.
 
-Cinq offres au maximum, classees de la plus pertinente a la moins. Mieux vaut
+Cinq offres au maximum, classées de la plus pertinente à la moins. Mieux vaut
 trois offres justes que dix approximatives.
 
-Si tu ne trouves rien de serieux, dis-le et arrete-toi. Une liste remplie pour
-ne pas revenir les mains vides lui ferait perdre une demi-journee.
+Si tu ne trouves rien de sérieux, dis-le et arrête-toi. Une liste remplie pour
+ne pas revenir les mains vides lui ferait perdre une demi-journée.
 
-Ne fabrique jamais une offre, un employeur ou un lien. Si tu n'es pas sur
-qu'une annonce existe, ne la cite pas. Reponds en francais, sans preambule.\
+Ne fabrique jamais une offre, un employeur ou un lien. Si tu n'es pas sûr
+qu'une annonce existe, ne la cite pas. Réponds en français, sans préambule.\
 """
 
 
@@ -139,7 +139,7 @@ def contexte_pour_recherche(question: str = "") -> str:
     lignes += [texte for texte, source in CRITERES if source == DIT]
     a_confirmer = [texte for texte, source in CRITERES if source != DIT]
     if a_confirmer:
-        lignes += ["", "Ceci n'est pas verifie, ne t'appuie pas dessus :"]
+        lignes += ["", "Ceci n'est pas vérifié, ne t'appuie pas dessus :"]
         lignes += [f"- {texte}" for texte in a_confirmer]
     if question.strip():
         lignes += ["", "Precision pour cette recherche :", question.strip()]

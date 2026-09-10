@@ -147,7 +147,20 @@ def test_aucune_source_n_affirme_qu_il_est_sur_windows() -> None:
         texte = re.sub(r"\s*\n\s*#?\s*", " ", chemin.read_text(encoding="utf-8"))
         for affirmation in ("il est sur Windows", "sur un PC Windows où rien",
                             "son nom d'utilisateur Windows", "qui est son terminal",
-                            "en `cmd` et en PowerShell"):
+                            "en `cmd` et en PowerShell",
+                            # Troisieme passage de la meme erreur, et le premier
+                            # ou elle ne nomme pas Windows : les documents le
+                            # 10 septembre, les docstrings le meme jour, puis
+                            # ces cinq-la, dont deux dans des phrases affichees
+                            # -- « le detail est ecrit dans la fenetre du PC ou
+                            # tourne le Sage », qu'il lisait sur son telephone
+                            # pendant que le Sage tournait sur son Mac.
+                            # Ancrees sur le present, pas sur « PC » : « le
+                            # meme code tourne sur son Mac [...] et tournait
+                            # sur son PC Windows » est vrai et doit passer. Un
+                            # garde-fou qui crie au loup finit desactive.
+                            "sur le PC,", "au PC,", "du PC ou tourne",
+                            "tourne sur son PC", "sur son PC et"):
             if affirmation in texte:
                 fautes.append(f"{relative} : « {affirmation} »")
 

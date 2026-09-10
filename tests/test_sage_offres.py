@@ -19,6 +19,7 @@ import pytest
 
 from singular.journal import DecisionJournal, Status, Tier
 from singular.sage.server import SageApp, SageError
+from tests.support import sans_accents
 
 
 @pytest.fixture
@@ -97,7 +98,7 @@ def client(monkeypatch) -> FauxClient:
 def test_voir_ce_qui_partirait_ne_coute_rien(app, sans_cle) -> None:
     """Il a le droit de relire ce qui est dit de lui avant que ça parte."""
     etat = app.offres_etat()
-    assert "bureau d'etudes CVC" in etat["contexte"]
+    assert "bureau d'etudes cvc" in sans_accents(etat["contexte"])
     assert etat["restants"] == etat["plafond"] > 0
 
 
@@ -150,7 +151,7 @@ def test_ce_qui_part_est_ce_qu_il_a_dit_de_lui(app, client) -> None:
     # en second ; avant ca il disait « il ne cherche pas d'alternance », ce
     # qu'il n'avait jamais dit.
     assert "alternance" in envoye
-    assert "sans preference" in envoye
+    assert "sans preference" in sans_accents(envoye)
     assert "poste vise" not in envoye.lower(), "l'un ne passe plus devant l'autre"
 
 

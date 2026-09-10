@@ -25,6 +25,7 @@ dépôt, jamais une faute d'orthographe dans l'absolu.
 from __future__ import annotations
 
 import ast
+import functools
 import pathlib
 import unicodedata
 
@@ -38,7 +39,8 @@ TESTS = RACINE / "tests"
 #: l'app affiche.
 AFFICHENT = ("singular/__main__.py", "singular/saisie.py", "singular/sage/server.py",
              "singular/sage/notice.py", "singular/parle.py", "singular/analyse.py",
-             "singular/offres.py", "singular/journal.py")
+             "singular/offres.py", "singular/journal.py",
+             "proto/suivi_candidatures.py")
 
 
 def _sans_accents(texte: str) -> str:
@@ -64,8 +66,16 @@ def _docstrings(arbre: ast.Module) -> set[int]:
     return trouves
 
 
-def _phrases_affichees() -> list[str]:
-    """Toute chaîne accentuée d'au moins trois mots que le programme montre."""
+def _phrases_affichees(*, accentuees_seulement: bool = True) -> list[str]:
+    """Toute chaîne d'au moins trois mots que le programme montre.
+
+    Deux usages, et la distinction compte : la détection ne s'intéresse qu'aux
+    phrases **accentuées**, puisqu'une phrase sans accent ne peut pas être mal
+    recopiée ; mais reconnaître une citation exacte demande de les voir toutes.
+    Sans ça, un test qui cite fidèlement une phrase encore sans accents se
+    faisait accuser parce qu'une **autre** phrase, ailleurs, portait les mêmes
+    mots correctement écrits.
+    """
     phrases = []
     for nom in AFFICHENT:
         arbre = ast.parse((RACINE / nom).read_text(encoding="utf-8"))
@@ -76,35 +86,45 @@ def _phrases_affichees() -> list[str]:
             texte = noeud.value
             if id(noeud) in docs or "\n\n" in texte:
                 continue
-            if texte.count(" ") >= 2 and _sans_accents(texte) != texte.lower():
-                phrases.append(texte)
+            if texte.count(" ") < 2:
+                continue
+            if accentuees_seulement and _sans_accents(texte) == texte.lower():
+                continue
+            phrases.append(texte)
     return phrases
 
 
 def _sous_sans_accents(arbre: ast.Module) -> set[int]:
-    """Les litteraux passes a `sans_accents(...)`, qui est la sortie prevue.
+    """Les litteraux des instructions qui passent par `sans_accents`.
 
-    Comparer sans accents des deux cotes est exactement ce que ce fichier
-    propose : les signaler serait refuser sa propre solution.
+    Comparer sans accents des deux cotes est la sortie que ce fichier propose :
+    les signaler serait refuser sa propre solution.
+
+    L'exemption vise l'**instruction** entiere, pas une forme d'appel. Elle a
+    d'abord vise `sans_accents("...")`, puis il a fallu ajouter
+    `"..." in sans_accents(x)`, puis `sans_accents(x).partition("...")`, puis
+    une boucle sur un tuple compare plus bas. Chaque forme oubliee accusait a
+    tort un test deja correct, et il en restait toujours une. Une instruction
+    qui nomme `sans_accents` compare sans accents : c'est ce qui compte, et ca
+    ne se decline pas.
     """
-    def appelle_sans_accents(noeud: ast.AST) -> bool:
-        return (isinstance(noeud, ast.Call)
-                and getattr(noeud.func, "id", "").endswith("sans_accents"))
-
     exemptes = set()
     for noeud in ast.walk(arbre):
-        # `sans_accents("...")` : le litteral est dedans.
-        if appelle_sans_accents(noeud):
-            for interne in ast.walk(noeud):
-                if isinstance(interne, ast.Constant):
-                    exemptes.add(id(interne))
-        # `"..." in sans_accents(phrase)` : il est a gauche, et c'est la forme
-        # la plus frequente. L'oublier faisait refuser la solution proposee.
-        if (isinstance(noeud, ast.Compare)
-                and isinstance(noeud.left, ast.Constant)
-                and any(appelle_sans_accents(c) for c in noeud.comparators)):
-            exemptes.add(id(noeud.left))
+        if not isinstance(noeud, ast.stmt):
+            continue
+        mentionne = any(isinstance(interne, ast.Name) and interne.id.endswith("sans_accents")
+                        for interne in ast.walk(noeud))
+        if not mentionne:
+            continue
+        for interne in ast.walk(noeud):
+            if isinstance(interne, ast.Constant):
+                exemptes.add(id(interne))
     return exemptes
+
+
+@functools.lru_cache(maxsize=1)
+def _toutes_les_phrases() -> tuple[str, ...]:
+    return tuple(_phrases_affichees(accentuees_seulement=False))
 
 
 def _recopies_fautives(source: str, phrases: list[str]) -> list[str]:
@@ -120,8 +140,15 @@ def _recopies_fautives(source: str, phrases: list[str]) -> list[str]:
         if attendu.count(" ") < 2 or _sans_accents(attendu) != attendu.lower():
             continue  # trop court, ou deja ecrit avec ses accents
         nu = _sans_accents(attendu)
+        # Un litteral qui se retrouve **tel quel** quelque part est une recopie
+        # exacte, pas une recopie fautive -- meme si un autre message, ailleurs,
+        # ecrit les memes mots avec leurs accents. Chercher la faute avant
+        # d'avoir cherche la correspondance exacte accusait `test_proto_suivi.py`
+        # de mal recopier `proto/suivi_candidatures.py`, qu'il citait juste.
+        if any(attendu.lower() in phrase.lower() for phrase in _toutes_les_phrases()):
+            continue
         for phrase in phrases:
-            if nu in _sans_accents(phrase) and attendu.lower() not in phrase.lower():
+            if nu in _sans_accents(phrase):
                 fautes.append(f"ligne {noeud.lineno} : « {attendu} » -- le programme"
                               f" ecrit « {phrase.strip()[:70]} »")
                 break
