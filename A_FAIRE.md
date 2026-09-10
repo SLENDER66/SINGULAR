@@ -28,7 +28,19 @@ cp /Volumes/TA_CLE/.singular/tarifs.json       ~/.singular/
 cp /Volumes/TA_CLE/.singular/parle_quota.json  ~/.singular/
 ```
 
-Puis vérifie, avant de faire quoi que ce soit d'autre :
+Puis vérifie que la copie est arrivée entière, **avant de faire quoi que ce
+soit d'autre**. Cette commande ne demande ni clone ni installation — `python3`
+suffit :
+
+```sh
+python3 -c "import sqlite3; b=sqlite3.connect('$HOME/.singular/journal.db'); \
+print(b.execute('select count(*) from journal_entries').fetchone()[0], 'décisions')"
+```
+
+Le nombre doit être celui que tu attends. Zéro ou une erreur veut dire que le
+fichier n'est pas arrivé, ou pas en entier.
+
+Une fois SINGULAR installé sur le Mac, la vraie vérification est celle-là :
 
 ```sh
 python3 -m singular review
@@ -40,6 +52,10 @@ la casse pas : les empreintes signent le contenu des entrées, pas leur chemin.
 C'est mesuré, pas supposé — une base copiée dans un autre dossier se vérifie
 encore, et une décision écrite après la copie se chaîne derrière les
 précédentes.
+
+**Le PC ne sert qu'à ça.** Ce dossier est la seule chose qui n'existe qu'ici :
+le code se reclone depuis GitHub, et tout le reste se recrée. Une fois la copie
+faite et vérifiée, tu n'as plus besoin d'y retourner.
 
 Ce qu'on **ne** copie pas : `sage_token`. Une machine neuve mérite un jeton
 neuf, et il se recrée tout seul au premier `--lan`.
