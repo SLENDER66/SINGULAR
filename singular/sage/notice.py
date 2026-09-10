@@ -141,9 +141,12 @@ def _overdue_item(overdue: tuple[Entry, ...], moment: datetime) -> NoticeItem | 
         f"{_plural(len(overdue), 'décision a', 'décisions ont')} dépassé "
         f"{'son' if single else 'leur'} horizon. "
         + (
-            f"{'Elle attend' if single else 'La plus ancienne attend'} un verdict depuis aujourd'hui."
+            # « la plus en retard », pas « la plus ancienne » : ce sont deux
+            # décisions différentes dès qu'un horizon long a été pris avant un
+            # horizon court, et c'est du retard que ce nombre parle.
+            f"{'Elle attend' if single else 'La plus en retard attend'} un verdict depuis aujourd'hui."
             if worst == 0
-            else f"{'Elle attend' if single else 'La plus ancienne attend'} "
+            else f"{'Elle attend' if single else 'La plus en retard attend'} "
                  f"depuis {worst} jour{'s' if worst > 1 else ''}."
         )
     )

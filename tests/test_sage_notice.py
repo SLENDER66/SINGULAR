@@ -468,3 +468,68 @@ def test_the_report_only_attributes_to_the_constitution_what_it_says(tmp_path):
         assert not re.search(motif, source), (
             f"le rapport prête une définition à constitution.md ({motif!r}), "
             "qui n'en donne aucune")
+
+
+# --- la carte doit nommer la decision dont elle donne le retard ---------------
+
+def test_la_carte_du_retard_nomme_la_decision_dont_elle_compte_les_jours(tmp_path) -> None:
+    """Le nombre venait d'un `max()`, l'action de `overdue[0]` : deux décisions.
+
+    `python3 -m singular due` listait une décision en retard d'un jour au-dessus
+    d'une décision en retard de trente-neuf, et finissait en lui donnant la
+    commande pour trancher la première. La Notice se contredisait dans une seule
+    phrase : « la plus ancienne attend depuis 39 jours », puis `resolve` sur une
+    autre.
+
+    Il faut un horizon long pris **avant** un horizon court pour que l'ordre du
+    retard et l'ordre d'écriture se séparent. C'est pour ça que personne ne
+    l'avait vu, et que les vecteurs de parité ne le voyaient pas non plus.
+
+    Le port Swift, lui, triait déjà par échéance et avait raison.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from singular.journal import DecisionJournal, Tier
+    from singular.sage.notice import build_notice
+
+    maintenant = datetime.now(UTC)
+    journal = DecisionJournal(tmp_path / "journal.db")
+    tot = journal.add(title="Écrite en premier, échue en dernier", action="a", predicted="b",
+                      probability=0.6, tier=Tier.REVENUS, cost_hours=1, horizon_days=59,
+                      now=maintenant - timedelta(days=60))
+    tard = journal.add(title="Écrite ensuite, échue depuis longtemps", action="a", predicted="b",
+                       probability=0.6, tier=Tier.REVENUS, cost_hours=1, horizon_days=1,
+                       now=maintenant - timedelta(days=40))
+
+    echues = journal.due(now=maintenant)
+    retards = [e.overdue_days(maintenant) for e in echues]
+    assert retards == sorted(retards, reverse=True), (
+        f"`due()` rend {retards} : la plus en retard doit venir en tête, "
+        "sinon l'écran et la Notice pointent la mauvaise décision")
+    assert echues[0].entry_id == tard.entry_id
+    assert tot.entry_id in {e.entry_id for e in echues}, "les deux sont bien en retard"
+
+    carte = next(item for item in build_notice(journal, now=maintenant).items
+                 if item.title == "À trancher aujourd'hui")
+    pire = max(e.overdue_days(maintenant) for e in echues)
+    assert f"depuis {pire} jours" in carte.detail
+    assert carte.action == f"resolve {tard.entry_id}", (
+        "la carte donne le retard d'une décision et la commande d'une autre")
+    assert carte.entry_ids[0] == tard.entry_id
+
+
+def test_la_carte_dit_le_retard_et_pas_l_anciennete() -> None:
+    """« La plus ancienne » nommait la mauvaise, une fois l'ordre corrigé.
+
+    Le témoin de la phrase : ce que le nombre mesure est un retard.
+    """
+    import pathlib
+
+    source = (pathlib.Path(__file__).resolve().parent.parent
+              / "singular/sage/notice.py").read_text(encoding="utf-8")
+    swift = (pathlib.Path(__file__).resolve().parent.parent
+             / "ios/SingularSage/Core/Notice.swift").read_text(encoding="utf-8")
+    for texte, nom in ((source, "notice.py"), (swift, "Notice.swift")):
+        assert "La plus en retard attend" in texte, nom
+        assert "La plus ancienne attend" not in texte, (
+            f"{nom} : « la plus ancienne » n'est pas « la plus en retard »")

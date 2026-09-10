@@ -183,7 +183,10 @@ enum NoticeEngine {
         guard let first = overdue.first else { return nil }
         let worst = overdue.map { $0.overdueDays(at: moment) }.max() ?? 0
         let single = overdue.count == 1
-        let subject = single ? "Elle attend" : "La plus ancienne attend"
+        // « la plus en retard », pas « la plus ancienne » : ce sont deux
+        // décisions différentes dès qu'un horizon long a été pris avant un
+        // horizon court, et c'est du retard que ce nombre parle.
+        let subject = single ? "Elle attend" : "La plus en retard attend"
         var detail = "\(plural(overdue.count, "décision a", "décisions ont")) dépassé "
             + "\(single ? "son" : "leur") horizon. "
         if worst == 0 {

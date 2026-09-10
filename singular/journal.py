@@ -632,13 +632,43 @@ class DecisionJournal:
             return tuple(self._entry(row) for row in conn.execute(query, params).fetchall())
 
     def due(self, *, now: datetime | None = None) -> tuple[Entry, ...]:
-        """Open decisions whose horizon has passed: the activity/result detector.
+        """Open decisions whose horizon has passed, la plus en retard d'abord.
 
         Le jour de l'échéance compte comme échu dès son début : voir
         `Entry.due_on`, qui porte la raison et ce qu'elle a coûté.
+
+        **L'ordre est celui du retard, et il compte.** Il suivait `entries()`,
+        donc la date d'écriture, ce qui n'est pas la même chose : un horizon
+        long pris il y a longtemps échoit après un horizon court pris hier.
+        Trois surfaces s'appuient sur cet ordre et disaient toutes la même
+        chose de travers.
+
+        `python3 -m singular due` listait une décision en retard d'un jour
+        au-dessus d'une décision en retard de trente-neuf, et terminait en lui
+        donnant la commande pour trancher **la première**. La Notice était
+        pire, parce qu'elle se contredisait dans une seule phrase : elle
+        annonçait « la plus ancienne attend depuis 39 jours » -- un `max()` --
+        puis proposait `resolve` sur `overdue[0]`, une autre décision. Et
+        l'app reçoit `entry_ids` dans cet ordre.
+
+        Trier ici plutôt qu'aux trois endroits : c'est la même règle, elle a
+        un domicile. Le second critère départage les ex æquo pour que deux
+        exécutions donnent le même écran.
+
+        **Le port Swift, lui, triait déjà juste.** `Notice.swift` fait
+        `sorted { $0.dueAt < $1.dueAt }` depuis toujours. Les deux moteurs
+        divergeaient donc pour de bon, et les vecteurs de parité ne l'ont pas
+        vu parce qu'aucun d'eux ne portait le cas : il faut un horizon long
+        pris avant un horizon court pour que les deux ordres se séparent.
         """
         moment = now or datetime.now(UTC)
-        return tuple(e for e in self.entries(status=Status.OPEN) if e.is_due(moment))
+        echues = [e for e in self.entries(status=Status.OPEN) if e.is_due(moment)]
+        # La clé est celle du port Swift, `Notice.swift` : `sorted { $0.dueAt
+        # < $1.dueAt }`. Trier sur `-overdue_days` donnerait le même premier
+        # mais regrouperait par jour, et deux échéances du même jour à des
+        # heures différentes se rangeraient autrement des deux côtés.
+        echues.sort(key=lambda e: (e.due_at, e.created_at))
+        return tuple(echues)
 
     def _chain(self) -> tuple[Entry, ...]:
         """Entries in the order they were written, which is the order they were chained.

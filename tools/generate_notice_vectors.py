@@ -117,6 +117,27 @@ CASES: list[dict[str, Any]] = [
         ],
     },
     {
+        "name": "deux_retards_dans_le_desordre",
+        "why": ("L'ordre du retard n'est pas celui de l'ecriture, et les deux moteurs "
+                "en divergeaient pour de bon -- Swift triait par echeance, Python par "
+                "date d'ecriture. Il faut un horizon long pris en premier pour que les "
+                "deux ordres se separent : sans ce cas, `deux_retards` les faisait "
+                "tomber d'accord par hasard.\n"
+                "Ce vecteur epingle la phrase, pas l'ordre : le nombre vient d'un "
+                "`max()`, donc il sortirait le meme des deux cotes meme si l'un des "
+                "deux triait a l'envers. Le contrat des vecteurs ne porte que "
+                "severite, titre et detail -- ni `action` ni `entry_ids` -- donc "
+                "*quelle* decision est nommee reste hors parite. C'est "
+                "`test_sage_notice.py` qui tient cet ordre, cote Python."),
+        "at_offset_days": 40,
+        "entries": [
+            # Ecrite la premiere, echue le trentieme jour : dix jours de retard.
+            _entry("Reprise d'etudes", tier=Tier.CAPACITES, days=30, created_offset=0),
+            # Ecrite ensuite, echue le onzieme : vingt-neuf jours de retard.
+            _entry("Relancer le bureau", tier=Tier.REVENUS, days=1, created_offset=10),
+        ],
+    },
+    {
         "name": "rangs_fondateurs_vides",
         "why": "Stabilité et Revenus vides, avec des heures réellement passées ailleurs.",
         "at_offset_days": 1,

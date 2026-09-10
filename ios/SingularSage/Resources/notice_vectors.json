@@ -125,7 +125,57 @@
           {
             "severity": "ATTENTION",
             "title": "À trancher aujourd'hui",
-            "detail": "2 décisions ont dépassé leur horizon. La plus ancienne attend depuis 5 jours."
+            "detail": "2 décisions ont dépassé leur horizon. La plus en retard attend depuis 5 jours."
+          },
+          {
+            "severity": "ATTENTION",
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
+          }
+        ]
+      }
+    },
+    {
+      "name": "deux_retards_dans_le_desordre",
+      "why": "L'ordre du retard n'est pas celui de l'ecriture, et les deux moteurs en divergeaient pour de bon -- Swift triait par echeance, Python par date d'ecriture. Il faut un horizon long pris en premier pour que les deux ordres se separent : sans ce cas, `deux_retards` les faisait tomber d'accord par hasard.\nCe vecteur epingle la phrase, pas l'ordre : le nombre vient d'un `max()`, donc il sortirait le meme des deux cotes meme si l'un des deux triait a l'envers. Le contrat des vecteurs ne porte que severite, titre et detail -- ni `action` ni `entry_ids` -- donc *quelle* decision est nommee reste hors parite. C'est `test_sage_notice.py` qui tient cet ordre, cote Python.",
+      "at": "2026-10-16T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Reprise d'etudes",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "CAPACITES",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Relancer le bureau",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 10,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. À trancher aujourd'hui.",
+        "severity": "CRITIQUE",
+        "items": [
+          {
+            "severity": "CRITIQUE",
+            "title": "À trancher aujourd'hui",
+            "detail": "2 décisions ont dépassé leur horizon. La plus en retard attend depuis 29 jours. Passé une semaine, un verdict qu'on ne rend pas n'est plus un oubli : c'est le résultat qu'on préfère ne pas voir."
           },
           {
             "severity": "ATTENTION",
