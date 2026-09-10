@@ -330,3 +330,58 @@ def test_deux_reprises_simultanees_refusent_dans_sa_langue(tmp_path, monkeypatch
     assert len(identifiants) == len(set(identifiants)), "aucune entree en double"
     assert len(identifiants) == 4
     assert final.verify(), "et la chaine tient"
+
+
+def test_le_sens_de_la_reprise_ne_change_rien_a_ce_qu_il_voit(tmp_path) -> None:
+    """`USAGE.md` lui dit de faire le geste le plus simple. Encore faut-il que ce
+    soit vrai.
+
+    Le premier conseil ecrit disait « reprends le petit dans le grand », ce qui
+    l'obligeait a renommer des fichiers -- le seul geste de cette page qui puisse
+    effacer trois mois de decisions. Mesure : les deux sens donnent le meme
+    rapport, la meme Notice, et une liste chronologique des deux cotes. Le
+    conseil risque n'achetait rien.
+
+    Si un jour le sens se met a compter, ce test le dit avant lui.
+    """
+    from singular.sage import build_notice
+
+    gros = _journal(tmp_path / "gros.db", "Gros", 12)
+    for index, entree in enumerate(gros.entries()):
+        if index % 2 == 0:
+            gros.resolve(entree.entry_id, happened=index % 4 == 0,
+                         now=DEBUT + timedelta(days=index + 20))
+    _journal(tmp_path / "petit.db", "Petit", 3, decalage=60)
+    fin = DEBUT + timedelta(days=120)
+
+    shutil.copy2(tmp_path / "gros.db", tmp_path / "sens_a.db")
+    sens_a = DecisionJournal(tmp_path / "sens_a.db")
+    sens_a.import_from(tmp_path / "petit.db")
+
+    shutil.copy2(tmp_path / "petit.db", tmp_path / "sens_b.db")
+    sens_b = DecisionJournal(tmp_path / "sens_b.db")
+    sens_b.import_from(tmp_path / "gros.db")
+
+    assert sens_a.verify() and sens_b.verify()
+    assert len(sens_a.entries()) == len(sens_b.entries()) == 15
+
+    rapport_a = sens_a.review(now=fin)
+    rapport_b = sens_b.review(now=fin)
+    assert rapport_a == rapport_b, (
+        "les deux sens ne donnent plus le meme rapport : `USAGE.md` lui dit de "
+        "faire le plus simple, et ce n'est plus sans consequence.")
+
+    titres_a = [item.title for item in build_notice(sens_a, now=fin).items]
+    titres_b = [item.title for item in build_notice(sens_b, now=fin).items]
+    assert titres_a == titres_b
+
+    for journal in (sens_a, sens_b):
+        dates = [entree.created_at for entree in journal.entries()]
+        assert dates == sorted(dates), "la liste s'affiche dans l'ordre des deux cotes"
+
+
+def test_usage_dit_bien_de_faire_le_geste_simple() -> None:
+    """Le temoin : un test qui prouve un conseil absent ne garde rien."""
+    texte = (RACINE / "USAGE.md").read_text(encoding="utf-8")
+    assert "Le sens n'a pas d'importance" in texte
+    assert "aucun fichier à renommer" in texte

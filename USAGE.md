@@ -401,9 +401,22 @@ Trois refus, et aucun n'écrit quoi que ce soit :
 - une décision est déjà des deux côtés — elle compterait deux fois, et le
   journal mentirait sur ce que tu as décidé.
 
-**Sens de la reprise.** Reprends le petit dans le grand : ce sont les entrées
-reprises qui sont resignées. Si tes trois mois sont dans l'ancien fichier, c'est
-lui le grand, et c'est dedans qu'on reprend les quelques décisions récentes.
+**Le sens n'a pas d'importance pour ce que tu vois.** Mesuré : reprendre le gros
+journal dans le petit ou l'inverse donne le même rapport, la même Notice, la
+même calibration, et la liste s'affiche dans l'ordre chronologique des deux
+côtés. `tests/test_deux_journaux.py` le vérifie.
+
+Fais donc le geste le plus simple : garde ton journal habituel là où il est, et
+reprends l'autre dedans. Une seule commande, aucun fichier à renommer — et
+renommer un journal, c'est le seul geste de cette page qui puisse effacer trois
+mois de décisions.
+
+La seule différence est une nuance de preuve. Les entrées reprises sont
+resignées, donc c'est la chaîne d'**ici** qui se vérifie de bout en bout ; celle
+d'où elles viennent ne se rejoue plus comme chaîne. Chaque entrée reprise garde
+l'empreinte qu'elle portait là-bas, et la reprise refuse une source dont la
+chaîne est cassée : ce qui entre a donc été prouvé intact au moment où il est
+entré.
 
 **Un journal par machine, et ils ne se parlent pas.** `~/.singular/journal.db`
 sur le PC et sur le téléphone sont deux fichiers différents. Deux journaux

@@ -529,6 +529,14 @@ class DecisionJournal:
         contenu repris est exactement celui qui avait été signé là-bas reste
         dans la base, et se revérifie.
 
+        Ce qui ne survit pas, et il faut le dire : la chaîne **d'origine** ne se
+        rejoue plus comme chaîne, puisque les maillons ont été remplacés. Ce qui
+        reste est l'empreinte de chaque entrée reprise, plus le fait que la
+        source a été vérifiée entière avant d'entrer -- c'est le refus
+        `source_broken` qui le garantit. Assumé : conserver aussi le maillon
+        d'origine demanderait une colonne de plus pour un geste qui arrive une
+        fois dans la vie d'un journal.
+
         Refuse, et ne écrit rien, si :
 
         * la source ne se vérifie pas -- reprendre un journal falsifié y
