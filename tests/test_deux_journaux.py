@@ -259,3 +259,74 @@ def test_une_base_d_avant_migre_et_reste_verifiable(tmp_path) -> None:
                          tier=Tier.REVENUS, cost_hours=1, horizon_days=7)
     assert entree.imported_fingerprint is None, "une décision écrite ici ne vient d'ailleurs"
     assert journal.verify()
+
+
+def test_deux_reprises_simultanees_refusent_dans_sa_langue(tmp_path, monkeypatch) -> None:
+    """Le controle des doublons se fait hors transaction : les deux le passent.
+
+    La cle primaire tient -- aucune entree en double, chaine intacte -- mais le
+    perdant recevait `UNIQUE constraint failed: journal_entries.entry_id`. C'est
+    la sixieme porte par ou un message de bibliotheque arrivait sur son ecran, et
+    je venais de l'ouvrir moi-meme.
+
+    La fenetre est elargie a la main : sans ca les deux fils se suivent en file
+    indienne et le test ne peut pas echouer.
+    """
+    import threading
+    import time
+
+    from singular.journal import ImportRefused
+
+    cible = _journal(tmp_path / "cible.db", "ici", 1)
+    _journal(tmp_path / "source.db", "la", 3, decalage=10)
+    assert cible is not None
+
+    # `monkeypatch` et pas une restauration a la main : `DecisionJournal._head`
+    # est une `staticmethod`, et la relire depuis la classe rend la fonction nue.
+    # La reposer telle quelle la transforme en methode d'instance, donc `self`
+    # part en premier argument -- et tout le reste de la suite casse, dans le
+    # meme processus, longtemps apres ce test. Mesure : 140 echecs.
+    vrai_head = DecisionJournal.__dict__["_head"].__func__
+    retarde = threading.Event()
+
+    def head_lent(conn):
+        if not retarde.is_set():
+            retarde.set()
+            time.sleep(0.4)
+        return vrai_head(conn)
+
+    resultats: list[object] = []
+    barriere = threading.Barrier(2)
+
+    def reprendre() -> None:
+        journal = DecisionJournal(tmp_path / "cible.db")
+        barriere.wait()
+        try:
+            journal.import_from(tmp_path / "source.db")
+            resultats.append("accepte")
+        except Exception as refus:  # noqa: BLE001 - c'est le sujet du test
+            resultats.append(refus)
+
+    monkeypatch.setattr(DecisionJournal, "_head", staticmethod(head_lent))
+    fils = [threading.Thread(target=reprendre) for _ in range(2)]
+    for fil in fils:
+        fil.start()
+    for fil in fils:
+        fil.join(timeout=10)
+    monkeypatch.undo()
+    assert isinstance(DecisionJournal.__dict__["_head"], staticmethod), (
+        "`_head` doit redevenir une staticmethod : reposee en fonction nue, elle "
+        "recoit `self` en premier argument et casse tout le reste de la suite")
+
+    assert resultats.count("accepte") == 1, f"une seule reprise doit passer : {resultats}"
+    refus = next(r for r in resultats if r != "accepte")
+    assert isinstance(refus, ImportRefused), (
+        f"le perdant recoit {type(refus).__name__} : « {refus} ». Une erreur SQLite "
+        "brute arrive telle quelle sur son ecran.")
+    assert refus.reason == "duplicates"
+
+    final = DecisionJournal(tmp_path / "cible.db")
+    identifiants = [entree.entry_id for entree in final.entries()]
+    assert len(identifiants) == len(set(identifiants)), "aucune entree en double"
+    assert len(identifiants) == 4
+    assert final.verify(), "et la chaine tient"

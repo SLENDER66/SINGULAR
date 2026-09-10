@@ -558,6 +558,26 @@ class DecisionJournal:
                 "duplicates",
                 f"{len(collisions)} entries are already here: {', '.join(collisions[:3])}")
 
+        try:
+            self._reprendre(a_reprendre)
+        except sqlite3.IntegrityError as course:
+            # La cle primaire a tenu -- aucune entree en double, chaine intacte --
+            # mais le message part en anglais sur son ecran. Le controle des
+            # doublons ci-dessus se fait hors transaction : deux reprises
+            # simultanees le passent toutes les deux, et celle qui perd la course
+            # se voit refuser par SQLite. Mesure, en elargissant la fenetre a la
+            # main : « UNIQUE constraint failed: journal_entries.entry_id ».
+            if "entry_id" not in str(course):
+                raise
+            raise ImportRefused(
+                "duplicates", "these entries were imported by someone else first"
+            ) from None
+
+        reprises = {entree.entry_id for entree in a_reprendre}
+        return tuple(e for e in self._chain() if e.entry_id in reprises)
+
+    def _reprendre(self, a_reprendre: tuple[Entry, ...]) -> None:
+        """L'écriture elle-même, dans une seule transaction sérialisée."""
         with self._connect() as conn:
             # Meme raison que `add` : lire la tete et ecrire derriere doit etre
             # un seul pas serialise, sinon deux ecrivains se chainent au meme
@@ -590,9 +610,6 @@ class DecisionJournal:
                      entree.imported_fingerprint or entree.fingerprint),
                 )
                 previous = fingerprint
-
-        reprises = {entree.entry_id for entree in a_reprendre}
-        return tuple(e for e in self._chain() if e.entry_id in reprises)
 
     # --- reading -------------------------------------------------------------
 
