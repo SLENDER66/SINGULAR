@@ -488,7 +488,14 @@ def cmd_review(journal: DecisionJournal, args) -> int:
     # Cette ligne-ci ne l'avait pas et passait au rouge dès la première
     # décision, dont l'échéance était dans deux semaines.
     warn = RED if report["resolved"] and unresolved > worked else DIM
-    print(_colour(f"  {unresolved:g}h encore sans verdict ({report['open']} ouvertes, {report['overdue']} en retard)", warn))
+    # « dont » : `overdue` est un sous-ensemble d'`open`, et la ligne se lisait
+    # comme une addition. Cinq ouvertes toutes en retard s'affichaient
+    # « 5 ouvertes, 5 en retard » -- dix decisions, pour qui lit vite le
+    # dimanche. Le mot est le seul correctif possible : les deux chiffres sont
+    # justes, c'est leur juxtaposition qui mentait.
+    retard = f", dont {report['overdue']} en retard" if report["overdue"] else ""
+    print(_colour(f"  {unresolved:g}h encore sans verdict "
+                  f"({report['open']} ouverte{'s' if report['open'] > 1 else ''}{retard})", warn))
 
     if report["hit_rate"] is not None:
         print(_colour("\n  CE QUE TA CONFIANCE VAUT\n", BOLD))
@@ -511,15 +518,20 @@ def cmd_review(journal: DecisionJournal, args) -> int:
         print(_colour(f"  Brier moyen {report['mean_brier']:.3f}  (0 = parfait, 0.25 = pile ou face)", DIM))
 
     print(_colour("\n  PAR RANG DE LA CONSTITUTION\n", BOLD))
-    print(_colour(f"  {'rang':<16}{'décisions':>10}{'heures':>9}{'ont marché':>12}{'sans verdict':>14}", DIM))
+    # La sixieme colonne n'avait pas d'en-tete : un pourcentage nu, en bout de
+    # ligne, qu'on ne peut pas interpreter. C'est la part des verdicts du rang
+    # qui sont arrives -- pas une part d'heures, contrairement aux deux colonnes
+    # qui la precedent, d'ou la necessite de la nommer.
+    print(_colour(f"  {'rang':<16}{'décisions':>10}{'heures':>9}{'ont marché':>12}"
+                  f"{'sans verdict':>14}{'réussite':>10}", DIM))
     for tier in Tier:
         stats = report["by_tier"].get(tier.value)
         if not stats:
-            print(_colour(f"  {tier.value.lower():<16}{'-':>10}{'-':>9}{'-':>12}{'-':>14}", DIM))
+            print(_colour(f"  {tier.value.lower():<16}{'-':>10}{'-':>9}{'-':>12}{'-':>14}{'-':>10}", DIM))
             continue
         hit = f"{stats['hit_rate']:.0%}" if stats["hit_rate"] is not None else "-"
         line = (f"  {tier.value.lower():<16}{stats['decisions']:>10}{stats['hours']:>8g}h"
-                f"{stats['hours_that_worked']:>11g}h{stats['hours_unresolved']:>13g}h   {hit}")
+                f"{stats['hours_that_worked']:>11g}h{stats['hours_unresolved']:>13g}h{hit:>10}")
         print(line)
 
     # La règle vient de la Notice, elle ne se réécrit pas ici. Cette ligne
