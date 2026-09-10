@@ -172,7 +172,8 @@ tient ne tient rien. Retire-le, montre qu'il tombe, remets-le.
 
 ## 6. Mon contexte — ce que je t'ai dit, et rien de plus
 
-- Débutant en code. iPhone et PC Windows. Pas de Mac.
+- Débutant en code. iPhone et **Mac** depuis le 10 septembre 2026 ; avant,
+  un PC Windows, qui n'est plus ma machine. Xcode ne s'installe pas dessus.
 - Bureau d'études thermique / CVC. **Deux ans d'expérience déjà effectués** —
   je ne suis pas en reconversion.
 - J'ai fait du tertiaire, sur des centrales de traitement d'air double flux,

@@ -88,10 +88,24 @@ def test_un_journal_seul_traverse_le_deplacement(tmp_path) -> None:
 
 
 def test_a_faire_porte_bien_ce_conseil() -> None:
-    """Le témoin : un test qui prouve une promesse absente ne garde rien."""
+    """Le témoin : un test qui prouve une promesse absente ne garde rien.
+
+    Il gardait le conseil inverse -- « ne rien écrire sur le Mac », « il
+    faudrait en jeter un » -- et c'était juste tant que recoller des lignes
+    était le seul moyen. `import` a rendu ce conseil faux le lendemain, et le
+    test le tenait en place : c'est très exactement ce que le message d'échec
+    du test ci-dessus annonçait qu'il faudrait réécrire.
+
+    Ce que le document doit dire maintenant tient en deux moitiés, et la
+    seconde compte autant que la première : il peut écrire sur le Mac **et**
+    il ne doit jamais poser le journal du PC par-dessus le sien. La reprise
+    ajoute ; une copie de fichier écrase.
+    """
     texte = (RACINE / "A_FAIRE.md").read_text(encoding="utf-8")
-    assert "Deux journaux ne se fusionnent pas" in texte
-    assert "N'enregistre pas de décision sur le Mac" in texte
+    assert "python3 -m singular import" in texte, (
+        "la page qui explique quoi faire de son journal doit nommer la reprise")
+    assert "Écris tes décisions sur le Mac" in texte
+    assert "ne copie jamais le `journal.db` du PC par-dessus celui du Mac" in texte
 
 
 # --- reprendre, ce n'est pas recoller -----------------------------------------

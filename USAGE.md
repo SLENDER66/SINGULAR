@@ -52,7 +52,7 @@ python3 -m singular analyse             # fait commenter la Notice par un modele
 ```
 
 **`--blanc` ne coûte rien et ne demande rien.** Pas de SDK, pas de clé, pas de
-PC : il assemble le rapport en texte et n'appelle personne. Colle le bloc dans
+machine allumée : il assemble le rapport en texte et n'appelle personne. Colle le bloc dans
 l'app Claude — c'est le même pont que le `6` du prototype, pour le journal.
 C'est aujourd'hui le seul chemin qui marche depuis un téléphone seul, et un
 test l'impose plutôt que d'en dépendre par chance.
@@ -345,7 +345,7 @@ de confiance.
 L'application iPhone **native** est dans `ios/` ; sa recette de compilation est
 dans `ios/README.md`.
 
-## Sur l'iPhone seul, sans PC et sans rien installer
+## Sur l'iPhone seul, sans Mac et sans rien installer
 
 Depuis que `singular/__init__.py` résout ses noms à la demande, le cœur n'a
 plus aucune dépendance : journal, chaîne d'intégrité, Notice, ligne de commande
@@ -418,12 +418,14 @@ l'empreinte qu'elle portait là-bas, et la reprise refuse une source dont la
 chaîne est cassée : ce qui entre a donc été prouvé intact au moment où il est
 entré.
 
-**Un journal par machine, et ils ne se parlent pas.** `~/.singular/journal.db`
-sur le PC et sur le téléphone sont deux fichiers différents. Deux journaux
+**Un journal par machine, et rien ne les synchronise.** `~/.singular/journal.db`
+sur le Mac et sur le téléphone sont deux fichiers différents. Deux journaux
 divergents donnent deux calibrations fausses, et rien ne le signale : un journal
 neuf ressemble exactement à un journal qu'on n'a pas encore rempli. C'est pour
 ça que « Journal vide » affiche désormais **le chemin** où il a regardé. Tiens-toi
-à une seule machine tant qu'il n'y a pas de synchronisation.
+à une seule machine : rien ne synchronise en continu. Si tu as quand même écrit
+des deux côtés, ce n'est pas perdu — `python3 -m singular import` reprend l'un
+dans l'autre, et la section ci-dessus dit ce que ça garde et ce que ça coûte.
 
 ## Le mettre devant tes yeux
 

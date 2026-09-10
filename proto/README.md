@@ -5,7 +5,7 @@ Un fichier, `suivi_candidatures.py`. Bibliothèque standard seule, aucun
 l'architecture de SINGULAR : pas de couches, pas de frontière d'exécution.
 C'est fait pour être supprimé si une semaine d'usage ne prouve pas que ça sert.
 
-## Sur l'iPhone — sans PC, sans serveur, sans wifi particulier
+## Sur l'iPhone — sans Mac, sans serveur, sans wifi particulier
 
 C'est le chemin principal : contrairement au Sage, ce script n'a besoin de rien
 d'autre que du téléphone. Installe **a-Shell** (gratuit, App Store) : un
@@ -51,14 +51,16 @@ cd ~/Documents/SINGULAR && python3 proto/suivi_candidatures.py
 Tes données vont alors dans `~/.singular/candidatures.json`, le même dossier
 que `journal.db`.
 
-**Les deux copies ne se parlent pas.** Le fichier du téléphone et celui du PC
+**Les deux copies ne se parlent pas.** Le fichier du téléphone et celui du Mac
 sont deux fichiers séparés : tiens-toi à un seul des deux, sinon tu auras deux
-suivis divergents. Tant que le PC n'est pas accessible, c'est le téléphone.
+suivis divergents. Contrairement au journal, ce fichier-ci n'a pas de reprise :
+`python3 -m singular import` ne connaît que `journal.db`. Ici, deux suivis
+divergents se réunissent à la main ou pas du tout.
 
-## Le Sage, lui, a besoin du PC
+## Le Sage, lui, a besoin du Mac
 
-`python3 -m singular sage --lan` sert l'app web depuis le PC : sans PC allumé et
-sans le même wifi, le Sage n'est pas joignable. Ce prototype-ci ne dépend pas
+`python3 -m singular sage --lan` sert l'app web depuis le Mac : sans Mac allumé
+et sans le même wifi, le Sage n'est pas joignable. Ce prototype-ci ne dépend pas
 de lui et fonctionne seul.
 
 ## Ce que fait l'action du jour, et dans quel ordre

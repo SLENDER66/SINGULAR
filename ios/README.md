@@ -1,10 +1,10 @@
 # L'application native — le Sage hors ligne, partout
 
 > **Le Sage est déjà sur ton iPhone sans rien de ce document.**
-> `python3 -m singular sage --lan` sur ton PC, l'adresse ouverte dans Safari,
+> `python3 -m singular sage --lan` sur ton Mac, l'adresse ouverte dans Safari,
 > Partager → « Sur l'écran d'accueil » : icône, plein écran, même journal,
 > même Notice. La marche à suivre est dans `A_FAIRE.md`, elle prend dix
-> minutes et ne demande ni Mac, ni compte Apple, ni un euro.
+> minutes et ne demande ni Xcode, ni compte Apple, ni un euro.
 
 > **Écartée le 10 septembre 2026, par Thomas lui-même.** L'App Store a refusé
 > Xcode sur son Mac. La question lui a été posée en questionnaire — chercher une
@@ -190,9 +190,10 @@ Ce que ça veut dire concrètement :
   même chose. C'est le vrai bénéfice de l'heure passée, et il ne dépend
   d'aucune donnée.
 - **S'en servir tous les jours découperait ton journal en deux.** Deux journaux
-  qui divergent donnent deux calibrations fausses, et rien ne le signale. Tant
-  qu'aucun import n'existe, l'app web servie par le Mac reste le seul endroit
-  où écrire.
+  qui divergent donnent deux calibrations fausses, et rien ne le signale. Ce
+  n'est plus sans retour — `python3 -m singular import` les réunit, chaîne
+  intacte — mais tant qu'on ne le lance pas, la calibration ment des deux
+  côtés. L'app web servie par le Mac reste donc le seul endroit où écrire.
 
 Il ne part sur aucun serveur, et la sauvegarde iCloud de ton iPhone l'emporte
 avec elle.

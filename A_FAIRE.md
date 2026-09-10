@@ -18,8 +18,8 @@ reconstruire.
 
 ### Si tu n'as pas accès au PC
 
-C'est le cas au 10 septembre 2026. Trois choses sont vraies, et une seule
-compte pour aujourd'hui.
+C'est le cas au 10 septembre 2026. Trois choses sont vraies, et c'est la
+troisième qui change ta journée.
 
 **Rien n'est perdu.** Le fichier est sur le disque du PC et n'en bouge pas. Ne
 pas pouvoir l'atteindre n'est pas la même chose que l'avoir perdu.
@@ -32,15 +32,29 @@ python3 -c "import sqlite3, os; c=os.path.expanduser('~/.singular/journal.db'); 
 print(sqlite3.connect(c).execute('select count(*) from journal_entries').fetchone()[0], 'décisions') if os.path.exists(c) else print('aucun journal ici')"
 ```
 
-**N'enregistre pas de décision sur le Mac tant que la question n'est pas
-tranchée.** Deux journaux ne se fusionnent pas : c'est mesuré, pas supposé.
-Recopier les lignes d'une base dans l'autre donne bien toutes les entrées, et
-`verify()` rend **faux** — chaque empreinte signe la précédente, donc une
-entrée insérée au milieu rompt la chaîne de toutes celles qui suivent, pour
-toujours. Il faudrait alors en jeter un.
+**Écris tes décisions sur le Mac, dès aujourd'hui.** Cette page disait le
+contraire, et te promettait d'avoir un jour à sacrifier l'un des deux journaux.
+C'était faux depuis que `import` existe. Tu ne sacrifieras rien : les deux
+histoires tiennent dans la même.
 
-Tant que tu n'écris rien sur le Mac, tu gardes le choix. Dès que tu y écris une
-décision, tu devras choisir laquelle des deux histoires garder.
+```sh
+python3 -m singular import ~/journal-du-pc.db
+```
+
+C'est mesuré, pas supposé : deux journaux de trois et deux décisions donnent
+un journal de cinq, la chaîne se vérifie de bout en bout, et le fichier
+d'origine n'est pas touché. Relancer la commande refuse, en disant que ces
+décisions sont déjà là.
+
+Recopier les **lignes** d'une base dans l'autre, ça, ça casse la chaîne : chaque
+empreinte signe la précédente, donc une entrée insérée au milieu rompt tout ce
+qui suit. C'est pour ça que la reprise resigne ce qu'elle écrit au lieu de le
+recopier. Chaque décision reprise garde en plus l'empreinte qu'elle portait
+là-bas, et une source dont la chaîne est cassée est refusée avant d'entrer.
+
+Le vrai risque n'est donc pas de perdre une histoire, c'est d'en écraser une :
+**ne copie jamais le `journal.db` du PC par-dessus celui du Mac.** Les étapes
+ci-dessous le posent à côté, sous un autre nom, et le reprennent.
 
 ### Ce qu'il y a dans ce dossier
 
@@ -97,11 +111,21 @@ Puis glisse les quatre fichiers de la clé dans cette fenêtre.
 
 ```sh
 mkdir -p ~/.singular
-cp /Volumes/TA_CLE/journal.db        ~/.singular/
+cp /Volumes/TA_CLE/journal.db        ~/journal-du-pc.db
 cp /Volumes/TA_CLE/candidatures.json ~/.singular/
 cp /Volumes/TA_CLE/tarifs.json       ~/.singular/
 cp /Volumes/TA_CLE/parle_quota.json  ~/.singular/
 ```
+
+**Le journal, lui, ne va pas dans `~/.singular/`** : il se pose à côté, et
+l'étape 4 le reprend. S'il allait à sa place, il écraserait ce que tu as écrit
+sur le Mac entre-temps, et c'est le seul geste de cette page qui puisse effacer
+des mois de décisions.
+
+Les trois autres fichiers s'écrasent sans dommage tant que tu ne t'en es pas
+servi sur le Mac : `tarifs.json` se retape, `parle_quota.json` est un compteur.
+`candidatures.json` est irremplaçable comme le journal — si tu as suivi des
+candidatures sur le Mac aussi, pose-le à côté également et garde les deux.
 
 ### Étape 4 — vérifier que tout est arrivé
 
@@ -140,10 +164,20 @@ Ce qu'on ne copie pas non plus, mais pour une autre raison : `conversation.json`
 est le fil de la faculté « parle ». Le perdre ne coûte rien — le journal, lui,
 ne se reconstruit pas.
 
-**Tant que la copie n'est pas faite, n'écris pas de décision sur le Mac.** Deux
-journaux qui divergent donnent deux calibrations fausses, et rien ne le
-signale : un journal neuf ressemble exactement à un journal qu'on n'a pas
-encore rempli.
+### Étape 5 — reprendre le journal du PC dans celui du Mac
+
+```sh
+python3 -m singular import ~/journal-du-pc.db
+python3 -m singular review
+```
+
+La première commande dit combien de décisions sont entrées et si la chaîne
+tient. La seconde te montre le tout, dans l'ordre chronologique, les deux
+histoires mêlées.
+
+Une fois que `review` affiche le compte attendu, le fichier `~/journal-du-pc.db`
+ne sert plus à rien. Garde-le quand même quelque part : il ne coûte rien, et
+c'est ta seule copie de sauvegarde.
 
 ---
 
@@ -317,8 +351,10 @@ ce qui a permis de passer du PC au Mac sans rien perdre.
 ## Ce qui compte maintenant
 
 1. **Ouvrir l'app le matin.** C'est le seul geste qui fait vivre le journal.
-   Depuis le Mac ou depuis le téléphone, mais **toujours le même des deux** tant
-   que les deux journaux ne se parlent pas.
+   Depuis le Mac ou depuis le téléphone : tiens-t'en de préférence au même des
+   deux, parce que deux journaux qui divergent donnent deux calibrations
+   fausses et que rien ne le signale. Mais si ça arrive, ce n'est plus perdu :
+   `python3 -m singular import <l'autre journal>` les réunit.
 2. **Trancher le 20 septembre.** La carte passera en haut, « À trancher
    aujourd'hui ». Oui ou non. Un journal où l'on écrit sans jamais trancher
    n'apprend rien.

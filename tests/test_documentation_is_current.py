@@ -407,3 +407,91 @@ def test_le_scan_voit_bien_les_clones() -> None:
                if CLONE.search(chemin.read_text(encoding="utf-8"))]
     assert len(trouves) >= 3, f"trop peu de clones lus : {trouves}"
     assert "ios/README.md" in trouves, "le chemin Mac doit etre couvert"
+
+
+# --- aucun document ne nie une commande qui existe ----------------------------
+
+#: Les phrases qui affirmaient qu'on ne peut pas réunir deux journaux.
+#:
+#: Elles étaient vraies quand elles ont été écrites, et fausses le lendemain.
+#: `import` est arrivé le 10 septembre 2026 ; trois documents ont continué à
+#: dire le contraire, dont celui qui explique quoi faire de son journal le jour
+#: où sa machine a changé. `A_FAIRE.md` lui disait de ne rien écrire sur le Mac
+#: et qu'il devrait « choisir laquelle des deux histoires garder » -- c'est-à-
+#: dire d'arrêter de se servir de SINGULAR, pour une durée inconnue, à cause
+#: d'une limite que le code n'avait plus.
+#:
+#: C'est la forme la plus coûteuse d'erreur de ce dépôt : corriger le code et
+#: laisser les documents affirmer l'ancien monde. La règle du mandat le dit --
+#: « terminer, c'est la demande plus ce qu'elle rend faux ».
+NIENT_LA_REPRISE = [
+    "deux journaux ne se fusionnent pas",
+    "aucun import n'existe",
+    "laquelle des deux histoires",
+    "les deux journaux ne se parlent pas",
+    "il faudrait alors en jeter un",
+]
+
+
+def _la_reprise_existe() -> bool:
+    """Lu dans le code, pas décidé ici.
+
+    Le jour où `import` serait retiré, ces documents auraient de nouveau
+    raison, et ce garde-fou cesserait tout seul d'exiger quoi que ce soit --
+    au lieu d'obliger quelqu'un à se souvenir de le retirer.
+    """
+    from singular.__main__ import build_parser
+    from singular.journal import DecisionJournal
+
+    actions = build_parser()._subparsers._group_actions  # noqa: SLF001 - argparse n'expose rien d'autre
+    commandes = set(actions[0].choices) if actions else set()
+    return "import" in commandes and hasattr(DecisionJournal, "import_from")
+
+
+def _documents_markdown() -> list[pathlib.Path]:
+    return [c for c in sorted(ROOT.rglob("*.md"))
+            if ".git" not in c.parts and c.name != "CHANGELOG.md"]
+
+
+def test_la_reprise_existe_bien() -> None:
+    """Sans ça, les deux tests suivants passeraient en ne gardant rien."""
+    assert _la_reprise_existe()
+
+
+def test_aucun_document_n_affirme_qu_on_ne_peut_pas_reunir_deux_journaux() -> None:
+    fautes = []
+    for chemin in _documents_markdown():
+        texte = " ".join(chemin.read_text(encoding="utf-8").split()).lower()
+        for phrase in NIENT_LA_REPRISE:
+            if phrase in texte:
+                fautes.append(f"{chemin.relative_to(ROOT)} : « {phrase} »")
+    assert not fautes, (
+        "un document nie une commande que le programme a :\n  " + "\n  ".join(fautes)
+        + "\n`python3 -m singular import` reunit deux journaux, chaine intacte."
+    )
+
+
+def test_un_document_qui_parle_de_deux_journaux_nomme_la_reprise() -> None:
+    """La moitié qui compte : l'oubli silencieux, pas la phrase fausse.
+
+    Une phrase interdite se voit ; un paragraphe qui décrit la divergence sans
+    dire qu'elle se répare ne se voit pas, et laisse exactement la même
+    impression -- c'est ce qui est arrivé à `USAGE.md`.
+
+    `proto/README.md` est le témoin en creux : il parle de deux suivis de
+    candidatures divergents, et il a raison de ne pas promettre de reprise --
+    `import` ne connaît que `journal.db`. Il doit donc le dire, ce qui le fait
+    passer par la même porte.
+    """
+    manquants = []
+    for chemin in _documents_markdown():
+        texte = " ".join(chemin.read_text(encoding="utf-8").split())
+        if "deux journaux" not in texte.lower() and "divergent" not in texte.lower():
+            continue
+        if "singular import" not in texte:
+            manquants.append(str(chemin.relative_to(ROOT)))
+    assert not manquants, (
+        "ces documents decrivent deux journaux divergents sans nommer la reprise :\n  "
+        + "\n  ".join(manquants)
+        + "\nDis `python3 -m singular import`, ou dis pourquoi il ne s'applique pas."
+    )
