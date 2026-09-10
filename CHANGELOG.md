@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.30.0 — Deux chiffres justes qui se lisaient faux, et l'export décalé
+
+- **`review`** : « 16h encore sans verdict (5 ouvertes, 5 en retard) ». Les
+  décisions en retard sont un sous-ensemble des ouvertes ; cinq et cinq font
+  cinq. Les deux chiffres étaient exacts, c'est leur juxtaposition qui mentait.
+  Un mot suffit — « dont » — et la ligne se tait sur le retard quand il n'y en
+  a pas.
+- **`review`** encore : le tableau par rang portait six colonnes de données sous
+  cinq en-têtes. Le pourcentage de fin de ligne s'appelle « réussite ».
+- **`export`** : l'en-tête du journal vide était recopiée à la main et avait
+  deux colonnes de retard, `expected_gain_eur` et `reversibility`. Une feuille
+  de calcul montée sur un export vide décalait ses colonnes au suivant. Les
+  colonnes se lisent maintenant sur `DecisionJournal.EXPORT_COLUMNS`.
+- **`export`** encore, invisible d'ici : le module csv écrit `\r\n` et la sortie
+  standard de Windows retraduit le `\n`, ce qui donne `\r\r\n` et une ligne
+  blanche entre chaque décision dans le tableur.
+- **Une seule porte écrit dans le journal.** Rien ne l'obligeait : une ligne
+  écrite à la main dans la base romprait la chaîne pour toujours. Le dépôt était
+  propre ; c'est justement pourquoi le garde-fou s'écrit maintenant, cette faute
+  ne se corrigeant pas après coup.
+
 ## 3.29.0 — Deux CV, deux listes
 
 Le suivi de candidatures portait une seule liste d'étapes, et l'une d'elles
