@@ -289,6 +289,14 @@ class Tarifs:
     def __init__(self, chemin: Path | str | None = None) -> None:
         self.chemin = Path(chemin) if chemin else FICHIER_TARIFS
         self.credit: float | None = None
+        #: Le seuil a partir duquel il veut etre prevenu, s'il en a ecrit un.
+        #:
+        #: Il vit dans son fichier pour la meme raison que les prix : « c'est
+        #: bas » est un chiffre sur son argent, et ce depot n'en invente aucun.
+        #: Cinq dollars de credit ne se decoupent pas de la meme facon selon
+        #: qu'on veut dix conversations ou une recherche d'offres, et lui seul
+        #: le sait. Absent, la Notice dit ce qui reste et ne juge pas.
+        self.alerte: float | None = None
         self.modeles: dict[str, dict[str, float]] = {}
         self._charger()
 
@@ -302,6 +310,9 @@ class Tarifs:
         credit = donnees.get("credit_usd")
         if isinstance(credit, int | float) and credit >= 0:
             self.credit = float(credit)
+        alerte = donnees.get("alerte_usd")
+        if isinstance(alerte, int | float) and alerte >= 0:
+            self.alerte = float(alerte)
         modeles = donnees.get("modeles", {})
         if not isinstance(modeles, dict):
             return
@@ -439,6 +450,7 @@ def bilan(quota: Quota | None = None, tarifs: Tarifs | None = None) -> dict[str,
         "modeles": sorted(depenses),
         "usd": tarifs.cout_usd(depenses),
         "credit_usd": tarifs.credit,
+        "alerte_usd": tarifs.alerte,
         "restant_usd": tarifs.restant_usd(depenses),
         "restant_au_mieux_usd": tarifs.restant_au_mieux_usd(depenses),
         "sans_tarif": tarifs.sans_tarif(depenses),
@@ -504,7 +516,8 @@ def modele_de_tarifs() -> str:
     postes = ",\n".join(f'      "{poste}": 0.0' for poste in Tarifs.POSTES)
     blocs = ",\n".join(f'    "{nom}": {{\n{postes}\n    }}'
                         for nom in modeles_qui_depensent())
-    return '{\n  "credit_usd": 5.0,\n  "modeles": {\n' + blocs + "\n  }\n}\n"
+    return ('{\n  "credit_usd": 5.0,\n  "alerte_usd": 1.0,\n  "modeles": {\n'
+            + blocs + "\n  }\n}\n")
 
 
 

@@ -231,7 +231,11 @@ def test_le_gabarit_est_du_json_valide() -> None:
     """Il est colle tel quel dans un fichier. S'il ne se relit pas, il ne sert
     a rien -- et l'erreur apparaitrait chez lui, pas ici."""
     gabarit = json.loads(modele_de_tarifs())
-    assert set(gabarit) == {"credit_usd", "modeles"}
+    assert set(gabarit) == {"credit_usd", "alerte_usd", "modeles"}
+    # `alerte_usd` est propose parce qu'un seuil absent laisse la Notice muette
+    # jusqu'a zero. Le gabarit le montre plutot que de le documenter ailleurs :
+    # c'est le seul texte qu'il ouvre en cherchant ou ecrire ses prix.
+    assert gabarit["alerte_usd"] < gabarit["credit_usd"]
     assert set(next(iter(gabarit["modeles"].values()))) == set(Tarifs.POSTES)
 
 

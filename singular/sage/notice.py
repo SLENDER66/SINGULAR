@@ -481,8 +481,59 @@ def _unpriced_item(entries: tuple[Entry, ...]) -> NoticeItem | None:
     )
 
 
+def _budget_item(budget: dict[str, Any] | None) -> NoticeItem | None:
+    """Ce qui reste de son crédit d'API, quand il y a lieu de le dire.
+
+    Deux raisons d'exister, et la seconde est celle qui a decide.
+
+    L'argent n'atteignait jamais la Notice. Il vivait dans une fenetre de
+    dialogue et en pied de commande, c'est-a-dire aux endroits ou l'on va
+    apres avoir depense. Sur cinq dollars, ca veut dire l'apprendre quand
+    c'est fini.
+
+    Et le Sage **refusait** a zero sans avoir rien dit avant. Un mur, pas un
+    avertissement.
+
+    Cette observation ne juge rien qu'elle n'ait recu. Le seuil vient de son
+    fichier de tarifs, `alerte_usd`, pour la meme raison que les prix : « c'est
+    bas » est un chiffre sur son argent. Cinq dollars ne se decoupent pas de la
+    meme facon selon qu'on veut dix conversations ou une recherche d'offres,
+    et lui seul le sait.
+
+    **Sans seuil ecrit, elle se tait jusqu'a zero.** Une ligne d'argent affichee
+    tous les matins serait du bruit, et ce depot a deja paye le reproche
+    premature une fois.
+
+    `restant_au_mieux_usd` et pas `restant_usd` : le second vaut None des qu'un
+    modele employe n'a pas de tarif, et l'observation s'eteindrait alors en
+    silence -- c'est la meme raison qui a fait choisir ce champ dans la garde
+    du Sage.
+    """
+    if not budget or budget.get("credit_usd") is None:
+        return None  # il n'a pas ecrit ses tarifs : on ne parle pas d'argent
+    reste = budget.get("restant_au_mieux_usd")
+    if reste is None:
+        return None
+    credit = budget["credit_usd"]
+    # Ce que ca n'arrete pas, et c'est la promesse centrale du depot : le
+    # journal, la chaine, la Notice et la calibration ne coutent rien.
+    intact = ("Le journal, la chaîne et cette page continuent sans clé : "
+              "elles n'ont jamais rien coûté.")
+    if reste <= 0:
+        return NoticeItem(
+            "CRITIQUE", "Crédit d'API épuisé",
+            f"Les facultés qui appellent un modèle vont refuser. {intact}")
+    alerte = budget.get("alerte_usd")
+    if alerte is not None and reste <= alerte:
+        return NoticeItem(
+            "ATTENTION", "Crédit d'API bas",
+            f"Il te reste au plus {reste:.2f} $ sur {credit:.2f} $. {intact}")
+    return None
+
+
 def _candidates(journal: DecisionJournal, moment: datetime,
-                report: dict[str, Any]) -> dict[str, NoticeItem | None]:
+                report: dict[str, Any],
+                budget: dict[str, Any] | None = None) -> dict[str, NoticeItem | None]:
     """Chaque observation sous le nom de la fonction qui la produit.
 
     Le nom sert à deux lecteurs qui n'ont pas d'autre moyen de savoir quelle
@@ -507,18 +558,27 @@ def _candidates(journal: DecisionJournal, moment: datetime,
         "_unresolved_hours_item": _unresolved_hours_item(report),
         "_unpriced_item": _unpriced_item(entries),
         "_quiet_item": _quiet_item(open_entries, moment),
+        "_budget_item": _budget_item(budget),
     }
 
 
-def observations(journal: DecisionJournal, *, now: datetime | None = None) -> dict[str, NoticeItem]:
+def observations(journal: DecisionJournal, *, now: datetime | None = None,
+                 budget: dict[str, Any] | None = None) -> dict[str, NoticeItem]:
     """Les observations produites aujourd'hui, sous le nom de leur fonction."""
     moment = now or datetime.now(UTC)
-    produced = _candidates(journal, moment, journal.review(now=moment))
+    produced = _candidates(journal, moment, journal.review(now=moment), budget)
     return {nom: item for nom, item in produced.items() if item is not None}
 
 
-def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> Notice:
+def build_notice(journal: DecisionJournal, *, now: datetime | None = None,
+                 budget: dict[str, Any] | None = None) -> Notice:
     """Ce que le Sage a à te dire, dans l'ordre où ça compte.
+
+    `budget` est **donné**, jamais cherché : la Notice doit se construire avec
+    les facultés désinstallées, donc elle ne peut pas importer celle qui sait
+    compter des dollars. Elle juge un chiffre qu'on lui tend, comme le
+    Conseiller juge les faits que le Scout a collectés. Absent, elle ne parle
+    pas d'argent.
 
     Chaque observation est un fait tiré du journal. L'ordre est fixé par la
     gravité puis par l'ordre de construction, qui est celui de la constitution :
@@ -527,7 +587,7 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None) -> No
     """
     moment = now or datetime.now(UTC)
     report = journal.review(now=moment)
-    candidates = _candidates(journal, moment, report)
+    candidates = _candidates(journal, moment, report, budget)
     items = tuple(item for item in candidates.values() if item is not None)
     ordered = tuple(sorted(items, key=lambda item: item.rank))
     return Notice(

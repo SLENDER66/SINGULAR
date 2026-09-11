@@ -50,6 +50,10 @@ ORIGIN = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 ABSENTES_DU_PORT = {
     "_irreversible_item": "engagement irréversible sans verdict",
     "_unpriced_item": "heures engagées sans gain attendu",
+    # Le port n'a pas de credit d'API a surveiller : l'app native n'appelle
+    # aucun modele. L'ecart est donc structurel et pas un retard -- mais il se
+    # declare ici comme les autres, sinon un vecteur l'exigerait du Swift.
+    "_budget_item": "crédit d'API bas ou épuisé",
 }
 
 

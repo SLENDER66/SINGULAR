@@ -533,3 +533,110 @@ def test_la_carte_dit_le_retard_et_pas_l_anciennete() -> None:
         assert "La plus en retard attend" in texte, nom
         assert "La plus ancienne attend" not in texte, (
             f"{nom} : « la plus ancienne » n'est pas « la plus en retard »")
+
+
+# --- l'argent, sur cinq dollars -----------------------------------------------
+
+def _budget(reste, *, credit=5.0, alerte=None):
+    """Le bilan tel que `parle.bilan()` le rend, reduit a ce qui est lu ici."""
+    return {"credit_usd": credit, "alerte_usd": alerte,
+            "restant_au_mieux_usd": reste, "restant_usd": reste}
+
+
+def test_sans_tarifs_ecrits_la_notice_ne_parle_pas_d_argent(tmp_path) -> None:
+    """Le depot ne connait aucun prix, et il ne commence pas par en inventer un."""
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+    for budget in (None, {"credit_usd": None, "restant_au_mieux_usd": None}):
+        titres = [i.title for i in build_notice(journal, budget=budget).items]
+        assert not any("API" in t for t in titres), titres
+
+
+def test_sans_seuil_ecrit_elle_se_tait_jusqu_a_zero(tmp_path) -> None:
+    """Une ligne d'argent tous les matins serait du bruit.
+
+    « C'est bas » est un chiffre sur son argent : cinq dollars ne se decoupent
+    pas de la meme facon selon qu'on veut dix conversations ou une recherche
+    d'offres, et lui seul le sait. Le seuil vit donc dans son fichier de
+    tarifs, a cote de ses prix -- et sans lui, elle ne juge pas.
+    """
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+
+    muette = build_notice(journal, budget=_budget(0.10)).items
+    assert not any("API" in i.title for i in muette), "sans seuil, pas de reproche"
+
+    epuise = build_notice(journal, budget=_budget(0.0)).items
+    assert any(i.severity == "CRITIQUE" and "API" in i.title for i in epuise), (
+        "zero n'est pas un jugement : la faculte suivante refusera")
+
+
+def test_le_seuil_vient_de_son_fichier(tmp_path) -> None:
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+
+    assert not any("API" in i.title
+                   for i in build_notice(journal, budget=_budget(2.0, alerte=1.0)).items)
+    bas = [i for i in build_notice(journal, budget=_budget(0.65, alerte=1.0)).items
+           if "API" in i.title]
+    assert [i.severity for i in bas] == ["ATTENTION"]
+    assert "0.65" in bas[0].detail and "5.00" in bas[0].detail
+
+
+def test_elle_dit_ce_qui_continue_sans_cle(tmp_path) -> None:
+    """La promesse centrale du depot, dite au moment ou elle compte.
+
+    Apprendre que son credit est epuise sans savoir ce qui s'arrete ferait
+    croire que l'outil s'arrete. C'est l'inverse : le moteur deterministe n'a
+    jamais rien coute.
+    """
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+    for reste in (0.0, 0.20):
+        dit = [i for i in build_notice(journal, budget=_budget(reste, alerte=1.0)).items
+               if "API" in i.title]
+        assert "sans clé" in dit[0].detail
+
+
+def test_un_modele_sans_tarif_n_eteint_pas_l_observation(tmp_path) -> None:
+    """`restant_usd` vaut None des qu'un modele employe n'a pas de prix.
+
+    C'est `restant_au_mieux_usd` qui est lu, pour la meme raison que dans la
+    garde du Sage : sinon l'observation s'eteint en silence le jour ou il
+    essaie un modele qu'il n'a pas tarife.
+    """
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+    budget = {"credit_usd": 5.0, "alerte_usd": 1.0,
+              "restant_usd": None, "restant_au_mieux_usd": 0.40}
+
+    dit = [i for i in build_notice(journal, budget=budget).items if "API" in i.title]
+    assert [i.severity for i in dit] == ["ATTENTION"]
+
+
+def test_la_notice_se_construit_avec_les_facultes_desinstallees(tmp_path) -> None:
+    """Elle juge un chiffre qu'on lui tend ; elle ne va pas le chercher.
+
+    Importer `parle` depuis la Notice mettrait le rapport du matin a la merci
+    d'un paquet absent. Le temoin : le module ne nomme jamais la faculte.
+    """
+    import ast
+    import pathlib
+
+    source = (pathlib.Path(__file__).resolve().parent.parent
+              / "singular" / "sage" / "notice.py").read_text(encoding="utf-8")
+    for noeud in ast.walk(ast.parse(source)):
+        if isinstance(noeud, ast.ImportFrom):
+            assert "parle" not in (noeud.module or ""), "la Notice importe la faculte"
+        elif isinstance(noeud, ast.Import):
+            assert not any("parle" in a.name for a in noeud.names)

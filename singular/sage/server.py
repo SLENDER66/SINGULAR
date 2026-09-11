@@ -302,7 +302,8 @@ class SageApp:
         son nom d'utilisateur. Il s'affiche chez lui, il ne part pas.
         `test_ce_qui_part.py` le verifie.
         """
-        return {**build_notice(self.journal).as_dict(), "journal": str(self.journal.path)}
+        return {**build_notice(self.journal, budget=_budget()).as_dict(),
+                "journal": str(self.journal.path)}
 
     def collecte(self) -> dict[str, Any]:
         """Ce que le Scout a trouvé hors du journal, tel quel.
@@ -815,6 +816,26 @@ PANNE = ("Quelque chose a cassé de mon côté. Le détail est écrit dans la fe
 #: Et la seule panne courante qu'il peut lui-meme resoudre.
 OCCUPE = ("Le journal est occupé par une autre fenêtre -- une commande en cours "
           "sur ton Mac. Réessaie dans un instant.")
+
+
+def _budget() -> dict[str, Any] | None:
+    """Ce qui reste de son crédit, ou rien du tout.
+
+    Importé tard, et l'échec est un cas normal : le Sage doit servir sa page
+    avec les facultés désinstallées. `parle` n'importe pas le SDK au
+    chargement, mais il peut ne pas être là du tout -- et un journal qui
+    refuserait de s'afficher parce qu'un compteur de dollars manque serait
+    exactement l'inverse de la promesse du dépôt.
+    """
+    try:
+        from ..parle import Quota, Tarifs, bilan
+    except ImportError:
+        return None
+    try:
+        return bilan(Quota(), Tarifs())
+    except OSError:
+        # Fichier de quota illisible : on se tait sur l'argent, le reste vit.
+        return None
 
 
 def _panne(exc: Exception) -> str:
