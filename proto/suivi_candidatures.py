@@ -49,8 +49,8 @@ COLONNES = 62
 
 STATUTS = {
     "a_envoyer": "à envoyer",
-    "envoyee": "envoyee",
-    "relancee": "relancee",
+    "envoyee": "envoyée",
+    "relancee": "relancée",
     "entretien": "entretien",
     "refus": "refus",
     "sans_suite": "sans suite",
