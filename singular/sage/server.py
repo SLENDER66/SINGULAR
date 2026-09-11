@@ -36,6 +36,7 @@ from typing import Any
 from urllib.parse import unquote_plus, urlsplit
 
 from ..fichiers import ecrire_atomique
+from ..collecte import collecter
 from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
 from ..saisie import CONFLIT_PAGE, introuvable, verifie_decision
 from .icon import render_icon
@@ -302,6 +303,18 @@ class SageApp:
         `test_ce_qui_part.py` le verifie.
         """
         return {**build_notice(self.journal).as_dict(), "journal": str(self.journal.path)}
+
+    def collecte(self) -> dict[str, Any]:
+        """Ce que le Scout a trouvé hors du journal, tel quel.
+
+        La route ne juge pas plus que lui : elle recopie les faits avec leur
+        source et leur date. Le fichier absent n'est pas une panne -- c'est le
+        cas normal tant qu'il n'a pas ouvert le suivi de candidatures sur cette
+        machine, et le Scout le dit comme un fait établi.
+        """
+        return {"faits": [{"sujet": f.sujet, "texte": f.texte, "source": f.source,
+                           "date": f.date, "verifie": f.verifie}
+                          for f in collecter()]}
 
     def entries(self, status: str | None = None) -> dict[str, Any]:
         chosen = None
@@ -594,6 +607,8 @@ class SageApp:
     def route(self, method: str, path: str, query: dict[str, str], body: dict[str, Any]) -> dict[str, Any]:
         if method == "GET" and path == "/api/notice":
             return self.notice()
+        if method == "GET" and path == "/api/collecte":
+            return self.collecte()
         if method == "GET" and path == "/api/entries":
             return self.entries(query.get("status"))
         if method == "POST" and path == "/api/entries":

@@ -57,7 +57,18 @@ EXECUTION_MODULES = frozenset({
 #: `pathlib`, il ne lit rien, il ne decide rien -- et il porte la seule
 #: ecriture atomique du depot, celle que la cle d'acces utilise pour ne pas
 #: exister un instant en clair.
+#:
+#: `collecte` est le Scout, et il elargit ce que le Sage **lit** : c'est la
+#: premiere fois qu'une donnee entre dans l'app sans venir du journal. Ce que
+#: ca coute, ecrit ici pour que personne n'ait a le rechercher : le Sage lit
+#: desormais aussi `~/.singular/candidatures.json`, en lecture seule, sans
+#: reseau et sans jeton. Le Scout n'a aucun moyen d'ecrire -- ni `write_text`,
+#: ni `open` en ecriture, ni le journal -- et `tests/test_collecte.py` le
+#: verifie sur l'arbre syntaxique plutot que sur sa docstring. Il ne juge pas
+#: non plus : un seuil de relance est un jugement, il reste chez celui qui
+#: juge. Le Sage gagne donc un fait de plus a montrer, et aucun pouvoir.
 ALLOWED = frozenset({"journal", "sage", "icon", "notice", "server", "learning",
+                     "collecte",
                      "sqlite_support", "analyse", "parle", "offres", "fichiers",
                      "saisie"})
 

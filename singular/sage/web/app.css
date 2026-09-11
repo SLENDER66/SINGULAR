@@ -120,6 +120,27 @@ h2 {
 .entry .meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .entry.late .meta { color: var(--critique); }
 
+/* --- ce que le Scout a trouvé --- */
+
+/* Repris de `.entry` : c'est la même lecture, une ligne et sa date à droite.
+   Un fait non vérifié se marque plutôt que de se cacher -- le masquer
+   laisserait croire qu'il n'y a rien à savoir, qui est le contraire. */
+.collecte ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.fait {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.fait .title { flex: 1; font-size: 15px; }
+.fait .meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.fait.doute { border-style: dashed; }
+.fait.doute .meta { color: var(--attention); }
+
 /* --- le bouton --- */
 
 .fab {

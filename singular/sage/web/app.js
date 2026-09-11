@@ -127,6 +127,25 @@ function renderFigures(report, calibration) {
   $("numbers").hidden = false;
 }
 
+function renderFaits(faits) {
+  // Le Scout ne juge pas, et cette section non plus : elle montre le fait, sa
+  // source et sa date. Un fait non verifie est marque plutot que masque -- le
+  // cacher laisserait croire qu'il n'y a rien a savoir.
+  if (!faits.length) { $("collecte").hidden = true; return; }
+
+  const list = $("faits");
+  list.replaceChildren();
+  for (const fait of faits) {
+    const row = el("li", fait.verifie ? "fait" : "fait doute");
+    row.append(el("span", "title", fait.texte));
+    const quand = fait.date ? fait.date : "sans date";
+    row.append(el("span", "meta", fait.verifie ? quand : `non verifie · ${quand}`));
+    row.title = fait.source;
+    list.append(row);
+  }
+  $("collecte").hidden = false;
+}
+
 function renderOpen(entries) {
   const open = entries.filter((entry) => entry.status === "OPEN");
   if (!open.length) { $("open-list").hidden = true; return; }
@@ -157,10 +176,13 @@ let entriesById = new Map();
 
 async function refresh() {
   try {
-    const [notice, listing] = await Promise.all([api("/api/notice"), api("/api/entries")]);
+    const [notice, listing, collecte] = await Promise.all([
+      api("/api/notice"), api("/api/entries"), api("/api/collecte"),
+    ]);
     entriesById = new Map(listing.entries.map((entry) => [entry.entry_id, entry]));
     fillTiers(listing.tiers);
     renderNotice(notice);
+    renderFaits(collecte.faits);
     renderOpen(listing.entries);
     $("error").hidden = true;
     setLocked(false);
