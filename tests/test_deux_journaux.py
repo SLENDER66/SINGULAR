@@ -16,6 +16,7 @@ conseil deviendrait faux et ce test le dirait.
 """
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import shutil
 import sqlite3
@@ -23,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from singular.journal import DecisionJournal, Tier
+from singular.journal import SCHEMA_VERSION, DecisionJournal, ImportRefused, Tier
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 DEBUT = datetime(2026, 6, 1, tzinfo=UTC)
@@ -399,3 +400,136 @@ def test_usage_dit_bien_de_faire_le_geste_simple() -> None:
     texte = (RACINE / "USAGE.md").read_text(encoding="utf-8")
     assert "Le sens n'a pas d'importance" in texte
     assert "aucun fichier à renommer" in texte
+
+
+# --- lire son journal ne doit pas l'ecrire ------------------------------------
+
+def _ramene_au_schema_ancien(chemin: pathlib.Path) -> None:
+    """Le journal du PC, tel qu'il est : ecrit avant trois colonnes.
+
+    `expected_gain_eur`, `reversibility` et `imported_fingerprint` sont nees
+    apres lui. C'est la seule facon honnete d'eprouver la reprise : la tester
+    sur une base d'aujourd'hui, c'est tester le cas qui n'arrivera pas.
+    """
+    recentes = ("expected_gain_eur", "reversibility", "imported_fingerprint")
+    conn = sqlite3.connect(chemin)
+    gardees = [r[1] for r in conn.execute("PRAGMA table_info(journal_entries)")
+               if r[1] not in recentes]
+    conn.executescript(f"""
+        CREATE TABLE ancien AS SELECT {','.join(gardees)} FROM journal_entries;
+        DROP TABLE journal_entries;
+        ALTER TABLE ancien RENAME TO journal_entries;
+        UPDATE journal_schema SET version = 1;
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _empreinte(chemin: pathlib.Path) -> str:
+    return hashlib.sha256(chemin.read_bytes()).hexdigest()
+
+
+def test_reprendre_un_journal_ne_l_ecrit_pas(tmp_path) -> None:
+    """Le defaut : `import` **migrait** la source avant de la lire.
+
+    Mesure du 11 septembre 2026, sur un journal de trois mois ramene a son
+    schema d'alors : son empreinte changeait. Trois `ALTER TABLE` partaient sur
+    le seul exemplaire de trois mois de decisions, au premier contact, **avant**
+    le controle de chaine -- donc y compris quand la reprise finissait par etre
+    refusee.
+
+    Le fichier vise est pose sur une cle USB, peut-etre protegee en ecriture, et
+    `A_FAIRE.md` lui dit de le garder comme unique sauvegarde. Une lecture qui
+    ecrit est un defaut meme quand elle n'abime rien.
+    """
+    source = tmp_path / "pc.db"
+    _journal(source, "PC", 3)
+    _ramene_au_schema_ancien(source)
+    avant = _empreinte(source)
+
+    # Le Mac ecrit apres le PC : c'est le cas reel, et sans le decalage les
+    # deux journaux partagent leurs dates et l'ordre ne veut plus rien dire.
+    ici = _journal(tmp_path / "mac.db", "Mac", 1, decalage=100)
+    reprises = ici.import_from(source)
+
+    assert _empreinte(source) == avant, "la source a ete reecrite en la lisant"
+    assert len(reprises) == 3
+    assert ici.verify(), "et la reprise reste bonne"
+    assert [e.title for e in ici.entries()] == ["PC 0", "PC 1", "PC 2", "Mac 0"]
+
+
+def test_une_source_refusee_n_est_pas_touchee_non_plus(tmp_path) -> None:
+    """Le pire cas du defaut : on refuse, et on a quand meme ecrit.
+
+    Ici c'est le journal d'arrivee qui est casse, donc la source est innocente
+    de bout en bout -- et elle etait migree malgre tout.
+    """
+    source = tmp_path / "pc.db"
+    _journal(source, "PC", 2)
+    _ramene_au_schema_ancien(source)
+    avant = _empreinte(source)
+
+    ici = _journal(tmp_path / "mac.db", "Mac", 2, decalage=100)
+    conn = sqlite3.connect(tmp_path / "mac.db")
+    conn.execute("UPDATE journal_entries SET fingerprint = 'casse' WHERE title = 'Mac 0'")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ImportRefused) as refus:
+        ici.import_from(source)
+
+    assert refus.value.reason == "self_broken"
+    assert _empreinte(source) == avant, "refusee, et pourtant reecrite"
+
+
+def test_la_lecture_seule_est_tenue_par_sqlite_et_pas_par_les_droits(tmp_path) -> None:
+    """La garantie doit valoir la ou les droits du fichier ne valent rien.
+
+    Un test sur `chmod 444` ne prouve rien dans le conteneur qui fait tourner
+    cette suite : il y est root, et root ecrit dans un fichier en lecture seule.
+    `mode=ro` est un refus de SQLite lui-meme, que personne ne contourne.
+    """
+    chemin = tmp_path / "pc.db"
+    _journal(chemin, "PC", 1)
+
+    lecture = DecisionJournal(chemin, lecture_seule=True)
+    assert lecture.lecture_seule is True
+    assert len(lecture.entries()) == 1
+
+    with pytest.raises(sqlite3.OperationalError, match="readonly"), lecture._connect() as conn:
+        conn.execute("UPDATE journal_entries SET title = 'change'")
+
+
+def test_lire_un_vieux_journal_ne_lui_ajoute_pas_de_colonnes(tmp_path) -> None:
+    """Le temoin de la migration : c'est elle qu'on a retiree du chemin."""
+    chemin = tmp_path / "pc.db"
+    _journal(chemin, "PC", 2)
+    _ramene_au_schema_ancien(chemin)
+    avant = [r[1] for r in sqlite3.connect(chemin).execute("PRAGMA table_info(journal_entries)")]
+
+    journal = DecisionJournal(chemin, lecture_seule=True)
+
+    assert len(journal.entries()) == 2, "une base de trois mois se lit telle quelle"
+    assert journal.verify(), "et sa chaine se rejoue : `_payload` n'a jamais change pour elle"
+    apres = [r[1] for r in sqlite3.connect(chemin).execute("PRAGMA table_info(journal_entries)")]
+    assert apres == avant
+    assert "expected_gain_eur" not in apres
+
+
+def test_un_journal_plus_recent_est_refuse_plutot_que_dit_casse(tmp_path) -> None:
+    """« Ton journal est casse » a quelqu'un dont le journal va bien.
+
+    En lecture seule on ne migre pas, donc rien ne verifiait la version. Les
+    regles de la charge d'empreinte pourraient changer : lire une base plus
+    recente avec les regles d'aujourd'hui rendrait `verify()` faux, et la
+    reprise dirait `source_broken` sur un journal intact.
+    """
+    chemin = tmp_path / "futur.db"
+    _journal(chemin, "Futur", 1)
+    conn = sqlite3.connect(chemin)
+    conn.execute("UPDATE journal_schema SET version = ?", (SCHEMA_VERSION + 1,))
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(RuntimeError, match=f"v{SCHEMA_VERSION + 1}"):
+        DecisionJournal(chemin, lecture_seule=True)

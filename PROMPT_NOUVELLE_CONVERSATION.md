@@ -216,15 +216,17 @@ une commande Windows qui aurait survécu quelque part est un reste, et elle est
 fausse. `tests/test_prompt_de_reprise.py` en tient la liste et fait échouer ce
 fichier si l'une d'elles y revient.
 
-**Mon journal est resté sur le PC, et je n'ai pas accès au PC.** Je ne sais pas
-quand je l'aurai. `~/.singular/journal.db` porte trois mois de décisions
+**Mon journal est resté sur le PC, et je n'ai pas encore accès au PC.** Je t'ai
+dit le 11 septembre que je l'aurais « dans pas longtemps ». Pas de date : ne
+m'en invente pas une, et ne planifie rien qui en dépende. `~/.singular/journal.db` porte trois mois de décisions
 chaînées qu'aucune session ne reconstruit, et le téléphone n'en a pas de copie —
 je n'ai jamais lancé SINGULAR dans a-Shell.
 
 Ce que ça implique, et c'est déjà réglé côté code : **j'écris sur le Mac en
 attendant, et je reprendrai l'ancien journal le jour où je l'aurai.**
 `python3 -m singular import <ancien.db>` ajoute un journal à la suite d'un
-autre sans rien réécrire — les entrées d'ici gardent leur empreinte, celles
+autre sans rien réécrire — y compris la source, qu'il ouvre en lecture seule
+depuis le 11 septembre : il la **migrait** avant, au premier contact — les entrées d'ici gardent leur empreinte, celles
 qu'on reprend sont resignées et gardent la leur écrite à côté. Recoller deux
 bases ligne à ligne, en revanche, rompt la chaîne définitivement :
 `tests/test_deux_journaux.py` le mesure.

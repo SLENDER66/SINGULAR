@@ -204,6 +204,13 @@ def _fingerprint(payload: dict, previous: str) -> str:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def _colonne(row: sqlite3.Row, nom: str, cast=None):
+    """La valeur d'une colonne qui peut ne pas exister dans ce schema."""
+    if nom not in row.keys() or row[nom] is None:
+        return None
+    return row[nom] if cast is None else cast(row[nom])
+
+
 def _payload(
     *,
     entry_id: str, title: str, action: str, predicted: str, probability: float,
@@ -240,10 +247,45 @@ def _payload(
 class DecisionJournal:
     """Append-only, hash-chained record of what you expected and what happened."""
 
-    def __init__(self, path: str | Path = DEFAULT_PATH) -> None:
-        self._location = SqliteLocation(path)
+    def __init__(self, path: str | Path = DEFAULT_PATH, *,
+                 lecture_seule: bool = False) -> None:
+        """`lecture_seule` ouvre une base sans la toucher. Voir `import_from`.
+
+        Ouvrir un journal le **migrait**, et c'est le defaut que ce drapeau
+        corrige. Trois `ALTER TABLE` partaient sur le fichier au premier
+        contact, avant le moindre controle : mesure faite sur un journal de
+        trois mois ramene au schema d'alors, son empreinte md5 changeait.
+
+        Le fichier vise est le seul exemplaire de trois mois de decisions, pose
+        sur une cle USB peut-etre protegee en ecriture. Une lecture qui ecrit
+        est un defaut meme quand elle n'abime rien.
+        """
+        self._location = SqliteLocation(path, lecture_seule=lecture_seule)
         self.path = self._location.reference
-        self._init_schema()
+        self.lecture_seule = lecture_seule
+        if lecture_seule:
+            self._verifie_la_version()
+        else:
+            self._init_schema()
+
+    def _verifie_la_version(self) -> None:
+        """Un journal ecrit par une version future ne se lit pas de travers.
+
+        En lecture seule on ne migre pas, donc rien ne verifie la version. Or
+        les regles de la charge d'empreinte pourraient changer : lire une base
+        plus recente avec les regles d'aujourd'hui declarerait sa chaine rompue.
+        Dire « ton journal est casse » a quelqu'un dont le journal va bien est
+        la pire reponse possible ici.
+
+        Plus ancienne, en revanche, se lit : `_payload` n'inclut les champs
+        recents que lorsqu'ils sont renseignes, exactement pour ca.
+        """
+        with self._connect() as conn:
+            ligne = conn.execute("SELECT version FROM journal_schema").fetchone()
+        version = int(ligne["version"]) if ligne else SCHEMA_VERSION
+        if version > SCHEMA_VERSION:
+            raise RuntimeError(
+                f"journal schema v{version} does not match v{SCHEMA_VERSION}")
 
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
         return self._location.session()
@@ -548,7 +590,11 @@ class DecisionJournal:
 
         Rend les entrées reprises, telles qu'elles sont désormais écrites ici.
         """
-        autre = DecisionJournal(source)
+        # En lecture seule, et c'est la moitie qui compte. Ouvrir la source
+        # normalement la **migrait** : trois `ALTER TABLE` sur le seul
+        # exemplaire de trois mois de decisions, avant meme le controle de
+        # chaine, donc y compris quand la reprise finit par etre refusee.
+        autre = DecisionJournal(source, lecture_seule=True)
         if not autre.verify():
             raise ImportRefused(
                 "source_broken", f"the journal to import does not verify: {autre.path}")
@@ -838,9 +884,12 @@ class DecisionJournal:
             row["due_at"], Status(row["status"]), row["resolved_at"], row["lesson"],
             None if row["brier_score"] is None else float(row["brier_score"]),
             row["previous_fingerprint"], row["fingerprint"],
-            None if row["expected_gain_eur"] is None else float(row["expected_gain_eur"]),
-            None if row["reversibility"] is None else Reversibility(row["reversibility"]),
-            row["imported_fingerprint"] if "imported_fingerprint" in row.keys() else None,
+            # Chaque colonne est gardee par sa presence, pas seulement la
+            # derniere arrivee : en lecture seule on ne migre pas, donc une base
+            # de trois mois arrive ici avec les colonnes de trois mois.
+            _colonne(row, "expected_gain_eur", float),
+            _colonne(row, "reversibility", Reversibility),
+            _colonne(row, "imported_fingerprint"),
         )
 
 

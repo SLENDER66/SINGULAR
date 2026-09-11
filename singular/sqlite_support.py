@@ -49,8 +49,21 @@ class SqliteLocation:
 
     __slots__ = ("target", "uri", "reference")
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, lecture_seule: bool = False) -> None:
         raw = str(path)
+        if lecture_seule:
+            # `mode=ro` : SQLite refuse toute ecriture sur cette connexion, y
+            # compris une migration de schema. Le dossier parent n'est pas cree
+            # non plus -- on lit un fichier qui existe, on ne prepare rien.
+            #
+            # Sans WAL, une base en lecture seule s'ouvre sans avoir besoin
+            # d'ecrire un fichier annexe. Ce depot n'active pas WAL, et c'est ce
+            # qui rend ce mode sur ici.
+            resolu = Path(path)
+            self.target = f"file:{resolu}?mode=ro"
+            self.uri = True
+            self.reference = resolu
+            return
         if raw == MEMORY_PATH:
             self.target = f"{_MEMORY_URI_PREFIX}{uuid4().hex}{_MEMORY_URI_SUFFIX}"
             self.uri = True

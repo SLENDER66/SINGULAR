@@ -18,8 +18,9 @@ reconstruire.
 
 ### Si tu n'as pas accès au PC
 
-C'est le cas au 10 septembre 2026. Trois choses sont vraies, et c'est la
-troisième qui change ta journée.
+C'est le cas depuis le 10 septembre 2026. Tu as dit le 11 que tu y aurais accès
+« dans pas longtemps » — pas de date, donc rien n'est daté ici. Trois choses
+sont vraies, et c'est la troisième qui change ta journée.
 
 **Rien n'est perdu.** Le fichier est sur le disque du PC et n'en bouge pas. Ne
 pas pouvoir l'atteindre n'est pas la même chose que l'avoir perdu.
@@ -41,10 +42,18 @@ histoires tiennent dans la même.
 python3 -m singular import ~/journal-du-pc.db
 ```
 
-C'est mesuré, pas supposé : deux journaux de trois et deux décisions donnent
-un journal de cinq, la chaîne se vérifie de bout en bout, et le fichier
-d'origine n'est pas touché. Relancer la commande refuse, en disant que ces
-décisions sont déjà là.
+C'est mesuré, pas supposé, et mesuré sur un journal ramené au schéma de tes
+trois mois — pas sur une base d'aujourd'hui, qui serait le cas qui n'arrivera
+pas. Deux journaux de trois et deux décisions donnent un journal de cinq, la
+chaîne se vérifie de bout en bout, et **l'empreinte du fichier d'origine est
+identique après la reprise, à l'octet près**. Relancer la commande refuse, en
+disant que ces décisions sont déjà là.
+
+Ça n'a pas toujours été vrai. Jusqu'au 11 septembre, ouvrir ton journal du PC
+le **réécrivait** : trois colonnes nées depuis lui étaient ajoutées au premier
+contact, avant le moindre contrôle, donc y compris quand la reprise finissait
+par être refusée. Il est maintenant ouvert en lecture seule, et c'est SQLite
+qui refuse l'écriture, pas les droits du fichier.
 
 Recopier les **lignes** d'une base dans l'autre, ça, ça casse la chaîne : chaque
 empreinte signe la précédente, donc une entrée insérée au milieu rompt tout ce
