@@ -391,6 +391,62 @@ navigateur. Corrigé — origine, hôte et type du corps sont vérifiés — et
 bug : **une phrase juste dans un commentaire peut devenir fausse sans que le
 code change.**
 
+## La séance du 10 septembre — ce qu'elle a trouvé, et comment
+
+Neuf corrections en une soirée, **toutes trouvées en jouant les vraies
+commandes sur un dossier personnel vide**, aucune par les tests. La méthode
+compte plus que la liste : ouvre le programme comme moi, sur une machine
+neuve, et lis l'écran.
+
+La plus grave n'était pas dans le code. `A_FAIRE.md` — la page que j'ouvre le
+jour où ma machine change — m'ordonnait de ne rien écrire sur le Mac et me
+promettait d'avoir un jour à sacrifier l'un des deux journaux. C'était faux
+depuis que `import` existe, soit la veille. Deux autres documents niaient la
+même commande, et l'étape 3 me faisait copier le journal du PC **par-dessus**
+le mien. Corrigé, mesuré, et gardé par un test dont le déclencheur se lit dans
+le code : il demande à `build_parser()` si `import` est une commande.
+
+Retiens la forme : **corriger le code et laisser les documents affirmer
+l'ancien monde est l'erreur la plus chère de ce dépôt.** Le prompt que tu lis
+était juste ce jour-là ; la page écrite pour moi ne l'était pas.
+
+Les autres, par classe :
+
+- **Une règle, deux domiciles**, quatre fois. Les six refus des facultés
+  vivaient dans `analyse.py`, `parle.py` et `offres.py`, mot pour mot, et
+  avaient déjà divergé — un modèle qui refuse disait trois phrases
+  différentes. La garde qui protège mes cinq dollars avait une copie par
+  route du Sage. `Tier.label` existait et la ligne de commande ne l'appelait
+  nulle part. La phrase du conflit était écrite entière pour la page web, et
+  disait au terminal de « fermer et rouvrir ».
+- **L'écran du verdict pointait la mauvaise décision.** `due()` triait par
+  date d'écriture, pas par échéance : une décision en retard d'un jour
+  passait au-dessus d'une en retard de trente-neuf, et la commande proposée
+  tranchait la première. La Notice se contredisait dans une seule phrase.
+  **Le port Swift, lui, triait juste** — les deux moteurs divergeaient pour
+  de bon.
+- **La moitié des phrases affichées n'était pas en français.** « une
+  probabilite » sous une question demandant une « Probabilité », mon métier
+  parti au service en « charge d'etudes », les 94 phrases du prototype. La
+  prudence venait de la console cp850 du PC, qui accepte ces accents : c'était
+  l'habitude prise à côté d'une contrainte réelle, pas la contrainte.
+
+**Quatre tests ont puni la correction avant de l'accepter.** Ils attendaient
+un message au caractère près et sont tombés quand les mots ont pris leurs
+accents, sans qu'aucun comportement change. Un test pareil apprend à ne plus
+corriger les messages. `tests/test_messages_recopies.py` les interdit
+maintenant, et tient aussi la règle inverse : un mot que le programme écrit
+accentué quelque part ne peut plus s'écrire sans accents ailleurs. Sans
+dictionnaire — il compare le dépôt à lui-même, ce qui suffit, parce que
+l'erreur visée est toujours une divergence interne.
+
+Deux garde-fous s'étaient **éteints en silence**, et c'est le pire état
+possible : on croit encore les avoir. L'un comparait un fait aux deux copies
+de mon profil et concluait « pareil » parce qu'il était absent des deux.
+L'autre comparait deux constantes qui partagent leur premier tiers. Quand tu
+écris un garde-fou, sabote-le dans les deux sens : montre qu'il tombe, et
+montre qu'il porte encore quelque chose.
+
 ## Ce qui décide de la suite
 
 Pas un compilateur, pas une liste de facultés : **une semaine d'usage**, et
@@ -444,7 +500,13 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
    déjà construit — hygiène, pas escalade, vérifié.
 4. `DurableIntegrityChecker.check()` sans argument n'a plus d'appelant en
    production.
-5. Côté port iOS : que le Swift **compile** reste hors de portée d'ici.
+5. Le contrat des vecteurs de parité ne porte que **sévérité, titre et
+   détail** — ni `action` ni `entry_ids`. Donc *quelle* décision une carte
+   nomme reste hors parité, et c'est exactement là que les deux moteurs
+   divergeaient le 10 septembre. L'étendre demanderait de modifier le test
+   Swift, que rien ici ne peut exécuter ; l'ordre est tenu côté Python par
+   `tests/test_sage_notice.py`.
+6. Côté port iOS : que le Swift **compile** reste hors de portée d'ici.
    L'équivalence arithmétique avec le moteur Python est tenue par
    `tests/test_notice_rounding_port.py`, la correspondance du JSON des
    vecteurs avec les structures Swift par `tests/test_notice_vector_schema.py`,
