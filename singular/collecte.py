@@ -30,7 +30,7 @@ domiciles dans ce dépôt.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -74,6 +74,13 @@ class Fait:
     source: str
     date: str = ""
     verifie: bool = True
+    #: Les nombres derriere la phrase, pour qui doit en juger.
+    #:
+    #: Le Scout ne juge pas, mais le Conseiller doit pouvoir le faire sans
+    #: relire le fichier lui-meme -- deux lectures de la meme source finiraient
+    #: par diverger. Le fait se dit donc deux fois : en francais pour l'ecran,
+    #: en chiffres pour celui qui decide.
+    mesure: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.sujet.strip():
@@ -142,12 +149,15 @@ def candidatures(chemin: Path | None = None, *,
         mot = STATUTS.get(statut, statut)
         if age is None:
             faits.append(Fait("candidatures", f"{combien} en « {mot} », sans date lisible",
-                              str(source), "", verifie=False))
+                              str(source), "", verifie=False,
+                              mesure={"statut": statut, "combien": len(groupe)}))
         else:
             faits.append(Fait("candidatures",
                               f"{combien} en « {mot} », la plus ancienne depuis "
                               f"{age} jour{'s' if age > 1 else ''}",
-                              str(source), depuis))
+                              str(source), depuis,
+                              mesure={"statut": statut, "combien": len(groupe),
+                                      "age_max": age}))
 
     for nom in sorted(cv):
         etapes = cv[nom] or []
@@ -155,7 +165,8 @@ def candidatures(chemin: Path | None = None, *,
         accord = "" if faites <= 1 else "s"
         faits.append(Fait("cv", f"CV {nom} : {faites} étape{accord} faite{accord} "
                                 f"sur {len(etapes)}",
-                          str(source), jour.isoformat()))
+                          str(source), jour.isoformat(),
+                          mesure={"cv": nom, "faites": faites, "total": len(etapes)}))
 
     if not faits:
         faits.append(Fait("candidatures", "suivi ouvert, aucune candidature dedans",

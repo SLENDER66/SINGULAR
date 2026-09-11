@@ -302,7 +302,8 @@ class SageApp:
         son nom d'utilisateur. Il s'affiche chez lui, il ne part pas.
         `test_ce_qui_part.py` le verifie.
         """
-        return {**build_notice(self.journal, budget=_budget()).as_dict(),
+        return {**build_notice(self.journal, budget=_budget(),
+                               faits=collecter()).as_dict(),
                 "journal": str(self.journal.path)}
 
     def collecte(self) -> dict[str, Any]:

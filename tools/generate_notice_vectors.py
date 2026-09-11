@@ -54,6 +54,9 @@ ABSENTES_DU_PORT = {
     # aucun modele. L'ecart est donc structurel et pas un retard -- mais il se
     # declare ici comme les autres, sinon un vecteur l'exigerait du Swift.
     "_budget_item": "crédit d'API bas ou épuisé",
+    # Meme forme : le port n'a pas acces au suivi de candidatures, qui est un
+    # fichier du Mac. Structurel, declare, et pas une dette.
+    "_recherche_item": "recherche d'emploi en attente",
 }
 
 

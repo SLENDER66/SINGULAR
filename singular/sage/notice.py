@@ -481,6 +481,78 @@ def _unpriced_item(entries: tuple[Entry, ...]) -> NoticeItem | None:
     )
 
 
+#: Les seuils du suivi de candidatures, en jours.
+#:
+#: Deuxieme domicile assume, comme la table des libelles dans `collecte.py` et
+#: la phrase du conflit dans `app.js` : l'original est dans
+#: `proto/suivi_candidatures.py`, qui doit tourner seul dans a-Shell et a donc
+#: interdiction d'importer le paquet. `tests/test_sage_notice.py` les compare.
+#:
+#: Ce sont des **jugements**, pas des faits, et c'est pour ca qu'ils sont ici
+#: et pas dans le Scout : lui collecte « envoyee depuis 12 jours », decider que
+#: douze jours est trop long appartient a celui qui conseille.
+RELANCE_JOURS = 10
+CLASSEMENT_JOURS = 14
+ENVOI_JOURS = 2
+
+
+def _recherche_item(faits: tuple[Any, ...]) -> NoticeItem | None:
+    """Ce que la recherche d'emploi attend de lui, quand elle attend.
+
+    Le Conseiller de la recherche, sur les faits que le Scout a collectes. Il
+    ne relit pas le fichier : deux lectures de la meme source finiraient par
+    diverger, et c'est deja arrive assez de fois dans ce depot.
+
+    **Aucun nom d'entreprise n'entre dans cette phrase, et ce n'est pas un
+    oubli.** Le `detail` de chaque observation part vers le modele quand il
+    lance `analyse` ou `parle` -- `contexte_pour_analyse` recopie titre et
+    detail. Ses candidatures ne sont pas dans ce qu'il a choisi d'envoyer, et
+    une observation qui nommerait l'employeur les ferait sortir de sa machine
+    sans qu'il l'ait decide. Des nombres et des ages suffisent a savoir quoi
+    faire ; le nom est dans l'app, ou il reste.
+
+    Une seule observation, pas quatre : `proto/suivi_candidatures.py` donne
+    **une** action par jour et c'est tout son interet. Rejouer son echelle de
+    priorites ici la recopierait ; on dit ce qui a franchi un seuil, et il
+    ouvre le prototype pour savoir laquelle.
+    """
+    par_statut = {f.mesure.get("statut"): f.mesure for f in faits
+                  if f.verifie and f.sujet == "candidatures" and f.mesure.get("statut")}
+
+    def attend(statut: str, seuil: int) -> int:
+        mesure = par_statut.get(statut)
+        if not mesure or mesure.get("age_max") is None:
+            return 0
+        return mesure["combien"] if mesure["age_max"] >= seuil else 0
+
+    entretiens = par_statut.get("entretien", {}).get("combien", 0)
+    a_envoyer = attend("a_envoyer", ENVOI_JOURS)
+    a_relancer = attend("envoyee", RELANCE_JOURS)
+    a_classer = attend("relancee", CLASSEMENT_JOURS)
+    if not (entretiens or a_envoyer or a_relancer or a_classer):
+        return None
+
+    dit = []
+    if entretiens:
+        dit.append(f"{entretiens} entretien{'s' if entretiens > 1 else ''} à préparer")
+    if a_envoyer:
+        dit.append(f"{a_envoyer} préparée{'s' if a_envoyer > 1 else ''} et pas envoyée"
+                   f"{'s' if a_envoyer > 1 else ''}")
+    if a_relancer:
+        dit.append(f"{a_relancer} sans réponse depuis plus de {RELANCE_JOURS} jours")
+    if a_classer:
+        dit.append(f"{a_classer} relancée{'s' if a_classer > 1 else ''} sans suite "
+                   f"depuis plus de {CLASSEMENT_JOURS} jours")
+
+    # Un entretien a une date ; le reste attend. C'est l'ordre du prototype, et
+    # la seule part de son echelle qu'on reprend ici.
+    gravite = "ATTENTION" if entretiens or a_envoyer or a_relancer else "INFO"
+    return NoticeItem(
+        gravite, "Ta recherche d'emploi",
+        ", ".join(dit).capitalize() + ". Le détail est dans le suivi.",
+        action="python3 proto/suivi_candidatures.py")
+
+
 def _budget_item(budget: dict[str, Any] | None) -> NoticeItem | None:
     """Ce qui reste de son crédit d'API, quand il y a lieu de le dire.
 
@@ -533,7 +605,8 @@ def _budget_item(budget: dict[str, Any] | None) -> NoticeItem | None:
 
 def _candidates(journal: DecisionJournal, moment: datetime,
                 report: dict[str, Any],
-                budget: dict[str, Any] | None = None) -> dict[str, NoticeItem | None]:
+                budget: dict[str, Any] | None = None,
+                faits: tuple[Any, ...] = ()) -> dict[str, NoticeItem | None]:
     """Chaque observation sous le nom de la fonction qui la produit.
 
     Le nom sert à deux lecteurs qui n'ont pas d'autre moyen de savoir quelle
@@ -559,19 +632,22 @@ def _candidates(journal: DecisionJournal, moment: datetime,
         "_unpriced_item": _unpriced_item(entries),
         "_quiet_item": _quiet_item(open_entries, moment),
         "_budget_item": _budget_item(budget),
+        "_recherche_item": _recherche_item(faits),
     }
 
 
 def observations(journal: DecisionJournal, *, now: datetime | None = None,
-                 budget: dict[str, Any] | None = None) -> dict[str, NoticeItem]:
+                 budget: dict[str, Any] | None = None,
+                 faits: tuple[Any, ...] = ()) -> dict[str, NoticeItem]:
     """Les observations produites aujourd'hui, sous le nom de leur fonction."""
     moment = now or datetime.now(UTC)
-    produced = _candidates(journal, moment, journal.review(now=moment), budget)
+    produced = _candidates(journal, moment, journal.review(now=moment), budget, faits)
     return {nom: item for nom, item in produced.items() if item is not None}
 
 
 def build_notice(journal: DecisionJournal, *, now: datetime | None = None,
-                 budget: dict[str, Any] | None = None) -> Notice:
+                 budget: dict[str, Any] | None = None,
+                 faits: tuple[Any, ...] = ()) -> Notice:
     """Ce que le Sage a à te dire, dans l'ordre où ça compte.
 
     `budget` est **donné**, jamais cherché : la Notice doit se construire avec
@@ -587,7 +663,7 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None,
     """
     moment = now or datetime.now(UTC)
     report = journal.review(now=moment)
-    candidates = _candidates(journal, moment, report, budget)
+    candidates = _candidates(journal, moment, report, budget, faits)
     items = tuple(item for item in candidates.values() if item is not None)
     ordered = tuple(sorted(items, key=lambda item: item.rank))
     return Notice(

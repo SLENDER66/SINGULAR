@@ -640,3 +640,124 @@ def test_la_notice_se_construit_avec_les_facultes_desinstallees(tmp_path) -> Non
             assert "parle" not in (noeud.module or ""), "la Notice importe la faculte"
         elif isinstance(noeud, ast.Import):
             assert not any("parle" in a.name for a in noeud.names)
+
+
+# --- la recherche d'emploi, jugee sur les faits du Scout ----------------------
+
+def _faits_de(statut, combien, age):
+    from singular.collecte import Fait
+    return (Fait("candidatures", f"{combien} en « {statut} »", "/x.json", "2026-09-11",
+                 mesure={"statut": statut, "combien": combien, "age_max": age}),)
+
+
+def test_les_seuils_disent_la_meme_chose_que_le_prototype() -> None:
+    """Deuxieme domicile assume, garde comme les autres.
+
+    `proto/suivi_candidatures.py` doit tourner seul dans a-Shell et a donc
+    interdiction d'importer le paquet. Les seuils sont en double, comme la
+    table des libelles et la phrase du conflit -- et une copie qu'on ne peut
+    pas eviter se garde par un test, pas par la vigilance.
+    """
+    import importlib.util
+    import pathlib
+
+    from singular.sage import notice as moteur
+
+    chemin = pathlib.Path(__file__).resolve().parent.parent / "proto/suivi_candidatures.py"
+    spec = importlib.util.spec_from_file_location("suivi_seuils", chemin)
+    suivi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(suivi)
+
+    assert moteur.RELANCE_JOURS == suivi.JOURS_AVANT_RELANCE
+    assert moteur.CLASSEMENT_JOURS == suivi.JOURS_AVANT_CLASSEMENT
+    assert moteur.ENVOI_JOURS == suivi.JOURS_AVANT_ENVOI
+
+
+def test_sous_le_seuil_la_recherche_ne_dit_rien(tmp_path) -> None:
+    """Le reproche premature a deja coute une fois dans ce depot."""
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import RELANCE_JOURS, build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+    faits = _faits_de("envoyee", 2, RELANCE_JOURS - 1)
+
+    assert not [i for i in build_notice(journal, faits=faits).items
+                if i.title == "Ta recherche d'emploi"]
+
+
+def test_au_seuil_elle_le_dit(tmp_path) -> None:
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import RELANCE_JOURS, build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+    dit = [i for i in build_notice(journal, faits=_faits_de("envoyee", 2, RELANCE_JOURS)).items
+           if i.title == "Ta recherche d'emploi"]
+
+    assert [i.severity for i in dit] == ["ATTENTION"]
+    assert f"plus de {RELANCE_JOURS} jours" in dit[0].detail
+
+
+def test_un_fait_non_verifie_ne_declenche_rien(tmp_path) -> None:
+    """On ne conseille pas sur ce qu'on n'a pas pu etablir.
+
+    Le fait porte ici un age **et** le doute. C'est deliberement une forme que
+    le Scout ne produit pas aujourd'hui -- sa branche non verifiee n'ecrit pas
+    d'age -- et c'est tout l'interet : sans ca, le test passait parce que l'age
+    manquait, pas parce que le doute etait respecte, et la garde pouvait sauter
+    sans que rien ne tombe. Elle tient pour le jour ou une source de plus
+    ramenera un fait date mais incertain.
+    """
+    from singular.collecte import Fait
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import RELANCE_JOURS, build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+    doute = Fait("candidatures", "2 en « envoyée », source incertaine", "/x.json",
+                 "2026-09-11", verifie=False,
+                 mesure={"statut": "envoyee", "combien": 2, "age_max": RELANCE_JOURS + 30})
+
+    assert not [i for i in build_notice(journal, faits=(doute,)).items
+                if i.title == "Ta recherche d'emploi"], (
+        "un age largement au-dessus du seuil, mais non verifie : on se tait")
+
+    # Le temoin : le meme fait, tenu pour etabli, declenche bien.
+    sur = Fait(doute.sujet, doute.texte, doute.source, doute.date,
+               verifie=True, mesure=doute.mesure)
+    assert [i for i in build_notice(journal, faits=(sur,)).items
+            if i.title == "Ta recherche d'emploi"]
+
+
+def test_aucun_nom_d_entreprise_ne_part_vers_le_modele(tmp_path) -> None:
+    """Le `detail` de chaque observation est recopie dans ce qui part.
+
+    `contexte_pour_analyse` envoie titre et detail de chaque item. Ses
+    candidatures ne sont pas dans ce qu'il a choisi d'envoyer : une observation
+    qui nommerait l'employeur les sortirait de sa machine sans qu'il l'ait
+    decide. Des nombres et des ages suffisent a savoir quoi faire.
+    """
+    from singular.collecte import Fait
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+    faits = (Fait("candidatures", "1 en « envoyée »", "/x.json", "2026-09-11",
+                  mesure={"statut": "envoyee", "combien": 1, "age_max": 40,
+                          "entreprise": "BE Fluides Occitanie"}),)
+
+    dit = [i for i in build_notice(journal, faits=faits).items
+           if i.title == "Ta recherche d'emploi"]
+
+    assert dit, "le seuil est franchi, l'observation doit exister"
+    assert "Occitanie" not in dit[0].detail
+    assert "Fluides" not in dit[0].detail
+
+
+def test_sans_suivi_de_candidatures_rien_ne_change(tmp_path) -> None:
+    """Le temoin : l'app doit s'ouvrir pareil chez quelqu'un qui n'a pas de suivi."""
+    from singular.journal import DecisionJournal
+    from singular.sage.notice import build_notice
+
+    journal = DecisionJournal(tmp_path / "j.db")
+
+    assert not [i for i in build_notice(journal, faits=()).items
+                if i.title == "Ta recherche d'emploi"]
