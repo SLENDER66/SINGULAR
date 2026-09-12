@@ -123,19 +123,46 @@ class JarvisParseError(ValueError):
 class JarvisRuntime:
     """User-facing orchestration seam above SINGULAR's durable core."""
 
-    def __init__(self, provider: LLMProvider, mission_runtime: DurableMissionRuntime | None = None, *, max_tokens: int = 1200) -> None:
+    DEFAULT_MAX_TOKENS = 1200
+    DEFAULT_MAX_ACTIONS = 8
+    DEFAULT_MAX_REQUEST_CHARS = 12000
+    DEFAULT_MAX_CONTEXT_CHARS = 20000
+
+    def __init__(
+        self,
+        provider: LLMProvider,
+        mission_runtime: DurableMissionRuntime | None = None,
+        *,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_actions: int = DEFAULT_MAX_ACTIONS,
+        max_request_chars: int = DEFAULT_MAX_REQUEST_CHARS,
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    ) -> None:
         if max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
+        if max_actions < 1:
+            raise ValueError("max_actions must be positive")
+        if max_request_chars < 1 or max_context_chars < 1:
+            raise ValueError("input limits must be positive")
         self.provider = provider
         self.missions = mission_runtime or DurableMissionRuntime()
         self.max_tokens = max_tokens
+        self.max_actions = max_actions
+        self.max_request_chars = max_request_chars
+        self.max_context_chars = max_context_chars
 
     def propose(self, request: str, *, context: str = "") -> MissionProposal:
         if not request.strip():
             raise ValueError("request must not be blank")
+        request = request.strip()
+        context = context.strip()
+        if len(request) > self.max_request_chars:
+            raise ValueError("request exceeds configured size limit")
+        if len(context) > self.max_context_chars:
+            raise ValueError("context exceeds configured size limit")
         response = self.provider.complete(
             system=_SYSTEM,
-            user=f"REQUEST:\n{request.strip()}\n\nCONTEXT:\n{context.strip()}",
+            user=f"REQUEST:\n{request}\n\nCONTEXT:\n{context}",
             max_tokens=self.max_tokens,
         )
         data = self._decode(response.text)
@@ -143,7 +170,7 @@ class JarvisRuntime:
             objective=self._text(data, "objective"),
             expected_result=self._text(data, "expected_result"),
             context_needed=self._strings(data, "context_needed"),
-            actions=self._actions(data),
+            actions=self._actions(data, max_actions=self.max_actions),
             llm=response,
         )
 
@@ -212,12 +239,14 @@ class JarvisRuntime:
         return tuple(item.strip() for item in value)
 
     @classmethod
-    def _actions(cls, data: dict[str, Any]) -> tuple[ProposedAction, ...]:
+    def _actions(cls, data: dict[str, Any], *, max_actions: int = DEFAULT_MAX_ACTIONS) -> tuple[ProposedAction, ...]:
         value = data.get("actions")
         if not isinstance(value, list):
             raise JarvisParseError("actions must be a list")
         if not value:
             raise JarvisParseError("at least one proposed action is required")
+        if len(value) > max_actions:
+            raise JarvisParseError("actions exceed configured proposal limit")
         actions: list[ProposedAction] = []
         for item in value:
             if not isinstance(item, dict):
