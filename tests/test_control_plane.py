@@ -41,6 +41,25 @@ def test_control_plane_builds_attests_and_executes_through_one_surface(tmp_path)
     assert result.status == "COMPLETED"
 
 
+def test_control_plane_exposes_verified_execution_as_canonical_safe_path(tmp_path):
+    runtime, plane = _plane(tmp_path)
+    control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-VERIFY"))
+    action_id = control_decision.decision.global_report.action_id
+
+    result = plane.execute_verified(
+        control_decision,
+        action_id,
+        authorized_handler,
+        lambda action, execution: execution.result == {"action_id": action.id, "executed": True},
+    )
+
+    assert result.status == "COMPLETED"
+    assert any(
+        event.category == "verification" and event.outcome == "VERIFIED"
+        for event in runtime.audit.events
+    )
+
+
 def test_control_plane_revoke_prevents_future_execution(tmp_path):
     runtime, plane = _plane(tmp_path)
     control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-REVOKE"))
