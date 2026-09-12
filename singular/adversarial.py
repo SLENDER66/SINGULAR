@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
@@ -7,8 +8,11 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Callable
 
+from cryptography.fernet import Fernet
+
 from .audit import AuditEvent, AuditTrail
 from .authority import AgentPower, AuthorityProtocol
+from .authentication import AuthenticationError, AuthenticationService, RateLimited, SecondFactorRequired, _totp
 from .durable import DurableStore
 from .economic_learning import EconomicLearningEngine
 from .economic_learning_ledger import EconomicLearningLedger
@@ -126,6 +130,109 @@ class AdversarialEngine:
         return AdversarialReport(tuple(findings))
 
     @classmethod
+    def authentication_suite(cls) -> AdversarialReport:
+        """Exercise credential, MFA, replay and persistence boundaries in isolation."""
+        findings: list[AdversarialFinding] = []
+        with tempfile.TemporaryDirectory(prefix="singular-auth-redteam-") as directory:
+            db_path = Path(directory) / "auth.db"
+            master_key = Fernet.generate_key()
+
+            def make(now: float = 1_000_000.0) -> AuthenticationService:
+                return AuthenticationService(db_path, master_key=master_key, now=lambda: now)
+
+            auth = make()
+            user_id = auth.create_user("redteam", "Correct horse battery staple 2026!")
+            enrollment = auth.begin_totp_enrollment(user_id, "Correct horse battery staple 2026!", now=1_000_020.0)
+
+            findings.append(cls._probe(
+                "AUTH-009", AttackSeverity.CRITICAL, AttackClass.AUTH,
+                "TOTP enrollment secret leakage through repr",
+                lambda: (_ for _ in ()).throw(AssertionError("secret leaked")) if enrollment.secret in repr(enrollment) or enrollment.otpauth_uri in repr(enrollment) else None,
+                AssertionError,
+                "Keep TOTP credentials out of repr and debug output.",
+            ))
+
+            def plaintext_totp_storage() -> object:
+                with sqlite3.connect(db_path) as conn:
+                    values = conn.execute("SELECT totp_ciphertext,pending_totp_ciphertext FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
+                if any(value is not None and enrollment.secret.encode("ascii") in bytes(value) for value in values):
+                    raise AssertionError("TOTP secret stored in plaintext")
+                return None
+
+            findings.append(cls._probe(
+                "AUTH-010", AttackSeverity.CRITICAL, AttackClass.AUTH,
+                "TOTP secret plaintext storage", plaintext_totp_storage, AssertionError,
+                "Encrypt TOTP secrets at rest and never persist their plaintext representation.",
+            ))
+
+            def wrong_enrollment_code() -> object:
+                for _ in range(5):
+                    try:
+                        auth.confirm_totp_enrollment(user_id, "000000", now=1_000_020.0)
+                    except AuthenticationError:
+                        continue
+                return auth.confirm_totp_enrollment(user_id, _totp(enrollment.secret, 1_000_020.0), now=1_000_020.0)
+
+            findings.append(cls._probe(
+                "AUTH-011", AttackSeverity.HIGH, AttackClass.AUTH,
+                "MFA enrollment brute-force after five failures", wrong_enrollment_code, RateLimited,
+                "Persist MFA enrollment failures and fail closed at the configured threshold.",
+            ))
+
+            # The previous probe leaves the account throttled; a fresh isolated DB
+            # proves the normal enrollment/replay lifecycle independently.
+            replay_db = Path(directory) / "replay.db"
+            replay = AuthenticationService(replay_db, master_key=master_key, now=lambda: 2_000_000.0)
+            replay_user = replay.create_user("replay", "Correct horse battery staple 2026!")
+            first = replay.begin_totp_enrollment(replay_user, "Correct horse battery staple 2026!", now=2_000_000.0)
+            replay.confirm_totp_enrollment(replay_user, _totp(first.secret, 2_000_000.0), now=2_000_000.0)
+            code = _totp(first.secret, 2_000_040.0)
+            replay.authenticate("replay", "Correct horse battery staple 2026!", otp=code, now=2_000_040.0)
+
+            findings.append(cls._probe(
+                "AUTH-012", AttackSeverity.CRITICAL, AttackClass.REPLAY,
+                "TOTP replay in the same time step",
+                lambda: replay.authenticate("replay", "Correct horse battery staple 2026!", otp=code, now=2_000_040.0),
+                AuthenticationError,
+                "Atomically advance the durable TOTP counter before accepting a code.",
+            ))
+
+            findings.append(cls._probe(
+                "AUTH-013", AttackSeverity.CRITICAL, AttackClass.REPLAY,
+                "recovery-code replay",
+                lambda: replay.authenticate("replay", "Correct horse battery staple 2026!", recovery_code=replay.confirm_totp_enrollment(replay_user, _totp(first.secret, 2_000_070.0), now=2_000_070.0)[0], now=2_000_070.0),
+                AuthenticationError,
+                "Recovery credentials must be single-use and must not be regenerated implicitly by an attacker-controlled path.",
+            ))
+
+            # A dedicated restart probe uses the same durable database and key.
+            rate_db = Path(directory) / "rate.db"
+            rate = AuthenticationService(rate_db, master_key=master_key, now=lambda: 3_000_000.0)
+            rate.create_user("rate", "Correct horse battery staple 2026!")
+            for _ in range(5):
+                try:
+                    rate.authenticate("rate", "wrong password 2026!", client_key="client-A", now=3_000_000.0)
+                except AuthenticationError:
+                    pass
+            restarted = AuthenticationService(rate_db, master_key=master_key, now=lambda: 3_000_001.0)
+            findings.append(cls._probe(
+                "AUTH-014", AttackSeverity.HIGH, AttackClass.AUTH,
+                "rate-limit bypass after process restart",
+                lambda: restarted.authenticate("rate", "Correct horse battery staple 2026!", client_key="client-A", now=3_000_001.0),
+                RateLimited,
+                "Keep authentication throttling state durable and keyed without storing raw client identifiers.",
+            ))
+
+            findings.append(cls._probe(
+                "AUTH-015", AttackSeverity.CRITICAL, AttackClass.AUTH,
+                "password-only MFA replacement",
+                lambda: replay.begin_totp_enrollment(replay_user, "Correct horse battery staple 2026!", now=2_000_100.0),
+                SecondFactorRequired,
+                "Changing an already configured second factor requires the existing second factor or a recovery credential.",
+            ))
+        return AdversarialReport(tuple(findings))
+
+    @classmethod
     def persistence_suite(cls) -> AdversarialReport:
         findings: list[AdversarialFinding] = []
         with tempfile.TemporaryDirectory(prefix="singular-redteam-") as directory:
@@ -186,6 +293,6 @@ class AdversarialEngine:
 
     @classmethod
     def full_suite(cls) -> AdversarialReport:
-        reports = (cls.authority_suite(), cls.persistence_suite())
+        reports = (cls.authority_suite(), cls.authentication_suite(), cls.persistence_suite())
         findings = tuple(finding for report in reports for finding in report.findings)
         return AdversarialReport(findings)
