@@ -17,7 +17,7 @@ import sqlite3
 import struct
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
@@ -60,7 +60,9 @@ class AuthPrincipal:
 
 @dataclass(frozen=True)
 class TotpEnrollment:
-    secret: str
+    # A TOTP secret is a live authentication credential. It must never appear in
+    # the default dataclass repr (logs, tracebacks, debugging, etc.).
+    secret: str = field(repr=False)
     otpauth_uri: str
     expires_at: float
 
@@ -116,6 +118,11 @@ def _totp_parts(secret: str, now: float) -> tuple[str, int]:
     offset = digest[-1] & 15
     value = (struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF) % 1_000_000
     return f"{value:06d}", counter
+
+
+def _totp(secret: str, now: float) -> str:
+    """Return the RFC 6238 code; kept private for deterministic unit tests."""
+    return _totp_parts(secret, now)[0]
 
 
 def _totp_ok(secret: str, code: str, now: float, last_counter: int | None = None) -> tuple[bool, int | None]:
