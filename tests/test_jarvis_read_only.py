@@ -87,6 +87,14 @@ def test_read_only_tool_rejects_wrong_action_shape(tmp_path: Path):
         handler(_action("inspect"))
 
 
+def test_read_only_tool_rejects_binary_files(tmp_path: Path):
+    (tmp_path / "binary.bin").write_bytes(b"\xff\xfe\x00")
+    _, handler = make_read_only_repository_tool(tmp_path, capability_id="cap_test_read_only_binary")
+
+    with pytest.raises(ValueError, match="UTF-8 text files only"):
+        handler(_action("read:binary.bin"))
+
+
 def test_read_only_tool_enforces_size_limit(tmp_path: Path):
     (tmp_path / "large.txt").write_text("123456", encoding="utf-8")
     _, handler = make_read_only_repository_tool(
