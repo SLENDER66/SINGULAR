@@ -67,6 +67,23 @@ class SingularControlPlane:
             raise TypeError("control plane execution requires a ControlPlaneDecision")
         return self.decisions.execute(control_decision.decision, action_id, handler)
 
+    def execute_verified(
+        self,
+        control_decision: ControlPlaneDecision,
+        action_id: str,
+        handler: Callable[[Any], Any],
+        verifier: Callable[[Any, Any], bool],
+    ) -> ExecutionResult:
+        """Execute only when an independent verifier accepts the durable result."""
+        if not isinstance(control_decision, ControlPlaneDecision):
+            raise TypeError("control plane execution requires a ControlPlaneDecision")
+        return self.decisions.execute_verified(
+            control_decision.decision,
+            action_id,
+            handler,
+            verifier,
+        )
+
     def execute_effect(
         self,
         control_decision: ControlPlaneDecision,
