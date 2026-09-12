@@ -24,6 +24,9 @@ def test_source_rules_detect_dynamic_code_execution(tmp_path: Path) -> None:
     assert len(findings) == 1
     assert findings[0].severity is FindingSeverity.HIGH
     assert findings[0].validated is False
+    assert findings[0] in report.observed_high_risk
+    assert findings[0] not in report.failures
+    assert report.clean
 
 
 def test_source_rules_detect_shell_true(tmp_path: Path) -> None:
@@ -35,9 +38,12 @@ def test_source_rules_detect_shell_true(tmp_path: Path) -> None:
     )
 
     report = SingularSecurityAssessment(package).scan(ScanMode.STANDARD)
-    findings = [finding for finding in report.findings if finding.rule == "SHELL_TRUE"]
+    findings = [f for f in report.findings if f.rule == "SHELL_TRUE"]
     assert len(findings) == 1
     assert findings[0].severity is FindingSeverity.CRITICAL
+    assert findings[0].validated is False
+    assert findings[0] in report.observed_high_risk
+    assert findings[0] not in report.failures
 
 
 def test_source_rules_detect_unsafe_pickle(tmp_path: Path) -> None:
