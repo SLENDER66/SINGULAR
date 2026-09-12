@@ -382,14 +382,59 @@ class AuthenticationService:
         with self._connect() as conn:
             conn.execute("UPDATE auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL", (self._now(), token_hash))
 
-    def change_password(self, user_id: str, current_password: str, new_password: str) -> None:
+    def change_password(self, user_id: str, current_password: str, new_password: str, *, otp: str | None = None, recovery_code: str | None = None, client_key: str = "", now: float | None = None) -> None:
+        """Change a password with durable throttling and step-up MFA when configured."""
+        current = self._now() if now is None else now
+        subject = _subject_hash(user_id, self._rate_secret)
+        client = _subject_hash(client_key, self._rate_secret) if client_key else None
         with self._connect() as conn:
-            row = conn.execute("SELECT password_salt,password_digest FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
+            if self._limited(conn, subject, current) or (client is not None and self._limited(conn, client, current)):
+                raise RateLimited("authentication temporarily unavailable")
+            row = conn.execute("SELECT password_salt,password_digest,totp_ciphertext,last_totp_counter FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
             if row is None or not _password_ok(current_password, row["password_salt"], row["password_digest"]):
+                self._fail(conn, subject, current)
+                if client is not None:
+                    self._fail(conn, client, current)
+                self._audit(conn, "password_change_failed", user_id if row else None)
+                conn.commit()
                 raise AuthenticationError("authentication failed")
+            if row["totp_ciphertext"] is not None:
+                if not otp and not recovery_code:
+                    raise SecondFactorRequired("second factor required")
+                if otp:
+                    try:
+                        secret = self._fernet.decrypt(row["totp_ciphertext"]).decode("ascii")
+                    except (InvalidToken, UnicodeDecodeError):
+                        raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
+                    ok, counter = _totp_ok(secret, otp, current, row["last_totp_counter"])
+                    if not ok:
+                        self._fail(conn, subject, current)
+                        if client is not None:
+                            self._fail(conn, client, current)
+                        self._audit(conn, "password_change_failed", user_id)
+                        conn.commit()
+                        raise AuthenticationError("authentication failed")
+                    cursor = conn.execute("UPDATE auth_users SET last_totp_counter=? WHERE user_id=? AND (last_totp_counter IS NULL OR last_totp_counter < ?)", (counter, user_id, counter))
+                    if cursor.rowcount != 1:
+                        self._fail(conn, subject, current)
+                        if client is not None:
+                            self._fail(conn, client, current)
+                        self._audit(conn, "password_change_failed", user_id)
+                        conn.commit()
+                        raise AuthenticationError("authentication failed")
+                elif not self._consume_recovery(conn, user_id, recovery_code or "", current):
+                    self._fail(conn, subject, current)
+                    if client is not None:
+                        self._fail(conn, client, current)
+                    self._audit(conn, "password_change_failed", user_id)
+                    conn.commit()
+                    raise AuthenticationError("authentication failed")
             salt, digest = _password_record(new_password)
             conn.execute("UPDATE auth_users SET password_salt=?,password_digest=?,security_version=security_version+1 WHERE user_id=?", (salt, digest, user_id))
-            self._revoke_all(conn, user_id, self._now())
+            self._revoke_all(conn, user_id, current)
+            self._clear(conn, subject)
+            if client is not None:
+                self._clear(conn, client)
             self._audit(conn, "password_changed", user_id)
 
     def disable_totp(self, user_id: str, password: str, *, otp: str | None = None, recovery_code: str | None = None) -> None:
