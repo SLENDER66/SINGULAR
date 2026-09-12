@@ -32,7 +32,7 @@ def proposal_text(**overrides):
                 "reversibility": 10,
                 "requires_human": False,
                 "sensitive": False,
-                "capability": "repo.read",
+                "capability": None,
             }
         ],
     }
