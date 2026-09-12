@@ -138,6 +138,39 @@ def test_route_never_executes_provider_and_governor_stays_in_control():
     assert decisions[0].can_execute is False
 
 
+def test_proposal_action_count_is_bounded():
+    actions = [
+        {
+            "name": f"action-{index}",
+            "description": "Action bornée",
+            "impact": 1,
+            "risk": 1,
+            "reversibility": 10,
+            "requires_human": False,
+            "sensitive": False,
+            "capability": None,
+        }
+        for index in range(9)
+    ]
+    provider = FakeProvider(proposal_text(actions=actions))
+
+    with pytest.raises(ValueError, match="actions exceed configured proposal limit"):
+        JarvisRuntime(provider).propose("Analyse")
+
+
+def test_request_and_context_sizes_are_bounded_before_provider_call():
+    provider = FakeProvider(proposal_text())
+    runtime = JarvisRuntime(provider, max_request_chars=5, max_context_chars=5)
+
+    with pytest.raises(ValueError, match="request exceeds configured size limit"):
+        runtime.propose("123456")
+    assert provider.calls == []
+
+    with pytest.raises(ValueError, match="context exceeds configured size limit"):
+        runtime.propose("ok", context="123456")
+    assert provider.calls == []
+
+
 def test_malformed_model_output_fails_closed():
     provider = FakeProvider('{"objective":"x","expected_result":"y","actions":[{')
     runtime = JarvisRuntime(provider)
