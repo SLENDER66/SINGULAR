@@ -39,13 +39,15 @@ class JarvisValidatedBridge:
         capacity_budget: float,
         decision_id: str,
         action_index: int = 0,
+        governance_capability: str | None = None,
         **kwargs: Any,
     ) -> Any:
         """Build and attest without granting JARVIS execution authority.
 
-        The execution target must already be an opaque registered capability.
-        The bridge never registers capabilities, changes policy, approves an
-        action, or calls an execution handler.
+        ``execution_target`` and ``governance_capability`` are trusted
+        composition inputs, never values selected from the LLM proposal. The
+        bridge never registers capabilities, changes policy, approves an action,
+        or calls an execution handler.
         """
         if not 0 <= action_index < len(proposal.actions):
             raise IndexError("action_index out of range")
@@ -55,6 +57,8 @@ class JarvisValidatedBridge:
             raise ValueError("intervention_id is required")
         if not decision_id.strip():
             raise ValueError("decision_id is required")
+        if governance_capability is not None and not governance_capability.strip():
+            raise ValueError("governance_capability must be non-empty when provided")
 
         selected = proposal.actions[action_index]
         contract = self.missions.create_mission(
@@ -70,7 +74,7 @@ class JarvisValidatedBridge:
             requires_human=selected.requires_human,
             sensitive=selected.sensitive,
             contract_id=contract.mission_id,
-            capability=selected.capability,
+            capability=governance_capability,
             execution_capability=execution_target,
         )
         return self.decisions.build_and_attest(
