@@ -53,17 +53,17 @@ def _build_read_decision(capability: str, control: SingularControlPlane, decisio
 def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_verification(tmp_path: Path):
     (tmp_path / "README.md").write_text("SINGULAR", encoding="utf-8")
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
-    control = SingularControlPlane(runtime)
     capability, handler = make_read_only_repository_tool(tmp_path, capability_id="cap_test_jarvis_read_only_e2e")
+    control = SingularControlPlane(
+        runtime,
+        verifier=lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result),
+    )
     decision, attestation = _build_read_decision(capability, control, "DEC-JARVIS-READ-E2E")
     assert attestation.decision_id == decision.decision_id
     assert control.decisions.is_attested(decision)
     assert decision.verify()
     assert decision.contract.autonomy == Autonomy.EXECUTE_REVERSIBLE
-    result = control.decisions.execute_verified(
-        decision, decision.authorized_actions[0].id, handler,
-        lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result),
-    )
+    result = control.decisions.execute_verified(decision, decision.authorized_actions[0].id, handler)
     assert result.status == "COMPLETED"
     assert result.result["path"] == "README.md"
     audit_events = runtime.store.audit_events()
@@ -74,24 +74,23 @@ def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_ve
     assert verification_events[-1]["payload"]["action_id"] == decision.authorized_actions[0].id
     assert verification_events[-1]["payload"]["execution_key"] == result.execution_key
     assert "SINGULAR" not in str(verification_events[-1]["payload"])
-    second = control.decisions.execute_verified(
-        decision, decision.authorized_actions[0].id, handler,
-        lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result),
-    )
+    second = control.decisions.execute_verified(decision, decision.authorized_actions[0].id, handler)
     assert second.execution_key == result.execution_key
 
 
 def test_jarvis_read_only_verification_rejects_file_changed_after_execution(tmp_path: Path):
     (tmp_path / "README.md").write_text("SINGULAR", encoding="utf-8")
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
-    control = SingularControlPlane(runtime)
     capability, handler = make_read_only_repository_tool(tmp_path, capability_id="cap_test_jarvis_read_only_changed_file")
-    decision, _ = _build_read_decision(capability, control, "DEC-JARVIS-READ-CHANGED")
+
     def tampering_verifier(action, execution_result):
         (tmp_path / "README.md").write_text("TAMPERED", encoding="utf-8")
         return verify_read_only_result(tmp_path, action, execution_result.result)
+
+    control = SingularControlPlane(runtime, verifier=tampering_verifier)
+    decision, _ = _build_read_decision(capability, control, "DEC-JARVIS-READ-CHANGED")
     with pytest.raises(PermissionError, match="verification"):
-        control.decisions.execute_verified(decision, decision.authorized_actions[0].id, handler, tampering_verifier)
+        control.decisions.execute_verified(decision, decision.authorized_actions[0].id, handler)
     audit_events = runtime.store.audit_events()
     assert any(event.get("event_type") == "verification" and event.get("outcome") == "FAILED" for event in audit_events)
 
@@ -104,7 +103,7 @@ def test_jarvis_read_only_rejects_handler_substitution_before_effect(tmp_path: P
     decision, _ = _build_read_decision(capability, control, "DEC-JARVIS-READ-SUB")
     _replacement_capability, replacement_handler = make_read_only_repository_tool(tmp_path, capability_id="cap_test_jarvis_read_only_replacement")
     with pytest.raises(PermissionError, match="capability"):
-        control.decisions.execute_verified(decision, decision.authorized_actions[0].id, replacement_handler, lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result))
+        control.decisions.execute_verified(decision, decision.authorized_actions[0].id, replacement_handler)
     execution_key = runtime.store.idempotency_key("execute", decision.contract.mission_id, decision.authorized_actions[0].id)
     assert not runtime.store.get_execution(execution_key)
 
@@ -117,6 +116,6 @@ def test_jarvis_read_only_revocation_blocks_execution(tmp_path: Path):
     decision, _ = _build_read_decision(capability, control, "DEC-JARVIS-READ-REVOKE")
     control.decisions.revoke(decision.decision_id)
     with pytest.raises(PermissionError, match="attestée"):
-        control.decisions.execute_verified(decision, decision.authorized_actions[0].id, handler, lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result))
+        control.decisions.execute_verified(decision, decision.authorized_actions[0].id, handler)
     execution_key = runtime.store.idempotency_key("execute", decision.contract.mission_id, decision.authorized_actions[0].id)
     assert not runtime.store.get_execution(execution_key)
