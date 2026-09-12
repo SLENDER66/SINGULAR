@@ -52,6 +52,80 @@ def test_provider_response_becomes_bounded_proposal():
     assert provider.calls[0]["max_tokens"] == 1200
 
 
+def test_trajectory_priority_is_deterministic_and_test_first():
+    provider = FakeProvider(proposal_text(actions=[
+        {
+            "name": "experiment",
+            "description": "Tester une hypothèse à faible coût",
+            "impact": 7,
+            "risk": 1,
+            "reversibility": 10,
+            "leverage": 9,
+            "dependency": 8,
+            "uncertainty": 9,
+            "cost": 2,
+            "learning": 10,
+            "ownership": 8,
+            "recurrence": 7,
+            "requires_human": False,
+            "sensitive": False,
+            "capability": "repo.read",
+        }
+    ]))
+    runtime = JarvisRuntime(provider)
+
+    priorities = runtime.propose("Teste l'hypothèse").priorities
+
+    assert priorities[0].test_first is True
+    assert "LOW_COST_TEST_FIRST" in priorities[0].reasons
+    assert priorities[0].score > 0
+
+
+def test_route_orders_actions_by_deterministic_trajectory_priority():
+    provider = FakeProvider(proposal_text(actions=[
+        {
+            "name": "risky",
+            "description": "Action locale mais coûteuse",
+            "impact": 8,
+            "risk": 8,
+            "reversibility": 2,
+            "leverage": 2,
+            "dependency": 2,
+            "uncertainty": 2,
+            "cost": 9,
+            "learning": 1,
+            "ownership": 0,
+            "recurrence": 0,
+            "requires_human": False,
+            "sensitive": False,
+            "capability": "repo.read",
+        },
+        {
+            "name": "safe",
+            "description": "Expérience réversible et utile",
+            "impact": 6,
+            "risk": 1,
+            "reversibility": 10,
+            "leverage": 9,
+            "dependency": 8,
+            "uncertainty": 8,
+            "cost": 2,
+            "learning": 9,
+            "ownership": 7,
+            "recurrence": 6,
+            "requires_human": False,
+            "sensitive": False,
+            "capability": "repo.read",
+        },
+    ]))
+    runtime = JarvisRuntime(provider)
+
+    _, decisions = runtime.route(runtime.propose("Priorise la meilleure trajectoire"))
+
+    assert [decision.action.name for decision in decisions] == ["safe", "risky"]
+    assert all(decision.action.contract_id is not None for decision in decisions)
+
+
 def test_route_never_executes_provider_and_governor_stays_in_control():
     provider = FakeProvider(proposal_text())
     runtime = JarvisRuntime(provider)
