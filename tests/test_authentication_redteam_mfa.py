@@ -69,8 +69,13 @@ def test_existing_mfa_cannot_be_replaced_with_password_only(tmp_path):
     )
     assert second.secret != first.secret
 
+    # Starting replacement creates only pending state; the old factor remains
+    # valid until the replacement is successfully confirmed.
+    token = auth.authenticate("user", PASSWORD, otp=_totp(first.secret, 1_000_080.0), now=1_000_080.0)
+    assert auth.validate_session(token, now=1_000_080.0).user_id == user_id
+
+    auth.confirm_totp_enrollment(user_id, _totp(second.secret, 1_000_110.0), now=1_000_110.0)
     with pytest.raises(AuthenticationError):
-        auth.authenticate("user", PASSWORD, otp=_totp(first.secret, 1_000_080.0), now=1_000_080.0)
-    auth.confirm_totp_enrollment(user_id, _totp(second.secret, 1_000_080.0), now=1_000_080.0)
-    token = auth.authenticate("user", PASSWORD, otp=_totp(second.secret, 1_000_110.0), now=1_000_110.0)
-    assert auth.validate_session(token, now=1_000_110.0).user_id == user_id
+        auth.authenticate("user", PASSWORD, otp=_totp(first.secret, 1_000_140.0), now=1_000_140.0)
+    token = auth.authenticate("user", PASSWORD, otp=_totp(second.secret, 1_000_140.0), now=1_000_140.0)
+    assert auth.validate_session(token, now=1_000_140.0).user_id == user_id
