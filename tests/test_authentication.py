@@ -102,6 +102,62 @@ def test_session_revocation_and_password_change_invalidate_sessions(tmp_path):
     assert auth.validate_session(token3).user_id == user_id
 
 
+def test_mfa_password_change_requires_second_factor(tmp_path):
+    auth = service(tmp_path)
+    user_id = auth.create_user("user", PASSWORD)
+    enrollment = auth.begin_totp_enrollment(user_id, PASSWORD, now=1_000_020.0)
+    auth.confirm_totp_enrollment(user_id, _totp(enrollment.secret, 1_000_020.0), now=1_000_020.0)
+    with pytest.raises(SecondFactorRequired):
+        auth.change_password(user_id, PASSWORD, "New secure password 2026!", client_key="ip:1", now=1_000_050.0)
+    assert auth.authenticate("user", PASSWORD, otp=_totp(enrollment.secret, 1_000_050.0), now=1_000_050.0)
+
+
+def test_mfa_password_change_accepts_totp_and_invalidates_sessions(tmp_path):
+    auth = service(tmp_path)
+    user_id = auth.create_user("user", PASSWORD)
+    enrollment = auth.begin_totp_enrollment(user_id, PASSWORD, now=1_000_020.0)
+    auth.confirm_totp_enrollment(user_id, _totp(enrollment.secret, 1_000_020.0), now=1_000_020.0)
+    token = auth.authenticate("user", PASSWORD, otp=_totp(enrollment.secret, 1_000_050.0), now=1_000_050.0)
+    new_password = "New secure password 2026!"
+    auth.change_password(user_id, PASSWORD, new_password, otp=_totp(enrollment.secret, 1_000_080.0), client_key="ip:1", now=1_000_080.0)
+    with pytest.raises(SessionInvalid):
+        auth.validate_session(token)
+    with pytest.raises(AuthenticationError):
+        auth.authenticate("user", PASSWORD, otp=_totp(enrollment.secret, 1_000_110.0), now=1_000_110.0)
+    replacement = auth.authenticate("user", new_password, otp=_totp(enrollment.secret, 1_000_110.0), now=1_000_110.0)
+    assert auth.validate_session(replacement).user_id == user_id
+
+
+def test_mfa_password_change_accepts_one_time_recovery_code(tmp_path):
+    auth = service(tmp_path)
+    user_id = auth.create_user("user", PASSWORD)
+    enrollment = auth.begin_totp_enrollment(user_id, PASSWORD, now=1_000_020.0)
+    codes = auth.confirm_totp_enrollment(user_id, _totp(enrollment.secret, 1_000_020.0), now=1_000_020.0)
+    new_password = "New secure password 2026!"
+    auth.change_password(user_id, PASSWORD, new_password, recovery_code=codes[0], now=1_000_050.0)
+    with pytest.raises(AuthenticationError):
+        auth.change_password(user_id, new_password, "Another secure password 2026!", recovery_code=codes[0], now=1_000_080.0)
+    token = auth.authenticate("user", new_password, otp=_totp(enrollment.secret, 1_000_080.0), now=1_000_080.0)
+    assert auth.validate_session(token).user_id == user_id
+
+
+def test_password_change_wrong_mfa_is_durably_rate_limited(tmp_path):
+    key = Fernet.generate_key()
+    db = tmp_path / "auth.db"
+    auth = AuthenticationService(db, master_key=key, now=lambda: 1_000_000.0)
+    user_id = auth.create_user("user", PASSWORD)
+    enrollment = auth.begin_totp_enrollment(user_id, PASSWORD, now=1_000_020.0)
+    auth.confirm_totp_enrollment(user_id, _totp(enrollment.secret, 1_000_020.0), now=1_000_020.0)
+    for _ in range(5):
+        with pytest.raises(AuthenticationError):
+            auth.change_password(user_id, PASSWORD, "New secure password 2026!", otp="000000", client_key="ip:1", now=1_000_050.0)
+    with pytest.raises(RateLimited):
+        auth.change_password(user_id, PASSWORD, "New secure password 2026!", otp=_totp(enrollment.secret, 1_000_050.0), client_key="ip:1", now=1_000_050.0)
+    restarted = AuthenticationService(db, master_key=key, now=lambda: 1_000_050.0)
+    with pytest.raises(RateLimited):
+        restarted.change_password(user_id, PASSWORD, "New secure password 2026!", otp=_totp(enrollment.secret, 1_000_050.0), client_key="ip:1", now=1_000_050.0)
+
+
 def test_rate_limit_is_durable_and_client_key_is_not_stored(tmp_path):
     auth = service(tmp_path)
     auth.create_user("user", PASSWORD)
