@@ -1,8 +1,9 @@
-"""Provider boundary for JARVIS reasoning.
+"""Model-provider boundary for AZAZEL reasoning.
 
 The provider proposes structured work; SINGULAR remains the authority that
 routes, governs and executes it. No provider object is allowed to execute a
-SINGULAR action directly.
+SINGULAR action directly. The historical module path is retained for
+compatibility; the public agent identity is AZAZEL.
 """
 from __future__ import annotations
 
@@ -25,21 +26,22 @@ class LLMResponse:
 
 
 class LLMProvider(Protocol):
-    """Minimal reasoning contract used by JARVIS."""
+    """Minimal reasoning contract used by AZAZEL."""
 
     def complete(self, *, system: str, user: str, max_tokens: int) -> LLMResponse:
         """Return model text; no execution authority is implied."""
 
 
 class LLMProviderError(RuntimeError):
-    """A provider could not produce a response."""
+    """A model provider could not produce a response."""
 
 
 class AnthropicProvider:
-    """Anthropic Claude adapter with secrets confined to the environment.
+    """Anthropic Claude adapter used as an implementation detail by AZAZEL.
 
-    The SDK is imported lazily so the governed core and all tests can run
-    without the optional provider package or an API key.
+    Claude is not a separate agent identity and has no governance or execution
+    authority. The SDK is imported lazily so the governed core and all tests can
+    run without the optional provider package or an API key.
     """
 
     def __init__(
@@ -53,7 +55,7 @@ class AnthropicProvider:
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         self._api_key = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY")
-        self.model = model or os.environ.get("JARVIS_LLM_MODEL", "claude-opus-5")
+        self.model = model or os.environ.get("AZAZEL_LLM_MODEL", os.environ.get("JARVIS_LLM_MODEL", "claude-opus-5"))
         self.timeout = timeout
         self._client = client
 
