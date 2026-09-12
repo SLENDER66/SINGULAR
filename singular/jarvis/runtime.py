@@ -63,8 +63,10 @@ Schéma exact :
 }
 
 Tous les scores sont entre 0 et 10. Une action sensible ou nécessitant un
-jugement humain doit être marquée comme telle. Ne mets jamais de code
-exécutable, de clé, de secret ou de commande shell dans capability.
+jugement humain doit être marquée comme telle. Le champ capability est une
+proposition non autoritative et sera ignoré par le runtime pour empêcher le
+modèle de sélectionner une permission. Ne mets jamais de code exécutable, de
+clé, de secret ou de commande shell dans capability.
 """
 
 
@@ -179,7 +181,9 @@ class JarvisRuntime:
 
         Trajectory priority changes ordering only. Every action still crosses
         DurableMissionRuntime, which owns governance, approvals, audit and
-        replay protection. No LLM output can grant execution authority.
+        replay protection. In particular, the LLM-provided ``capability`` field
+        is never copied into ActionRequest: permissions must come from trusted
+        SINGULAR composition, never from model output.
         """
         contract = self.missions.create_mission(
             proposal.objective,
@@ -200,7 +204,7 @@ class JarvisRuntime:
                     requires_human=action.requires_human,
                     sensitive=action.sensitive,
                     contract_id=contract.mission_id,
-                    capability=action.capability,
+                    capability=None,
                 ),
                 contract.mission_id,
             )
