@@ -1,5 +1,823 @@
 # Changelog
 
+## 3.30.0 — Deux chiffres justes qui se lisaient faux, et l'export décalé
+
+- **`review`** : « 16h encore sans verdict (5 ouvertes, 5 en retard) ». Les
+  décisions en retard sont un sous-ensemble des ouvertes ; cinq et cinq font
+  cinq. Les deux chiffres étaient exacts, c'est leur juxtaposition qui mentait.
+  Un mot suffit — « dont » — et la ligne se tait sur le retard quand il n'y en
+  a pas.
+- **`review`** encore : le tableau par rang portait six colonnes de données sous
+  cinq en-têtes. Le pourcentage de fin de ligne s'appelle « réussite ».
+- **`export`** : l'en-tête du journal vide était recopiée à la main et avait
+  deux colonnes de retard, `expected_gain_eur` et `reversibility`. Une feuille
+  de calcul montée sur un export vide décalait ses colonnes au suivant. Les
+  colonnes se lisent maintenant sur `DecisionJournal.EXPORT_COLUMNS`.
+- **`export`** encore, invisible d'ici : le module csv écrit `\r\n` et la sortie
+  standard de Windows retraduit le `\n`, ce qui donne `\r\r\n` et une ligne
+  blanche entre chaque décision dans le tableur.
+- **Une seule porte écrit dans le journal.** Rien ne l'obligeait : une ligne
+  écrite à la main dans la base romprait la chaîne pour toujours. Le dépôt était
+  propre ; c'est justement pourquoi le garde-fou s'écrit maintenant, cette faute
+  ne se corrigeant pas après coup.
+
+## 3.29.0 — Deux CV, deux listes
+
+Le suivi de candidatures portait une seule liste d'étapes, et l'une d'elles
+disait « retirer toute mention d'alternance tant qu'aucune école n'est
+trouvée ». Personne dans le dépôt ne montrait qu'il l'avait dite, et elle
+contredisait sa réponse du même jour sur les offres : postes et alternances,
+sans hiérarchie. Il a tranché en questionnaire : deux CV.
+
+- Deux listes complètes, pas une liste commune plus deux variantes. Ce sont deux
+  documents : relire à voix haute le CV « poste » ne relit pas l'autre.
+- L'action du jour ne trie pas les deux. Même étape, elle se dit une fois ;
+  étapes différentes, les deux sont nommées. Un ordre arbitraire aurait
+  contredit « sans hiérarchie » en silence chaque matin.
+- `ETAPES_CV` porte enfin sa provenance, comme `PROFIL`. Ce sont des conseils
+  sur sa vie au même titre : ils s'affichent chaque matin et partent dans le
+  bloc collé à Claude, où une étape non marquée voyage comme un fait acquis —
+  le mécanisme exact qui a produit un CV faux.
+- La migration ne perd rien : un fichier d'avant devient la liste « poste »,
+  cases comprises, et la liste « alternance » démarre à zéro.
+- `test_docs_sans_compte_perissable.py` comptait `len(ETAPES_CV)` et annonçait
+  donc « le CV compte 2 étapes » — le nombre de CV. Un garde-fou qui compte la
+  mauvaise chose accuse le document au lieu de lui-même.
+
+## 3.28.0 — La dernière porte parlait encore anglais
+
+Le corps JSON d'une panne imprévue portait `f"{type(exc).__name__}: {exc}"`, et
+donnait sur son écran `OperationalError: database is locked`. Le cas se produit
+sans rien faire d'anormal : le Sage sert le téléphone pendant qu'une commande
+écrit dans une fenêtre du PC. SQLite attend dix secondes — le délai est bien
+celui-là, mesuré — puis rend la main.
+
+- Le téléphone reçoit une phrase ; la seule panne courante qu'il peut lui-même
+  résoudre est nommée. Le détail technique change de destinataire : il s'affiche
+  dans la fenêtre du PC, sans quoi la seule chose à me rapporter serait « ça a
+  cassé ».
+- Le même défaut a été corrigé à quatre portes en une semaine — la saisie du
+  téléphone, le clavier, les refus d'écriture, les pannes imprévues. Un balayage
+  refuse désormais un message où l'anglais de la bibliothèque affleure, sur tout
+  ce qui écrit dans le journal. Les marqueurs ne sont pas devinés : ils sont
+  faits de ce qu'on a vu passer sur son écran.
+- `add()` n'avait aucun test de course, alors que c'est lui qui construit la
+  chaîne d'intégrité. Six processus réels, une barrière par fichier, puis
+  `verify()` et un contrôle maillon par maillon. Le code tenait déjà ; rien ne
+  le prouvait.
+
+## 3.27.0 — Trois pannes ordinaires déroulaient une pile Python
+
+Il débute en code. Une pile d'appels ne se distingue pas d'une application
+cassée, et le geste dangereux — supprimer le fichier — est justement celui
+qu'on est tenté de faire quand on ne comprend pas.
+
+- **Le port déjà pris.** `A_FAIRE.md` demande de lancer le Sage chaque matin ;
+  une fenêtre laissée ouverte la veille tient encore le port. La réponse tient
+  en une phrase : il tourne déjà, ouvre l'adresse. Un test lit le parseur pour
+  vérifier que l'option conseillée existe.
+- **Un fichier qui n'est pas une base.** Le message dit le chemin, et dit
+  surtout de ne pas supprimer le fichier.
+- **`due` ne disait pas où il avait regardé** — la commande de chaque matin.
+  Sur un chemin mal tapé elle répondait « Rien à trancher ». `list` et `review`
+  le disaient depuis la 3.19.0 ; personne n'avait regardé la troisième. Le
+  garde-fou classe désormais chaque sous-commande, et une nouvelle commande non
+  classée fait échouer le test.
+
+## 3.26.0 — Le mode d'emploi donnait les commandes d'une autre machine
+
+Il est sur Windows, en PowerShell. `USAGE.md` ouvrait sur
+`cd ~/SINGULAR && python -m pip install -e ".[dev]"`, que la version de
+PowerShell installée par défaut refuse : erreur de syntaxe, avant d'avoir rien
+fait. Et la section « Le mettre devant tes yeux » — celle dont tout le propos
+est qu'un journal qu'on doit penser à ouvrir finit par ne plus s'ouvrir —
+demandait un `alias` dans `~/.bashrc`.
+
+- Le profil PowerShell, une `function` avec `@args` (un alias PowerShell ne
+  peut pas porter d'arguments), `2>$null`.
+- Deux documents portent la commande de clonage pour l'iPhone et un seul était
+  vérifié : `USAGE.md` faisait cloner une troisième branche tout en promettant
+  que c'était celle du mandat.
+- Les blocs destinés à a-Shell sur l'iPhone portent l'étiquette ```sh, seule
+  exemption, et un témoin vérifie qu'il en reste au moins un.
+
+## 3.25.0 — Le chemin le plus rapide était le seul sans vérification
+
+`sj apply` est ce qu'il tape le plus — il cherche un poste. C'était la seule
+écriture de décision qui ne vérifiait rien, et `sj add --title ...` non plus :
+seule la branche interactive de `add` validait. La règle était écrite sur
+quatre surfaces, donc deux pouvaient l'oublier.
+
+- `singular.saisie.verifie_decision` est la porte unique ; le serveur, les deux
+  branches de `add` et `apply` la traversent.
+- Le garde-fou lit l'arbre syntaxique de `singular/`, trouve chaque
+  `journal.add(...)` et exige que la fonction qui le contient appelle la porte.
+
+## 3.24.0 — Le Sage parle dès qu'un écart est prouvé
+
+Il se taisait sur ce qu'il pouvait démontrer. « Conclusif » voulait dire
+« démontré **et** d'au moins quinze points », donc deux cents verdicts annoncés
+à 60 % dont la moitié arrivent — dix points d'écart, que le hasard seul
+produirait une fois sur deux cents — n'affichaient rien. Dans l'outil construit
+exactement pour répondre à « est-ce que mes 70 % arrivent sept fois sur dix ? ».
+
+Où placer ce plancher n'appartient pas au code : c'est une question sur ce qui
+vaut la peine d'être corrigé, pas sur ce qui est établi. Elle a été posée en
+questionnaire, avec le cas mesuré et les quatre réponses possibles. Réponse :
+dès que c'est prouvé.
+
+- `conclusive` ne demande plus que la preuve. `CALIBRATION_GAP` garde son autre
+  emploi — montrer un écart voyant en disant qu'il n'est pas encore établi — et
+  la correction de la 3.10.0, qui refusait de conclure sur trois verdicts à
+  75 %, tient toujours.
+- Le seul plancher restant est un plancher d'arrondi : sous un demi-point, la
+  phrase dirait « tu te surestimes de +0% ».
+- Le port Swift portait la même condition et l'applique pareil, sinon un écart
+  prouvé de dix points parlerait sur le PC et se tairait sur le téléphone. Un
+  vecteur porte le cas : seize paris à 95 %, trois perdus, quatorze points
+  prouvés.
+
+## 3.23.0 — Le clavier et le serveur refusaient encore en anglais
+
+Trancher deux fois la même décision est banal : un double appui, deux onglets,
+la ligne de commande après l'app. Le journal refuse — l'histoire ne se réécrit
+pas — et ce refus arrivait sur l'écran :
+
+    DEC-24bfbaeb was already resolved as HAPPENED; history is not editable
+
+L'app avait sa traduction, écrite chez elle. Le clavier n'avait rien. Le serveur
+renvoyait `str(exc)` dans le corps JSON, et seul le remplacement côté navigateur
+sauvait l'affichage. C'est le défaut de la 3.20.0 à une autre porte.
+
+Un identifiant inconnu, lui, s'affichait `'DEC-inconnu'`, guillemets compris :
+le `repr` d'une clé absente.
+
+- `singular/saisie.py` porte `CONFLIT` et `introuvable()`. Le clavier et le
+  serveur les lisent ; l'app garde sa copie — elle doit pouvoir refuser hors
+  connexion — et un test vérifie qu'elle cite la phrase mot pour mot.
+
+## 3.22.0 — Une docstring décrivait une règle disparue
+
+`_calibration_item` expliquait que sa règle se lisait « en dessous de
+`CALIBRATION_CERTAIN` verdicts ». La constante n'existait plus. Rien ne casse,
+aucun test ne rougit, et la prochaine session lit une explication fausse écrite
+avec autorité, puis corrige le code pour le faire correspondre à la phrase.
+
+- `tests/test_docstrings_sans_citation_morte.py` relit toutes les docstrings de
+  `singular/` et `tools/` et refuse un nom en majuscules cité entre accents
+  graves qui n'existe pas dans son fichier. Il y en avait exactement un.
+
+## 3.21.0 — Un reproche qui ne s'éteignait jamais
+
+Trouvé en jouant quinze mois d'usage. « 120 h engagées sans gain attendu »
+comptait toute la vie du journal, qui est append-only : aucun geste ne peut
+faire baisser ce nombre. Chiffrer chaque décision pendant plus d'un an laissait
+la même phrase tous les matins, au-dessus du même conseil sur le prochain
+enregistrement. Un reproche prématuré fait douter d'un rapport ; un reproche
+éternel le fait fermer.
+
+- Le constat porte sur les dix dernières décisions enregistrées — l'habitude en
+  cours. Il compte toujours des heures et non des lignes.
+- En le corrigeant, une contradiction ancienne apparaît : les vecteurs de parité
+  exigeaient depuis toujours deux observations que le Swift ne produit pas. Le
+  fichier de test qui déclare cet écart le disait lui-même, dans son propre
+  message d'erreur. `build_vectors` refuse désormais d'écrire un tel vecteur.
+- `_candidates` nomme chaque observation par la fonction qui l'écrit, ce qui
+  donne enfin au test de parité et au générateur un moyen de savoir quelle
+  fonction a produit une phrase.
+
+## 3.20.1 — La ligne des retards rougissait sur son propre seuil
+
+`python -m singular due` teintait une échéance en rouge au-delà de sept jours,
+écrits en toutes lettres dans la commande, pendant que le rapport escalade en
+CRITIQUE au-delà de `LATE_DAYS`. Quatrième fois que la même règle est écrite à
+deux endroits, donc le test est écrit à la place du prochain lecteur : il
+déplace `LATE_DAYS` et exige que le rouge suive.
+
+## 3.20.0 — Le téléphone parlait anglais quand il refusait
+
+Les règles de saisie sont celles du journal, et il lève en anglais — c'est son
+contrat de bibliothèque, testé comme tel. Mais ce message remontait jusqu'à
+l'écran.
+
+Chaque surface s'était mise à valider de son côté : le clavier en français, le
+formulaire par des attributs HTML, **le serveur pas du tout**. Trois écritures
+de la même règle, et c'est celle qui ne validait pas qui parlait.
+
+Le champ du gain est en texte libre, exprès — « vide » doit rester possible,
+parce que « non chiffré » et « ne rapporte rien » ne sont pas la même chose. Il
+n'a donc aucune borne dans le formulaire, et taper `-100` en pensant à un coût
+rendait, sur son téléphone :
+
+    expected_gain_eur cannot be negative: a cost is not a gain
+
+- `singular/saisie.py` est le seul endroit où la règle est dite en français.
+  Le clavier et le serveur la lisent au lieu de la réécrire.
+- `test_saisie_au_clavier.py` vérifie que les **trois** surfaces acceptent
+  exactement ce que le journal accepte, et qu'aucun message de la bibliothèque
+  n'arrive tel quel sur son écran. Un quatrième test tient les bornes du
+  formulaire HTML.
+- Ma première version lisait `1` comme « 1 % ». C'est faux — `1` veut dire la
+  certitude — et elle aurait conseillé « pour 100 %, écris 1 », un conseil que
+  la règle suivante refuse.
+- `test_windows_console.py` scanne le nouveau fichier : les messages passent
+  par sa console, la liste devait suivre les messages.
+
+## 3.19.0 — L'app ne disait pas où elle avait regardé
+
+« Le journal est vide. » Un journal vide et un mauvais journal donnent
+exactement le même écran — et deux fichiers existent, le PC et le téléphone,
+qui ne se parlent pas. Ouvrir l'app après avoir changé de branche, de dossier
+ou de machine peut donc afficher un journal neuf alors que le sien est intact
+ailleurs.
+
+La ligne de commande le disait déjà : `_vide()` affiche le chemin, et sa
+docstring explique précisément pourquoi. L'app, celle qu'il ouvre le matin et
+celle qui a le plus de chances de pointer ailleurs, ne le disait pas.
+`A_FAIRE.md` l'affirmait pourtant pour les deux.
+
+- La carte « journal vide » porte maintenant « Cherché ici : … ».
+- Le chemin est posé **en dehors** de `items` et de `report`, qui sont
+  exactement ce que `contexte_pour_analyse` recopie : il contient son nom
+  d'utilisateur Windows, il s'affiche chez lui, il ne part pas. Un test le
+  vérifie dans les deux sens — affiché, et absent de ce qui sort.
+
+## 3.18.0 — Profil relu avec lui : la roue est hygroscopique
+
+Le test garantit qu'une ligne **porte** une provenance ; il ne peut pas
+garantir qu'elle dit vrai. Les quinze lignes étaient marquées « dit par lui »
+et rien dans le dépôt ne permettait de le vérifier — les conversations
+d'origine n'y sont pas.
+
+Alors on les lui a montrées, une par une. Une seule correction :
+
+> la roue est **hygroscopique**, pas enthalpique.
+
+C'est son métier et c'est son mot. Les deux existent et ce ne sont pas les
+mêmes ; une session qui trouverait « enthalpique » plus courant se tromperait,
+et la correction est donc écrite là où elle se relit, des deux côtés.
+
+Le reste — deux ans de bureau d'études, cinq ans d'Armée, chambres froides
+positif et négatif, CTA de 600 à 50 000 m³/h, bureau d'études et pas
+entretien, BTS FED, au chômage, ni école ni entreprise, débutant en code — il
+l'a confirmé ligne par ligne.
+
+Et, à la question posée : **les deux genres d'offre, sans hiérarchie.** Le
+profil disait « poste visé », qui rangeait l'alternance en second ; deux jours
+plus tôt il disait « il ne cherche pas d'alternance », ce qu'il n'avait jamais
+dit. Troisième formulation de la même ligne, et la première qui vient de lui.
+L'agent couvre maintenant les deux sans en mettre un devant l'autre — c'est lui
+qui trie, et une liste qui a déjà choisi à sa place lui cache la moitié du
+marché.
+
+- `test_offres.py` tient « hygroscopique » comme un fait que les deux profils
+  doivent porter pareil : une correction faite d'un seul côté échoue.
+
+## 3.17.0 — Le profil qui part vers un service distant n'avait aucune provenance
+
+`proto/suivi_candidatures.py` marque chaque ligne de son profil `DIT` ou
+`DEDUIT` depuis que deux déductions non demandées lui ont coûté un CV faux et
+un marché écarté. Un test y refuse une ligne sans provenance.
+
+`singular/offres.py` décrit la même vie, plus récemment, et **l'envoie à un
+service distant**. Il n'avait ni marque ni test. Son commentaire promettait
+« rien ici n'est déduit » — une promesse, pas une garantie, et elle était
+fausse.
+
+Ce qui s'y était glissé, sur la même ligne, en deux jours :
+
+1. « il ne cherche pas d'alternance », alors qu'il a dit qu'une reprise
+   d'études l'intéressait. Corrigé avant-hier.
+2. puis, dans la correction elle-même, **« une offre d'alternance ne se retient
+   que si elle dit prendre en charge la recherche d'école »** — une règle de
+   filtrage inventée, posée au milieu de ce qu'il aurait dit. Elle écartait des
+   annonces que personne n'avait demandé d'écarter. C'est la faute déjà payée,
+   refaite dans le geste qui la corrigeait.
+
+- `CRITERES` porte les mêmes marques que `PROFIL`, et une déduction voyage
+  désormais sous son étiquette : « Ceci n'est pas vérifié, ne t'appuie pas
+  dessus », **et seulement là**.
+- Un test refuse une consigne de filtrage dans le profil : un profil dit qui il
+  est, pas ce qu'il faut écarter. Une consigne ressemble à un fait quand on la
+  pose au milieu d'une liste de faits.
+- Un test refuse que les deux profils du dépôt se contredisent : une correction
+  faite à un seul endroit laisse la contradiction ailleurs, et c'est celle qui
+  part qui compte.
+- Ma première version du test d'étiquette se contentait de trouver la déduction
+  quelque part. Une déduction posée dans le corps **et** répétée sous
+  l'étiquette passait — alors que l'agent l'aurait lue comme un fait avant
+  d'arriver à l'avertissement.
+
+## 3.16.0 — Voir ce qui part, pour les trois facultés
+
+Trois facultés font sortir quelque chose de sa machine. Deux affichaient ce
+qui partirait, une non — et les deux qui l'affichaient en montraient moins que
+ce qui partait.
+
+**La conversation n'avait aucun aperçu.** C'est pourtant elle qui envoie le
+plus — le rapport du jour **et** tout le fil des tours précédents — et elle
+part de son téléphone. « Il a le droit de relire ce qui est dit de lui avant
+que ça parte » est la règle qu'on s'était donnée pour le bouton de recherche ;
+elle ne valait pas pour la seule faculté où elle comptait le plus.
+
+**`analyse` et `offres` cachaient l'instruction système.** Leur `--blanc`
+promettait « exactement ce qui quittera la machine » et montrait le contexte
+seul. L'instruction part aussi : elle le nomme, elle cite sa constitution, et
+pour la recherche elle porte la garantie qui compte — « tu ne postules jamais ».
+
+- `parle --blanc`, et un bloc dépliable sous le bouton 💬 comme sous le 🔎.
+- Les trois aperçus comprennent maintenant l'instruction.
+- `test_ce_qui_part.py` capture ce que le client reçoit réellement et exige que
+  l'aperçu le couvre **dans les deux sens** : un aperçu qui montre moins
+  rassure sur ce qu'il cache, un aperçu qui montre plus fait croire à une fuite
+  qui n'existe pas — et la fois d'après on ne le lit plus.
+- Mesure au passage, pour la rassurer : ce qui part reste la Notice et les
+  agrégats, jamais la base. Pas d'empreintes de chaîne, pas de score par
+  décision. Un test le tient.
+
+## 3.15.0 — Un fichier d'état ne peut plus exister à moitié
+
+Trois fichiers portent quelque chose qu'il ne peut pas reconstituer : son fil
+de conversation, sa clé d'accès, et ses candidatures. Les trois étaient écrits
+par un `write_text`, qui tronque le fichier puis écrit dedans. **Entre les
+deux, il n'y a rien.**
+
+Reproduit sur le suivi de candidatures : 1266 octets sains, 635 après une
+coupure au milieu de l'écriture — Ctrl+C, un portable qu'on referme — et
+l'outil refuse alors de démarrer sur `Unterminated string starting at:
+line 27`. Une erreur de parseur JSON, à quelqu'un qui débute en code. Son
+historique n'est pas perdu au sens strict ; il est illisible, ce qui revient au
+même.
+
+`Quota` faisait déjà l'écriture en deux temps, exactement pour cette raison.
+C'était donc la troisième fois que le même oubli se payait : la règle a un
+domicile, et `test_ecriture_atomique.py` échoue à la place du prochain lecteur.
+
+- `singular/fichiers.py` écrit à côté, ferme, puis remplace. `os.replace` est
+  atomique sur Windows comme sur Unix : une coupure laisse soit l'ancien
+  fichier intact, soit le nouveau complet, jamais un mélange.
+- Le provisoire est nettoyé même sur `KeyboardInterrupt` — c'est précisément
+  l'interruption dont ce module protège, et un provisoire abandonné bloquerait
+  l'écriture suivante.
+- **La clé d'accès était écrite en clair, puis resserrée à 0600.** Entre les
+  deux, le secret était lisible par tout le monde. Les droits se posent
+  maintenant à la création du fichier, avant qu'il contienne quoi que ce soit.
+- Le prototype de suivi garde sa propre copie de six lignes, par `pathlib` :
+  ajouter `os` à ses imports élargirait la promesse « ce script ne contacte
+  aucun serveur » que garde `test_proto_suivi.py`, pour un gain nul.
+- Le détecteur du test ne cherche que `write_text` et `open(..., "w")`. Ma
+  première version attrapait aussi `wfile.write` — la socket HTTP du Sage — et
+  un test qui crie au loup finit désactivé.
+
+## 3.14.0 — Deux dépenses en même temps s'écrasaient l'une l'autre
+
+Le serveur du Sage répond au téléphone ; la ligne de commande sert au clavier.
+Les deux écrivent le même fichier de compteur, et lisaient toutes deux le total
+avant d'écrire chacune le sien.
+
+Mesuré, pas supposé — huit processus, quarante dépenses :
+
+    9 ont planté (FileNotFoundError)
+    22 enregistrées sur 40  ->  18 perdues
+
+Le fichier provisoire portait un nom fixe : deux écrivains s'en disputaient un
+seul, et le second ne le retrouvait plus. Sur le téléphone, ça se serait vu
+comme une panne de l'app — après une réponse déjà payée.
+
+Et ce qui est perdu coûte deux fois : le compte sous-estime la dépense, donc la
+garde qui refuse sur crédit épuisé refuse trop tard, et le plafond de soixante
+réponses par jour pouvait être dépassé pareillement. C'est la faute déjà payée
+sur le journal — deux verdicts simultanés acceptés — transposée à son argent.
+
+- Le fichier provisoire porte le numéro du processus : plus de collision.
+- Un fichier verrou sérialise lire-puis-écrire. Un fichier plutôt que `fcntl`
+  ou `msvcrt` : il est sur Windows, et une garde qui ne marche que sur la
+  machine du développeur n'est pas une garde. Un verrou abandonné plus de cinq
+  secondes est repris — un processus tué en le tenant condamnerait l'outil.
+- Après correction, la même sonde : 40 sur 40, zéro plantage.
+- La première version du test de concurrence **passait sans le verrou** : des
+  processus lancés par `spawn` mettent si longtemps à démarrer qu'ils ne se
+  rencontrent jamais. Il ne prouvait rien. Refait avec des fils et une
+  barrière, il tombe quand on retire le verrou.
+- La garde « aucun prix écrit dans ce dépôt » refusait `5.0 secondes` comme un
+  tarif. Elle avait raison sur le fond et tort sur la forme : une garde qui
+  crie au loup finit désactivée. Les nombres à virgule qui ne sont pas des prix
+  se déclarent maintenant, avec ce qu'ils mesurent, et un témoin refuse une
+  déclaration dont le nom a disparu.
+
+## 3.13.0 — Le budget cessait de compter dès qu'on se servait de l'outil
+
+Trois trous dans la seule chose qui protège ses cinq dollars.
+
+**Le gabarit de tarifs ne nommait qu'un modèle.** La conversation tourne sur
+Sonnet ; l'analyse et la recherche d'offres tournent sur Opus. Une seule
+recherche mettait donc dans le compte un modèle sans tarif — et `cout_usd`
+refuse de répondre dès qu'il en manque un. L'affichage en dollars disparaissait
+pour de bon, remplacé par « écris tes tarifs dans… », ce qu'il avait déjà fait.
+
+**Et la garde du crédit s'éteignait avec.** Elle lit `restant_usd`, qui vaut
+`None` dans ce cas : la route qui refuse une dépense sur crédit épuisé ne se
+déclenchait plus du tout. Une garde qui s'éteint quand on se sert de l'outil
+est pire que pas de garde — et c'est le branchement du bouton 🔎, la veille,
+qui a rendu le cas atteignable en un geste.
+
+**`python -m singular analyse` dépensait sans rien enregistrer.** Même cause
+que pour la recherche l'avant-veille : la fonction ne rendait pas son coût,
+donc l'appelant ne pouvait pas l'écrire. Le solde affiché sur le téléphone
+était faux de tout ce qui avait été analysé au clavier.
+
+- Le gabarit est généré depuis les modèles réels. `test_parle_budget.py` refuse
+  qu'une faculté dépense sur un modèle qui n'y figure pas : une quatrième
+  faculté échouera au test au lieu d'aveugler le budget en silence.
+- La garde compte sur `restant_au_mieux_usd` — ce qui reste en ignorant ce
+  qu'on ne sait pas chiffrer. Il surestime, donc il refuse tard, jamais trop
+  tôt : si même en oubliant une dépense le crédit est fini, il est fini.
+- Quand un modèle manque, la phrase le **nomme** au lieu de renvoyer écrire des
+  tarifs déjà écrits, et donne ce qui reste au plus.
+- `analyser()` rend son coût comme ses deux jumelles, et le CLI l'enregistre.
+- `_consommation` remonte dans `analyse`, que les trois facultés importent déjà.
+  Il vivait dans `parle`, ce qui forçait `offres` à emprunter un nom privé au
+  module voisin et interdisait à `analyse` de s'en servir — donc `analyse` ne
+  comptait rien. Le cercle d'imports est cassé au passage.
+
+## 3.12.0 — Taper « 75 » ne fait plus perdre tout ce qu'on vient d'écrire
+
+`python -m singular add` pose huit questions. Deux fautes de saisie s'y payaient
+cher, et aucune n'était de sa faute.
+
+Taper **75** en pensant pourcents passait les six questions suivantes, puis
+échouait à l'écriture sur `probability must be strictly between 0 and 1` — en
+anglais, et surtout **après coup** : tout ce qui venait d'être saisi était
+perdu, et un outil censé prendre trente secondes en redemandait autant.
+
+Taper **0,75**, avec la virgule décimale d'un clavier français, rendait
+`could not convert string to float: '0,75'`. Une saisie qui n'avait rien de
+fautif, refusée par un message de machine.
+
+- Les trois questions numériques valident sur place, dans sa langue, et disent
+  quoi écrire : « entre 0.05 et 0.95, pas en pourcents - pour 75 %, ecris
+  0.75 ». `_ask` reboucle : il corrige un chiffre, pas huit.
+- La virgule et les espaces se lisent partout de la même façon — « 1 500 »
+  vaut 1500. La question du gain avait son propre nettoyage ; elle passe
+  maintenant par le même.
+- `test_saisie_au_clavier.py` vérifie que ce qu'une question accepte est
+  exactement ce que `DecisionJournal.add` accepte. Deux écritures de la même
+  règle finissent par diverger, et celle qui se tromperait ferait perdre la
+  saisie à la question suivante.
+- Aucun message neuf ne contient de caractère que sa console Windows ne sait
+  pas afficher : `test_windows_console.py` a attrapé un tiret cadratin et une
+  espace fine insécable au passage, et il avait raison.
+
+## 3.11.0 — Une règle, un domicile : les vignettes cessent de contredire les phrases
+
+La correction de la calibration avait laissé quatre copies vivantes. La
+vignette dorée du rapport gardait « écart ≥ 15 % et 3 verdicts » et s'allumait
+donc en alerte pendant que la phrase, juste en dessous, expliquait qu'il était
+trop tôt pour conclure. Deux réponses contradictoires à la même question, sur
+le même écran — dans l'app web et dans le port iOS.
+
+Et `python -m singular review`, que personne ne regardait parce qu'il est au
+clavier, tenait la pire version : **son propre seuil de 5 %, sans minimum de
+verdicts**. Après le tout premier verdict, il imprimait en rouge
+« surconfiance de +75 % - tu crois plus que ce qui arrive ». Sur un pari.
+
+C'est la troisième fois que le même défaut se produit — une phrase corrigée,
+sa vignette qui garde l'ancienne condition — donc la règle n'a plus qu'un
+domicile et `tests/test_une_seule_regle_par_phrase.py` échoue si une interface
+la refait.
+
+- `calibration_verdict()` calcule l'écart, la rareté et la conclusion une fois.
+  La Notice le rend avec le rapport ; les trois interfaces lisent `conclusive`.
+- La même garde manquait sur la ligne des heures de `review` : elle passait au
+  rouge dès la première décision, alors que son échéance était dans deux
+  semaines. C'est le défaut déjà payé, à un quatrième endroit.
+- Un test du dépôt figeait ce défaut : il exigeait que `review` imprime
+  « surconfiance » après un seul verdict. Il exige maintenant l'inverse, et un
+  second cas vérifie que le rouge revient quand il est mérité.
+- `is_due` est exposé sur chaque décision ouverte. « Échue » et « en retard »
+  ne sont pas la même chose : le jour dit, le retard vaut zéro jour, et la
+  ligne restait grise pendant que le rapport la mettait en tête. Elle affiche
+  maintenant « aujourd'hui ».
+
+## 3.10.1 — Le rapport ne parle plus au nom d'un document qui se tait
+
+« C'est la définition que ta constitution donne de confondre activité et
+résultat. » Elle n'en donne aucune : `constitution.md` nomme le piège dans sa
+mission — « sans confondre activité et résultat » — et s'arrête là. Le seuil,
+lui, est un choix de ce rapport.
+
+Ce n'est pas un détail de ton. Un outil qui invoque un document que son auteur
+a écrit lui-même, pour lui prêter une règle qu'il ne contient pas, rend cette
+règle inattaquable : on ne discute pas sa propre constitution. C'est la règle
+de provenance du dépôt, appliquée aux phrases plutôt qu'aux données.
+
+- L'observation dit désormais d'où vient la mesure, et que c'est la sienne.
+- Les deux autres phrases qui parlent au nom du document — la hiérarchie et le
+  « juger sur son levier et son coût » — sont exactes ; un test les relie
+  maintenant au texte de `constitution.md` et refuse toute attribution neuve.
+- Le port Swift porte la même phrase, et les vecteurs la figent.
+
+## 3.10.0 — La calibration ne conclut plus avant d'en avoir le droit
+
+C'est la question pour laquelle ce journal existe : « est-ce que mes 70 %
+arrivent 7 fois sur 10 ? » Elle était mal répondue.
+
+Dès trois verdicts, la Notice affirmait « sur 3 verdicts, ce n'est plus de la
+malchance » et enchaînait sur « baisse tes probabilités d'autant ». Sur trois
+paris à 75 %, n'en gagner qu'un arrive **une fois sur six** par pur hasard.
+L'outil conseillait donc de corriger un jugement que rien ne montrait faux — et
+corriger un jugement juste, c'est le dérégler.
+
+- La Notice calcule maintenant, exactement, à quelle fréquence des probabilités
+  justes produiraient un écart au moins aussi grand, et affiche le nombre :
+  « une fois sur 6 », « une fois sur 117 ». En dessous d'une fois sur vingt elle
+  conclut ; au-dessus elle montre l'écart et dit de ne pas le corriger.
+- Le calcul est exact, pas approché par la moyenne des probabilités. Deux paris
+  à 5 % et un à 95 %, tous perdus : c'est le pari sûr qui parle, et une moyenne
+  à 35 % l'effacerait. Une fois sur 21 — le Sage le dit ; avec la moyenne il se
+  serait tu.
+- Il reste déterministe : de l'arithmétique sur des flottants, sans réseau,
+  sans modèle, dans le même ordre des deux côtés du portage.
+- Un seuil plat aurait été faux dans les deux sens : trois verdicts à 75 % ne
+  prouvent rien, mais quatre paris à 90 % tous perdus valent une chance sur dix
+  mille et méritent d'être dits. C'est l'écart **et** le nombre.
+- Le port Swift porte le même calcul. Deux vecteurs de parité neufs le tiennent,
+  un de chaque côté du seuil ; le cas d'arrondi a été refait pour qu'il continue
+  de séparer les deux formules de `Numbers.round`.
+- `review()` expose `resolved_probabilities` : la moyenne seule ne permettait
+  pas de répondre.
+
+## 3.9.1 — La leçon est la sienne, ou rien
+
+Le journal écrivait dans le champ « leçon », quand Thomas n'en donnait pas :
+
+    Forecast DEC-138fee1a was incorrect: predicted 0.75, observed 0.
+
+Une phrase de machine, en anglais, dans un outil français, dans le champ prévu
+pour ce que *lui* a compris — et gravée pour de bon, puisqu'une entrée tranchée
+ne se réécrit plus. L'app lui offre pourtant un champ pour l'écrire : le
+laisser vide faisait écrire la machine à sa place.
+
+Elle n'apprenait rien : la probabilité, le statut et le score de Brier sont
+déjà dans l'entrée, et cette phrase ne fait que les redire. Elle coûtait, en
+revanche, la seule chose qui compte — on ne distinguait plus « il n'a rien
+noté » de « il a noté ceci ». C'est la règle de provenance du dépôt, celle qui
+lui a déjà coûté un CV faux et un marché écarté, appliquée cette fois à ce que
+l'outil écrit sur lui.
+
+- `resolve()` enregistre sa phrase, ou rien. `abandon()` garde la raison qu'il
+  donne, qui est déjà la sienne.
+- Le port Swift faisait déjà juste — `lesson.isEmpty ? nil : lesson`. C'est le
+  moteur de référence qui divergeait, et rien ne le disait : les vecteurs de
+  parité couvrent la Notice, pas les champs que le journal écrit.
+- La chaîne n'est pas touchée : la leçon n'entre pas dans l'empreinte.
+
+## 3.9.0 — L'échéance tombe le jour dit, pas le lendemain
+
+Le seul geste que cet outil réclame à son auteur est de rendre son verdict à
+l'échéance. Il le réclamait un jour trop tard, systématiquement.
+
+`due_at` vaut `created_at + horizon_days`, donc il porte l'heure de l'écriture.
+Comparé comme un instant, un horizon de 14 jours pris un soir à 20 h n'échoit
+qu'à 20 h le quatorzième jour. Thomas écrit ses décisions le soir et ouvre son
+rapport le matin : le matin du jour dit, le rapport se contentait d'un INFO
+« la prochaine échéance tombe aujourd'hui », noyé dans la liste. La carte
+« À trancher aujourd'hui » n'arrivait en tête que le lendemain.
+
+Deux documents promettaient l'inverse, et c'est le code qui avait tort :
+`A_FAIRE.md` — « la carte passera en haut, À trancher aujourd'hui » — et le CLI
+lui-même, qui imprime « verdict attendu le 20/09/2026 » au moment de
+l'enregistrement.
+
+- `Entry.due_on` est le jour de l'échéance ; `is_due`, `days_until_due` et
+  `overdue_days` comptent en jours de calendrier. `due()` et la phrase
+  « prochaine échéance » passent par eux.
+- Le retard se comptait en secondes tronquées : il manquait une demi-journée à
+  chaque fois. Sept jours de retard s'annonçaient comme six, et le passage en
+  CRITIQUE — « passé une semaine » — arrivait un jour après ce que sa propre
+  phrase promet.
+- La faute était à trois endroits parce que chacun refaisait le calcul. La
+  règle a maintenant un domicile, et `test_journal.py` refuse qu'un module
+  reconvertisse `due_at` pour autre chose que l'afficher.
+- Le test qui couvrait l'horizon vérifiait le treizième jour et le quinzième,
+  et sautait le quatorzième — la frontière même. C'est là que c'était faux.
+- Rien de tout cela ne touche la chaîne d'intégrité : `due_at` est dérivé et
+  n'entre pas dans l'empreinte. Les journaux existants restent vérifiables.
+- Le port Swift porte la même correction, et les vecteurs de parité couvrent
+  désormais le cas « écrite le soir, relue le matin » et son versant « la
+  veille au soir ». Ils ne le couvraient pas : tous les journaux y étaient
+  écrits et relus à la même heure, et les deux moteurs tombaient d'accord pour
+  une mauvaise raison.
+
+## 3.8.0 — Le bouton 🔎 : chercher depuis le téléphone
+
+« Chercher pour moi » était le point 5 de sa liste et le seul qui n'existait
+qu'au clavier : depuis son téléphone, il ne pouvait pas l'atteindre. C'est
+maintenant le troisième rond de l'app.
+
+- `GET /api/offres` montre ce qui partirait — son profil, le même texte que
+  `offres --blanc` — sans clé et sans rien dépenser. `POST /api/offres`
+  cherche.
+- La route ne peut pas écrire dans le journal : elle rend du texte, et
+  `test_sage_offres.py` le vérifie sur le journal lui-même, pas sur
+  l'instruction donnée au modèle. L'autorité reste lui, avant toute action.
+- Le verrou est **le même objet** que celui de la conversation. Deux verrous
+  distincts auraient laissé une recherche et une réponse partir ensemble, sur
+  un crédit vérifié une seule fois : c'est la course qui vide les cinq dollars
+  sans que rien ne l'ait refusée.
+- `chercher()` rend maintenant son coût, comme sa jumelle `parle.repondre()`.
+  Il ne le rendait pas, donc une recherche ne se comptait nulle part : le solde
+  affiché sur le téléphone était faux de tout ce qui avait été cherché. Compté
+  des deux côtés désormais, au clavier comme dans l'app.
+- Les liens des offres sont cliquables sans que le texte du modèle devienne du
+  HTML : chaque morceau est posé par le DOM, et seuls `http://` et `https://`
+  deviennent des liens. Ce que rend l'agent vient d'annonces lues sur le web.
+- Son profil disait « il ne cherche pas d'alternance ». Ce qu'il a dit est
+  « une reprise d'études en alternance m'intéresse, mais je n'ai ni école ni
+  entreprise à ce jour » — marqué DIT dans `proto/suivi_candidatures.py`. Le
+  durcissement était une déduction non marquée, qui faisait écarter des
+  annonces qu'il aurait voulu voir. Remis à ce qu'il a dit.
+- La garde d'origine — celle qui empêche une page web quelconque d'agir en son
+  nom — est désormais vérifiée sur **toutes** les routes `/api/`, lues dans le
+  source plutôt qu'énumérées à la main. `/api/offres` est la première qui
+  dépense de l'argent réel.
+- `test_offres.py` ne vérifiait la coupure que sur les imports, ce qui
+  interdisait aussi le branchement demandé sans rien prouver de plus. Il coupe
+  maintenant le module pour de bon et refait tout le parcours gratuit.
+
+## 3.7.1 — The report stops reproaching what could not have been done
+
+One defect, found in three places. The Sage told Thomas, the morning after he
+recorded his first decision, « Aucune décision sur Stabilité » — in ATTENTION,
+as the report's headline. He had written one line. The foundation has two
+rungs, and one line cannot occupy two: the reproach described arithmetic, not
+conduct, and nothing he could have done that morning would have avoided it.
+
+The sentence was also false. « 4h sont allées ailleurs » summed `hours_total`,
+which included the 4h he had put on Revenus — the second rung of the very
+foundation it was naming. It called « ailleurs » exactly where the hours were.
+
+- `foundation_item` now waits for at least as many decisions as the foundation
+  has rungs, and counts only the hours actually spent outside it. With no hours
+  outside, the empty rung is stated as INFO — a fact worth knowing, not a
+  reproach to make.
+- The same premature reproach had already been paid for once, on « heures
+  engagées sans verdict », and fixed in one place only. This was the second.
+  The third was `python -m singular review`, which held its own copy of the
+  rule (`list(Tier)[:2]`) and reproached from the first decision too.
+- Third occurrence, so the repository's own rule applies: stop correcting it,
+  make it impossible. The rule now has one home. `review` calls
+  `foundation_item` and prints its sentence; `tests/test_reproche_premature.py`
+  fails if any module re-derives the founding rungs or rewrites the phrase.
+- The Swift port and the committed notice vectors carry the same correction,
+  with vectors for both sides of it.
+
+## 3.7.0 — The Sage in daily use: concurrency, business fields, faculties
+
+The journal went into real daily use on a phone. Everything below was found by
+using it, not by reading it.
+
+Security — the journal and the Sage:
+
+- `resolve()` and `abandon()` read the status, refused if it was not open, then
+  wrote — three steps, no lock. Measured with four concurrent processes: two
+  contradictory verdicts accepted on the same decision, and the loser was told
+  its own verdict had been recorded while the journal kept the other one. The
+  tool lied about what it had just written, and calibration is computed from
+  the stored verdict. Closed twice over: `BEGIN IMMEDIATE` before the read, and
+  a conditional `UPDATE ... AND status=OPEN` whose `rowcount` is checked.
+  Either alone suffices — verified by disabling them separately.
+- The schema migration could fail with "duplicate column name" when two
+  processes opened the journal at once: the version check and the `ALTER TABLE`
+  ran in a deferred transaction. Now `BEGIN IMMEDIATE`.
+- Any web page open on the machine while the Sage was running could write to
+  the journal and render verdicts — `127.0.0.1` was trusted wholesale, and the
+  browser is somebody. Refused on three facts the calling page does not
+  control: the Host header must be an address, the Origin must match, and the
+  body must be declared JSON.
+- The access token file is now created 0600, and existing files are tightened
+  on startup.
+- The token guard no longer depends on how the server was asked to start:
+  `--host 0.0.0.0` without `--lan` served the personal journal to the whole
+  network with an empty token. Absence of a token now refuses.
+- A double tap sent two verdicts, or recorded the same decision twice. One
+  submit lock per form in the web app, and the 409 now reads in French.
+
+Journal — schema v2:
+
+- Entries carry `expected_gain_eur` and `reversibility`. Business fields enter
+  the integrity payload only when set, so v1 entries keep their exact payload
+  and stay verifiable. Real migration by `ALTER TABLE`, not
+  `CREATE TABLE IF NOT EXISTS`.
+- The report adds expected gain, hours spent on decisions with no stated gain,
+  and open irreversible decisions.
+
+Faculties — the parts that call a model, and can all be cut:
+
+- `singular/analyse.py` comments the already-computed report.
+  `analyse --blanc` prints exactly what would leave the machine and sends
+  nothing; a test pins it to the same string that is sent.
+- `singular/offres.py` searches the web for engineering-office job offers and
+  proposes at most five. It cannot apply, write, or decide — it imports
+  neither the journal nor the execution boundary, and a test reads the imports.
+- `singular/parle.py` is a conversation that already knows the day's report and
+  the previous thread. Bounded to twenty exchanges, single cached system block,
+  per-turn token accounting. It cannot write to the journal.
+- Continuous conversation is affordable because the thread itself is cached up
+  to the last recorded turn, not just the system prefix: without that the whole
+  history is rebilled at full price every turn, and the twentieth costs twenty
+  times the first. `parle` defaults to `claude-sonnet-5` for the same reason —
+  the one faculty whose default differs, because it is the only one called
+  twenty times in an evening.
+- Spending is counted for life, per model, and never resets with the daily cap.
+  The repository holds no prices at all — a hardcoded tariff would age silently
+  and would be used to decide when to stop — so `~/.singular/tarifs.json` holds
+  the owner's own figures and credit, and until it does the conversation talks
+  in tokens and never in dollars. A test refuses any price written into the
+  code.
+- The Sage serves that conversation to the phone at `/api/parle` — the first
+  route in the app that can spend money, and the reason the isolation test's
+  allowlist now names it. Three refusals stand before the spend: an empty or
+  oversized question, a turn already in flight (server-side, not just in the
+  browser), a daily cap of sixty answers held on disk so a restart cannot reset
+  it, and — once tariffs are known — a refusal before the call when the credit
+  is spent. A cut faculty costs nothing and consumes no quota, and the report,
+  the journal and the verdicts keep working while it is cut.
+- None of them can leak the key: `tests/test_facultes_sans_fuite.py` discovers
+  every module that refuses with `AnalyseIndisponible` and checks both the
+  shape of its messages and what actually escapes when the SDK fails. An
+  `APIResponseValidationError` used to traverse all four handlers and reach the
+  screen — and, through the Sage's JSON error body, the browser.
+
+Packaging:
+
+- `singular/__init__.py` resolves its exports lazily. The journal and the Sage
+  now import on a bare Python with nothing installed; a broken submodule still
+  reports its real cause rather than an `AttributeError`.
+
+## 3.6.0 — Artifact Identity, Bounded Integrity, and the Sage
+
+Security — artifact identity:
+
+- `artifact_fingerprint` now covers the whole code object (constants recursing into nested code, global and attribute names, varnames, freevars, cellvars, argument counts, flags) plus a function's defaults and keyword defaults. It hashed `co_code` alone, so two same-named implementations differing only in which URL they post to were one artifact — the substitution the durable capability record exists to refuse.
+- A class's non-`__code__` attributes now count too: properties through their getter/setter/deleter, `functools.partial` through its target and bound arguments, callable instances through their `__call__`, and constants by value. Mutable class attributes are recorded by type only, so a cache cannot revoke a live capability.
+- Execution capability schema is v2. A v1 row's fingerprint cannot be recomputed and cannot be trusted, so opening a v1 database revokes every binding with a reason naming the rotation.
+- `ExecutionCapabilityRegistry.attach()` attaches the durable store before writing bindings, so a partial failure leaves the registry stricter rather than reverting to in-memory verification, and refuses to replace an already-attached store. `revoke()` writes durably first, so a failed write can no longer leave a token dead in this process and ACTIVE in the next.
+- `improvement_registry.artifact_fingerprint` no longer falls back to `str()`: data is canonicalised by value and type, code by the boundary's code identity, and an object that can state neither is refused rather than fingerprinted by its memory address. Schema is v3.
+
+Integrity and recovery:
+
+- The durable integrity scan reads every table in one deferred read transaction. Executions and mission statuses were read at different instants, so a concurrent writer could show the scan a contradiction that never existed — and the boundary refuses every execution while the scan is dirty.
+- The execution gate scans the mission being executed rather than the whole database. One bad row anywhere used to shut every mission permanently, with no supported repair. `check()` with no argument remains the operator's whole-database view.
+- `executions(mission_id)` and `external_effects(execution_key)` are indexed.
+
+Journal:
+
+- A decision recorded with an integer cost broke the hash chain from its first entry, permanently: the value was fingerprinted as written and read back as a float. Values are canonicalised before fingerprinting.
+
+The Sage:
+
+- Added `singular/sage/`: an observation engine that turns the journal into a daily report, and a standard-library web app installable on a phone's home screen. It is advisory by construction — a test refuses any import of the execution boundary from the package.
+- Added `ios/SingularSage/`: the same engine as a native SwiftUI iPhone app, pinned to the Python implementation by generated vectors that assert identical output text.
+
+## 3.5.2 — Governed Control Plane & Continuous Improvement
+
+- Added `SingularControlPlane` as the canonical top-level lifecycle surface for build -> attest -> execute -> observe outcome.
+- Added `ControlPlaneDecision` so a validated decision and its durable attestation travel together at the orchestration layer.
+- Added a durable outcome ledger binding forecast, actual result, execution status and exact decision context fingerprint.
+- Added a human-reviewed learning queue and bounded self-improvement engine; observed error can create a test proposal, never silent policy mutation.
+- Added `TemporalAdvisor` forecast signals with explicit non-authorizing semantics.
+- Hardened `DecisionAttestationStore` so `:memory:` instances remain valid across internal SQLite connections.
+- Expanded execution-boundary static auditing to detect aliases of the durable executor and direct calls to its inner validated methods outside the canonical adapter/service.
+- Added regression coverage for the top-level control plane and the learning lifecycle.
+
+## 3.5.1 — Execution Boundary Hardening
+
+- Made durable execution itself require a valid, active `DecisionAttestationStore` record; the inner executor can no longer bypass durable issuance/revocation checks.
+- Bound durable execution identities to the exact `ValidatedTrajectoryDecision.context_fingerprint`, preventing a distinct decision context from reusing the same mission/action execution identity.
+- Routed handler execution, external-effect execution and external-effect reconciliation through the strict validated boundary surface.
+- Added a static/dynamic `ExecutionBoundaryAuditor` for production call-site bypass detection, direct inner-executor detection and deny-by-default raw API probes.
+- Added a canonical `ValidatedDecisionService` lifecycle surface so production callers can build, attest, execute and revoke decisions without manually sequencing security-critical primitives.
+- Added a durable outcome ledger that binds forecast, actual outcome, execution status and decision context for calibration and replay-safe learning.
+- Added a human-reviewed learning proposal queue and a bounded self-improvement engine; measured error can produce strategy tests, but never automatic policy or authorization mutation.
+- Strengthened historical reasoning so contested evidence remains counterevidence instead of inflating pattern support.
+- Added explicit temporal forecast signals for collective cognition while preserving a non-authorizing boundary.
+- Expanded adversarial tests for attestation, restart, replay identity, external-effect routing, temporal authority separation and continuous-learning governance.
+
+## 3.5.0 — Fail-Closed Validated Execution Boundary
+
+- Added an immutable, tamper-evident `ValidatedTrajectoryDecision` as the sole executable authorization artifact.
+- Bound validated execution to the exact handler target, or for external effects to provider implementation, provider name, operation and payload fingerprint.
+- Disabled raw durable action, effect and reconciliation entry points; callers must present a validated decision.
+- Closed direct execution bypasses in ToolFabric, MissionAutopilot and Empire AutopilotSupervisor.
+- Added a mandatory construction pipeline: domain state -> Human Optimization -> exact Trajectory Optimization -> Trajectory Engine -> Global Decision Gate -> validated decision.
+- Persisted the source domain/intervention/interaction inputs and re-ran deterministic human and trajectory optimization during validation to resist forged portfolios.
+- Added strict `ActionRequest` validation for finite, bounded security-relevant numeric inputs and nonblank identifiers.
+- Added adversarial tests for handler, provider, operation and payload substitution plus direct execution bypasses.
+- Added durable `DecisionAttestationStore` issuance/revocation with TTL and exact context binding.
+- Added evidence-bounded historical memory and probabilistic future reasoning, with explicit canonical facts, contested evidence, assumptions, horizon uncertainty and non-authorizing future scenarios.
+- Kept the new execution boundary fail-closed until all production callers are migrated and CI is green.
+
 ## 3.4.3 — Interaction-Aware Trajectory Optimization
 
 - Added a dedicated trajectory layer that evaluates portfolios rather than only individual interventions.

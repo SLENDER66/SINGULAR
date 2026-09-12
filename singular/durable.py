@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import AbstractContextManager
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -11,6 +12,17 @@ from typing import Any
 
 from .audit import AuditEvent, AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, DelegationContract
+from .sqlite_support import SqliteLocation
+
+
+class AuditChainOutOfDate(ValueError):
+    """The event offered does not sit at the head of the durable chain any more.
+
+    A distinct type because this one is retryable and the other audit failures
+    are not: the trail simply has not seen a write that landed between reading
+    the head and offering the next event. Re-anchor behind what is really there
+    and try again. Corruption and invalid fingerprints keep raising loudly.
+    """
 
 
 class MissionStatus(str, Enum):
@@ -40,14 +52,14 @@ class DurableStore:
     """SQLite persistence boundary for mission, approval, audit, execution and effect state."""
 
     def __init__(self, path: str | Path = "data/singular.db") -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._location = SqliteLocation(path)
+        #: Derived stores are constructed from this value, so it must be the
+        #: resolved location and not the raw ":memory:" they cannot share.
+        self.path = self._location.reference
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return self._location.session(foreign_keys=True, busy_timeout=True)
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
@@ -115,6 +127,12 @@ class DurableStore:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                -- The integrity scan runs before every validated execution and
+                -- reads one mission's executions, and its effects through them.
+                -- Without these, both are a full scan of the whole history, so
+                -- the check got slower with everything the system had ever done.
+                CREATE INDEX IF NOT EXISTS idx_executions_mission ON executions(mission_id);
+                CREATE INDEX IF NOT EXISTS idx_external_effects_execution ON external_effects(execution_key);
                 """
             )
             columns = {row[1] for row in conn.execute("PRAGMA table_info(approvals)")}
@@ -128,6 +146,20 @@ class DurableStore:
                 conn.execute("ALTER TABLE executions ADD COLUMN lease_until TEXT")
             effect_columns = {row[1] for row in conn.execute("PRAGMA table_info(external_effects)")}
             if "action_fingerprint" not in effect_columns:
+                # Adding the column to a table that already holds rows fills them
+                # with '', which the integrity checker reports as
+                # EFFECT-ACTION-BINDING for ever -- and the boundary refuses
+                # every execution while integrity is dirty. The database opened
+                # without a word and the system simply stopped executing, with
+                # nothing naming the migration as the cause. Nobody can
+                # reconstruct which action those effects belonged to, so this
+                # says so here instead.
+                existing = conn.execute("SELECT COUNT(*) AS total FROM external_effects").fetchone()
+                if existing is not None and int(existing["total"]) > 0:
+                    raise RuntimeError(
+                        "external_effects holds rows written before action_fingerprint existed; "
+                        "migrate them explicitly before opening this database"
+                    )
                 conn.execute("ALTER TABLE external_effects ADD COLUMN action_fingerprint TEXT NOT NULL DEFAULT ''")
 
     def init_execution_schema(self) -> None:
@@ -137,8 +169,13 @@ class DurableStore:
         now = datetime.now(UTC).isoformat()
         payload = json.dumps(asdict(contract), sort_keys=True)
         with self._connect() as conn:
-            conn.execute("INSERT OR REPLACE INTO missions(mission_id,payload,created_at) VALUES(?,?,?)", (contract.mission_id, payload, now))
-            conn.execute("INSERT OR IGNORE INTO mission_states(mission_id,status,updated_at) VALUES(?,?,?)", (contract.mission_id, MissionStatus.CREATED.value, now))
+            existing = conn.execute("SELECT payload FROM missions WHERE mission_id=?", (contract.mission_id,)).fetchone()
+            if existing is not None:
+                if existing["payload"] != payload:
+                    raise ValueError("L'identité d'une mission existante est immuable.")
+                return
+            conn.execute("INSERT INTO missions(mission_id,payload,created_at) VALUES(?,?,?)", (contract.mission_id, payload, now))
+            conn.execute("INSERT INTO mission_states(mission_id,status,updated_at) VALUES(?,?,?)", (contract.mission_id, MissionStatus.CREATED.value, now))
 
     def load_mission(self, mission_id: str) -> DelegationContract | None:
         with self._connect() as conn:
@@ -183,9 +220,23 @@ class DurableStore:
         return MissionStatus(row["status"])
 
     def save_approval(self, approval: ApprovalRequest, mission_id: str | None = None) -> None:
+        """Persist an approval identity once; never replace an existing authorization row."""
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
-            conn.execute("INSERT OR REPLACE INTO approvals(approval_id,action_id,mission_id,reason,status,created_at,updated_at) VALUES(?,?,?,?,?,COALESCE((SELECT created_at FROM approvals WHERE approval_id=?),?),?)", (approval.id, approval.action_id, mission_id, approval.reason, approval.status.value, approval.id, now, now))
+            row = conn.execute(
+                "SELECT action_id,mission_id,reason,status,created_at FROM approvals WHERE approval_id=?",
+                (approval.id,),
+            ).fetchone()
+            if row is not None:
+                expected = (approval.action_id, mission_id, approval.reason, approval.status.value)
+                actual = (row["action_id"], row["mission_id"], row["reason"], row["status"])
+                if actual != expected:
+                    raise ValueError("L'identité d'une approbation existante est immuable.")
+                return
+            conn.execute(
+                "INSERT INTO approvals(approval_id,action_id,mission_id,reason,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                (approval.id, approval.action_id, mission_id, approval.reason, approval.status.value, now, now),
+            )
 
     def get_approval(self, approval_id: str) -> ApprovalRequest:
         with self._connect() as conn:
@@ -202,13 +253,28 @@ class DurableStore:
         return row["mission_id"]
 
     def update_approval(self, approval_id: str, status: ApprovalStatus) -> ApprovalRequest:
+        """Allow only one human authorization decision; terminal approvals cannot be rewritten."""
+        status = ApprovalStatus(status)
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
-            cur = conn.execute("UPDATE approvals SET status=?, updated_at=? WHERE approval_id=?", (status.value, now, approval_id))
-            if cur.rowcount != 1:
+            row = conn.execute(
+                "SELECT approval_id,action_id,reason,status FROM approvals WHERE approval_id=?",
+                (approval_id,),
+            ).fetchone()
+            if row is None:
                 raise KeyError(approval_id)
-            row = conn.execute("SELECT approval_id,action_id,reason,status FROM approvals WHERE approval_id=?", (approval_id,)).fetchone()
-        return ApprovalRequest(row["action_id"], row["reason"], ApprovalStatus(row["status"]), row["approval_id"])
+            current = ApprovalStatus(row["status"])
+            if current == status:
+                return ApprovalRequest(row["action_id"], row["reason"], current, row["approval_id"])
+            if current is not ApprovalStatus.PENDING:
+                raise ValueError(f"Transition d'approbation interdite : {current.value} -> {status.value}")
+            cur = conn.execute(
+                "UPDATE approvals SET status=?,updated_at=? WHERE approval_id=? AND status=?",
+                (status.value, now, approval_id, ApprovalStatus.PENDING.value),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError("La transition d'approbation a échoué à cause d'une concurrence d'état.")
+            return ApprovalRequest(row["action_id"], row["reason"], status, row["approval_id"])
 
     def pending_approvals(self, mission_id: str | None = None) -> tuple[ApprovalRequest, ...]:
         with self._connect() as conn:
@@ -219,7 +285,6 @@ class DurableStore:
         return tuple(ApprovalRequest(r["action_id"], r["reason"], ApprovalStatus(r["status"]), r["approval_id"]) for r in rows)
 
     def record_audit(self, event: AuditEvent) -> None:
-        """Atomically append an already-materialized event to the durable audit chain."""
         payload = dict(event.payload)
         sequence = payload.get("audit_sequence")
         fingerprint = payload.get("audit_fingerprint")
@@ -238,7 +303,7 @@ class DurableStore:
             expected_sequence = len(persisted) + 1
             expected_previous = persisted[-1]["payload"]["audit_fingerprint"] if persisted else ""
             if sequence != expected_sequence or previous != expected_previous:
-                raise ValueError("L'événement d'audit ne s'insère pas à la tête de la chaîne.")
+                raise AuditChainOutOfDate("L'événement d'audit ne s'insère pas à la tête de la chaîne.")
             expected_chain = AuditEvent.chain_fingerprint(sequence, fingerprint, expected_previous)
             if chain_fingerprint != expected_chain or not AuditTrail.verify_persisted_event(asdict(event)):
                 raise ValueError("L'intégrité de l'événement d'audit est invalide.")
@@ -287,22 +352,16 @@ class DurableStore:
     def _execution_fields() -> str:
         return "execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until"
 
-    def begin_execution(self, execution_key: str, mission_id: str, action_id: str, lease_seconds: int = 300) -> dict[str, Any]:
-        if lease_seconds <= 0:
-            raise ValueError("La durée du lease doit être positive.")
-        now = datetime.now(UTC)
-        lease_until = (now + timedelta(seconds=lease_seconds)).isoformat()
-        with self._connect() as conn:
-            cur = conn.execute("INSERT OR IGNORE INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)", (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until))
-            row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
-        if row is None:
-            raise RuntimeError("Execution record could not be persisted")
-        self._validate_execution_identity(row, mission_id, action_id)
-        result = dict(row)
-        result["claimed"] = cur.rowcount == 1
-        return result
-
     def begin_execution_and_start_mission(self, execution_key: str, mission_id: str, action_id: str, lease_seconds: int = 300) -> dict[str, Any]:
+        """The only way an execution is claimed.
+
+        There used to be a second claimer, begin_execution, which inserted a
+        RUNNING execution and left the mission where it was. Nothing called it
+        either: it produced a state the system considers impossible -- a running
+        execution under a mission that never started -- which the integrity
+        checker reports and which blocks the real path from ever claiming that
+        key.
+        """
         if lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         now = datetime.now(UTC)
@@ -317,7 +376,6 @@ class DurableStore:
             current_row = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (mission_id,)).fetchone()
             if current_row is None:
                 raise KeyError(mission_id)
-            current = MissionStatus(current_row["status"])
             self._transition_mission_status(conn, mission_id, MissionStatus.RUNNING, expected_current=MissionStatus.PLANNED)
             conn.execute("INSERT INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)", (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until))
             row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
@@ -361,8 +419,8 @@ class DurableStore:
         return self.mark_execution_recovery_required(execution_key)
 
     def resolve_execution_recovery(self, execution_key: str, decision: str, *, result: Any = None, reason: str | None = None) -> dict[str, Any]:
-        if decision not in {"CONFIRM", "FAIL", "CANCEL"}:
-            raise ValueError(f"Décision de récupération inconnue: {decision}")
+        if decision not in {"FAIL", "CANCEL"}:
+            raise ValueError("Une exécution en récupération ne peut être confirmée comme réussie sans preuve externe.")
         now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             row = conn.execute("SELECT execution_key,mission_id,action_id,status,result,error FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
@@ -373,10 +431,7 @@ class DurableStore:
             mission = conn.execute("SELECT status FROM mission_states WHERE mission_id=?", (row["mission_id"],)).fetchone()
             if mission is None or mission["status"] != MissionStatus.RUNNING.value:
                 raise ValueError("La mission doit être RUNNING pendant une récupération.")
-            if decision == "CONFIRM":
-                execution_status, mission_status = "COMPLETED", MissionStatus.COMPLETED
-                encoded_result, error = json.dumps(result, sort_keys=True, default=str), reason
-            elif decision == "FAIL":
+            if decision == "FAIL":
                 execution_status, mission_status = "FAILED", MissionStatus.FAILED
                 encoded_result, error = None, reason or "Échec confirmé pendant la récupération."
             else:
@@ -391,21 +446,16 @@ class DurableStore:
             raise RuntimeError("Execution record could not be persisted")
         return dict(final)
 
-    def finish_execution(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
-        if status not in {"COMPLETED", "FAILED"}:
-            raise ValueError("Un résultat d'exécution doit être COMPLETED ou FAILED.")
-        now = datetime.now(UTC).isoformat()
-        encoded = None if result is None else json.dumps(result, sort_keys=True)
-        with self._connect() as conn:
-            cur = conn.execute("UPDATE executions SET status=?,result=?,error=?,finished_at=?,lease_until=NULL WHERE execution_key=? AND status='RUNNING'", (status, encoded, error, now, execution_key))
-            row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
-        if row is None:
-            raise KeyError(execution_key)
-        if cur.rowcount != 1 and row["status"] not in {"COMPLETED", "FAILED"}:
-            raise RuntimeError("Execution state could not be finalized")
-        return dict(row)
-
     def finish_execution_and_mission(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
+        """The only way an execution reaches a terminal state.
+
+        There used to be a second finalizer, finish_execution, which wrote
+        COMPLETED without touching the mission. Nothing called it -- not the
+        engine, not a test -- but it sat on the public store offering exactly
+        what the boundary forbids: a successful execution result recorded
+        outside the one transition that keeps execution and mission state
+        consistent. An unused door into the terminal state is still a door.
+        """
         if status not in {"COMPLETED", "FAILED"}:
             raise ValueError("Un résultat d'exécution doit être COMPLETED ou FAILED.")
         now = datetime.now(UTC).isoformat()
@@ -430,3 +480,31 @@ class DurableStore:
         with self._connect() as conn:
             row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
         return dict(row) if row else None
+
+
+def install_store_extension(name: str, function: Any) -> None:
+    """Attach a method defined outside this module, refusing a stranger's version.
+
+    Several transitions are implemented in their own modules and grafted onto
+    DurableStore at import time. The two installers disagreed about conflicts:
+    the recovery one skipped silently if anything was already bound, the
+    approval one overwrote unless the binding was already its own. Both were
+    silent, in opposite directions, about the same question -- and the graft the
+    recovery module installs governs RECOVERY_REQUIRED -> COMPLETED, where a
+    weaker definition winning by import order is precisely the fail-open shape
+    the boundary exists to prevent.
+
+    Re-installing the same function stays a no-op; anything else raises rather
+    than picking a winner quietly. Nothing may replace a method this module
+    defines: an approval hardening used to arrive that way, leaving a weaker
+    implementation live in the class for any tidy-up to fall back to.
+    """
+    current = getattr(DurableStore, name, None)
+    if current is not None:
+        owner = getattr(current, "__module__", "")
+        if owner != getattr(function, "__module__", ""):
+            raise RuntimeError(
+                f"DurableStore.{name} is already defined by {owner or 'an unknown module'}: "
+                "refusing to install a second definition"
+            )
+    setattr(DurableStore, name, function)

@@ -10,8 +10,13 @@ from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
 from .audit import AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, Autonomy, DelegationContract
-from .durable import MISSION_TRANSITIONS, DurableStore, MissionStatus
+from .durable import MISSION_TRANSITIONS, AuditChainOutOfDate, DurableStore, MissionStatus
 from .v32_governed_core import GovernedAction, GovernedMission, GovernorDecision
+
+
+#: How many times a write may lose the race for the head of the audit chain
+#: before the runtime reports it instead of retrying.
+_AUDIT_PERSIST_ATTEMPTS = 5
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,8 @@ class DurableMissionRuntime:
                 self.audit.record("governance_drift", "GOVERNOR", "BLOCKED", {"action_id": action.id, "mission_id": contract.mission_id if contract else None})
                 self._persist_new_audit_events()
                 raise PermissionError("La politique de gouvernance a changé depuis la décision persistée : exécution refusée.")
+            self._audit_governance("governance_route_replayed", action, contract, cached, fingerprint, idempotency_key)
+            self._persist_new_audit_events()
             return self._from_cached(action, cached)
 
         result = self.governed.route(action, contract)
@@ -85,8 +92,47 @@ class DurableMissionRuntime:
             if current_status in {MissionStatus.CREATED, MissionStatus.WAITING_APPROVAL} or (current_status == MissionStatus.PLANNED and target != MissionStatus.PLANNED):
                 self._set_status(contract.mission_id, target)
         cached_result = self.store.put_idempotent(idempotency_key, self._cache(result), fingerprint)
+        self._audit_governance("governance_route", action, contract, cached_result, fingerprint, idempotency_key)
         self._persist_new_audit_events()
         return self._from_cached(action, cached_result)
+
+    def _audit_governance(self, event_type: str, action, contract: DelegationContract | None, verdict: dict[str, Any], fingerprint: str, idempotency_key: str) -> None:
+        """Record the governance verdict itself in the durable audit trail.
+
+        GovernedMission records governance_route/governance_block into its own
+        in-memory AuditTrail, which is never persisted and dies with the process.
+        The durable trail therefore only held runtime pre-checks and approvals:
+        the verdict that actually authorizes -- or refuses -- an execution left
+        no trace at all, so no restart could explain why an action had been
+        allowed to cross the boundary.
+
+        The event is built from the persisted idempotency record rather than
+        from the in-memory GovernedAction, so the audit states what a restart
+        would really replay, including when a concurrent writer won the
+        put_idempotent race. It is recorded after the decision is durable: a
+        crash in between leaves a cached verdict whose first replay records
+        governance_route_replayed, which closes the provenance gap rather than
+        claiming an authorization that was never persisted.
+        """
+        mode = str(verdict.get("mode"))
+        self.audit.record(
+            event_type,
+            "GOVERNOR",
+            mode,
+            {
+                "action_id": action.id,
+                "mission_id": contract.mission_id if contract else None,
+                "approval_id": verdict.get("approval_id"),
+                "policy_tier": verdict.get("policy_tier"),
+                "mode": mode,
+                "reasons": list(verdict.get("reasons", ())),
+                "can_prepare": bool(verdict.get("can_prepare", verdict.get("allowed", False))),
+                "can_execute": bool(verdict.get("can_execute", False)),
+                "requires_human": bool(verdict.get("requires_human", mode == Autonomy.ESCALATE.value)),
+                "action_fingerprint": fingerprint,
+                "idempotency_key": idempotency_key,
+            },
+        )
 
     @staticmethod
     def _governance_matches(current: GovernedAction, cached: dict[str, Any]) -> bool:
@@ -184,5 +230,49 @@ class DurableMissionRuntime:
         return GovernedAction(action, cached["policy_tier"], decision, can_prepare, can_execute, requires_human, tuple(cached["reasons"]))
 
     def _persist_new_audit_events(self) -> None:
-        for event in self.audit.events():
-            self.store.record_audit(event)
+        """Persist only the events that are not durable yet.
+
+        This re-sent the whole in-memory trail on every call, so the second
+        audited operation on a runtime replayed event #1 and DurableStore refused
+        it as not inserting at the head of the chain. create_mission() followed by
+        route() -- the ordinary public sequence -- therefore always raised, and
+        the audit trail could never grow past one event.
+
+        The durable table is the source of truth for how far persistence got
+        rather than an in-memory cursor: a cursor that drifted ahead would skip
+        events and open an audit gap silently, while an authoritative count can
+        only ever re-offer an event, which record_audit refuses loudly.
+
+        Counting was not enough once a second runtime shared the database. Ours
+        numbered events from its own trail, so anything the other one wrote left
+        our next event pointing at a fingerprint that was no longer the head, and
+        record_audit refused it -- after the operation it was documenting had
+        already been persisted. Two runtimes on one database is the ordinary
+        case, not an exotic one, so the trail re-anchors behind whatever really
+        came first instead: the events keep their ids, timestamps and content and
+        take new positions.
+
+        A write landing between this read and record_audit is the same situation
+        one moment later, so it re-anchors and tries again rather than raising:
+        the audit write happens after the operation it documents, so giving up
+        would leave the state advanced and nothing recorded. Bounded, because a
+        chain that never settles is a problem to report, not to spin on.
+        """
+        for remaining in reversed(range(_AUDIT_PERSIST_ATTEMPTS)):
+            persisted = self.store.audit_events()
+            events = list(self.audit.events())
+            persisted_ids = [event["id"] for event in persisted]
+            if [event.id for event in events[: len(persisted_ids)]] != persisted_ids:
+                known = set(persisted_ids)
+                pending = [event for event in events if event.id not in known]
+                self.audit = AuditTrail.restore(list(persisted))
+                for event in pending:
+                    self.audit.append(event)
+            try:
+                for event in self.audit.events()[len(persisted):]:
+                    self.store.record_audit(event)
+            except AuditChainOutOfDate:
+                if not remaining:
+                    raise
+                continue
+            return

@@ -1,0 +1,781 @@
+"""Le Sage expose un journal personnel sur le réseau. Ce qu'il refuse compte.
+
+Ce serveur a été écrit sans ces tests, et la faille est arrivée exactement là où
+on l'attendait : la garde d'accès dépendait de l'option qu'on avait tapée
+(`--lan`, la seule à créer un jeton) et non de l'adresse réellement écoutée.
+`--host 0.0.0.0` servait donc le journal à tout le wifi, sans authentification,
+sans que rien ne le signale.
+
+Une propriété de sécurité déduite d'une intention plutôt que d'un fait tient
+jusqu'au jour où quelqu'un atteint le fait par un autre chemin. Les tests
+d'accès portent donc sur le fait -- l'adresse du client, l'adresse d'écoute --
+et pas sur les options.
+"""
+from __future__ import annotations
+
+import json
+import socket
+import threading
+import urllib.error
+import urllib.request
+from http import HTTPStatus
+
+import pytest
+
+from singular.journal import DecisionJournal, Status, Tier
+from singular.sage.server import (
+    MAX_BODY,
+    SageApp,
+    SageError,
+    build_server,
+    host_is_an_address,
+    is_loopback_bind,
+    read_token,
+    same_origin,
+)
+from tests.support import sans_accents
+
+TOKEN = "un-jeton-de-test-suffisamment-long"
+
+
+@pytest.fixture
+def journal(tmp_path):
+    return DecisionJournal(tmp_path / "journal.db")
+
+
+@pytest.fixture
+def app(journal):
+    return SageApp(journal, token=TOKEN)
+
+
+# --- qui a le droit de lire --------------------------------------------------
+
+@pytest.mark.parametrize("client", ["127.0.0.1", "::1"])
+def test_the_machine_itself_needs_no_token(app, client):
+    """Sur la boucle locale il n'y a personne d'autre, et un jeton perdu
+    n'a pas à enfermer son propriétaire dehors."""
+    assert app.authorised(client, {}, "") is True
+
+
+@pytest.mark.parametrize("client", ["192.168.1.57", "10.0.0.4", "203.0.113.9"])
+def test_another_machine_needs_the_token(app, client):
+    assert app.authorised(client, {}, "") is False
+    assert app.authorised(client, {}, "mauvais") is False
+    assert app.authorised(client, {"k": "mauvais"}, "") is False
+    assert app.authorised(client, {}, TOKEN) is True
+    assert app.authorised(client, {"k": TOKEN}, "") is True
+
+
+def test_no_token_refuses_instead_of_allowing(journal):
+    """La régression exacte : sans jeton, tout le réseau était servi.
+
+    L'absence de jeton signifiait « pas de protection demandée », donc
+    « autorise » — alors qu'elle ne peut vouloir dire qu'une chose côté
+    serveur : rien ne permet de distinguer ce client du propriétaire.
+    """
+    open_app = SageApp(journal, token="")
+    assert open_app.authorised("127.0.0.1", {}, "") is True
+    for stranger in ("192.168.1.57", "10.0.0.4", "203.0.113.9"):
+        assert open_app.authorised(stranger, {}, "") is False, (
+            f"{stranger} lit le journal personnel sans rien présenter"
+        )
+
+
+@pytest.mark.parametrize(
+    "host,loopback",
+    [("127.0.0.1", True), ("localhost", True), ("::1", True), ("", True),
+     ("0.0.0.0", False), ("192.168.1.57", False), ("  0.0.0.0  ", False)],
+)
+def test_exposure_is_read_from_the_bind_address(host, loopback):
+    """C'est ce fait-là qui décide qu'un jeton est nécessaire, pas une option."""
+    assert is_loopback_bind(host) is loopback
+
+
+def test_the_token_survives_a_restart(tmp_path):
+    """Sinon l'app installée sur le téléphone perdrait l'accès à chaque relance."""
+    path = tmp_path / "sage_token"
+    first = read_token(path)
+    assert len(first) >= 20
+    assert read_token(path) == first
+
+
+# --- ce que les routes refusent ----------------------------------------------
+
+def test_an_unknown_route_is_refused(app):
+    with pytest.raises(SageError) as refusal:
+        app.route("GET", "/api/inventé", {}, {})
+    assert refusal.value.status == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.parametrize("forged", ["DEC-XXXX", "DEC-", "DEC-deadbeefff", "",
+                                    "'; DROP TABLE journal_entries;--",
+                                    "..%2f..%2fetc%2fpasswd"])
+def test_a_forged_entry_id_is_refused_before_the_journal(app, forged):
+    """La forme de l'identifiant est vérifiée avant toute lecture.
+
+    Le séparateur encodé en `%2f` mérite d'être ici : c'est le contournement
+    classique d'un routage qui décode avant de router. Celui-ci ne décode pas le
+    chemin, donc `%2f` reste littéral et la garde de forme l'attrape.
+    """
+    with pytest.raises(SageError) as refusal:
+        app.route("POST", f"/api/entries/{forged}/resolve", {}, {"happened": True})
+    assert refusal.value.status in {HTTPStatus.BAD_REQUEST, HTTPStatus.NOT_FOUND}
+    assert "n'existe pas" not in refusal.value.message, (
+        "l'identifiant a été porté jusqu'au journal au lieu d'être refusé sur sa forme"
+    )
+
+
+@pytest.mark.parametrize("forged", ["../../etc/passwd", "a/b"])
+def test_an_id_carrying_a_separator_matches_no_route_at_all(app, forged):
+    """Le chemin ne ressemble plus à la route : il est refusé avant d'être lu."""
+    with pytest.raises(SageError, match="route inconnue"):
+        app.route("POST", f"/api/entries/{forged}/resolve", {}, {"happened": True})
+
+
+def test_certainty_is_refused_through_the_api(app):
+    """La règle du journal doit valoir aussi par le réseau, et se lire.
+
+    Elle valait déjà ; c'est le message qui ne se lisait pas. La route laissait
+    le journal lever et renvoyait son texte tel quel — `probability must be
+    strictly between 0 and 1` sur un téléphone, à quelqu'un qui débute en code
+    et lit le français. Le clavier, lui, répondait déjà dans sa langue.
+    """
+    payload = {"title": "A", "action": "a", "predicted": "p", "probability": 1.0,
+               "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7}
+    with pytest.raises(SageError) as refusal:
+        app.add(payload)
+    assert refusal.value.status == HTTPStatus.BAD_REQUEST
+    assert "certitude" in refusal.value.message
+    assert "probability must be" not in refusal.value.message
+
+
+def test_a_cost_typed_as_a_gain_is_refused_in_his_language(app):
+    """Le champ du gain n'a aucune borne dans le formulaire, et c'est voulu.
+
+    Il est en texte libre pour que « vide » reste possible — « non chiffré » et
+    « ne rapporte rien » ne sont pas la même chose. Mais taper « -100 » en
+    pensant à un coût rendait `expected_gain_eur cannot be negative: a cost is
+    not a gain`, sur son téléphone. Quatrième écriture de la même règle, et la
+    seule qui parlait anglais.
+    """
+    payload = {"title": "A", "action": "a", "predicted": "p", "probability": 0.6,
+               "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7,
+               "expected_gain_eur": "-100"}
+    with pytest.raises(SageError) as refusal:
+        app.add(payload)
+    assert refusal.value.status == HTTPStatus.BAD_REQUEST
+    assert "un cout n'est pas un gain" in sans_accents(refusal.value.message)
+    assert "laisse vide" in refusal.value.message
+
+
+def test_percent_typed_in_the_probability_says_what_to_write(app):
+    """« 75 » pour 75 % : le refus doit donner la réponse, pas la règle."""
+    payload = {"title": "A", "action": "a", "predicted": "p", "probability": 75,
+               "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7}
+    with pytest.raises(SageError) as refusal:
+        app.add(payload)
+    assert "ecris 0.75" in sans_accents(refusal.value.message)
+
+
+def test_blank_fields_are_refused(app):
+    base = {"title": "A", "action": "a", "predicted": "p", "probability": 0.5,
+            "tier": "REVENUS", "cost_hours": 1, "horizon_days": 7}
+    for field in ("title", "action", "predicted"):
+        with pytest.raises(SageError):
+            app.add({**base, field: "   "})
+
+
+def test_an_unknown_tier_is_refused(app):
+    with pytest.raises(SageError, match="rang inconnu"):
+        app.add({"title": "A", "action": "a", "predicted": "p", "probability": 0.5,
+                 "tier": "LIBERTE_TOTALE", "cost_hours": 1, "horizon_days": 7})
+
+
+def test_a_verdict_cannot_be_rewritten_through_the_api(app, journal):
+    entry = journal.add(title="A", action="a", predicted="p", probability=0.6,
+                        tier=Tier.REVENUS, cost_hours=1.0, horizon_days=7)
+    app.resolve(entry.entry_id, {"happened": True})
+    with pytest.raises(SageError) as refusal:
+        app.resolve(entry.entry_id, {"happened": False})
+    assert refusal.value.status == HTTPStatus.CONFLICT
+
+
+def test_a_missing_entry_is_not_found(app):
+    with pytest.raises(SageError) as refusal:
+        app.resolve("DEC-deadbeef", {"happened": True})
+    assert refusal.value.status == HTTPStatus.NOT_FOUND
+
+
+def test_happened_must_be_a_boolean(app, journal):
+    entry = journal.add(title="A", action="a", predicted="p", probability=0.6,
+                        tier=Tier.REVENUS, cost_hours=1.0, horizon_days=7)
+    for value in ("oui", 1, None, {}):
+        with pytest.raises(SageError, match="vrai ou faux"):
+            app.resolve(entry.entry_id, {"happened": value})
+
+
+def test_writing_through_the_api_keeps_the_chain_intact(app, journal):
+    app.add({"title": "Négocier", "action": "demander", "predicted": "accepté",
+             "probability": 0.4, "tier": "REVENUS", "cost_hours": 2, "horizon_days": 30})
+    entry_id = journal.entries()[0].entry_id
+    app.resolve(entry_id, {"happened": True, "lesson": "posé, ça passe"})
+    assert journal.verify() is True
+
+
+# --- le serveur réel ---------------------------------------------------------
+
+@pytest.fixture
+def running(app):
+    server = build_server(app, "127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+def _raw_request(base: str, request_line: str) -> str:
+    """Envoyer une ligne de requête telle quelle, sans normalisation d'urllib."""
+    host, port = base.removeprefix("http://").split(":")
+    with socket.create_connection((host, int(port)), timeout=5) as sock:
+        sock.sendall(f"{request_line}\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode())
+        return sock.recv(4096).decode("utf-8", "replace")
+
+
+@pytest.mark.parametrize("target", [
+    "/../../../../etc/passwd",
+    "/../singular/journal.py",
+    "/web/../../../etc/hostname",
+    "//etc/passwd",
+])
+def test_no_path_escapes_the_web_directory(running, target):
+    """urllib normaliserait ces chemins ; une socket brute, non."""
+    response = _raw_request(running, f"GET {target} HTTP/1.1")
+    assert " 404 " in response.splitlines()[0], response.splitlines()[0]
+    assert "root:" not in response and "import" not in response
+
+
+def test_the_app_shell_and_its_assets_are_served(running):
+    for path, marker in [("/", "SINGULAR"), ("/app.js", "Notice"), ("/manifest.webmanifest", "standalone")]:
+        with urllib.request.urlopen(running + path) as response:
+            assert response.status == 200
+            assert marker in response.read().decode("utf-8")
+
+
+def test_the_icon_is_a_real_png(running):
+    with urllib.request.urlopen(running + "/icon-180.png") as response:
+        assert response.read()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_an_oversized_body_is_refused_before_being_read(running):
+    request = urllib.request.Request(
+        running + "/api/entries", data=b"{}" + b" " * (MAX_BODY + 1),
+        headers={"Content-Type": "application/json"}, method="POST")
+    with pytest.raises(urllib.error.HTTPError) as refusal:
+        urllib.request.urlopen(request)
+    assert refusal.value.code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+
+
+def test_an_unreadable_body_is_refused(running):
+    request = urllib.request.Request(
+        running + "/api/entries", data=b"{ceci n'est pas du json",
+        headers={"Content-Type": "application/json"}, method="POST")
+    with pytest.raises(urllib.error.HTTPError) as refusal:
+        urllib.request.urlopen(request)
+    assert refusal.value.code == HTTPStatus.BAD_REQUEST
+
+
+def test_a_json_body_that_is_not_an_object_is_refused(running):
+    request = urllib.request.Request(
+        running + "/api/entries", data=b'["une liste"]',
+        headers={"Content-Type": "application/json"}, method="POST")
+    with pytest.raises(urllib.error.HTTPError) as refusal:
+        urllib.request.urlopen(request)
+    assert refusal.value.code == HTTPStatus.BAD_REQUEST
+
+
+def test_writing_to_a_static_path_is_refused(running):
+    request = urllib.request.Request(running + "/index.html", data=b"{}", method="POST")
+    with pytest.raises(urllib.error.HTTPError) as refusal:
+        urllib.request.urlopen(request)
+    assert refusal.value.code == HTTPStatus.METHOD_NOT_ALLOWED
+
+
+def test_a_refusal_answers_in_json_rather_than_a_stack_trace(running):
+    request = urllib.request.Request(running + "/api/entries", data=b"{}",
+                                     headers={"Content-Type": "application/json"}, method="POST")
+    with pytest.raises(urllib.error.HTTPError) as refusal:
+        urllib.request.urlopen(request)
+    body = json.loads(refusal.value.read())
+    assert "message" in body
+    assert "Traceback" not in body["message"]
+
+
+# --- ce que le jeton garde, et ce qu'il n'a jamais eu à garder ---------------
+
+@pytest.fixture
+def from_the_network(journal):
+    """Un serveur joint depuis une vraie adresse réseau, pas la boucle locale.
+
+    Tous les autres tests d'assets passent par `127.0.0.1`, où le jeton n'est
+    pas demandé. C'est ce qui a laissé passer la panne : le serveur exigeait le
+    jeton pour tout, y compris `app.css` et `app.js`, que le navigateur va
+    chercher par lui-même avec des adresses relatives qui ne le portent pas.
+    Depuis un téléphone, l'app s'ouvrait sans mise en forme et sans données, et
+    rien ne disait pourquoi. Depuis la machine, tout marchait.
+    """
+    from singular.sage.server import local_address
+
+    address = local_address()
+    if address in {"127.0.0.1", "::1"}:
+        pytest.skip("aucune adresse non-loopback : ce test a besoin d'un vrai réseau")
+
+    entry = journal.add(title="Titre confidentiel MARQUEUR-TITRE", action="faire",
+                        predicted="résultat MARQUEUR-PREDIT", probability=0.42,
+                        tier=Tier.REVENUS, cost_hours=3, horizon_days=7)
+    journal.resolve(entry.entry_id, happened=False, lesson="leçon MARQUEUR-LECON")
+
+    server = build_server(SageApp(journal, token=TOKEN), "0.0.0.0", 0)  # noqa: S104 - le test veut l'exposition
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://{address}:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+def _fetch(base: str, path: str, token: str | None = None) -> tuple[int, bytes]:
+    request = urllib.request.Request(base + path)
+    if token is not None:
+        request.add_header("X-Sage-Token", token)
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as refused:
+        return refused.code, refused.read()
+
+
+@pytest.mark.parametrize("asset", ["/", "/app.css", "/app.js", "/manifest.webmanifest",
+                                   "/icon-180.png"])
+def test_the_shell_loads_from_the_network_without_the_token(from_the_network, asset):
+    """Le navigateur ne peut pas faire autrement : il demande ces fichiers seul."""
+    status, body = _fetch(from_the_network, asset)
+    assert status == HTTPStatus.OK, f"{asset} refusé : l'app resterait nue sur le téléphone"
+    assert body, f"{asset} servi vide"
+
+
+@pytest.mark.parametrize("token", [None, "", "mauvais-jeton"])
+def test_the_journal_still_refuses_the_network_without_the_right_token(from_the_network, token):
+    status, _ = _fetch(from_the_network, "/api/notice", token)
+    assert status == HTTPStatus.UNAUTHORIZED
+
+
+def test_the_journal_opens_to_the_network_with_the_right_token(from_the_network):
+    status, body = _fetch(from_the_network, "/api/notice", TOKEN)
+    assert status == HTTPStatus.OK
+    assert json.loads(body)["headline"].startswith("Notice.")
+
+
+@pytest.mark.parametrize("asset", ["/", "/app.css", "/app.js", "/manifest.webmanifest",
+                                   "/icon-180.png", "/sw.js"])
+def test_nothing_served_without_the_token_carries_a_decision(from_the_network, asset):
+    """La contre-vérification, et la condition de toute la correction.
+
+    Servir la coquille sans jeton n'est acceptable que tant qu'elle ne contient
+    rien. Le jour où l'un de ces fichiers porterait une décision -- une page
+    rendue côté serveur, un état préchargé pour aller plus vite -- ce choix
+    deviendrait une fuite du journal vers tout le wifi, sans que rien
+    n'échoue. Ce test l'interdit maintenant plutôt qu'après.
+    """
+    _, body = _fetch(from_the_network, asset)
+    text = body.decode("utf-8", "replace")
+    for marker in ("MARQUEUR-TITRE", "MARQUEUR-PREDIT", "MARQUEUR-LECON", "DEC-"):
+        assert marker not in text, (
+            f"{asset} contient {marker!r} et se sert sans jeton : le journal fuirait "
+            "vers tout le réseau local.")
+
+
+# --- pouvoir donner sa clé, plutôt que buter dessus --------------------------
+
+def test_the_manifest_pins_no_start_url(from_the_network):
+    """Un point d'entrée figé perdait la clé à l'installation.
+
+    « Sur l'écran d'accueil » enregistre l'adresse d'où l'on part. Avec un
+    `start_url` dans le manifeste, iOS l'utilise à la place, et il ne peut pas
+    porter de clé — la mettre là la publierait, puisque le manifeste se sert
+    sans authentification. Sans `start_url`, l'adresse retenue est celle qui
+    est ouverte, jeton compris.
+    """
+    _, body = _fetch(from_the_network, "/manifest.webmanifest")
+    manifest = json.loads(body)
+    assert "start_url" not in manifest
+    assert manifest["display"] == "standalone", "l'app doit rester en plein écran"
+
+
+def test_the_page_offers_a_way_in_when_the_token_is_missing(from_the_network):
+    """Un refus doit laisser un recours.
+
+    L'app ajoutée à l'écran d'accueil a son propre stockage, séparé de Safari :
+    elle démarre sans rien savoir, et n'affichait que « jeton d'accès manquant
+    ou invalide ». Sans champ pour en fournir un, il n'y avait aucun geste
+    possible depuis le téléphone.
+    """
+    _, body = _fetch(from_the_network, "/")
+    page = body.decode("utf-8")
+    for marker in ('id="unlock"', 'id="unlock-form"', 'id="unlock-input"'):
+        assert marker in page, f"{marker} absent : un refus d'accès resterait sans issue"
+
+    _, script = _fetch(from_the_network, "/app.js")
+    code = script.decode("utf-8")
+    assert "askForTheToken" in code
+    assert "error.status === 401" in code, "le refus doit être reconnu par son statut"
+
+
+# --- ce qu'une autre page peut demander en ton nom ---------------------------
+
+def _post_as_a_page(base: str, path: str, payload: dict, **headers) -> int:
+    """Poster comme le fait un navigateur pour le compte d'une page web.
+
+    Aucun jeton : c'est le sujet. Une page n'en a pas besoin pour que le
+    navigateur joigne à sa requête tout ce que la machine porte déjà.
+    """
+    request = urllib.request.Request(
+        base + path, data=json.dumps(payload).encode(), method="POST",
+        headers={"Content-Type": "application/json", **headers},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status
+    except urllib.error.HTTPError as refused:
+        return refused.code
+
+
+A_DECISION = {"title": "écrit sans toi", "action": "rien", "predicted": "rien",
+              "probability": 0.5, "cost_hours": 1, "tier": "REVENUS", "horizon_days": 7}
+
+
+def test_another_page_cannot_write_to_the_journal(running, journal):
+    """La faille telle qu'elle a été reproduite avant d'être corrigée.
+
+    Le jeton dit qui sait ; il ne dit pas qui demande. Une page web ouverte sur
+    cette machine parle depuis `127.0.0.1`, à qui la garde accordait tout parce
+    qu'il n'y a « personne d'autre » sur la boucle locale. Il y a le navigateur.
+    """
+    assert _post_as_a_page(running, "/api/entries", A_DECISION,
+                           Origin="https://site-malveillant.example") == HTTPStatus.FORBIDDEN
+    assert not journal.entries(), "une page quelconque a écrit dans le journal"
+
+
+def test_another_page_cannot_deliver_a_verdict_in_your_place(journal, running):
+    """Le pire des deux : pas l'écriture, le verdict.
+
+    Une décision tranchée par quelqu'un d'autre fausse le score de Brier, donc
+    la calibration, qui est tout l'intérêt de l'outil. Et c'est l'invariant du
+    projet pris à revers : le Sage ne décide pas à ta place, mais un site
+    quelconque le faisait.
+    """
+    entry = journal.add(title="Postuler", action="envoyer", predicted="un entretien",
+                        probability=0.75, tier=Tier.REVENUS, cost_hours=4, horizon_days=14)
+    status = _post_as_a_page(running, f"/api/entries/{entry.entry_id}/resolve",
+                             {"happened": False}, Origin="https://site-malveillant.example")
+    assert status == HTTPStatus.FORBIDDEN
+    assert journal.entries()[0].status is not Status.DID_NOT_HAPPEN, (
+        "un verdict a été rendu à ta place"
+    )
+
+
+def test_no_api_route_escapes_the_cross_origin_guard(running):
+    """La garde vaut pour toutes les routes, y compris celles qui n'existent pas encore.
+
+    Les tests au-dessus la vérifient là où la faille a été trouvée : écrire, et
+    trancher. Elle est pourtant posée une seule fois, dans `_handle`, pour tout
+    ce qui commence par `/api/` -- et c'est cette propriété-là qu'il faut
+    tenir, parce que la route suivante sera ajoutée par quelqu'un qui n'aura
+    pas relu ce fichier. `/api/offres` est la première qui dépense de l'argent
+    réel : une page ouverte pendant que le Sage tourne pouvait autrefois écrire
+    dans le journal, elle ne doit pas pouvoir vider un crédit.
+
+    Les routes sont lues dans le source plutôt qu'énumérées ici : une liste
+    recopiée vieillit sans rien casser, ce qui est exactement le mode de panne
+    que ce test existe pour empêcher.
+    """
+    import ast
+    import pathlib
+
+    from singular.sage import server as module
+
+    source = ast.parse(pathlib.Path(module.__file__).read_text(encoding="utf-8"))
+    corps = next(noeud for noeud in ast.walk(source)
+                 if isinstance(noeud, ast.FunctionDef) and noeud.name == "route")
+    chemins = sorted({
+        noeud.value for noeud in ast.walk(corps)
+        if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)
+        and noeud.value.startswith("/api/")
+    })
+    # La route paramétrée ne se lit pas comme une constante : elle est décrite
+    # par une expression régulière, et vaut le même refus.
+    chemins.append("/api/entries/DEC-INEXISTANTE/resolve")
+    assert len(chemins) >= 6, f"trop peu de routes lues : {chemins}"
+
+    for chemin in chemins:
+        refus = _post_as_a_page(running, chemin, {},
+                                Origin="https://site-malveillant.example")
+        assert refus == HTTPStatus.FORBIDDEN, (
+            f"{chemin} répond {refus} à une page quelconque au lieu de 403. "
+            "La garde est posée dans `_handle` pour tout `/api/` : cette route "
+            "y échappe, ou elle a été branchée ailleurs."
+        )
+
+
+def test_a_page_without_an_origin_of_its_own_is_refused(running):
+    """`null` est ce qu'annonce une page sandboxée ou ouverte depuis un fichier."""
+    assert _post_as_a_page(running, "/api/entries", A_DECISION,
+                           Origin="null") == HTTPStatus.FORBIDDEN
+
+
+def test_a_body_a_page_could_send_without_asking_first_is_refused(running):
+    """Le type du corps est la seconde barrière, indépendante de l'origine.
+
+    Un navigateur n'envoie une requête vers une autre origine sans permission
+    préalable que pour `text/plain`, un formulaire ou du multipart. Un
+    formulaire HTML ne peut rien poster d'autre : le refus tient même si
+    l'origine venait à manquer.
+    """
+    request = urllib.request.Request(
+        running + "/api/entries", data=json.dumps(A_DECISION).encode(), method="POST",
+        headers={"Content-Type": "text/plain;charset=UTF-8"})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            code = response.status
+    except urllib.error.HTTPError as refused:
+        code = refused.code
+    assert code == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
+
+
+def test_a_domain_pointed_at_this_machine_is_refused(running):
+    """Comparer l'origine à l'hôte ne suffit pas : il faut que l'hôte soit une adresse.
+
+    Un attaquant qui fait pointer son domaine vers cette machine et sert sa page
+    sur le même port obtient une origine et un hôte identiques. La comparaison
+    dirait « même origine » pour une page qui est la sienne.
+    """
+    port = running.rsplit(":", 1)[1]
+    assert _post_as_a_page(running, "/api/entries", A_DECISION,
+                           Host=f"evil.example:{port}",
+                           Origin=f"http://evil.example:{port}") == HTTPStatus.FORBIDDEN
+
+
+def test_the_app_itself_still_writes(running, journal):
+    """La garde ne vaut rien si elle ferme aussi la porte à l'app."""
+    port = running.rsplit(":", 1)[1]
+    request = urllib.request.Request(
+        running + "/api/entries", data=json.dumps(A_DECISION).encode(), method="POST",
+        headers={"Content-Type": "application/json", "X-Sage-Token": TOKEN,
+                 "Origin": f"http://127.0.0.1:{port}"})
+    with urllib.request.urlopen(request, timeout=5) as response:
+        assert response.status == HTTPStatus.OK
+    assert len(journal.entries()) == 1
+
+
+def test_a_client_that_is_not_a_browser_still_writes(running, journal):
+    """`curl` et l'app native n'envoient pas d'origine, et ne portent pas de session."""
+    assert _post_as_a_page(running, "/api/entries", A_DECISION) == HTTPStatus.OK
+    assert len(journal.entries()) == 1
+
+
+@pytest.mark.parametrize("host,accepted", [
+    ("127.0.0.1:8765", True),
+    ("192.168.1.20:8765", True),
+    ("localhost:8765", True),
+    ("[::1]:8765", True),
+    ("::1", True),
+    ("sage.local:8765", False),
+    ("evil.example", False),
+    ("", False),
+])
+def test_only_an_address_names_this_server(host: str, accepted: bool):
+    assert host_is_an_address(host) is accepted
+
+
+@pytest.mark.parametrize("origin,host,accepted", [
+    ("", "127.0.0.1:8765", True),
+    ("http://127.0.0.1:8765", "127.0.0.1:8765", True),
+    ("http://127.0.0.1:8765", "127.0.0.1:9999", False),
+    ("https://127.0.0.1:8765", "127.0.0.1:8765", False),
+    ("null", "127.0.0.1:8765", False),
+    ("http://evil.example", "127.0.0.1:8765", False),
+])
+def test_the_declared_origin_must_be_this_server(origin: str, host: str, accepted: bool):
+    assert same_origin(origin, host) is accepted
+
+
+def test_le_jeton_n_est_lisible_que_par_son_proprietaire(tmp_path) -> None:
+    """La cle du journal ne doit pas etre en clair et lisible par tous.
+
+    Elle l'etait -- 0644, le mode par defaut de tout fichier ecrit sans le
+    dire. Sur un PC Windows a utilisateur unique ca ne changeait rien, et c'est
+    pour ca que personne ne l'avait vu. Depuis que le coeur tourne sans
+    dependance, il tourne aussi sur des machines partagees.
+    """
+    import stat
+    import sys
+
+    from singular.sage.server import read_token
+
+    if sys.platform.startswith("win"):
+        pytest.skip("chmod ne pose que le bit lecture seule sur Windows")
+
+    chemin = tmp_path / "sage_token"
+    jeton = read_token(chemin)
+
+    assert jeton
+    mode = stat.S_IMODE(chemin.stat().st_mode)
+    assert mode == 0o600, f"jeton lisible au-dela de son proprietaire : {mode:o}"
+
+
+def test_un_jeton_deja_ecrit_est_resserre_au_passage(tmp_path) -> None:
+    """Sinon la correction ne protegerait que les installations neuves."""
+    import stat
+    import sys
+
+    from singular.sage.server import read_token
+
+    if sys.platform.startswith("win"):
+        pytest.skip("chmod ne pose que le bit lecture seule sur Windows")
+
+    chemin = tmp_path / "sage_token"
+    chemin.write_text("un-jeton-deja-la", encoding="utf-8")
+    chemin.chmod(0o644)
+
+    assert read_token(chemin) == "un-jeton-deja-la"
+    assert stat.S_IMODE(chemin.stat().st_mode) == 0o600
+
+
+def test_an_empty_journal_says_where_it_looked(tmp_path):
+    """« Le journal est vide » ne dit pas s'il a tout perdu ou si on cherche mal.
+
+    Le coeur tourne sur son PC et sur son telephone, sur deux fichiers qui ne
+    se parlent pas. Ouvrir l'app apres avoir change de branche, de dossier ou
+    de machine peut donc afficher un journal neuf alors que le sien est intact
+    ailleurs. La ligne de commande le disait deja ; l'app, celle qu'il ouvre le
+    matin, ne le disait pas.
+    """
+    from singular.sage.server import SageApp
+
+    journal = DecisionJournal(tmp_path / "ailleurs" / "journal.db")
+    rendu = SageApp(journal).notice()
+
+    assert rendu["report"]["decisions"] == 0
+    assert rendu["journal"].endswith("journal.db")
+    assert "ailleurs" in rendu["journal"]
+
+    # Et le client l'affiche : sans ca, le serveur le dirait a personne.
+    import pathlib
+
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "singular/sage/web/app.js").read_text(encoding="utf-8")
+    assert "notice.journal" in page, "l'app ne lit pas le chemin que le serveur envoie"
+    assert "Cherché ici" in page
+
+
+# --- le port pris, chaque matin ----------------------------------------------
+
+def test_un_port_deja_pris_se_dit_en_une_phrase(tmp_path, capsys):
+    """`A_FAIRE.md` demande de lancer le Sage chaque matin.
+
+    Une fenetre laissee ouverte la veille tient encore le port, et Python
+    deroulait huit lignes de pile finissant par `OSError: [Errno 98] Address
+    already in use`. Pour quelqu'un qui debute en code, c'est indistinguable
+    d'une application cassee -- alors que la vraie reponse tient en une phrase :
+    elle tourne deja, ouvre l'adresse.
+    """
+    from singular.sage.server import serve
+
+    occupant = socket.socket()
+    occupant.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    occupant.bind(("127.0.0.1", 0))
+    occupant.listen(1)
+    port = occupant.getsockname()[1]
+    try:
+        code = serve(db=tmp_path / "journal.db", port=port)
+    finally:
+        occupant.close()
+
+    sortie = capsys.readouterr().out
+    assert code == 1
+    assert "deja pris" in sans_accents(sortie)
+    assert f"http://127.0.0.1:{port}/" in sortie
+    for pile in ("Traceback", "Errno", "Address already in use", "socketserver"):
+        assert pile not in sortie, f"la pile Python arrive sur son ecran : {sortie}"
+
+
+def test_l_option_conseillee_existe_vraiment():
+    """Conseiller une option inexistante serait pire que la pile.
+
+    Le test lit le parseur plutot que le texte : c'est la seule facon que le
+    conseil vieillisse en meme temps que la commande.
+    """
+    from singular.__main__ import build_parser
+
+    args = build_parser().parse_args(["sage", "--port", "9000"])
+    assert args.port == 9000
+
+
+# --- la derniere porte : les pannes qu'on n'a pas prevues ---------------------
+
+def test_une_panne_imprevue_ne_parle_pas_anglais_sur_son_telephone(tmp_path):
+    """Le corps JSON portait `f"{type(exc).__name__}: {exc}"`.
+
+    `OperationalError: database is locked` s'affichait donc sur son ecran. Le
+    cas est reel : le Sage sert le telephone pendant qu'une commande ecrit dans
+    une fenetre du PC. C'est le meme defaut que les refus de saisie et les refus
+    d'ecriture, a la derniere porte -- celle des pannes non prevues.
+    """
+    import sqlite3
+
+    from singular.sage.server import OCCUPE, PANNE, SageApp, _panne
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    assert app is not None
+
+    assert _panne(sqlite3.OperationalError("database is locked")) == OCCUPE
+    assert _panne(ValueError("un detail interne")) == PANNE
+    for message in (OCCUPE, PANNE):
+        for anglais in ("Error", "locked", "database", "Traceback"):
+            assert anglais not in message, f"« {message} » parle encore la langue de la machine"
+
+
+def test_la_panne_se_lit_quand_meme_sur_le_pc(tmp_path, capsys):
+    """Une phrase pour lui ne doit pas devenir un silence pour moi.
+
+    Sans la trace cote PC, la seule chose qu'il pourrait me rapporter serait
+    « ca a casse » -- et il n'y aurait rien a chercher.
+    """
+    import socket
+    import threading
+    import urllib.error
+    import urllib.request
+
+    from singular.sage.server import SageApp, build_server
+
+    journal = DecisionJournal(tmp_path / "journal.db")
+    app = SageApp(journal)
+    app.notice = lambda: (_ for _ in ()).throw(RuntimeError("panne fabriquee par le test"))
+
+    libre = socket.socket()
+    libre.bind(("127.0.0.1", 0))
+    port = libre.getsockname()[1]
+    libre.close()
+    serveur = build_server(app, "127.0.0.1", port)
+    fil = threading.Thread(target=serveur.serve_forever, daemon=True)
+    fil.start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as refus:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/notice")
+        corps = json.loads(refus.value.read())
+    finally:
+        serveur.shutdown()
+        fil.join(timeout=5)
+
+    assert refus.value.code == 500
+    assert "panne fabriquee" not in corps["message"], "le detail part sur le telephone"
+    assert "panne fabriquee" in capsys.readouterr().out, "et il ne reste nulle part"

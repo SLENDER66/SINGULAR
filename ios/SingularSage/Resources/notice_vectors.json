@@ -1,0 +1,1273 @@
+{
+  "generated_by": "tools/generate_notice_vectors.py",
+  "origin": "2026-09-06T09:00:00+00:00",
+  "note": "Régénérer avec `python tools/generate_notice_vectors.py` après toute modification de singular/sage/notice.py.",
+  "cases": [
+    {
+      "name": "journal_vide",
+      "why": "Sans entrées, on le dit une fois et on ne reproche rien d'autre.",
+      "at": "2026-09-06T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [],
+      "expected": {
+        "headline": "Notice. Le journal est vide.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Le journal est vide",
+            "detail": "Je ne peux rien t'apprendre sur toi tant que tu n'as rien prédit. La première décision est la seule qui demande un effort ; ensuite c'est trente secondes."
+          }
+        ]
+      }
+    },
+    {
+      "name": "une_decision_en_retard",
+      "why": "Le retard passe avant tout le reste, et il est écrit au singulier.",
+      "at": "2026-09-15T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Refonte",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 7,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. À trancher aujourd'hui.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "À trancher aujourd'hui",
+            "detail": "1 décision a dépassé son horizon. Elle attend depuis 2 jours."
+          }
+        ]
+      }
+    },
+    {
+      "name": "retard_critique",
+      "why": "Au-delà d'une semaine, ce n'est plus un oubli.",
+      "at": "2026-09-26T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Refonte",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 7,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. À trancher aujourd'hui.",
+        "severity": "CRITIQUE",
+        "items": [
+          {
+            "severity": "CRITIQUE",
+            "title": "À trancher aujourd'hui",
+            "detail": "1 décision a dépassé son horizon. Elle attend depuis 13 jours. Passé une semaine, un verdict qu'on ne rend pas n'est plus un oubli : c'est le résultat qu'on préfère ne pas voir."
+          }
+        ]
+      }
+    },
+    {
+      "name": "deux_retards",
+      "why": "Le pluriel, et le plus ancien qui donne le compte.",
+      "at": "2026-09-18T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Refonte",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 7,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Formation",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "CAPACITES",
+          "cost_hours": 4.0,
+          "horizon_days": 10,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. À trancher aujourd'hui.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "À trancher aujourd'hui",
+            "detail": "2 décisions ont dépassé leur horizon. La plus en retard attend depuis 5 jours."
+          },
+          {
+            "severity": "ATTENTION",
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
+          }
+        ]
+      }
+    },
+    {
+      "name": "deux_retards_dans_le_desordre",
+      "why": "L'ordre du retard n'est pas celui de l'ecriture, et les deux moteurs en divergeaient pour de bon -- Swift triait par echeance, Python par date d'ecriture. Il faut un horizon long pris en premier pour que les deux ordres se separent : sans ce cas, `deux_retards` les faisait tomber d'accord par hasard.\nCe vecteur epingle la phrase, pas l'ordre : le nombre vient d'un `max()`, donc il sortirait le meme des deux cotes meme si l'un des deux triait a l'envers. Le contrat des vecteurs ne porte que severite, titre et detail -- ni `action` ni `entry_ids` -- donc *quelle* decision est nommee reste hors parite. C'est `test_sage_notice.py` qui tient cet ordre, cote Python.",
+      "at": "2026-10-16T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Reprise d'etudes",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "CAPACITES",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Relancer le bureau",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 10,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. À trancher aujourd'hui.",
+        "severity": "CRITIQUE",
+        "items": [
+          {
+            "severity": "CRITIQUE",
+            "title": "À trancher aujourd'hui",
+            "detail": "2 décisions ont dépassé leur horizon. La plus en retard attend depuis 29 jours. Passé une semaine, un verdict qu'on ne rend pas n'est plus un oubli : c'est le résultat qu'on préfère ne pas voir."
+          },
+          {
+            "severity": "ATTENTION",
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
+          }
+        ]
+      }
+    },
+    {
+      "name": "rangs_fondateurs_vides",
+      "why": "Stabilité et Revenus vides, avec des heures réellement passées ailleurs.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Patrimoine",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "PATRIMOINE",
+          "cost_hours": 30.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Bourse",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "PATRIMOINE",
+          "cost_hours": 30.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Aucune décision sur Stabilité et Revenus.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Aucune décision sur Stabilité et Revenus",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ces rangs n’ont reçu aucune décision, alors que 60h sont allées ailleurs."
+          },
+          {
+            "severity": "INFO",
+            "title": "2 décisions ouvertes",
+            "detail": "La prochaine échéance tombe dans 29 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "un_seul_rang_fondateur_vide",
+      "why": "Le singulier de la même observation.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Patrimoine",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "PATRIMOINE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Aucune décision sur Revenus.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Aucune décision sur Revenus",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision, alors que 4h sont allées ailleurs."
+          },
+          {
+            "severity": "INFO",
+            "title": "2 décisions ouvertes",
+            "detail": "La prochaine échéance tombe dans 29 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "un_rang_fondateur_vide_sans_heures_ailleurs",
+      "why": "Rien n'est allé ailleurs : le rang manque, on le dit, on ne le reproche pas.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Relancer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Aucune décision sur Stabilité.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision."
+          },
+          {
+            "severity": "INFO",
+            "title": "2 décisions ouvertes",
+            "detail": "La prochaine échéance tombe dans 29 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "une_seule_decision_ne_peut_pas_couvrir_deux_rangs",
+      "why": "Le lendemain de la première ligne, aucun rang vide ne se reproche.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. 1 décision ouverte.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 13 jours : « le résultat observable », que tu donnes à 75%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "ecrite_le_soir_relue_le_matin_de_l_echeance",
+      "why": "Le jour dit, dès le matin : l'horizon est en jours, il tombe un jour.",
+      "at": "2026-09-20T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "Un entretien",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 11,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. À trancher aujourd'hui.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "À trancher aujourd'hui",
+            "detail": "1 décision a dépassé son horizon. Elle attend un verdict depuis aujourd'hui."
+          }
+        ]
+      }
+    },
+    {
+      "name": "ecrite_le_soir_relue_la_veille_au_soir",
+      "why": "Et pas la veille : le versant qui prouve que le seuil n'a pas glissé.",
+      "at": "2026-09-19T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "Un entretien",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 11,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. 1 décision ouverte.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 1 jour : « Un entretien », que tu donnes à 75%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "ecart_qui_peut_encore_etre_du_hasard",
+      "why": "Un pari sur trois gagné quand on en annonçait trois quarts : le hasard seul fait ça une fois sur six. On montre l'écart, on ne conclut pas.",
+      "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Pari 0",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 2",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Aucune décision sur Stabilité.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision."
+          },
+          {
+            "severity": "INFO",
+            "title": "Tu annonces plus que ce qui arrive",
+            "detail": "Tu annonces 75% en moyenne ; il en arrive 33%. Sur 3 verdicts, un écart pareil sort du pur hasard une fois sur 6 : c'est encore trop peu pour en conclure quoi que ce soit. Regarde-le sans le corriger."
+          }
+        ]
+      }
+    },
+    {
+      "name": "un_pari_sur_qui_tombe",
+      "why": "Deux paris à 5 % et un à 95 %, aucun tenu. C'est le 95 % qui parle : une moyenne les ramènerait tous à 35 % et effacerait le signal.",
+      "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Pari long 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.05,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari long 2",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.05,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari sûr",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Tu te surestimes de +35%.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Tu te surestimes de +35%",
+            "detail": "Tu annonces 35% en moyenne ; il en arrive 0%. Sur 3 verdicts, ce n'est plus de la malchance : le hasard seul produirait cet écart une fois sur 21. Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+          },
+          {
+            "severity": "INFO",
+            "title": "Aucune décision sur Stabilité",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision."
+          }
+        ]
+      }
+    },
+    {
+      "name": "ecart_prouve_sous_le_seuil_voyant",
+      "why": "Seize paris annoncés à 95 %, trois perdus : quatorze points d'écart, que le hasard seul produirait une fois sur vingt-trois. Sous les quinze points qui rendaient un écart voyant, et pourtant démontré — c'est le cas sur lequel le Sage se taisait.",
+      "at": "2026-09-09T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Pari 0",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 2",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 3",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 4",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 5",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 6",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 7",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 8",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 9",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 10",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 11",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 12",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 13",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 14",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 15",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.95,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Tu te surestimes de +14%.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Tu te surestimes de +14%",
+            "detail": "Tu annonces 95% en moyenne ; il en arrive 81%. Sur 16 verdicts, ce n'est plus de la malchance : le hasard seul produirait cet écart une fois sur 23. Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+          },
+          {
+            "severity": "INFO",
+            "title": "Aucune décision sur Revenus",
+            "detail": "Ta constitution ouvre sur Stabilité → Revenus. Ce rang n’a reçu aucune décision."
+          }
+        ]
+      }
+    },
+    {
+      "name": "surconfiance",
+      "why": "Quatre paris à 90 % tous perdus : une fois sur dix mille. Là, on conclut.",
+      "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Pari 0",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.9,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.9,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 2",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.9,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 3",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.9,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Tu te surestimes de +90%.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Tu te surestimes de +90%",
+            "detail": "Tu annonces 90% en moyenne ; il en arrive 0%. Sur 4 verdicts, ce n'est plus de la malchance : le hasard seul produirait cet écart une fois sur 10 000. Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+          },
+          {
+            "severity": "ATTENTION",
+            "title": "4h engagées sans verdict",
+            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est ce que ce rapport appelle confondre activité et résultat : ta constitution nomme le piège dans sa mission, elle ne le mesure pas — la mesure est celle-ci, et elle vaut ce que vaut ce rapport."
+          },
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 28 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "arrondi_sur_une_moitie",
+      "why": "L'écart tombe pile sur une moitié : 0,475 → +47 %, pas +48 %. Un port qui multiplie par 100 avant d'arrondir bascule ici, et se trompe d'un point tous les matins sans rien signaler. Huit paris et un seul gagné : assez pour que le titre porte le nombre, ce qui est la seule raison d'être de ce cas.",
+      "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Pari 0",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        },
+        {
+          "title": "Pari 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 2",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 3",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 4",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 5",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 6",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 7",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 1,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. Tu te surestimes de +47%.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "Tu te surestimes de +47%",
+            "detail": "Tu annonces 60% en moyenne ; il en arrive 12%. Sur 8 verdicts, ce n'est plus de la malchance : le hasard seul produirait cet écart une fois sur 117. Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+          },
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 28 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "trop_peu_de_verdicts_pour_juger",
+      "why": "Sous le seuil, l'échantillon explique l'écart aussi bien.",
+      "at": "2026-09-08T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Pari 0",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.9,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Pari 1",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.9,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": false
+        },
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. 4h engagées sans verdict.",
+        "severity": "ATTENTION",
+        "items": [
+          {
+            "severity": "ATTENTION",
+            "title": "4h engagées sans verdict",
+            "detail": "Contre 0h qui ont produit ce que tu attendais. C'est ce que ce rapport appelle confondre activité et résultat : ta constitution nomme le piège dans sa mission, elle ne le mesure pas — la mesure est celle-ci, et elle vaut ce que vaut ce rapport."
+          },
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 28 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "chaine_rompue",
+      "why": "L'observation la plus grave, et la seule qui invalide toutes les autres. Elle passe avant le retard, et elle est CRITIQUE quoi qu'il y ait d'autre.",
+      "at": "2026-09-26T09:00:00+00:00",
+      "chain_intact": false,
+      "entries": [
+        {
+          "title": "Refonte",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 7,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. La chaîne du journal est rompue.",
+        "severity": "CRITIQUE",
+        "items": [
+          {
+            "severity": "CRITIQUE",
+            "title": "La chaîne du journal est rompue",
+            "detail": "Une prédiction a été modifiée ou supprimée après coup. Tant que c'est vrai, aucune statistique de cette page ne vaut : elles portent sur un passé qui a été réécrit."
+          },
+          {
+            "severity": "CRITIQUE",
+            "title": "À trancher aujourd'hui",
+            "detail": "1 décision a dépassé son horizon. Elle attend depuis 13 jours. Passé une semaine, un verdict qu'on ne rend pas n'est plus un oubli : c'est le résultat qu'on préfère ne pas voir."
+          },
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 10 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "premiere_decision_sans_reproche",
+      "why": "Le cas réel du premier matin : une décision ouverte, échéance lointaine, rien de tranché. Le Sage n'a rien à reprocher — un verdict qu'on ne pouvait pas rendre n'est pas une faute.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Postuler",
+          "action": "faire la chose",
+          "predicted": "Un entretien",
+          "probability": 0.75,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 14,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        }
+      ],
+      "expected": {
+        "headline": "Notice. 1 décision ouverte.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 13 jours : « Un entretien », que tu donnes à 75%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "tout_va_bien",
+      "why": "Le Sage doit savoir se taire, sinon on cesse de le lire.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Loyer",
+          "action": "faire la chose",
+          "predicted": "bail signé",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 4.0,
+          "horizon_days": 30,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Client",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 4.0,
+          "horizon_days": 20,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        }
+      ],
+      "expected": {
+        "headline": "Notice. 1 décision ouverte.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 29 jours : « bail signé », que tu donnes à 60%."
+          }
+        ]
+      }
+    },
+    {
+      "name": "heures_sans_verdict",
+      "why": "L'activité qui n'est jamais devenue un résultat.",
+      "at": "2026-09-07T09:00:00+00:00",
+      "chain_intact": true,
+      "entries": [
+        {
+          "title": "Gros chantier",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "STABILITE",
+          "cost_hours": 80.0,
+          "horizon_days": 60,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": null
+        },
+        {
+          "title": "Client",
+          "action": "faire la chose",
+          "predicted": "le résultat observable",
+          "probability": 0.6,
+          "tier": "REVENUS",
+          "cost_hours": 2.0,
+          "horizon_days": 20,
+          "created_offset_days": 0,
+          "created_offset_hours": 0,
+          "expected_gain_eur": 500.0,
+          "resolved": true
+        }
+      ],
+      "expected": {
+        "headline": "Notice. 80h engagées sans verdict.",
+        "severity": "INFO",
+        "items": [
+          {
+            "severity": "INFO",
+            "title": "80h engagées sans verdict",
+            "detail": "Contre 2h qui ont produit ce que tu attendais. C'est ce que ce rapport appelle confondre activité et résultat : ta constitution nomme le piège dans sa mission, elle ne le mesure pas — la mesure est celle-ci, et elle vaut ce que vaut ce rapport."
+          },
+          {
+            "severity": "INFO",
+            "title": "1 décision ouverte",
+            "detail": "La prochaine échéance tombe dans 59 jours : « le résultat observable », que tu donnes à 60%."
+          }
+        ]
+      }
+    }
+  ]
+}

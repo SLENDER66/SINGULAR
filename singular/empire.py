@@ -5,8 +5,6 @@ from typing import Any, Callable, Optional
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from .autopilot import ActionRequest, DelegationContract, ExecutionBus, Governor, Autonomy
-
 class EventType(str, Enum):
     USER='USER'; EMAIL='EMAIL'; CALENDAR='CALENDAR'; WEB='WEB'; FILE='FILE'; SYSTEM='SYSTEM'; RESULT='RESULT'; ALERT='ALERT'
 
@@ -58,11 +56,10 @@ class HumanLoadOptimizer:
         return round(requests / steps, 3)
 
 class AutopilotSupervisor:
-    """Closed-loop supervisor: observe events, route missions, execute safe work, escalate the rest."""
+    """Closed-loop supervisor; execution is fail-closed until validated."""
     def __init__(self, registry: AgentRegistry | None = None):
         self.registry = registry or AgentRegistry()
         self.events = EventBus()
-        self.bus = ExecutionBus()
         self.runs: dict[str, MissionRun] = {}
         self.audit: list[dict[str, Any]] = []
         self.events.subscribe(self._audit_event)
@@ -76,6 +73,7 @@ class AutopilotSupervisor:
         return run
 
     def route(self, run: MissionRun, capability: str, payload: dict[str, Any]) -> Any:
+        """Route observation only; never invoke an agent handler directly."""
         candidates = self.registry.available(capability)
         if not candidates:
             run.blockers.append(f'Aucun agent pour la capacité: {capability}')
@@ -83,17 +81,9 @@ class AutopilotSupervisor:
             return None
         agent = sorted(candidates, key=lambda a: a.risk_tier)[0]
         self.events.publish(Event(EventType.SYSTEM, 'agent_selected', {'agent': agent.name, 'run': run.mission_id}))
-        if agent.handler is None:
-            run.human_requests.append(f'Configurer le handler de {agent.name}')
-            run.status = 'WAITING_HUMAN'
-            return None
-        try:
-            out = agent.handler(payload)
-            run.outputs.append({'agent': agent.name, 'output': out})
-            self.events.publish(Event(EventType.RESULT, 'agent_result', {'run': run.mission_id, 'agent': agent.name}))
-            return out
-        except Exception as exc:
-            run.blockers.append(str(exc)); run.status = 'FAILED'; return None
+        run.status = 'BLOCKED'
+        run.blockers.append('Execution refusée: une ValidatedTrajectoryDecision est requise avant tout handler.')
+        return None
 
     def finish(self, run: MissionRun):
         run.status = 'DONE' if not run.blockers and not run.human_requests else ('WAITING_HUMAN' if run.human_requests else 'BLOCKED')

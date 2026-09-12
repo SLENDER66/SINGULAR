@@ -43,6 +43,12 @@ class CalibrationRecord:
     forecast_confidence: float
     lesson: str
 
+    def __post_init__(self) -> None:
+        # Belt and braces: every consumer compares kind with `is`, which a bare
+        # string passes type-checking but fails at runtime.
+        if not isinstance(self.kind, ForecastKind):
+            object.__setattr__(self, "kind", ForecastKind(self.kind))
+
 
 @dataclass(frozen=True)
 class LearningUpdate:

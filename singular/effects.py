@@ -3,11 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol
 
 from .durable import DurableStore
+from .sqlite_support import SqliteLocation
 
 
 class EffectStatus(str, Enum):
@@ -28,7 +30,19 @@ class EffectRequest:
     provider: str
     operation: str
     payload: Any
-    action_fingerprint: str | None = None
+    action_fingerprint: str
+
+    def __post_init__(self) -> None:
+        """An effect must name the action it belongs to.
+
+        A row without that fingerprint is a permanent integrity violation --
+        EFFECT-ACTION-BINDING -- and the boundary refuses every execution while
+        integrity is dirty, with nothing able to repair the row. The field used
+        to default to None, so forgetting it wrote that state silently instead
+        of reporting it here.
+        """
+        if not str(self.action_fingerprint).strip():
+            raise ValueError("un effet externe doit nommer l'action à laquelle il appartient")
 
     @property
     def payload_fingerprint(self) -> str:
@@ -65,36 +79,15 @@ class ExternalEffectCoordinator:
     }
 
     def __init__(self, store: DurableStore) -> None:
+        #: external_effects belongs to DurableStore, which owns this database.
+        #: This class declared the table too, with action_fingerprint nullable
+        #: where the store makes it NOT NULL DEFAULT '': two definitions of one
+        #: table, settled by whichever ran first, deciding whether a missing
+        #: action identity was even representable.
         self.store = store
-        self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.store.path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS external_effects (
-                    provider_idempotency_key TEXT PRIMARY KEY,
-                    execution_key TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    operation TEXT NOT NULL,
-                    action_fingerprint TEXT,
-                    payload_fingerprint TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    result TEXT,
-                    error TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            columns = {row[1] for row in conn.execute("PRAGMA table_info(external_effects)")}
-            if "action_fingerprint" not in columns:
-                conn.execute("ALTER TABLE external_effects ADD COLUMN action_fingerprint TEXT")
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return SqliteLocation(self.store.path).session(foreign_keys=True, busy_timeout=True)
 
     def prepare(self, request: EffectRequest) -> dict[str, Any]:
         key = request.provider_idempotency_key
@@ -136,7 +129,26 @@ class ExternalEffectCoordinator:
         if existing["payload_fingerprint"] != request.payload_fingerprint:
             raise ValueError("Clé d'idempotence fournisseur réutilisée avec un payload différent.")
 
+    def _execution_status(self, execution_key: str) -> str:
+        row = self.store.get_execution(execution_key)
+        if row is None:
+            raise KeyError(execution_key)
+        return str(row["status"])
+
+    def _authorize_execution(self, request: EffectRequest) -> None:
+        status = self._execution_status(request.execution_key)
+        if status == "RECOVERY_REQUIRED":
+            raise RuntimeError("Exécution en récupération : réconciliation explicite requise avant tout nouvel effet externe.")
+        if status != "RUNNING":
+            raise RuntimeError(f"Effet externe interdit pour une exécution dans l'état {status}.")
+
+    def _authorize_reconciliation(self, request: EffectRequest) -> None:
+        status = self._execution_status(request.execution_key)
+        if status != "RECOVERY_REQUIRED":
+            raise RuntimeError("La réconciliation externe est réservée aux exécutions RECOVERY_REQUIRED.")
+
     def execute(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
+        self._authorize_execution(request)
         key = request.provider_idempotency_key
         existing = self.prepare(request)
         status = existing["status"]
@@ -150,7 +162,7 @@ class ExternalEffectCoordinator:
             raise EffectInProgress(key)
 
         if not self._claim(key):
-            current = self.prepare(request)
+            current = self.peek(request)
             if current["status"] == EffectStatus.COMPLETED.value:
                 return ProviderResult("COMPLETED", current.get("result"))
             if current["status"] == EffectStatus.FAILED.value:
@@ -177,21 +189,29 @@ class ExternalEffectCoordinator:
         return normalized
 
     def recover_in_flight(self, request: EffectRequest, *, reason: str) -> dict[str, Any]:
-        """Quarantine an abandoned claim without calling the external provider."""
+        """Quarantine an existing abandoned claim without creating a new effect intent."""
         if not reason.strip():
             raise ValueError("Une raison de récupération explicite est obligatoire.")
         key = request.provider_idempotency_key
-        row = self.prepare(request)
+        try:
+            row = self.peek(request)
+        except KeyError:
+            raise KeyError(key) from None
         if row["status"] == EffectStatus.UNKNOWN.value:
             return row
         if row["status"] != EffectStatus.IN_FLIGHT.value:
             raise ValueError(f"Récupération d'effet impossible depuis l'état {row['status']}.")
         self._transition(key, EffectStatus.UNKNOWN.value, error=f"Recovery required: {reason}")
-        return self.prepare(request)
+        return self.peek(request)
 
     def reconcile(self, request: EffectRequest, provider: EffectProvider) -> ProviderResult:
+        """Reconcile only an existing UNKNOWN effect; never create recovery intent."""
+        self._authorize_reconciliation(request)
         key = request.provider_idempotency_key
-        row = self.prepare(request)
+        try:
+            row = self.peek(request)
+        except KeyError:
+            raise RuntimeError("Aucune preuve durable de l'effet externe n'existe pour cette réconciliation.") from None
         if row["status"] == EffectStatus.COMPLETED.value:
             return ProviderResult("COMPLETED", row.get("result"))
         if row["status"] != EffectStatus.UNKNOWN.value:
@@ -209,7 +229,7 @@ class ExternalEffectCoordinator:
         return normalized
 
     def get(self, request: EffectRequest) -> dict[str, Any]:
-        return self.prepare(request)
+        return self.peek(request)
 
     def _claim(self, key: str) -> bool:
         with self._connect() as conn:
@@ -220,12 +240,26 @@ class ExternalEffectCoordinator:
             return cur.rowcount == 1
 
     def _transition(self, key: str, status: str, *, result: Any = None, error: str | None = None) -> None:
+        """Applique une transition d'état atomiquement.
+
+        Rejouer le même état ne fait rien et n'est pas une erreur : c'est ce
+        qui préserve la preuve. Un rejeu -- reprise après incident, appel en
+        double, retentative d'un fournisseur -- ne doit pas écraser le résultat
+        déjà enregistré par une seconde écriture identique, sinon l'horodatage
+        de l'effet ne dit plus quand il s'est réellement produit.
+
+        Phrase récupérée de `feat/validated-execution-boundary` avant que cette
+        branche soit jugée supprimable : le code y était identique, ce
+        commentaire était la seule chose qu'elle avait en plus.
+        """
         with self._connect() as conn:
             row = conn.execute("SELECT status FROM external_effects WHERE provider_idempotency_key=?", (key,)).fetchone()
             if row is None:
                 raise KeyError(key)
             current = row["status"]
-            if status != current and status not in self._TRANSITIONS.get(current, frozenset()):
+            if status == current:
+                return
+            if status not in self._TRANSITIONS.get(current, frozenset()):
                 if current in {EffectStatus.COMPLETED.value, EffectStatus.FAILED.value}:
                     raise RuntimeError(f"Transition d'effet perdue : état terminal déjà atteint ({current} -> {status}).")
                 raise ValueError(f"Transition d'effet interdite : {current} -> {status}")
