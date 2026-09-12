@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from ..autopilot import ActionRequest
 from ..execution_capability import register_execution_capability
