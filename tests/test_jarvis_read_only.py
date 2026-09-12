@@ -51,6 +51,10 @@ def test_read_only_result_is_independently_verified(tmp_path: Path):
     tampered["path"] = "other.txt"
     assert not verify_read_only_result(tmp_path, action, tampered)
 
+    tampered = dict(result)
+    tampered["text"] = "forged"
+    assert not verify_read_only_result(tmp_path, action, tampered)
+
 
 def test_read_only_tool_rejects_absolute_and_escape_paths(tmp_path: Path):
     _, handler = make_read_only_repository_tool(tmp_path, capability_id="cap_test_read_only_escape")
