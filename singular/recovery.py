@@ -30,9 +30,9 @@ class RecoveryResult:
 class RecoveryManager:
     """Fail-closed recovery boundary for stale executions.
 
-    A quarantined execution can never be resumed automatically. The durable store
-    owns the transaction; this class translates the persisted representation into
-    the domain-level recovery result.
+    A quarantined execution can never be resumed automatically. A successful
+    outcome must be established through the external-effect reconciliation
+    protocol, not asserted by an operator through this generic recovery API.
     """
 
     def __init__(self, store: DurableStore) -> None:
@@ -46,6 +46,11 @@ class RecoveryManager:
         result: Any = None,
         reason: str | None = None,
     ) -> RecoveryResult:
+        if decision is RecoveryDecision.CONFIRM:
+            raise ValueError(
+                "Une exécution RECOVERY_REQUIRED ne peut être confirmée comme réussie sans preuve externe. "
+                "Utilisez la réconciliation du fournisseur."
+            )
         persisted = self.store.resolve_execution_recovery(
             execution_key,
             decision.value,

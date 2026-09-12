@@ -1,0 +1,303 @@
+"""Un test ne recopie pas un message de SINGULAR sans ses accents.
+
+Quatre fois dans la même journée, une correction du français d'un message a
+fait tomber un test qui l'attendait au caractère près : « refuse », « ecris tes
+tarifs », « jetons envoyes », « un cout n'est pas un gain », « pour 75 %, ecris
+0.75 ». Aucun comportement n'avait changé.
+
+C'est le pire type de test. Il ne prouve rien de plus qu'une comparaison
+tolérante, et il **punit la correction des messages** -- donc il apprend à ne
+plus les corriger. À la quatrième, la règle du dépôt dit d'arrêter de corriger
+et de rendre l'erreur impossible.
+
+La règle se découvre plutôt qu'elle ne s'énumère : un littéral de test qui se
+retrouve, accents ôtés, dans une phrase affichée par le programme, mais qui ne
+s'y retrouve pas tel qu'il est écrit, est une recopie fautive. Deux sorties
+honnêtes : recopier les accents, ou passer par `sans_accents()` de
+`tests/support.py` -- auquel cas la comparaison est faite sur la forme sans
+accents des deux côtés, et ce test ne voit rien à redire.
+
+Ce que ce fichier ne prétend pas faire : juger le français. Il ne connaît aucun
+dictionnaire. Il compare le dépôt à lui-même, ce qui suffit -- l'erreur qu'on
+veut rendre impossible est toujours une divergence entre deux endroits du
+dépôt, jamais une faute d'orthographe dans l'absolu.
+"""
+from __future__ import annotations
+
+import ast
+import functools
+import pathlib
+import re
+import unicodedata
+
+import pytest
+
+RACINE = pathlib.Path(__file__).resolve().parent.parent
+TESTS = RACINE / "tests"
+
+#: Les modules dont les chaînes finissent sous ses yeux. Même liste d'esprit
+#: que `SPEAKS_TO_THE_CONSOLE` dans `test_windows_console.py`, élargie à ce que
+#: l'app affiche.
+AFFICHENT = ("singular/__main__.py", "singular/saisie.py", "singular/sage/server.py",
+             "singular/sage/notice.py", "singular/parle.py", "singular/analyse.py",
+             "singular/offres.py", "singular/journal.py",
+             "proto/suivi_candidatures.py")
+
+
+def _sans_accents(texte: str) -> str:
+    decompose = unicodedata.normalize("NFD", texte.lower())
+    return "".join(c for c in decompose if not unicodedata.combining(c))
+
+
+def _docstrings(arbre: ast.Module) -> set[int]:
+    """Les docstrings, qui expliquent le code et ne s'affichent jamais.
+
+    Sans cette exclusion le corpus contenait des paragraphes entiers de prose
+    interne, et n'importe quel bout de phrase d'un test finissait par y
+    ressembler : le garde-fou criait au loup sur cinq fichiers.
+    """
+    portees = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+    trouves = set()
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, portees) and getattr(noeud, "body", None):
+            premier = noeud.body[0]
+            if (isinstance(premier, ast.Expr) and isinstance(premier.value, ast.Constant)
+                    and isinstance(premier.value.value, str)):
+                trouves.add(id(premier.value))
+    return trouves
+
+
+def _tables_de_libelles(arbre: ast.Module) -> tuple[set[int], list[str]]:
+    """Les valeurs d'une table de libellés : affichées, souvent d'un seul mot.
+
+    `STATUTS = {"envoyee": "envoyée", ...}` dans le prototype, et la même forme
+    partout où un code de stockage se traduit pour l'écran. La clé reste en
+    ASCII parce qu'elle s'écrit dans ses données ; la valeur, elle, est lue.
+
+    Elles manquaient au corpus, et ce n'est pas théorique : deux libellés de
+    statut se sont affichés « envoyee » et « relancee » pendant tout ce temps,
+    sous des yeux français, parce que la détection exigeait au moins un espace
+    pour écarter les noms de champs. Un mot seul dans une table de libellés
+    n'est pas un nom de champ -- c'est la traduction du nom de champ.
+    """
+    noeuds: set[int] = set()
+    valeurs: list[str] = []
+    for noeud in ast.walk(arbre):
+        if not (isinstance(noeud, ast.Assign) and isinstance(noeud.value, ast.Dict)):
+            continue
+        paires = list(zip(noeud.value.keys, noeud.value.values))
+        if not paires:
+            continue
+        if all(isinstance(cle, ast.Constant) and isinstance(cle.value, str)
+               and isinstance(val, ast.Constant) and isinstance(val.value, str)
+               for cle, val in paires):
+            # Les noeuds, pas les chaines : `"envoyee"` est la valeur du libelle
+            # **et** la cle de statut compare dans vingt `if`. Juger sur le texte
+            # accusait ces vingt `if` des qu'un libelle perdait son accent.
+            noeuds.update(id(val) for _, val in paires)
+            valeurs.extend(val.value for _, val in paires)
+    return noeuds, valeurs
+
+
+def _phrases_affichees(*, accentuees_seulement: bool = True) -> list[str]:
+    """Toute chaîne d'au moins trois mots que le programme montre.
+
+    Deux usages, et la distinction compte : la détection ne s'intéresse qu'aux
+    phrases **accentuées**, puisqu'une phrase sans accent ne peut pas être mal
+    recopiée ; mais reconnaître une citation exacte demande de les voir toutes.
+    Sans ça, un test qui cite fidèlement une phrase encore sans accents se
+    faisait accuser parce qu'une **autre** phrase, ailleurs, portait les mêmes
+    mots correctement écrits.
+    """
+    phrases = []
+    for nom in AFFICHENT:
+        arbre = ast.parse((RACINE / nom).read_text(encoding="utf-8"))
+        docs = _docstrings(arbre)
+        for noeud in ast.walk(arbre):
+            if not (isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)):
+                continue
+            texte = noeud.value
+            if id(noeud) in docs or "\n\n" in texte:
+                continue
+            if texte.count(" ") < 2:
+                continue
+            if accentuees_seulement and _sans_accents(texte) == texte.lower():
+                continue
+            phrases.append(texte)
+    return phrases
+
+
+def _sous_sans_accents(arbre: ast.Module) -> set[int]:
+    """Les litteraux des instructions qui passent par `sans_accents`.
+
+    Comparer sans accents des deux cotes est la sortie que ce fichier propose :
+    les signaler serait refuser sa propre solution.
+
+    L'exemption vise l'**instruction** entiere, pas une forme d'appel. Elle a
+    d'abord vise `sans_accents("...")`, puis il a fallu ajouter
+    `"..." in sans_accents(x)`, puis `sans_accents(x).partition("...")`, puis
+    une boucle sur un tuple compare plus bas. Chaque forme oubliee accusait a
+    tort un test deja correct, et il en restait toujours une. Une instruction
+    qui nomme `sans_accents` compare sans accents : c'est ce qui compte, et ca
+    ne se decline pas.
+    """
+    exemptes = set()
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.stmt):
+            continue
+        mentionne = any(isinstance(interne, ast.Name) and interne.id.endswith("sans_accents")
+                        for interne in ast.walk(noeud))
+        if not mentionne:
+            continue
+        for interne in ast.walk(noeud):
+            if isinstance(interne, ast.Constant):
+                exemptes.add(id(interne))
+    return exemptes
+
+
+@functools.lru_cache(maxsize=1)
+def _toutes_les_phrases() -> tuple[str, ...]:
+    return tuple(_phrases_affichees(accentuees_seulement=False))
+
+
+def _recopies_fautives(source: str, phrases: list[str]) -> list[str]:
+    fautes = []
+    arbre = ast.parse(source)
+    exemptes = _sous_sans_accents(arbre) | _docstrings(arbre)
+    for noeud in ast.walk(arbre):
+        if not (isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)):
+            continue
+        if id(noeud) in exemptes:
+            continue
+        attendu = noeud.value.strip()
+        if attendu.count(" ") < 2 or _sans_accents(attendu) != attendu.lower():
+            continue  # trop court, ou deja ecrit avec ses accents
+        nu = _sans_accents(attendu)
+        # Un litteral qui se retrouve **tel quel** quelque part est une recopie
+        # exacte, pas une recopie fautive -- meme si un autre message, ailleurs,
+        # ecrit les memes mots avec leurs accents. Chercher la faute avant
+        # d'avoir cherche la correspondance exacte accusait `test_proto_suivi.py`
+        # de mal recopier `proto/suivi_candidatures.py`, qu'il citait juste.
+        if any(attendu.lower() in phrase.lower() for phrase in _toutes_les_phrases()):
+            continue
+        for phrase in phrases:
+            if nu in _sans_accents(phrase):
+                fautes.append(f"ligne {noeud.lineno} : « {attendu} » -- le programme"
+                              f" ecrit « {phrase.strip()[:70]} »")
+                break
+    return fautes
+
+
+def test_le_corpus_de_phrases_n_est_pas_vide() -> None:
+    """Sans phrases a comparer, le garde-fou passerait en ne cherchant rien."""
+    phrases = _phrases_affichees()
+    assert len(phrases) > 50, len(phrases)
+
+
+@pytest.mark.parametrize(
+    "fichier", sorted(p.name for p in TESTS.glob("test_*.py")),
+)
+def test_aucun_test_ne_recopie_un_message_sans_ses_accents(fichier: str) -> None:
+    fautes = _recopies_fautives((TESTS / fichier).read_text(encoding="utf-8"),
+                                _phrases_affichees())
+    assert not fautes, (
+        f"{fichier} attend un message de SINGULAR au caractere pres :\n  "
+        + "\n  ".join(fautes)
+        + "\nRecopie les accents, ou compare via `sans_accents()` de tests/support.py."
+    )
+
+
+# --- et le programme lui-meme ecrit en francais -------------------------------
+
+#: Les mots qui existent des deux façons, et qui ne sont pas la même chose.
+#:
+#: Un dictionnaire ne serait ni installable ni honnête ici : le dépôt n'a
+#: aucune dépendance et le garde-fou doit tourner sans réseau. La règle se
+#: découvre donc dans le dépôt lui-même — **un mot que le programme écrit
+#: accentué quelque part ne doit pas s'écrire sans accents ailleurs.** Ce qui
+#: se compare est le dépôt à lui-même, pas le français à une norme.
+#:
+#: Restent les vrais homographes, où les deux graphies sont deux mots : « il
+#: marche » et « le marché », « il donne » et « c'est donné ». Ils sont ici,
+#: nommés un par un, parce qu'aucune règle mécanique ne les distingue. Une
+#: liste courte qu'on relit vaut mieux qu'une heuristique qui se trompe en
+#: silence.
+DEUX_MOTS_VRAIMENT = {
+    "annonce", "arrive", "chiffre", "decide", "donne", "laisse", "marche",
+    "parle", "analyse", "demande", "corrige", "compte", "cherche", "efface",
+    "bouge", "route", "des", "cote", "precise", "installe", "vise", "refuse",
+    "sur", "entree", "cree", "note", "reste", "trouve", "pense", "ecarte",
+}
+
+#: Les mots qui s'ecrivent dans ses fichiers et se relisent tels quels.
+#:
+#: Deux raisons vivaient dans une seule liste, et c'etait le defaut : un nom de
+#: champ n'est pas un homographe. « envoyee » est une cle de statut **et** un
+#: libelle affiche ; exempte partout, il s'affichait « envoyee » sous des yeux
+#: francais sans que rien ne tombe. L'exemption de stockage ne vaut donc plus a
+#: l'interieur d'une valeur de table de libelles -- la, c'est du texte lu.
+NOMS_DE_CHAMPS = {
+    "decision", "decisions", "precision", "credit", "ete", "envoye", "etape",
+    "envoyee", "deduit", "modele", "modeles", "ecrire", "reponds",
+}
+
+
+def _mot(texte: str) -> list[str]:
+    return re.findall(r"[A-Za-zÀ-ÿ]{3,}", texte)
+
+
+def _porte_un_accent(mot: str) -> bool:
+    """Sans passer par `_sans_accents`, qui met aussi en minuscules.
+
+    Le premier jet comparait `_sans_accents(mot) != mot` : « Les » devenait
+    « les », donc different, donc « accentue ». Le garde-fou accusait alors
+    « pas », « dans » et « une » d'exister en deux graphies.
+    """
+    return any(unicodedata.combining(c)
+               for c in unicodedata.normalize("NFD", mot))
+
+
+def test_le_programme_n_ecrit_pas_le_meme_mot_de_deux_facons() -> None:
+    """Sa moitié d'écran ne peut pas être en français et l'autre pas.
+
+    Le menu des rangs listait « Stabilite » sous un titre qui disait
+    « Stabilité ». Le refus répondait « une probabilite » à une question qui
+    demandait une « Probabilité ». Le Sage annonçait « credit epuise » pendant
+    que la page web affichait « crédit épuisé ». Chaque fois, les deux
+    graphies étaient dans le même dépôt, souvent dans le même fichier.
+    """
+    arbres = {nom: ast.parse((RACINE / nom).read_text(encoding="utf-8")) for nom in AFFICHENT}
+    libelles = {nom: _tables_de_libelles(arbre) for nom, arbre in arbres.items()}
+    accentues = {
+        _sans_accents(mot).lower()
+        for phrase in _phrases_affichees() + [v for _, lot in libelles.values() for v in lot]
+        for mot in _mot(phrase)
+        if _porte_un_accent(mot)
+    }
+    fautes = []
+    for nom, arbre in arbres.items():
+        docs = _docstrings(arbre)
+        for noeud in ast.walk(arbre):
+            if not (isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)):
+                continue
+            # Une valeur de table de libellés compte même sans espace : c'est
+            # du texte lu, pas un nom de champ.
+            if id(noeud) in docs or (noeud.value.count(" ") < 1
+                                     and id(noeud) not in libelles[nom][0]):
+                continue
+            for mot in _mot(noeud.value):
+                nu = mot.lower()
+                if nu in DEUX_MOTS_VRAIMENT or _porte_un_accent(mot):
+                    continue
+                # Dans une table de libelles, un nom de champ n'en est plus un :
+                # c'est sa traduction pour l'ecran.
+                if nu in NOMS_DE_CHAMPS and id(noeud) not in libelles[nom][0]:
+                    continue
+                if nu in accentues:
+                    fautes.append(f"{nom}:{noeud.lineno} : « {mot} » "
+                                  f"-- ecrit avec ses accents ailleurs")
+    assert not fautes, (
+        "le programme ecrit le meme mot de deux facons :\n  " + "\n  ".join(sorted(set(fautes)))
+        + "\nAccentue-le, ou ajoute-le a DEUX_MOTS_VRAIMENT si les deux graphies"
+          " sont deux mots differents."
+    )

@@ -2,8 +2,18 @@ from pathlib import Path
 
 import pytest
 
-from singular.durable import DurableStore
-from singular.effects import EffectInProgress, EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
+from singular.autopilot import Autonomy, DelegationContract
+from singular.durable import DurableStore, MissionStatus
+from singular.effects import (
+    EffectInProgress,
+    EffectRequest,
+    EffectStatus,
+    ExternalEffectCoordinator,
+    ProviderResult,
+)
+
+MISSION_ID = "MIS-EFFECT"
+EXECUTION_KEY = "execute-key"
 
 
 class FakeProvider:
@@ -24,9 +34,26 @@ class FakeProvider:
         return self.outcome
 
 
+def claimed_store(tmp_path: Path) -> DurableStore:
+    """An external effect is only permitted under a claimed durable execution.
+
+    ExternalEffectCoordinator refuses a request whose execution_key owns no
+    RUNNING execution row: an effect nobody claimed could be produced by any
+    caller, outside the lease that makes it exactly-once. These tests used to
+    invent an execution key with no execution behind it, so they exercised the
+    coordinator with the ownership check unsatisfied.
+    """
+    store = DurableStore(tmp_path / "effects.db")
+    store.save_mission(DelegationContract(MISSION_ID, "objective", "expected", autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.init_execution_schema()
+    store.set_mission_status(MISSION_ID, MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission(EXECUTION_KEY, MISSION_ID, "ACT-EFFECT", lease_seconds=300)
+    return store
+
+
 def request(**overrides) -> EffectRequest:
     values = {
-        "execution_key": "execute-key",
+        "execution_key": EXECUTION_KEY,
         "provider": "fake-mail",
         "operation": "send",
         "payload": {"to": "a@example.com", "body": "hello"},
@@ -46,7 +73,7 @@ def test_provider_key_is_stable_and_payload_is_bound_separately():
 
 
 def test_completed_effect_is_not_sent_twice(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_store(tmp_path))
     provider = FakeProvider()
     assert coordinator.execute(request(), provider).status == "COMPLETED"
     assert coordinator.execute(request(), provider).status == "COMPLETED"
@@ -54,7 +81,7 @@ def test_completed_effect_is_not_sent_twice(tmp_path: Path):
 
 
 def test_provider_error_becomes_unknown_and_requires_reconciliation(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_store(tmp_path))
     provider = FakeProvider(error=TimeoutError("response lost"))
     result = coordinator.execute(request(), provider)
     assert result.status == "UNKNOWN"
@@ -66,11 +93,14 @@ def test_provider_error_becomes_unknown_and_requires_reconciliation(tmp_path: Pa
 
 
 def test_reconciliation_confirms_unknown_without_reexecution(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_store(tmp_path))
     provider = FakeProvider(error=TimeoutError("response lost"))
     coordinator.execute(request(), provider)
     provider.error = None
     provider.outcome = ProviderResult("COMPLETED", {"provider_id": "confirmed"})
+    # Reconciliation is reserved to quarantined executions; the engine marks
+    # this when a provider outcome comes back UNKNOWN.
+    coordinator.store.mark_execution_recovery_required(EXECUTION_KEY)
 
     result = coordinator.reconcile(request(), provider)
     assert result.status == "COMPLETED"
@@ -80,7 +110,7 @@ def test_reconciliation_confirms_unknown_without_reexecution(tmp_path: Path):
 
 
 def test_same_provider_key_cannot_change_payload(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_store(tmp_path))
     original = request()
     coordinator.prepare(original)
     forged = request(payload={"to": "attacker@example.com"})
@@ -89,7 +119,7 @@ def test_same_provider_key_cannot_change_payload(tmp_path: Path):
 
 
 def test_same_provider_key_cannot_change_action_identity(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_store(tmp_path))
     original = request()
     coordinator.prepare(original)
     forged = request(action_fingerprint="forged-action")
@@ -98,7 +128,7 @@ def test_same_provider_key_cannot_change_action_identity(tmp_path: Path):
 
 
 def test_in_flight_effect_has_single_claimant(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_store(tmp_path))
     provider = FakeProvider()
     original = request()
     coordinator.prepare(original)

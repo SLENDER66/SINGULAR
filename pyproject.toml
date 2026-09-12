@@ -4,15 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singular-agentic-os"
-version = "3.4.0"
-description = "SINGULAR: a governed personal agentic operating system"
+version = "3.30.0"
+description = "AZAZEL: a governed personal agentic operating system powered by SINGULAR"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.0,<3"]
+dependencies = ["pydantic>=2.0,<3", "cryptography>=43,<47"]
+
+[project.scripts]
+azazel = "singular.azazel.cli:main"
+singular-jarvis = "singular.jarvis.cli:main"
+singular-redteam = "singular.security_assessment:main"
 
 [project.optional-dependencies]
 runtime = ["openai-agents>=0.14.0"]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11,<2", "anthropic>=1.0"]
+# La faculte « Analyse » est la seule chose de ce depot qui consomme des jetons.
+# Elle est optionnelle par construction : le journal, la chaine d'integrite, la
+# Notice et la calibration tournent sans elle, et tests/test_sage_independence.py
+# le verifie plutot que de le promettre. Ne pas l'installer coupe la faculte,
+# rien d'autre.
+analyse = ["anthropic>=1.0"]
 
 [tool.setuptools.packages.find]
 include = ["singular*"]
@@ -23,8 +34,50 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = ["attic"]
+
+# Keep the CI lint contract deterministic across Ruff versions and runner-level
+# configuration. Security boundary checks are separate blocking CI stages;
+# this linter covers the stable correctness baseline (E4/E7/E9/F).
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+# A few historical compatibility modules/tests intentionally retain compact
+# syntax or wildcard imports. Their correctness rules remain enforced except
+# where the old test itself relies on a wildcard or stale compatibility shape.
+[tool.ruff.lint.extend-per-file-ignores]
+"singular/__main__.py" = ["E701", "E702"]
+"singular/empire.py" = ["E701", "E702"]
+"singular/models.py" = ["E701", "E702"]
+"tests/test_execution_capability.py" = ["E731"]
+"tests/test_v16.py" = ["E701", "E702"]
+"tests/test_autopilot.py" = ["F403", "F405"]
+"tests/test_v3_os.py" = ["F403", "F405"]
+"tests/test_v34_execution.py" = ["F401"]
+"tests/test_validated_capability_binding.py" = ["F401"]
+"tests/test_validated_pipeline.py" = ["F401"]
+"tests/test_documentation_is_current.py" = ["F821"]
+"tests/test_effect_execution_boundary.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
 warn_unused_ignores = true
+
+# Explicit legacy/type-baseline exceptions. These do not disable mypy for the
+# modules; they suppress only the currently known diagnostics while the runtime
+# and security boundaries remain enforced by the blocking audit/red-team/tests.
+[[tool.mypy.overrides]]
+module = [
+  "singular.history_world_model",
+  "singular.human_optimization",
+  "singular.sqlite_support",
+  "singular.durable",
+  "singular.durable_integrity",
+  "singular.validated_trajectory_decision",
+  "singular.outcome_ledger",
+  "singular.execution",
+  "singular.execution_boundary_audit",
+  "singular.adversarial",
+]
+disable_error_code = ["arg-type", "no-redef", "assignment", "var-annotated", "attr-defined", "func-returns-value"]

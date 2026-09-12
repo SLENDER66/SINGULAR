@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SINGULAR · le Sage</title>
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sage">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main id="app">
+  <header class="brief">
+    <p class="eyebrow">SINGULAR</p>
+    <h1 id="headline">…</h1>
+    <p id="subline" class="subline"></p>
+  </header>
+
+  <section id="items" class="items" aria-live="polite"></section>
+
+  <section id="numbers" class="numbers" hidden>
+    <h2>Où vont tes heures</h2>
+    <div class="grid" id="figures"></div>
+  </section>
+
+  <section id="collecte" class="collecte" hidden>
+    <h2>Ce que le Scout a trouvé</h2>
+    <ul id="faits"></ul>
+  </section>
+
+  <section id="open-list" class="entries" hidden>
+    <h2>Décisions ouvertes</h2>
+    <ul id="open-entries"></ul>
+  </section>
+
+  <p id="error" class="error" hidden></p>
+
+  <!-- Quand le jeton manque, un message ne suffit pas : il faut pouvoir en
+       donner un. L'app ajoutée à l'écran d'accueil a son propre stockage,
+       séparé de Safari, donc elle démarre sans rien savoir. -->
+  <section id="unlock" class="unlock" hidden>
+    <h2>Cette app a besoin de ta clé d'accès</h2>
+    <p>Elle protège ton journal des autres appareils du wifi. Colle ici
+       l'adresse complète affichée par <code>python3 -m singular sage --lan</code>,
+       celle qui contient <code>?k=</code>.</p>
+    <form id="unlock-form">
+      <input id="unlock-input" type="text" inputmode="url" autocapitalize="off"
+             autocorrect="off" spellcheck="false"
+             placeholder="http://192.168.1.71:8765/?k=..." required>
+      <button type="submit">Déverrouiller</button>
+    </form>
+    <p id="unlock-error" class="error" hidden></p>
+  </section>
+</main>
+
+<button id="offres-button" class="fab third" type="button" aria-label="Chercher des offres">&#128269;</button>
+<button id="parle-button" class="fab second" type="button" aria-label="Parler au Sage">&#128172;</button>
+<button id="add-button" class="fab" type="button" aria-label="Enregistrer une décision">+</button>
+
+<dialog id="parle-dialog" class="sheet">
+  <form id="parle-form" method="dialog">
+    <h2>Parler</h2>
+    <!-- Le fil des tours précédents. Il vient du serveur : la conversation
+         d'hier soir doit être là quand on rouvre l'app. -->
+    <div id="parle-thread" class="thread" aria-live="polite"></div>
+
+    <label>Ta question
+      <textarea id="parle-input" name="question" rows="3" maxlength="2000"
+                autocomplete="off" placeholder="je fais quoi avec ça ?"></textarea>
+    </label>
+
+    <!-- Ce qui quitte le telephone, lisible avant de partir. Meme geste que
+         pour la recherche d'offres : il a le droit de relire ce qui est dit de
+         lui. C'est la faculte qui envoie le plus -- le rapport et tout le fil. -->
+    <details id="parle-contexte-bloc">
+      <summary>Ce qui part de ton téléphone</summary>
+      <pre id="parle-contexte" class="contexte"></pre>
+    </details>
+
+    <p id="parle-cost" class="cost" hidden></p>
+    <p class="form-error" id="parle-error" hidden></p>
+    <div class="actions three">
+      <button type="button" class="ghost" id="parle-oubli">Effacer le fil</button>
+      <button type="button" class="ghost" id="parle-close">Fermer</button>
+      <button type="submit" class="primary" id="parle-submit">Envoyer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="offres-dialog" class="sheet">
+  <form id="offres-form" method="dialog">
+    <h2>Chercher</h2>
+    <!-- Dit avant, pas après. Un agent qui cherche du travail pour quelqu'un
+         doit annoncer ce qu'il ne fera pas, sinon on se demande, en lisant sa
+         liste, si une candidature est déjà partie. -->
+    <p class="note">Il lit les annonces, il écarte, il propose. <strong>Il ne
+      postule jamais.</strong> Tu décides.</p>
+
+    <label>Une précision, si tu en as une
+      <textarea id="offres-input" name="precision" rows="2" maxlength="2000"
+                autocomplete="off" placeholder="plutôt du tertiaire, pas d'industrie"></textarea>
+    </label>
+
+    <!-- Ce qui quitte le téléphone, lisible avant de partir. Même contenu que
+         « python3 -m singular offres --blanc » au clavier : il a le droit de
+         relire ce qui est dit de lui. -->
+    <details id="offres-contexte-bloc">
+      <summary>Ce qui part de ton téléphone</summary>
+      <pre id="offres-contexte" class="contexte"></pre>
+    </details>
+
+    <div id="offres-resultat" class="thread" aria-live="polite"></div>
+
+    <p id="offres-cost" class="cost" hidden></p>
+    <p class="form-error" id="offres-error" hidden></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="offres-close">Fermer</button>
+      <button type="submit" class="primary" id="offres-submit">Chercher</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="add-dialog" class="sheet">
+  <form id="add-form" method="dialog">
+    <h2>Une décision, avant de la prendre</h2>
+
+    <label>Décision, en une ligne
+      <input name="title" required maxlength="140" autocomplete="off" placeholder="Postuler chez Anthropic">
+    </label>
+    <label>Ce que tu vas faire
+      <input name="action" required maxlength="280" autocomplete="off" placeholder="candidature + projet joint">
+    </label>
+    <label>Le résultat observable que tu attends
+      <input name="predicted" required maxlength="280" autocomplete="off" placeholder="un entretien décroché">
+      <small>Il doit pouvoir être tranché par oui ou non. « le système sera plus clair » ne peut pas l'être.</small>
+    </label>
+
+    <label>Probabilité que ça arrive : <output id="probability-out">60 %</output>
+      <input name="probability" id="probability" type="range" min="5" max="95" step="5" value="60">
+      <small>La certitude est refusée : elle ne peut pas avoir tort, donc elle n'apprend rien.</small>
+    </label>
+
+    <label>Rang de ta constitution
+      <select name="tier" id="tier"></select>
+    </label>
+
+    <div class="pair">
+      <label>Heures que ça coûte
+        <input name="cost_hours" type="number" min="0" step="0.5" value="4" inputmode="decimal">
+      </label>
+      <label>On vérifie dans
+        <input name="horizon_days" type="number" min="1" step="1" value="14" inputmode="numeric">
+        <small>jours</small>
+      </label>
+    </div>
+
+    <label>Gain attendu si ça marche
+      <input name="expected_gain_eur" type="text" inputmode="decimal"
+             placeholder="en euros, vide si tu ne sais pas">
+      <small>Laisse vide plutôt que d'écrire 0 : « non chiffré » et « ne rapporte
+        rien » ne sont pas la même chose, et le Sage les distingue.</small>
+    </label>
+
+    <label>Si tu te trompes, tu peux revenir en arrière ?
+      <select name="reversibility">
+        <option value="">je ne sais pas encore</option>
+        <option value="REVERSIBLE">oui, sans que ça coûte</option>
+        <option value="COUTEUSE">oui, mais ça se paie</option>
+        <option value="IRREVERSIBLE">non, c'est fait</option>
+      </select>
+    </label>
+
+    <p class="form-error" id="add-error" hidden></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="add-cancel">Annuler</button>
+      <button type="submit" class="primary" id="add-submit">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="resolve-dialog" class="sheet">
+  <form id="resolve-form" method="dialog">
+    <h2>Qu'est-ce qui s'est passé ?</h2>
+    <p id="resolve-predicted" class="quote"></p>
+    <label>Ce que tu en retiens (facultatif)
+      <input name="lesson" maxlength="280" autocomplete="off">
+    </label>
+    <p class="form-error" id="resolve-error" hidden></p>
+    <div class="actions three">
+      <button type="button" class="ghost" id="resolve-cancel">Annuler</button>
+      <button type="button" class="no" id="resolve-no">Pas arrivé</button>
+      <button type="button" class="yes" id="resolve-yes">Arrivé</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -23,10 +23,23 @@ def test_operating_core_is_constraint_aware() -> None:
 
 
 def test_operating_core_surfaces_kpi_underperformance() -> None:
+    """KPIs are only weighed once there is a portfolio to weigh them against.
+
+    This passed no initiatives, and prioritize() short-circuits on an empty
+    portfolio before it ever looks at KPIs -- so the assertion could not hold and
+    the KPI path was never exercised.
+    """
+    kpi = KPI("recurring revenue", 40, 100)
+    initiative = Initiative("A", "Fast cash", "cash", "BUSINESS", 100, 0.9, 10, 2, urgency=9, strategic_fit=9)
+    plan = EnterpriseOperatingCore.prioritize("growth", (initiative,), capacity_budget=3, financial_budget=20, kpis=(kpi,))
+    assert "KPI_PORTFOLIO_BELOW_TARGET" in plan.warnings
+
+
+def test_operating_core_reports_an_empty_portfolio_before_anything_else() -> None:
     kpi = KPI("recurring revenue", 40, 100)
     plan = EnterpriseOperatingCore.prioritize("growth", (), capacity_budget=1, financial_budget=1, kpis=(kpi,))
-    assert "KPI_PORTFOLIO_BELOW_TARGET" in plan.warnings
-    assert plan.warnings[-1] == "NO_INITIATIVES"
+    assert plan.warnings == ("NO_INITIATIVES",)
+    assert plan.selected_ids == ()
 
 
 def test_blocked_completed_and_dropped_work_is_not_selected() -> None:

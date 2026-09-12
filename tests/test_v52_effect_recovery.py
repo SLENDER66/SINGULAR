@@ -4,113 +4,31 @@ import pytest
 
 from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
-from singular.effects import EffectRequest, ExternalEffectCoordinator, ProviderResult
 from singular.execution import DurableExecutionEngine
 from singular.mission_runtime import DurableMissionRuntime
-
-
-class FakeProvider:
-    def __init__(self, outcome: ProviderResult):
-        self.outcome = outcome
-        self.execute_calls = 0
-        self.reconcile_calls = 0
-
-    def execute(self, request, idempotency_key):
-        self.execute_calls += 1
-        return self.outcome
-
-    def reconcile(self, request, idempotency_key):
-        self.reconcile_calls += 1
-        return self.outcome
 
 
 def setup(tmp_path: Path):
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "s.db"))
     contract = runtime.create_mission("external effect", "provider outcome", autonomy=Autonomy.EXECUTE_REVERSIBLE)
-    coordinator = ExternalEffectCoordinator(runtime.store)
-    engine = DurableExecutionEngine(runtime, effect_coordinator=coordinator)
+    engine = DurableExecutionEngine(runtime)
     action = ActionRequest("safe_action", "send", 1, 1, 10)
-    return runtime, contract, engine, coordinator, action
+    return runtime, contract, engine, action
 
 
-def reset_to_running(store: DurableStore, mission_id: str, execution_key: str) -> None:
-    with store._connect() as conn:
-        conn.execute("UPDATE executions SET status='RUNNING', error=NULL, result=NULL WHERE execution_key=?", (execution_key,))
-        conn.execute("UPDATE mission_states SET status='RUNNING' WHERE mission_id=?", (mission_id,))
+def test_raw_effect_repair_entry_point_is_closed(tmp_path: Path):
+    runtime, contract, engine, action = setup(tmp_path)
+
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
+        engine.execute_effect(action, contract.mission_id, object(), provider_name="fake", operation="send", payload={"to": "a"})
+
+    assert runtime.state(contract.mission_id).status == MissionStatus.CREATED
 
 
-def test_completed_external_effect_repairs_running_execution_without_reexecution(tmp_path: Path):
-    runtime, contract, _engine, coordinator, action = setup(tmp_path)
-    provider = FakeProvider(ProviderResult("COMPLETED", {"provider_id": "one"}))
+def test_raw_reconciliation_entry_point_is_closed(tmp_path: Path):
+    runtime, contract, engine, action = setup(tmp_path)
 
-    first = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
-    assert first.status == "COMPLETED"
-    assert provider.execute_calls == 1
+    with pytest.raises(PermissionError, match="ValidatedTrajectoryDecision"):
+        engine.reconcile_effect(action, contract.mission_id, object(), provider_name="fake", operation="send", payload={"to": "a"})
 
-    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
-    reset_to_running(runtime.store, contract.mission_id, key)
-
-    replay = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
-
-    assert replay.status == "COMPLETED"
-    assert replay.result == {"provider_id": "one"}
-    assert provider.execute_calls == 1
-    assert runtime.state(contract.mission_id).status == MissionStatus.COMPLETED
-    assert runtime.store.get_execution(key)["status"] == "COMPLETED"
-
-
-def test_failed_external_effect_repairs_running_execution_without_reexecution(tmp_path: Path):
-    runtime, contract, _engine, coordinator, action = setup(tmp_path)
-    provider = FakeProvider(ProviderResult("FAILED", error="provider rejected"))
-
-    first = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
-    assert first.status == "FAILED"
-    assert provider.execute_calls == 1
-
-    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
-    reset_to_running(runtime.store, contract.mission_id, key)
-
-    replay = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
-
-    assert replay.status == "FAILED"
-    assert replay.error == "provider rejected"
-    assert provider.execute_calls == 1
-    assert runtime.state(contract.mission_id).status == MissionStatus.FAILED
-
-
-def test_unknown_external_effect_quarantines_running_execution_without_reexecution(tmp_path: Path):
-    runtime, contract, _engine, coordinator, action = setup(tmp_path)
-    provider = FakeProvider(ProviderResult("UNKNOWN", error="ambiguous"))
-
-    first = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
-    assert first.status == "RECOVERY_REQUIRED"
-    assert provider.execute_calls == 1
-
-    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
-    reset_to_running(runtime.store, contract.mission_id, key)
-
-    replay = _engine.execute_effect(action, contract.mission_id, provider, provider_name="fake", operation="send", payload={"to": "a"})
-
-    assert replay.status == "RECOVERY_REQUIRED"
-    assert replay.error == "ambiguous"
-    assert provider.execute_calls == 1
-    assert runtime.store.get_execution(key)["status"] == "RECOVERY_REQUIRED"
-
-
-def test_peek_does_not_create_missing_effect_intent(tmp_path: Path):
-    runtime, contract, _engine, coordinator, action = setup(tmp_path)
-    key = runtime.store.idempotency_key("execute", contract.mission_id, action.id)
-    request = EffectRequest(
-        execution_key=key,
-        provider="fake",
-        operation="send",
-        payload={"to": "a"},
-        action_fingerprint=runtime._action_fingerprint(action, contract.mission_id),
-    )
-
-    with pytest.raises(KeyError):
-        coordinator.peek(request)
-
-    with runtime.store._connect() as conn:
-        row = conn.execute("SELECT * FROM external_effects WHERE provider_idempotency_key=?", (request.provider_idempotency_key,)).fetchone()
-    assert row is None
+    assert runtime.state(contract.mission_id).status == MissionStatus.CREATED

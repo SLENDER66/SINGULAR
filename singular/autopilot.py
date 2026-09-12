@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from math import isfinite
 from typing import Optional
 from uuid import uuid4
 
@@ -53,7 +54,32 @@ class ActionRequest:
     sensitive: bool = False
     contract_id: Optional[str] = None
     id: str = field(default_factory=lambda: "ACT-" + uuid4().hex[:8])
+    #: Named governance capability from CapabilityRegistry (e.g. "send_email").
+    #: Read by ActionPolicy, the Governor and approval integrity to decide what
+    #: this action is allowed to be. An unknown name is refused as tier BLACK.
     capability: str | None = None
+    #: Opaque `cap_...` token from ExecutionCapabilityRegistry identifying the
+    #: exact in-process object authorized to run this action. It answers "which
+    #: code", never "is this allowed", and must never be read by policy: these
+    #: are two different questions and a token is by construction not a
+    #: governance capability name.
+    execution_capability: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.id.strip() or not self.name.strip() or not self.description.strip():
+            raise ValueError("ActionRequest id, name and description cannot be empty")
+        for name, value in (("impact", self.impact), ("risk", self.risk), ("reversibility", self.reversibility)):
+            if not isfinite(value) or not 0 <= value <= 10:
+                raise ValueError(f"ActionRequest {name} must be finite and between 0 and 10")
+        if self.contract_id is not None and not self.contract_id.strip():
+            raise ValueError("ActionRequest contract_id cannot be blank")
+        if self.capability is not None and not self.capability.strip():
+            raise ValueError("ActionRequest capability cannot be blank")
+        if self.execution_capability is not None:
+            if not self.execution_capability.strip():
+                raise ValueError("ActionRequest execution_capability cannot be blank")
+            if not self.execution_capability.startswith("cap_"):
+                raise ValueError("ActionRequest execution_capability must be an opaque cap_ token")
 
 
 @dataclass
@@ -98,17 +124,9 @@ class Governor:
     def evaluate(action: ActionRequest, contract: Optional[DelegationContract]) -> GovernorDecision:
         reasons: list[str] = []
         if contract is not None and action.contract_id not in (None, contract.mission_id):
-            return GovernorDecision(
-                action.id,
-                Autonomy.BLOCK,
-                ("L'action référence un contrat différent du contrat de mission.",),
-            )
+            return GovernorDecision(action.id, Autonomy.BLOCK, ("L'action référence un contrat différent du contrat de mission.",))
         if contract and action.name in contract.forbidden_actions:
-            return GovernorDecision(
-                action.id,
-                Autonomy.BLOCK,
-                ("Action explicitement interdite par le contrat.",),
-            )
+            return GovernorDecision(action.id, Autonomy.BLOCK, ("Action explicitement interdite par le contrat.",))
         if action.requires_human or action.sensitive:
             reasons.append("Jugement humain requis ou opération sensible.")
             return GovernorDecision(action.id, Autonomy.ESCALATE, tuple(reasons), "APR-" + uuid4().hex[:8])
@@ -131,11 +149,7 @@ class ExecutionBus:
     def submit(self, action: ActionRequest, contract: Optional[DelegationContract] = None) -> GovernorDecision:
         decision = Governor.evaluate(action, contract)
         if decision.mode == Autonomy.ESCALATE:
-            approval = ApprovalRequest(
-                action.id,
-                "; ".join(decision.reasons),
-                id=decision.approval_id or "APR-" + uuid4().hex[:8],
-            )
+            approval = ApprovalRequest(action.id, "; ".join(decision.reasons), id=decision.approval_id or "APR-" + uuid4().hex[:8])
             self.approvals[approval.id] = approval
         return decision
 
@@ -171,9 +185,5 @@ class MissionManager:
             return self.bus.submit(action, None)
         contract = self.contracts.get(mission_id)
         if contract is None:
-            return GovernorDecision(
-                action.id,
-                Autonomy.BLOCK,
-                ("Mission inconnue: aucune autorisation ne peut être déduite.",),
-            )
+            return GovernorDecision(action.id, Autonomy.BLOCK, ("Mission inconnue: aucune autorisation ne peut être déduite.",))
         return self.bus.submit(action, contract)

@@ -9,9 +9,25 @@ from typing import Any
 from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
 from .autopilot import ApprovalStatus, Autonomy
+from .decision_attestation import DecisionAttestationStore
 from .durable import DurableStore, MissionStatus
-from .effects import EffectProvider, EffectRequest, EffectStatus, ExternalEffectCoordinator
+from .effects import (
+    EffectProvider,
+    EffectRequest,
+    EffectStatus,
+    ExternalEffectCoordinator,
+)
+from .execution_capability import (
+    DurableCapabilityStore,
+    artifact_fingerprint,
+    execution_capability_matches,
+)
 from .mission_runtime import DurableMissionRuntime
+from .security import ActionPolicy
+from .validated_trajectory_decision import (
+    ValidatedTrajectoryDecision,
+    payload_fingerprint,
+)
 
 
 @dataclass(frozen=True)
@@ -33,76 +49,193 @@ class ExecutionRecoveryRequired(RuntimeError):
 
 
 class DurableExecutionEngine:
-    """Execution transaction boundary: authorize, claim, run, persist outcome."""
+    """Durable execution boundary; raw actions and unattested decisions are never executable."""
 
-    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None) -> None:
+    def __init__(self, runtime: DurableMissionRuntime, execution_lease_seconds: int = 300, effect_coordinator: ExternalEffectCoordinator | None = None, attestation_store: DecisionAttestationStore | None = None, capability_store: DurableCapabilityStore | None = None) -> None:
         if execution_lease_seconds <= 0:
             raise ValueError("La durée du lease doit être positive.")
         self.runtime = runtime
         self.store: DurableStore = runtime.store
         self.execution_lease_seconds = execution_lease_seconds
         self.effect_coordinator = effect_coordinator
+        self.attestation_store = attestation_store or DecisionAttestationStore(self.store.path)
+        #: What a `cap_...` token means here, durably. The in-process registry
+        #: says "this exact object"; this says "this artifact", which is the half
+        #: that survives a restart.
+        self.capability_store = capability_store or DurableCapabilityStore(self.store.path)
         self.store.init_execution_schema()
 
     @staticmethod
-    def _execution_identity_fingerprint(action: Any, mission_id: str, governed: Any, contract: Any) -> str:
-        payload = {
-            "mission_id": mission_id,
-            "action": {
-                "id": getattr(action, "id", None),
-                "name": getattr(action, "name", None),
-                "payload": getattr(action, "payload", None),
-                "risk": getattr(action, "risk", None),
-                "reversibility": getattr(action, "reversibility", None),
-                "sensitive": getattr(action, "sensitive", None),
-                "capability": getattr(action, "capability", None),
-            },
-            "governance": {
-                "policy_tier": getattr(governed, "policy_tier", None),
-                "can_prepare": getattr(governed, "can_prepare", None),
-                "can_execute": getattr(governed, "can_execute", None),
-                "requires_human": getattr(governed, "requires_human", None),
-                "reasons": list(getattr(governed, "reasons", ()) or ()),
-                "mode": getattr(getattr(governed, "governor", None), "mode", None),
-                "approval_id": getattr(getattr(governed, "governor", None), "approval_id", None),
-            },
-            "contract": None if contract is None else str(contract),
-        }
+    def _execution_identity_fingerprint(action: Any, mission_id: str, governed: Any, contract: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> str:
+        payload = {"mission_id": mission_id, "decision_id": decision_id, "decision_context_fingerprint": decision_fingerprint, "action": {"id": getattr(action, "id", None), "name": getattr(action, "name", None), "payload": getattr(action, "payload", None), "risk": getattr(action, "risk", None), "reversibility": getattr(action, "reversibility", None), "sensitive": getattr(action, "sensitive", None), "capability": getattr(action, "capability", None), "execution_capability": getattr(action, "execution_capability", None)}, "governance": {"policy_tier": getattr(governed, "policy_tier", None), "can_prepare": getattr(governed, "can_prepare", None), "can_execute": getattr(governed, "can_execute", None), "requires_human": getattr(governed, "requires_human", None), "reasons": list(getattr(governed, "reasons", ()) or ()), "mode": getattr(getattr(governed, "governor", None), "mode", None), "approval_id": getattr(getattr(governed, "governor", None), "approval_id", None)}, "contract": None if contract is None else str(contract)}
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-    def _bind_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any) -> None:
+    @staticmethod
+    def _callable_target(handler: Callable[[Any], Any]) -> str:
+        module = getattr(handler, "__module__", None)
+        qualname = getattr(handler, "__qualname__", None)
+        if module and qualname:
+            return f"{module}:{qualname}"
+        handler_type = type(handler)
+        return f"{handler_type.__module__}:{handler_type.__qualname__}.__call__"
+
+    @staticmethod
+    def _provider_target(provider: EffectProvider) -> str:
+        provider_type = type(provider)
+        return f"{provider_type.__module__}:{provider_type.__qualname__}"
+
+    def _require_durable_capability(self, capability_id: str, target: Any) -> None:
+        """Record, then require, what this token durably means.
+
+        The in-process registry is empty after a restart, so a capability token
+        alone proved nothing about which code it stood for: registering an
+        arbitrary object under an old token used to be enough. The durable record
+        is written the first time a token is used against this database and can
+        never afterwards be pointed at a different artifact, nor revived once
+        revoked.
+
+        Called after _require_decision_artifact, never before: this writes, so
+        binding first would let a caller presenting an unauthorized artifact
+        record it against the token and permanently lock out the legitimate one.
+        """
+        try:
+            self.capability_store.bind(capability_id, target)
+        except PermissionError as exc:
+            raise PermissionError(f"Capability durable identity refused: {exc}") from exc
+
+    @staticmethod
+    def _require_decision_artifact(decision: ValidatedTrajectoryDecision, target: Any) -> None:
+        """The decision names the artifact, not only the token that stands for it.
+
+        A token's meaning lives in a registry; the decision's own fingerprint
+        covers the artifact, so a decision issued for one implementation cannot
+        authorize another even if the token were re-bound.
+        """
+        if decision.execution_artifact_fingerprint != artifact_fingerprint(target):
+            raise PermissionError("L'artefact exécutable ne correspond pas à celui nommé par la décision validée.")
+
+    def _require_live_capability(self, capability_id: str, target: Any) -> None:
+        """Re-check immediately before handing control to the executable.
+
+        Between validation and execution a capability can be revoked. Checking
+        once at the top of the call would leave that window open, so the check is
+        repeated here, as late as it can be.
+        """
+        if not execution_capability_matches(capability_id, target) or not self.capability_store.verify(capability_id, target):
+            raise PermissionError("La capacité d'exécution n'est plus valide au moment de l'exécution.")
+
+    def _require_live_authority(self, decision: ValidatedTrajectoryDecision | None, capability_id: str | None, target: Any) -> None:
+        """Everything authorizing this call, re-read at the moment of use.
+
+        The capability was already re-checked here; the attestation was not, so
+        revoking a decision while its execution was being set up -- governance,
+        the durable claim -- stopped nothing: the effect still left the process.
+        Both are revocable, so both are re-read as late as they can be, and the
+        decision's own validity window is enforced at the instant the effect
+        happens rather than only when the call started.
+        """
+        if decision is not None:
+            self._require_attestation(decision)
+        if capability_id is not None:
+            self._require_live_capability(capability_id, target)
+
+    def _release_claim_if_refused(self, key: str, mission_id: str, action_id: str, decision: ValidatedTrajectoryDecision | None, capability_id: str | None, target: Any) -> None:
+        """Run the last-moment check while holding the claim, and let it go if it refuses.
+
+        The check happens after the durable claim, so a refusal used to leave the
+        execution RUNNING. Its lease then expired and the next attempt read that
+        as a stale execution needing recovery -- ambiguity invented about an
+        effect that provably never started, on a path where recovery means
+        asking a provider what it did. The claim is released as a refused
+        execution instead, which is also what puts the refusal in the audit.
+        """
+        try:
+            self._require_live_authority(decision, capability_id, target)
+        except PermissionError as exc:
+            self._fail_result(key, mission_id, action_id, f"{type(exc).__name__}: {exc}")
+            raise
+
+    def _require_attestation(self, decision: ValidatedTrajectoryDecision) -> None:
+        if not self.attestation_store.verify(decision):
+            raise PermissionError("La décision validée n'est pas durablement attestée, est révoquée ou a expiré.")
+
+    def _bind_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> None:
         contract = self.store.load_mission(mission_id)
-        fingerprint = self._execution_identity_fingerprint(action, mission_id, governed, contract)
+        fingerprint = self._execution_identity_fingerprint(action, mission_id, governed, contract, decision_id, decision_fingerprint)
         identity_key = self.store.idempotency_key("execution_identity", key)
         self.store.put_idempotent(identity_key, {"execution_key": key, "mission_id": mission_id, "action_id": action.id}, fingerprint=fingerprint)
 
-    def _validate_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any) -> None:
+    def _validate_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> None:
         identity_key = self.store.idempotency_key("execution_identity", key)
-        expected = self._execution_identity_fingerprint(action, mission_id, governed, self.store.load_mission(mission_id))
+        expected = self._execution_identity_fingerprint(action, mission_id, governed, self.store.load_mission(mission_id), decision_id, decision_fingerprint)
         actual = self.store.get_idempotency_fingerprint(identity_key)
         if actual is None:
             raise PermissionError("Identité d'exécution absente : exécution/rejeu refusé par sécurité.")
         if actual != expected:
-            raise PermissionError("Identité d'exécution réutilisée avec une autorité ou un contenu différent.")
+            raise PermissionError("Identité d'exécution réutilisée avec une autorité, une décision ou un contenu différent.")
 
-    def _prepare_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any) -> None:
-        self._bind_execution_identity(key, action, mission_id, governed)
+    def _prepare_execution_identity(self, key: str, action: Any, mission_id: str, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None) -> None:
+        self._bind_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
 
     def execute(self, action, mission_id: str, handler: Callable[[Any], Any]) -> ExecutionResult:
+        raise PermissionError("Raw ActionRequest execution is disabled: a ValidatedTrajectoryDecision is required.")
+
+    def execute_validated(self, decision: ValidatedTrajectoryDecision, handler: Callable[[Any], Any]) -> ExecutionResult:
+        if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
+            raise PermissionError("Validated trajectory decision is missing or invalid.")
+        self._require_attestation(decision)
+        if decision.execution_kind != "handler":
+            raise PermissionError("Validated decision is bound to an external effect, not a handler.")
+        if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, handler):
+            raise PermissionError("Handler capability does not match the exact executable target authorized by the validated decision.")
+        self._require_decision_artifact(decision, handler)
+        self._require_durable_capability(decision.execution_target, handler)
+        mission_id = decision.contract.mission_id
+        action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
+        if action is None:
+            raise PermissionError("Validated decision does not authorize an executable action.")
+        if action.contract_id != mission_id:
+            raise PermissionError("Validated action is not bound to the validated contract.")
+        if action.execution_capability != decision.execution_target:
+            raise PermissionError("Validated action is not bound to the authorized execution capability.")
         governed = self._authorize(action, mission_id)
+        if governed.governor != decision.governor:
+            raise PermissionError("Current governance no longer matches the validated decision.")
+        self._assert_policy_unchanged(action, governed, decision)
+        return self._execute_authorized(action, mission_id, handler, governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target, decision=decision)
+
+    @staticmethod
+    def _assert_policy_unchanged(action, governed: Any, decision: ValidatedTrajectoryDecision) -> None:
+        """Recompute the policy and compare it to the one sealed in the decision.
+
+        This used to read `governed.policy`, an attribute GovernedAction does not
+        have, through getattr with a None default: the comparison could never
+        succeed, so every validated execution was refused. Fail-closed, but the
+        check proved nothing -- and the same getattr defaulted to the decision's
+        own value would have been fail-open. Reconstruct the policy instead of
+        reading it off an object that was never asked to carry it.
+        """
+        current = ActionPolicy.evaluate(action)
+        if current != decision.policy:
+            raise PermissionError("Current policy no longer matches the validated decision.")
+        if governed.policy_tier != decision.policy.tier.value:
+            raise PermissionError("Current governance tier no longer matches the validated policy.")
+
+    def _execute_authorized(self, action, mission_id: str, handler: Callable[[Any], Any], governed: Any, *, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None, decision: ValidatedTrajectoryDecision | None = None) -> ExecutionResult:
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is not None:
             if existing["status"] in {"COMPLETED", "FAILED"}:
-                self._validate_execution_identity(key, action, mission_id, governed)
+                self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             return self._handle_existing_execution(key, existing)
-        self._prepare_execution_identity(key, action, mission_id, governed)
+        self._prepare_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
-            self._validate_execution_identity(key, action, mission_id, governed)
+            self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             return self._handle_existing_execution(key, claimed)
+        self._release_claim_if_refused(key, mission_id, action.id, decision, capability_id, handler)
         try:
             value = handler(action)
         except Exception as exc:
@@ -110,16 +243,40 @@ class DurableExecutionEngine:
         return self._complete(key, mission_id, action.id, value)
 
     def execute_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
-        """Execute one governed external effect without ever auto-retrying ambiguity."""
+        raise PermissionError("Raw external-effect execution is disabled: a ValidatedTrajectoryDecision is required.")
+
+    def execute_effect_validated(self, decision: ValidatedTrajectoryDecision, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
+            raise PermissionError("Validated trajectory decision is missing or invalid.")
+        self._require_attestation(decision)
+        if decision.execution_kind != "external_effect":
+            raise PermissionError("Validated decision is not bound to an external effect.")
+        if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
+            raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
+        self._require_decision_artifact(decision, provider)
+        self._require_durable_capability(decision.execution_target, provider)
+        if decision.provider_name != provider_name or decision.operation != operation:
+            raise PermissionError("Provider or operation does not match the validated decision.")
+        if decision.payload_fingerprint != payload_fingerprint(payload):
+            raise PermissionError("External-effect payload does not match the validated decision.")
+        action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
+        if action is None:
+            raise PermissionError("Validated decision does not authorize an executable action.")
+        governed = self._authorize(action, decision.contract.mission_id)
+        if governed.governor != decision.governor:
+            raise PermissionError("Current governance no longer matches the validated decision.")
+        self._assert_policy_unchanged(action, governed, decision)
+        return self._execute_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target, decision=decision)
+
+    def _execute_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None, decision: ValidatedTrajectoryDecision | None = None) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
-        governed = self._authorize(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
         existing = self.store.get_execution(key)
         if existing is not None:
-            self._validate_execution_identity(key, action, mission_id, governed)
+            self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             try:
                 effect = self.effect_coordinator.peek(request)
             except KeyError:
@@ -127,8 +284,16 @@ class DurableExecutionEngine:
             if effect is not None:
                 status = effect["status"]
                 if status == EffectStatus.COMPLETED.value:
+                    if existing["status"] == "RECOVERY_REQUIRED":
+                        return self._result_from_row(self.store.confirm_execution_recovery_from_effect(key, request.provider_idempotency_key))
+                    if existing["status"] in {"COMPLETED", "FAILED"}:
+                        return self._handle_existing_execution(key, existing)
                     return self._complete(key, mission_id, action.id, effect.get("result"))
                 if status == EffectStatus.FAILED.value:
+                    if existing["status"] == "RECOVERY_REQUIRED":
+                        return self._result_from_row(self.store.resolve_execution_recovery(key, "FAIL", reason=effect.get("error") or "Effet externe échoué."))
+                    if existing["status"] in {"COMPLETED", "FAILED"}:
+                        return self._handle_existing_execution(key, existing)
                     return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
                 if status == EffectStatus.UNKNOWN.value and existing["status"] == "RUNNING":
                     self.store.mark_execution_recovery_required(key)
@@ -136,19 +301,32 @@ class DurableExecutionEngine:
                     self.runtime._persist_new_audit_events()
                     return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=effect.get("result"), error=effect.get("error"))
             return self._handle_existing_execution(key, existing)
-        self._prepare_execution_identity(key, action, mission_id, governed)
+        self._prepare_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         claimed = self._claim(action, mission_id, key)
         if not claimed["claimed"]:
-            self._validate_execution_identity(key, action, mission_id, governed)
+            self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
             try:
                 effect = self.effect_coordinator.peek(request)
             except KeyError:
                 effect = None
             if effect is not None and effect["status"] == EffectStatus.COMPLETED.value:
+                if claimed["status"] == "RECOVERY_REQUIRED":
+                    return self._result_from_row(self.store.confirm_execution_recovery_from_effect(key, request.provider_idempotency_key))
+                if claimed["status"] in {"COMPLETED", "FAILED"}:
+                    return self._handle_existing_execution(key, claimed)
                 return self._complete(key, mission_id, action.id, effect.get("result"))
             if effect is not None and effect["status"] == EffectStatus.FAILED.value:
+                if claimed["status"] == "RECOVERY_REQUIRED":
+                    return self._result_from_row(self.store.resolve_execution_recovery(key, "FAIL", reason=effect.get("error") or "Effet externe échoué."))
+                if claimed["status"] in {"COMPLETED", "FAILED"}:
+                    return self._handle_existing_execution(key, claimed)
                 return self._fail_result(key, mission_id, action.id, effect.get("error") or "Effet externe échoué.")
             return self._handle_existing_execution(key, claimed)
+        # As late as the handler path checks it: everything between the
+        # decision's checks and here -- governance, the durable claim -- is a
+        # window in which the capability or the decision can be revoked, and
+        # this is the path whose effect leaves the process.
+        self._release_claim_if_refused(key, mission_id, action.id, decision, capability_id, provider)
         outcome = self.effect_coordinator.execute(request, provider)
         if outcome.status == EffectStatus.UNKNOWN.value:
             self.store.mark_execution_recovery_required(key)
@@ -163,19 +341,52 @@ class DurableExecutionEngine:
         return self._complete(key, mission_id, action.id, outcome.result)
 
     def reconcile_effect(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        raise PermissionError("Raw effect reconciliation is disabled: a ValidatedTrajectoryDecision is required.")
+
+    def reconcile_effect_validated(self, decision: ValidatedTrajectoryDecision, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any) -> ExecutionResult:
+        if not isinstance(decision, ValidatedTrajectoryDecision) or not decision.verify():
+            raise PermissionError("Validated trajectory decision is missing or invalid.")
+        self._require_attestation(decision)
+        if decision.execution_kind != "external_effect":
+            raise PermissionError("Validated decision is not bound to an external effect.")
+        if not decision.execution_target.startswith("cap_") or not execution_capability_matches(decision.execution_target, provider):
+            raise PermissionError("Provider capability does not match the exact executable target authorized by the validated decision.")
+        # Reconciliation reaches the same provider and can confirm an execution
+        # as COMPLETED, so it needs the same artifact identity as execution. It
+        # used to require only the in-process registry, which is rebuilt from
+        # scratch after a restart: a substituted provider registered under the
+        # old token could report an effect that never happened.
+        self._require_decision_artifact(decision, provider)
+        self._require_durable_capability(decision.execution_target, provider)
+        if decision.provider_name != provider_name or decision.operation != operation:
+            raise PermissionError("Provider or operation does not match the validated decision.")
+        if decision.payload_fingerprint != payload_fingerprint(payload):
+            raise PermissionError("External-effect payload does not match the validated decision.")
+        action = next((item.to_action() for item in decision.authorized_actions if item.id == decision.global_report.action_id), None)
+        if action is None:
+            raise PermissionError("Validated decision does not authorize an executable action.")
+        governed = self._authorize_reconciliation(action, decision.contract.mission_id)
+        if governed.governor != decision.governor:
+            raise PermissionError("Current governance no longer matches the validated decision.")
+        return self._reconcile_effect_authorized(action, decision.contract.mission_id, provider, provider_name=provider_name, operation=operation, payload=payload, governed=governed, decision_id=decision.decision_id, decision_fingerprint=decision.context_fingerprint, capability_id=decision.execution_target, decision=decision)
+
+    def _reconcile_effect_authorized(self, action, mission_id: str, provider: EffectProvider, *, provider_name: str, operation: str, payload: Any, governed: Any, decision_id: str | None = None, decision_fingerprint: str | None = None, capability_id: str | None = None, decision: ValidatedTrajectoryDecision | None = None) -> ExecutionResult:
         if self.effect_coordinator is None:
             raise RuntimeError("Aucun ExternalEffectCoordinator n'est configuré.")
-        governed = self._authorize_reconciliation(action, mission_id)
         action = governed.action
         key = self.store.idempotency_key("execute", mission_id, action.id)
         existing = self.store.get_execution(key)
         if existing is None or existing["status"] != "RECOVERY_REQUIRED":
             raise ValueError("L'exécution doit être RECOVERY_REQUIRED pour une réconciliation.")
-        self._validate_execution_identity(key, action, mission_id, governed)
+        self._validate_execution_identity(key, action, mission_id, governed, decision_id, decision_fingerprint)
         request = EffectRequest(execution_key=key, provider=provider_name, operation=operation, payload=payload, action_fingerprint=self.runtime._action_fingerprint(action, mission_id))
+        self._require_live_authority(decision, capability_id, provider)
         outcome = self.effect_coordinator.reconcile(request, provider)
         if outcome.status == EffectStatus.COMPLETED.value:
-            return self._result_from_row(self.store.resolve_execution_recovery(key, "CONFIRM", result=outcome.result))
+            effect = self.effect_coordinator.peek(request)
+            if effect["status"] != EffectStatus.COMPLETED.value:
+                raise RuntimeError("La preuve durable de l'effet externe est absente ou incohérente.")
+            return self._result_from_row(self.store.confirm_execution_recovery_from_effect(key, request.provider_idempotency_key))
         if outcome.status == EffectStatus.FAILED.value:
             return self._result_from_row(self.store.resolve_execution_recovery(key, "FAIL", reason=outcome.error))
         return ExecutionResult(key, mission_id, action.id, "RECOVERY_REQUIRED", result=outcome.result, error=outcome.error)

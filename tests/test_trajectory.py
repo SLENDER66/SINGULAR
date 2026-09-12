@@ -31,7 +31,8 @@ def test_value_violation_blocks_even_when_economics_look_good() -> None:
     )
     assert result.decision is TrajectoryDecision.BLOCK
     assert result.human_review is True
-    assert "CORE_VALUE_VIOLATION" in result.rationale
+    # The rationale names the violated constraint, not just its category.
+    assert "HARD_CONSTRAINT_VIOLATION:freedom" in result.rationale
 
 
 def test_missing_dimension_requires_review_instead_of_silent_optimization() -> None:

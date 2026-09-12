@@ -2,8 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from singular.durable import DurableStore
-from singular.effects import EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
+from singular.effects import (
+    EffectRequest,
+    EffectStatus,
+    ExternalEffectCoordinator,
+    ProviderResult,
+)
+from tests.support import claimed_execution_store
 
 
 class Provider:
@@ -31,7 +36,7 @@ def make_request() -> EffectRequest:
 
 
 def test_abandoned_in_flight_claim_requires_explicit_recovery(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_execution_store(tmp_path / "effects.db", execution_key="execution-1"))
     provider = Provider()
     request = make_request()
     coordinator.prepare(request)
@@ -56,6 +61,9 @@ def test_abandoned_in_flight_claim_requires_explicit_recovery(tmp_path: Path):
         coordinator.execute(request, provider)
     assert provider.execute_calls == 0
 
+    # Reconciliation is reserved to quarantined executions; the engine marks the
+    # execution when a provider outcome comes back UNKNOWN.
+    coordinator.store.mark_execution_recovery_required(request.execution_key)
     result = coordinator.reconcile(request, provider)
     assert result.status == EffectStatus.COMPLETED.value
     assert provider.execute_calls == 0
@@ -63,7 +71,7 @@ def test_abandoned_in_flight_claim_requires_explicit_recovery(tmp_path: Path):
 
 
 def test_recovery_cannot_be_used_to_reopen_completed_or_failed_effect(tmp_path: Path):
-    coordinator = ExternalEffectCoordinator(DurableStore(tmp_path / "effects.db"))
+    coordinator = ExternalEffectCoordinator(claimed_execution_store(tmp_path / "effects.db", execution_key="execution-1"))
     provider = Provider()
     request = make_request()
 

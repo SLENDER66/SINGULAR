@@ -3,9 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
+from typing import TYPE_CHECKING
 
 from .state import CapacitySnapshot
 from .values import ValueAssessment, ValueAssessmentResult, ValueMode, Vision
+
+if TYPE_CHECKING:
+    from .trajectory_optimization import TrajectoryPortfolio
 
 
 class TrajectoryDecision(str, Enum):
@@ -60,6 +64,7 @@ class TrajectoryEngine:
         dimensions: dict[str, float],
         value_results: tuple[ValueAssessmentResult, ...] = (),
         capacity: CapacitySnapshot | None = None,
+        portfolio: TrajectoryPortfolio | None = None,
     ) -> TrajectoryAssessment:
         unknown = sorted(set(dimensions) - set(profile.weights))
         if unknown:
@@ -93,6 +98,18 @@ class TrajectoryEngine:
             return TrajectoryAssessment(TrajectoryDecision.REVIEW, 0.0, 0.0, tuple(dict.fromkeys(rationale + ["INSUFFICIENT_TRAJECTORY_DATA"])), True)
 
         score = round(weighted / total_weight, 6)
+        if portfolio is not None:
+            if not portfolio.candidates:
+                return TrajectoryAssessment(TrajectoryDecision.BLOCK, 0.0, 0.0, tuple(dict.fromkeys(rationale + ["EMPTY_TRAJECTORY_PORTFOLIO"])), True)
+            if not all(isfinite(value) for value in (portfolio.objective, portfolio.capacity_used, portfolio.capacity_remaining, portfolio.interaction_effect)):
+                return TrajectoryAssessment(TrajectoryDecision.BLOCK, 0.0, 0.0, tuple(dict.fromkeys(rationale + ["INVALID_TRAJECTORY_PORTFOLIO"])), True)
+            if portfolio.objective <= 0:
+                return TrajectoryAssessment(TrajectoryDecision.BLOCK, 0.0, 0.0, tuple(dict.fromkeys(rationale + ["NON_POSITIVE_TRAJECTORY_PORTFOLIO"])), True)
+            if portfolio.capacity_used < 0 or portfolio.capacity_remaining < 0:
+                return TrajectoryAssessment(TrajectoryDecision.BLOCK, 0.0, 0.0, tuple(dict.fromkeys(rationale + ["INVALID_TRAJECTORY_CAPACITY"])), True)
+            if portfolio.interaction_effect < 0:
+                rationale.append("NEGATIVE_PORTFOLIO_INTERACTION")
+
         if capacity is not None and capacity.confidence < 0.5:
             rationale.append("LOW_CAPACITY_CONFIDENCE")
         if capacity is not None and capacity.headroom <= 0:

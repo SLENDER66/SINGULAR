@@ -1,119 +1,171 @@
-# SINGULAR — Empire Core
+# AZAZEL
 
-SINGULAR is a personal agentic operating system designed around one principle: maximize useful autonomy while minimizing unnecessary human effort, with fail-closed controls for sensitive actions.
+[![CI](https://github.com/SLENDER66/SINGULAR/actions/workflows/ci.yml/badge.svg)](https://github.com/SLENDER66/SINGULAR/actions/workflows/ci.yml)
 
-## Architecture
+**AZAZEL — powered by the SINGULAR governed execution core.**
 
-- Commander / manager orchestration
-- Specialist workforce
-- World Model and persistent memory
-- Mission Autopilot
-- Execution Bus + Governor
-- Human Task Filter + approval queue
-- Event Bus and continuous supervisor loop
-- Red Team / adversarial review
-- Learning and evaluation
-- System Architect / controlled evolution
-- Audit trail and observability
+AZAZEL is the single public agent identity. The previous JARVIS/Claude split is
+no longer a product-level distinction: JARVIS is retained only as an internal
+compatibility package during migration, while Claude is only an underlying model
+provider. SINGULAR remains the internal authority and execution-security core.
 
-## V1.6 additions
+An agent proposes something. Between that proposal and the moment it changes
+something in the world, SINGULAR requires a durable, verifiable authorization —
+and refuses when it cannot reconstruct one.
 
-- `singular.empire`: event bus, agent registry, supervisor, mission runs, human-load metric
-- `singular.v16_workforce`: default specialist workforce and capability planner
-- `tests/test_v16.py`: workforce and supervisor tests
+## The problem
 
-### Human-system specialists
+Teams deploying agents can usually answer *what the agent did*. They usually
+cannot answer:
 
-The workforce explicitly includes two complementary specialists without creating a new hierarchy:
+- what exactly was it authorized to do, and by which check?
+- was that authorization still valid at the moment it acted?
+- did it act once, or twice, or not at all?
+- is the code that ran the code that was approved?
 
-- `MENTAL`: functional mental state, cognitive load, recovery, self-regulation and sustainable performance. It may adapt workload and plans from observed state, but does not diagnose or replace professional care.
-- `PRESENCE`: physical capacity, posture, presentation, voice, communication and social presence. It develops durable physical and interpersonal capability rather than optimizing appearance alone.
+Logging after the fact does not answer these. They have to be structural.
 
-These specialists are advisory inputs to the existing Commander and World Model. They do not bypass governance or gain autonomous authority merely because their domain concerns the user directly.
+## AZAZEL architecture
 
-## Safety model
+AZAZEL is the single user-facing reasoning entity. It is **not an authority**
+and it does not execute tools directly. A model provider supplies proposals;
+SINGULAR governs the resulting work.
 
-Autonomy is permissioned, not assumed. Sensitive, high-risk, irreversible or explicitly human-required operations remain blocked/escalated unless an explicit authorization path exists.
-
-## Next industrialization step
-
-Connect real tools through MCP/function tools and the OpenAI Agents SDK; add durable external storage, real connectors, tracing/evals, scheduled event ingestion, and production deployment. The SDK supports agents, agent-as-tools/handoffs, guardrails, function tools, MCP, sessions, human-in-the-loop and tracing.
-
-## V2 Empire Engine
-
-- `singular.v2_empire`: capital snapshot, opportunity ranking, revenue experiments, strategic assets and empire snapshot.
-- Economic layer is decision-support only: it never moves money, signs contracts, or bypasses the Governor.
-- `tests/test_v2_empire.py`: 5 tests for runway, opportunity classification, risk blocking, revenue experiments, and strategic asset value.
-
-## V2.1 — Empire Control
-
-Adds the portfolio-control layer that decides where scarce resources should go before any real-world execution:
-- `v2_1_control.py`: portfolio ranking/allocation, resource budgets, compounding-loop detection, risk concentration and unified empire snapshot.
-- Explicit decisions: `FUND`, `TEST`, `HOLD`, `EXIT`.
-- No external side effects: allocation is planning only and remains behind the Governor for real execution.
-
-Control chain:
-`WORLD MODEL → COMMANDER → WORKFORCE → PORTFOLIO → COMPOUNDING → RISK CONTROL → GOVERNOR → EXECUTION → MEASURE → LEARN`
-
-Design principle: build an empire by compounding capabilities, capital, network, reputation and optionality—not by maximizing activity.
-
-## V3 — Autonomous OS prototype
-
-V3 closes the operating loop: signals → world model → deterministic decision → governed action routing → learning → controlled system-change proposals.
-
-## V3.1 — Production Foundation
-
-V3.1 makes the repository GitHub-ready without pretending it is already a deployed production service:
-
-- `pyproject.toml` for reproducible packaging and optional runtime/dev dependencies.
-- CI on Python 3.11–3.13 with lint, type checking and tests.
-- environment configuration with `.env.example`; secrets are excluded from Git.
-- structured safety boundary in `singular.security` (defense-in-depth).
-- append-only in-memory audit trail in `singular.audit` (replaceable by durable storage later).
-- health/readiness checks in `singular.health`.
-- isolated optional OpenAI Agents SDK boundary in `singular.production_runtime`.
-- autonomy policy and architecture documentation in `docs/`.
-
-### Install
-
-Core:
-
-```bash
-python -m pip install -e .
+```
+THOMAS
+  ↓
+AZAZEL
+  ↓  proposal only
+SINGULAR
+  ↓
+World Model / Mission / Trajectory / Decision
+  ↓
+Governor
+  ↓
+ValidatedTrajectoryDecision + durable attestation
+  ↓
+Execution Boundary
+  ↓
+Tool / external effect
+  ↓
+Independent verification
+  ↓
+Audit + outcome + memory
 ```
 
-Development:
+The invariant is simple:
+
+> **AZAZEL proposes; SINGULAR decides; Governor authorizes; Tool executes;
+> Verifier verifies; Audit records; Memory learns.**
+
+The model provider cannot choose a governance capability, execution target,
+verifier, approval, policy or permission. Model output is treated as untrusted
+input and bounded before it reaches SINGULAR.
+
+### CLI
+
+The governed front door remains available after installation:
 
 ```bash
-python -m pip install -e '.[dev]'
-pytest -q
+python3 -m pip install -e ".[dev]"
+singular-jarvis "Inspect the repository"
+singular-jarvis "Inspect the repository" --route
 ```
 
-Optional Agents SDK runtime:
+The legacy CLI name is retained during migration; the product identity exposed
+by the application is AZAZEL. The CLI can propose work and create a governed
+mission/decision, but it has no `execute` command. Effects remain behind the
+validated decision service and execution boundary.
 
-```bash
-python -m pip install -e '.[runtime]'
+## The chain
+
+```
+domain state
+   → human optimization      what would actually help
+   → trajectory portfolio    what is worth doing, under a capacity budget
+   → policy + governor       what this action is allowed to be
+   → red team gate           why this might be wrong
+   → GlobalDecisionGate      one PROCEED, or a refusal with reasons
+   → ValidatedTrajectoryDecision
+   → durable attestation     issued, revocable, expiring
+   → capability              which code, bound to an artifact fingerprint
+   → execution lease         exactly one owner
+   → external effect         the world changes
+   → independent verification
+   → audit + outcome ledger  prediction vs. reality, hash-chained
 ```
 
-V3.1 is a **production foundation**, not a claim that external integrations, durable persistence, deployment, monitoring, and real-world tool execution are complete. Those belong to the next integration phase.
+Every stage is **reconstructed** at validation time, not trusted. A decision
+carrying a favourable report is rejected unless re-running the gate on its own
+inputs produces the same report. A decision naming a capability is rejected
+unless the artifact fingerprint still matches the code being handed control.
 
-## V3.2 — Governed Agent Core
+## What it guarantees
 
-V3.2 adds a controlled multi-specialist workforce layer with explicit routing, a deterministic Red Team gate, and defense-in-depth governance before any action reaches the execution bus.
+| | |
+|---|---|
+| **Fail-closed** | Raw execution entry points deny by default. Ambiguity refuses rather than authorizes. |
+| **Exactly once** | An execution lease has one owner. Replaying a decision returns the first result without re-acting. |
+| **Ambiguity is not a guess** | A timed-out external effect is quarantined as UNKNOWN. Resolution comes from asking the provider, never from retrying. |
+| **Artifact identity** | A capability token means one artifact, durably. An old token plus a new object after a restart is refused. |
+| **Tamper-evident** | Decisions, approvals, audit events and outcomes are fingerprinted and re-verified from their own fields, not from a stored hash. |
+| **Learning ≠ policy** | Improvements go candidate → artifact → evaluation → human review → activation, each stage bound to the artifact fingerprint. No promotion path touches safety policy. |
+| **AZAZEL is asymmetric** | Proposal and governed routing are exposed; direct execution is not. Model-selected authority is ignored. |
 
-Core rule: **no specialist can bypass the Governor, and no system change can silently modify SINGULAR.**
+The validated execution core is adversarially tested for forged reports,
+substituted handlers and providers, same-named implementations differing in
+constants, tampered identities, replay, restart, revocation races, torn reads,
+NaN and infinity inputs, schema mismatches and stale execution state.
 
-The workforce includes Strategy, Intelligence, Finance, Career, Business, Capability, Life, Mental and Presence specialists, plus Red Team and System Architect. Routing is selective rather than running every specialist on every task.
+## What it does not do
 
-## V3.3 — Durable Mission Runtime
+- It is not an unrestricted agent framework. Governance and execution authority
+  remain in SINGULAR.
+- Anthropic Claude is only a model provider. API credentials are read only from
+  `ANTHROPIC_API_KEY` and are never included in audit output.
+- Capability fingerprints identify the whole code object, a class's attributes,
+  closure captures and default arguments — but not what a provider *instance*
+  holds unless it declares `artifact_identity()`, and not what a global name
+  resolves to. Both limits are explicit rather than hidden.
+- Human approval is currently not an authorization channel: escalated actions
+  cannot cross the validated execution boundary. That is an intentional open
+  design decision, not an accidental bypass.
 
-V3.3 adds a persistence boundary for mission contracts, human approvals, audit events and idempotency keys using SQLite. The durable runtime is intentionally infrastructure-light and restart-safe for the prototype phase; a managed database can replace it later without changing the governance domain model.
+## Status
 
-### Governance invariant
+The current AZAZEL slice is implemented on top of SINGULAR's existing authority
+model. AZAZEL is the sole product/agent identity; SINGULAR remains the internal
+governed core. The historical `singular.jarvis` package is compatibility-only.
+CI validation is required after each change; a green test suite is not a reason
+to bypass the next audit or red-team pass.
 
-- GREEN: low-risk and sufficiently reversible actions may execute when the delegation contract permits it.
-- ORANGE: preparation may proceed, but execution is escalated to human approval.
-- RED: high-risk or poorly reversible actions are blocked fail-closed.
-- BLACK: sensitive/forbidden actions are blocked fail-closed.
+The project is deliberately built in layers: the face can evolve quickly while
+the authority boundary remains conservative. Neuroscience and other evidence
+sources belong in the evidence layer; they do not create a new authority or
+clinical inference engine.
 
-No approval is treated as execution. A human approval only clears the governance gate; the eventual external tool must still enforce its own execution contract and produce an auditable result.
+## Layout
+
+```
+singular/azazel/                    public AZAZEL facade
+singular/jarvis/                    legacy compatibility implementation
+singular/execution.py               durable execution engine
+singular/validated_trajectory_decision.py   authorization contract
+singular/validated_execution.py     strict boundary adapter
+singular/decision_attestation.py    durable issuance and revocation
+singular/execution_capability.py    artifact identity for executables
+singular/effects.py                 external-effect coordinator
+singular/providers/                 real providers
+singular/outcome_ledger.py          predictions vs. outcomes
+singular/improvement_registry.py    governed learning lifecycle
+singular/journal.py                 decision journal
+singular/sage/                      observation/reporting layer
+singular/analyse.py                 optional model faculties
+ios/SingularSage/                   native iPhone app
+
+docs/                               authority model and boundary design
+attic/                              parked material
+```
+
+Licence: MIT, see `LICENSE`. `constitution.md` holds the design principles this is
+built to satisfy.

@@ -121,13 +121,29 @@ class CollectiveIntelligence:
 
         # Consensus requires a real independent majority. A critical Red Team
         # challenge keeps the deliberation unresolved until explicitly reviewed.
+        #
+        # Weighted score alone is not a majority of minds. Two contributors
+        # advancing different claims once each is a disagreement, but EVIDENCE
+        # outweighs ANALYSIS, so the weighted test alone declared the heavier
+        # kind the consensus. That matters beyond tidiness: an unresolved
+        # deliberation is one of the conditions that make GlobalDecisionReport
+        # require a human, so resolving a genuine split silently removed a
+        # human-review trigger. Require a majority of the contributors who took
+        # a position as well as a majority of the weight.
+        backing = len(claims.get(winning_claim, {})) if winning_claim is not None else 0
+        positioned = len({contributor for claim in claims.values() for contributor in claim})
+        independent_majority = positioned > 0 and backing * 2 > positioned
         consensus = (
             winning_claim
             if winning_claim is not None and total_support > 0 and winning_score > total_support / 2
+            and independent_majority
             and not blocking
             else None
         )
-        dissent = tuple(sorted(claim for claim, _ in scored[1:]))
+        # With no consensus nothing is agreed, so every claim is dissent.
+        # Reporting only the lower-weighted ones implied the top claim had been
+        # accepted when in fact the deliberation was left open.
+        dissent = tuple(sorted(claim for claim, _ in (scored[1:] if consensus is not None else scored)))
         dissent += tuple(sorted({signal.claim for signal in relevant if signal.kind is KnowledgeKind.CHALLENGE}))
         unresolved = consensus is None or bool(blocking)
         collective_confidence = (winning_score / total_support) if total_support else 0.0
