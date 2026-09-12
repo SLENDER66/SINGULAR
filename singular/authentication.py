@@ -23,6 +23,8 @@ from urllib.parse import quote, urlencode
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .sqlite_support import SqliteLocation
+
 PASSWORD_N, PASSWORD_R, PASSWORD_P = 2**15, 8, 1
 RECOVERY_N, RECOVERY_R, RECOVERY_P = 2**14, 8, 1
 SESSION_TTL = 12 * 60 * 60
@@ -63,7 +65,7 @@ class TotpEnrollment:
     # A TOTP secret is a live authentication credential. It must never appear in
     # the default dataclass repr (logs, tracebacks, debugging, etc.).
     secret: str = field(repr=False)
-    otpauth_uri: str
+    otpauth_uri: str = field(repr=False)
     expires_at: float
 
 
@@ -153,7 +155,6 @@ class AuthenticationService:
 
     def __init__(self, db_path: str | Path, *, master_key: bytes | str | None = None, now: Callable[[], float] = time.time) -> None:
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         raw = master_key if master_key is not None else os.environ.get("SINGULAR_AUTH_MASTER_KEY")
         if raw is None:
             raise AuthenticationConfigurationError("SINGULAR_AUTH_MASTER_KEY is required")
@@ -166,18 +167,18 @@ class AuthenticationService:
         self._rate_secret = hashlib.sha256(raw + b"/rate-limit-v1").digest()
         self._now = now
         self._dummy_salt, self._dummy_digest = _password_record("SINGULAR dummy authentication password")
+        self._db = SqliteLocation(self.db_path)
         self._init_db()
-        try: os.chmod(self.db_path, 0o600)
-        except OSError: pass
+        try:
+            os.chmod(self.db_path, 0o600)
+        except OSError:
+            pass
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10, isolation_level="IMMEDIATE")
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        return self._db.connect(foreign_keys=True, busy_timeout=True)
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with self._db.session(foreign_keys=True, busy_timeout=True) as conn:
             conn.executescript("""
             CREATE TABLE IF NOT EXISTS auth_users(
               user_id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
@@ -205,7 +206,8 @@ class AuthenticationService:
 
     @staticmethod
     def _token_hash(token: str) -> str:
-        if not isinstance(token, str): raise SessionInvalid("invalid session")
+        if not isinstance(token, str):
+            raise SessionInvalid("invalid session")
         return hashlib.sha256(token.encode("ascii", "strict")).hexdigest()
 
     def _audit(self, conn: sqlite3.Connection, event: str, user_id: str | None) -> None:
@@ -216,8 +218,10 @@ class AuthenticationService:
         salt, digest = _password_record(password)
         user_id = "USR-" + secrets.token_hex(16)
         with self._connect() as conn:
-            try: conn.execute("INSERT INTO auth_users(user_id,username,password_salt,password_digest,created_at) VALUES(?,?,?,?,?)", (user_id, username, salt, digest, self._now()))
-            except sqlite3.IntegrityError: raise ValueError("user already exists") from None
+            try:
+                conn.execute("INSERT INTO auth_users(user_id,username,password_salt,password_digest,created_at) VALUES(?,?,?,?,?)", (user_id, username, salt, digest, self._now()))
+            except sqlite3.IntegrityError:
+                raise ValueError("user already exists") from None
             self._audit(conn, "user_created", user_id)
         return user_id
 
@@ -225,7 +229,8 @@ class AuthenticationService:
         current = self._now() if now is None else now
         with self._connect() as conn:
             row = conn.execute("SELECT username,password_salt,password_digest FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
-            if row is None or not _password_ok(password, row["password_salt"], row["password_digest"]): raise AuthenticationError("authentication failed")
+            if row is None or not _password_ok(password, row["password_salt"], row["password_digest"]):
+                raise AuthenticationError("authentication failed")
             secret = base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
             expires = current + PENDING_TOTP_TTL
             conn.execute("UPDATE auth_users SET pending_totp_ciphertext=?,pending_totp_expires=? WHERE user_id=?", (self._fernet.encrypt(secret.encode()), expires, user_id))
@@ -238,11 +243,15 @@ class AuthenticationService:
         current = self._now() if now is None else now
         with self._connect() as conn:
             row = conn.execute("SELECT pending_totp_ciphertext,pending_totp_expires FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
-            if row is None or row["pending_totp_ciphertext"] is None or row["pending_totp_expires"] is None or current > row["pending_totp_expires"]: raise AuthenticationError("authentication failed")
-            try: secret = self._fernet.decrypt(row["pending_totp_ciphertext"]).decode("ascii")
-            except (InvalidToken, UnicodeDecodeError): raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
+            if row is None or row["pending_totp_ciphertext"] is None or row["pending_totp_expires"] is None or current > row["pending_totp_expires"]:
+                raise AuthenticationError("authentication failed")
+            try:
+                secret = self._fernet.decrypt(row["pending_totp_ciphertext"]).decode("ascii")
+            except (InvalidToken, UnicodeDecodeError):
+                raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
             ok, counter = _totp_ok(secret, code, current)
-            if not ok: raise AuthenticationError("authentication failed")
+            if not ok:
+                raise AuthenticationError("authentication failed")
             conn.execute("UPDATE auth_users SET totp_ciphertext=?,pending_totp_ciphertext=NULL,pending_totp_expires=NULL,last_totp_counter=?,security_version=security_version+1 WHERE user_id=?", (self._fernet.encrypt(secret.encode()), counter, user_id))
             conn.execute("DELETE FROM auth_recovery_codes WHERE user_id=?", (user_id,))
             codes: list[str] = []
@@ -261,47 +270,74 @@ class AuthenticationService:
         account = _subject_hash(normalized, self._rate_secret)
         client = _subject_hash(client_key, self._rate_secret) if client_key else None
         with self._connect() as conn:
-            if self._limited(conn, account, current) or (client is not None and self._limited(conn, client, current)): raise RateLimited("authentication temporarily unavailable")
+            if self._limited(conn, account, current) or (client is not None and self._limited(conn, client, current)):
+                raise RateLimited("authentication temporarily unavailable")
             row = conn.execute("SELECT * FROM auth_users WHERE username=?", (normalized,)).fetchone()
             password_ok = _password_ok(password, row["password_salt"], row["password_digest"]) if row else _password_ok(password, self._dummy_salt, self._dummy_digest)
             if not password_ok:
                 self._fail(conn, account, current)
-                if client is not None: self._fail(conn, client, current)
+                if client is not None:
+                    self._fail(conn, client, current)
+                self._audit(conn, "login_failed", row["user_id"] if row else None)
+                conn.commit()
                 raise AuthenticationError("authentication failed")
             if row["totp_ciphertext"] is not None:
-                if not otp and not recovery_code: raise SecondFactorRequired("second factor required")
+                if not otp and not recovery_code:
+                    raise SecondFactorRequired("second factor required")
                 if otp:
-                    try: secret = self._fernet.decrypt(row["totp_ciphertext"]).decode("ascii")
-                    except (InvalidToken, UnicodeDecodeError): raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
+                    try:
+                        secret = self._fernet.decrypt(row["totp_ciphertext"]).decode("ascii")
+                    except (InvalidToken, UnicodeDecodeError):
+                        raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
                     ok, counter = _totp_ok(secret, otp, current, row["last_totp_counter"])
-                    if not ok: raise AuthenticationError("authentication failed")
+                    if not ok:
+                        self._fail(conn, account, current)
+                        if client is not None:
+                            self._fail(conn, client, current)
+                        self._audit(conn, "login_failed", row["user_id"])
+                        conn.commit()
+                        raise AuthenticationError("authentication failed")
                     conn.execute("UPDATE auth_users SET last_totp_counter=? WHERE user_id=?", (counter, row["user_id"]))
                 elif not self._consume_recovery(conn, row["user_id"], recovery_code or "", current):
+                    self._fail(conn, account, current)
+                    if client is not None:
+                        self._fail(conn, client, current)
+                    self._audit(conn, "login_failed", row["user_id"])
+                    conn.commit()
                     raise AuthenticationError("authentication failed")
             self._clear(conn, account)
-            if client is not None: self._clear(conn, client)
+            if client is not None:
+                self._clear(conn, client)
             return self._session(conn, row["user_id"], row["security_version"], current)
 
     def validate_session(self, token: str, *, now: float | None = None) -> AuthPrincipal:
         current = self._now() if now is None else now
-        try: token_hash = self._token_hash(token)
-        except (UnicodeEncodeError, ValueError): raise SessionInvalid("invalid session") from None
+        try:
+            token_hash = self._token_hash(token)
+        except (UnicodeEncodeError, ValueError):
+            raise SessionInvalid("invalid session") from None
         with self._connect() as conn:
             row = conn.execute("SELECT s.*,u.username FROM auth_sessions s JOIN auth_users u ON u.user_id=s.user_id WHERE s.token_hash=?", (token_hash,)).fetchone()
-            if row is None or row["revoked_at"] is not None or row["expires_at"] <= current: raise SessionInvalid("invalid session")
+            if row is None or row["revoked_at"] is not None or row["expires_at"] <= current:
+                raise SessionInvalid("invalid session")
             user = conn.execute("SELECT security_version FROM auth_users WHERE user_id=?", (row["user_id"],)).fetchone()
-            if user is None or user["security_version"] != row["security_version"]: raise SessionInvalid("invalid session")
+            if user is None or user["security_version"] != row["security_version"]:
+                raise SessionInvalid("invalid session")
             return AuthPrincipal(row["user_id"], row["username"], row["security_version"])
 
     def revoke_session(self, token: str) -> None:
-        try: token_hash = self._token_hash(token)
-        except (UnicodeEncodeError, ValueError): raise SessionInvalid("invalid session") from None
-        with self._connect() as conn: conn.execute("UPDATE auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL", (self._now(), token_hash))
+        try:
+            token_hash = self._token_hash(token)
+        except (UnicodeEncodeError, ValueError):
+            raise SessionInvalid("invalid session") from None
+        with self._connect() as conn:
+            conn.execute("UPDATE auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL", (self._now(), token_hash))
 
     def change_password(self, user_id: str, current_password: str, new_password: str) -> None:
         with self._connect() as conn:
             row = conn.execute("SELECT password_salt,password_digest FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
-            if row is None or not _password_ok(current_password, row["password_salt"], row["password_digest"]): raise AuthenticationError("authentication failed")
+            if row is None or not _password_ok(current_password, row["password_salt"], row["password_digest"]):
+                raise AuthenticationError("authentication failed")
             salt, digest = _password_record(new_password)
             conn.execute("UPDATE auth_users SET password_salt=?,password_digest=?,security_version=security_version+1 WHERE user_id=?", (salt, digest, user_id))
             self._revoke_all(conn, user_id, self._now())
@@ -310,14 +346,19 @@ class AuthenticationService:
     def disable_totp(self, user_id: str, password: str, *, otp: str | None = None, recovery_code: str | None = None) -> None:
         with self._connect() as conn:
             row = conn.execute("SELECT password_salt,password_digest,totp_ciphertext,last_totp_counter FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
-            if row is None or row["totp_ciphertext"] is None or not _password_ok(password, row["password_salt"], row["password_digest"]): raise AuthenticationError("authentication failed")
-            try: secret = self._fernet.decrypt(row["totp_ciphertext"]).decode("ascii")
-            except (InvalidToken, UnicodeDecodeError): raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
-            ok, counter = _totp_ok(secret, otp or "", self._now(), row["last_totp_counter"]) if otp else (self._consume_recovery(conn, user_id, recovery_code or "", self._now()), None)
-            if not ok: raise AuthenticationError("authentication failed")
+            if row is None or row["totp_ciphertext"] is None or not _password_ok(password, row["password_salt"], row["password_digest"]):
+                raise AuthenticationError("authentication failed")
+            try:
+                secret = self._fernet.decrypt(row["totp_ciphertext"]).decode("ascii")
+            except (InvalidToken, UnicodeDecodeError):
+                raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
+            current = self._now()
+            ok, counter = _totp_ok(secret, otp or "", current, row["last_totp_counter"]) if otp else (self._consume_recovery(conn, user_id, recovery_code or "", current), None)
+            if not ok:
+                raise AuthenticationError("authentication failed")
             conn.execute("UPDATE auth_users SET totp_ciphertext=NULL,last_totp_counter=?,security_version=security_version+1 WHERE user_id=?", (counter, user_id))
             conn.execute("DELETE FROM auth_recovery_codes WHERE user_id=?", (user_id,))
-            self._revoke_all(conn, user_id, self._now())
+            self._revoke_all(conn, user_id, current)
             self._audit(conn, "totp_disabled", user_id)
 
     def _session(self, conn: sqlite3.Connection, user_id: str, version: int, now: float) -> str:
@@ -333,15 +374,20 @@ class AuthenticationService:
     @staticmethod
     def _limited(conn: sqlite3.Connection, subject: str, now: float) -> bool:
         row = conn.execute("SELECT failures,first_failure_at FROM auth_attempts WHERE subject_hash=?", (subject,)).fetchone()
-        if row is None: return False
-        if now - row["first_failure_at"] >= RATE_WINDOW: conn.execute("DELETE FROM auth_attempts WHERE subject_hash=?", (subject,)); return False
+        if row is None:
+            return False
+        if now - row["first_failure_at"] >= RATE_WINDOW:
+            conn.execute("DELETE FROM auth_attempts WHERE subject_hash=?", (subject,))
+            return False
         return row["failures"] >= RATE_LIMIT
 
     @staticmethod
     def _fail(conn: sqlite3.Connection, subject: str, now: float) -> None:
         row = conn.execute("SELECT failures,first_failure_at FROM auth_attempts WHERE subject_hash=?", (subject,)).fetchone()
-        if row is None or now - row["first_failure_at"] >= RATE_WINDOW: conn.execute("INSERT OR REPLACE INTO auth_attempts VALUES(?,?,?,?)", (subject, 1, now, now))
-        else: conn.execute("UPDATE auth_attempts SET failures=failures+1,last_failure_at=? WHERE subject_hash=?", (now, subject))
+        if row is None or now - row["first_failure_at"] >= RATE_WINDOW:
+            conn.execute("INSERT OR REPLACE INTO auth_attempts VALUES(?,?,?,?)", (subject, 1, now, now))
+        else:
+            conn.execute("UPDATE auth_attempts SET failures=failures+1,last_failure_at=? WHERE subject_hash=?", (now, subject))
 
     @staticmethod
     def _clear(conn: sqlite3.Connection, subject: str) -> None:
@@ -349,11 +395,15 @@ class AuthenticationService:
 
     @staticmethod
     def _consume_recovery(conn: sqlite3.Connection, user_id: str, code: str, now: float) -> bool:
-        if not isinstance(code, str) or len(code) != 16 or not code.isascii() or not code.isalnum(): return False
+        if not isinstance(code, str) or len(code) != 16 or not code.isascii() or not code.isalnum():
+            return False
         rows = conn.execute("SELECT rowid,code_salt,code_digest FROM auth_recovery_codes WHERE user_id=? AND used_at IS NULL", (user_id,)).fetchall()
         for row in rows:
-            try: actual = _scrypt(code.upper().encode("ascii"), base64.b64decode(row["code_salt"], validate=True), RECOVERY_N, RECOVERY_R, RECOVERY_P, 32 * 1024 * 1024); expected = base64.b64decode(row["code_digest"], validate=True)
-            except (ValueError, TypeError): continue
+            try:
+                actual = _scrypt(code.upper().encode("ascii"), base64.b64decode(row["code_salt"], validate=True), RECOVERY_N, RECOVERY_R, RECOVERY_P, 32 * 1024 * 1024)
+                expected = base64.b64decode(row["code_digest"], validate=True)
+            except (ValueError, TypeError):
+                continue
             if hmac.compare_digest(actual, expected):
                 cursor = conn.execute("UPDATE auth_recovery_codes SET used_at=? WHERE rowid=? AND used_at IS NULL", (now, row["rowid"]))
                 return cursor.rowcount == 1
