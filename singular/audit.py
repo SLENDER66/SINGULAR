@@ -76,13 +76,10 @@ class AuditEvent:
         payload = dict(self.payload)
         payload.setdefault("correlation_id", self.correlation_id)
         payload.setdefault("related_ids", self.related_ids)
-        payload.setdefault("audit_sequence", sequence)
-        payload.setdefault("audit_fingerprint", self.fingerprint)
-        payload.setdefault("audit_prev_fingerprint", previous_fingerprint)
-        payload.setdefault(
-            "audit_chain_fingerprint",
-            self.chain_fingerprint(sequence, self.fingerprint, previous_fingerprint),
-        )
+        payload["audit_sequence"] = sequence
+        payload["audit_fingerprint"] = self.fingerprint
+        payload["audit_prev_fingerprint"] = previous_fingerprint
+        payload["audit_chain_fingerprint"] = self.chain_fingerprint(sequence, self.fingerprint, previous_fingerprint)
         return payload
 
 
@@ -123,7 +120,7 @@ class AuditTrail:
 
         An event's own fingerprint deliberately excludes its chain position, so
         an event recorded by a trail that turned out to be behind can be moved
-        behind whatever really came first without becoming a different event:
+        behind whatever really came first without becoming a different one:
         same id, same timestamp, same content, new position. Rebuilding it with
         record() would mint a new id and timestamp, which would make the trail
         lie about when the thing happened.
