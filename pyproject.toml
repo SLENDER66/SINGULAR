@@ -8,7 +8,7 @@ version = "3.30.0"
 description = "SINGULAR: a governed personal agentic operating system"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.0,<3"]
+dependencies = ["pydantic>=2.0,<3", "cryptography>=43,<47"]
 
 [project.scripts]
 singular-jarvis = "singular.jarvis.cli:main"
