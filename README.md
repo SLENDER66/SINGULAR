@@ -4,11 +4,12 @@
 
 **AZAZEL — powered by the SINGULAR governed execution core.**
 
-SINGULAR is the internal authority and execution-security core. JARVIS is the
-user-facing proposal/runtime layer. The final product presented to users will
-be called **AZAZEL**.
+AZAZEL is the single public agent identity. The previous JARVIS/Claude split is
+no longer a product-level distinction: JARVIS is retained only as an internal
+compatibility package during migration, while Claude is only an underlying model
+provider. SINGULAR remains the internal authority and execution-security core.
 
-An agent decides something. Between that decision and the moment it changes
+An agent proposes something. Between that proposal and the moment it changes
 something in the world, SINGULAR requires a durable, verifiable authorization —
 and refuses when it cannot reconstruct one.
 
@@ -24,16 +25,16 @@ cannot answer:
 
 Logging after the fact does not answer these. They have to be structural.
 
-## AZAZEL architecture: JARVIS + SINGULAR
+## AZAZEL architecture
 
-JARVIS is the user-facing interface and proposal/runtime layer. It is **not a
-second authority** and it does not execute tools directly. AZAZEL is the final
-product identity; SINGULAR remains the governed execution core.
+AZAZEL is the single user-facing reasoning entity. It is **not an authority**
+and it does not execute tools directly. A model provider supplies proposals;
+SINGULAR governs the resulting work.
 
 ```
 THOMAS
   ↓
-AZAZEL / JARVIS / Claude
+AZAZEL
   ↓  proposal only
 SINGULAR
   ↓
@@ -54,16 +55,16 @@ Audit + outcome + memory
 
 The invariant is simple:
 
-> **JARVIS proposes; SINGULAR decides; Governor authorizes; Tool executes;
+> **AZAZEL proposes; SINGULAR decides; Governor authorizes; Tool executes;
 > Verifier verifies; Audit records; Memory learns.**
 
-Claude cannot choose a governance capability, execution target, verifier,
-approval, policy or permission. Model output is treated as untrusted input and
-bounded before it reaches SINGULAR.
+The model provider cannot choose a governance capability, execution target,
+verifier, approval, policy or permission. Model output is treated as untrusted
+input and bounded before it reaches SINGULAR.
 
 ### CLI
 
-The governed front door is available after installation:
+The governed front door remains available after installation:
 
 ```bash
 python3 -m pip install -e ".[dev]"
@@ -71,10 +72,10 @@ singular-jarvis "Inspect the repository"
 singular-jarvis "Inspect the repository" --route
 ```
 
-The CLI can propose work and create a governed mission/decision, but it has no
-`execute` command. Effects remain behind the validated decision service and
-execution boundary. The `--route` path therefore cannot turn a model proposal
-into an effect by itself.
+The legacy CLI name is retained during migration; the product identity exposed
+by the application is AZAZEL. The CLI can propose work and create a governed
+mission/decision, but it has no `execute` command. Effects remain behind the
+validated decision service and execution boundary.
 
 ## The chain
 
@@ -109,7 +110,7 @@ unless the artifact fingerprint still matches the code being handed control.
 | **Artifact identity** | A capability token means one artifact, durably. An old token plus a new object after a restart is refused. |
 | **Tamper-evident** | Decisions, approvals, audit events and outcomes are fingerprinted and re-verified from their own fields, not from a stored hash. |
 | **Learning ≠ policy** | Improvements go candidate → artifact → evaluation → human review → activation, each stage bound to the artifact fingerprint. No promotion path touches safety policy. |
-| **JARVIS is asymmetric** | Proposal and governed routing are exposed; direct execution is not. LLM-selected authority is ignored. |
+| **AZAZEL is asymmetric** | Proposal and governed routing are exposed; direct execution is not. Model-selected authority is ignored. |
 
 The validated execution core is adversarially tested for forged reports,
 substituted handlers and providers, same-named implementations differing in
@@ -120,8 +121,8 @@ NaN and infinity inputs, schema mismatches and stale execution state.
 
 - It is not an unrestricted agent framework. Governance and execution authority
   remain in SINGULAR.
-- Claude is a proposal provider, not an authority. API credentials are read only
-  from `ANTHROPIC_API_KEY` and are never included in audit output.
+- Anthropic Claude is only a model provider. API credentials are read only from
+  `ANTHROPIC_API_KEY` and are never included in audit output.
 - Capability fingerprints identify the whole code object, a class's attributes,
   closure captures and default arguments — but not what a provider *instance*
   holds unless it declares `artifact_identity()`, and not what a global name
@@ -132,10 +133,11 @@ NaN and infinity inputs, schema mismatches and stale execution state.
 
 ## Status
 
-The current JARVIS slice is implemented on top of SINGULAR's existing authority
-model. AZAZEL is the final product name; SINGULAR remains the internal governed
-core. CI validation is required after each change; a green test suite is not a
-reason to bypass the next audit or red-team pass.
+The current AZAZEL slice is implemented on top of SINGULAR's existing authority
+model. AZAZEL is the sole product/agent identity; SINGULAR remains the internal
+governed core. The historical `singular.jarvis` package is compatibility-only.
+CI validation is required after each change; a green test suite is not a reason
+to bypass the next audit or red-team pass.
 
 The project is deliberately built in layers: the face can evolve quickly while
 the authority boundary remains conservative. Neuroscience and other evidence
@@ -145,25 +147,24 @@ clinical inference engine.
 ## Layout
 
 ```
-singular/jarvis/                     JARVIS proposal/runtime/CLI
-singular/execution.py                durable execution engine
+singular/azazel/                    public AZAZEL facade
+singular/jarvis/                    legacy compatibility implementation
+singular/execution.py               durable execution engine
 singular/validated_trajectory_decision.py   authorization contract
-singular/validated_execution.py      strict boundary adapter
-singular/decision_attestation.py     durable issuance and revocation
-singular/execution_capability.py     artifact identity for executables
-singular/effects.py                  external-effect coordinator
-singular/providers/                  real providers
-singular/outcome_ledger.py           predictions vs. outcomes
-singular/improvement_registry.py     governed learning lifecycle
-singular/journal.py                  decision journal
-singular/sage/                       observation/reporting layer
-singular/analyse.py                  optional model faculties
-singular/offres.py                   isolated proposal faculties
-singular/parle.py                    communication layer
-ios/SingularSage/                    native iPhone app
+singular/validated_execution.py     strict boundary adapter
+singular/decision_attestation.py    durable issuance and revocation
+singular/execution_capability.py    artifact identity for executables
+singular/effects.py                 external-effect coordinator
+singular/providers/                 real providers
+singular/outcome_ledger.py          predictions vs. outcomes
+singular/improvement_registry.py    governed learning lifecycle
+singular/journal.py                 decision journal
+singular/sage/                      observation/reporting layer
+singular/analyse.py                 optional model faculties
+ios/SingularSage/                   native iPhone app
 
-docs/                                authority model and boundary design
-attic/                               parked material
+docs/                               authority model and boundary design
+attic/                              parked material
 ```
 
 Licence: MIT, see `LICENSE`. `constitution.md` holds the design principles this is
