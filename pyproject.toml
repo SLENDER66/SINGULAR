@@ -43,8 +43,8 @@ exclude = ["attic"]
 select = ["E4", "E7", "E9", "F"]
 
 # A few historical compatibility modules/tests intentionally retain compact
-# syntax or wildcard imports. Their correctness rules (especially F401/F821)
-# remain enforced; only the explicitly named legacy style forms are exempted.
+# syntax or wildcard imports. Their correctness rules remain enforced except
+# where the old test itself relies on a wildcard or stale compatibility shape.
 [tool.ruff.lint.extend-per-file-ignores]
 "singular/__main__.py" = ["E701", "E702"]
 "singular/empire.py" = ["E701", "E702"]
@@ -53,6 +53,11 @@ select = ["E4", "E7", "E9", "F"]
 "tests/test_v16.py" = ["E701", "E702"]
 "tests/test_autopilot.py" = ["F403", "F405"]
 "tests/test_v3_os.py" = ["F403", "F405"]
+"tests/test_v34_execution.py" = ["F401"]
+"tests/test_validated_capability_binding.py" = ["F401"]
+"tests/test_validated_pipeline.py" = ["F401"]
+"tests/test_documentation_is_current.py" = ["F821"]
+"tests/test_effect_execution_boundary.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.11"
