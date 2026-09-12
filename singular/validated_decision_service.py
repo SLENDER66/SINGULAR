@@ -84,53 +84,46 @@ class ValidatedDecisionService:
         handler: Callable[[Any], Any],
         verifier: Callable[[Any, Any], bool],
     ) -> ExecutionResult:
-        """Execute and require an independent verifier before declaring the lifecycle verified.
-
-        The verifier receives the bound action and durable execution result. It is
-        trusted composition, not model output, and cannot grant authority. A
-        rejected result remains durably recorded but is never reported as
-        verified; a verification audit event records only identities and a
-        result fingerprint, not the result payload.
-        """
+        """Execute and require an independent verifier before declaring the lifecycle verified."""
         if not callable(verifier):
             raise TypeError("verifier must be callable")
         result = self.execute(decision, action_id, handler)
         action = next((item.to_action() for item in decision.authorized_actions if item.id == action_id), None)
         if action is None:
             raise PermissionError("Validated decision does not authorize the requested action.")
+        if result.status != "COMPLETED":
+            self._record_verification(decision, action_id, result, "FAILED", "execution_not_completed")
+            raise VerificationFailed("Independent execution-result verification failed.")
         try:
             verified = bool(verifier(action, result))
         except Exception as exc:
-            self.executor.runtime.audit.record(
-                "verification",
-                "EXECUTION_RESULT",
-                "FAILED",
-                {
-                    "decision_id": decision.decision_id,
-                    "action_id": action_id,
-                    "execution_key": result.key,
-                    "result_fingerprint": _result_fingerprint(result),
-                    "reason": type(exc).__name__,
-                },
-            )
-            self.executor.runtime._persist_new_audit_events()
+            self._record_verification(decision, action_id, result, "FAILED", type(exc).__name__)
             raise VerificationFailed("Independent execution-result verification failed.") from None
         outcome = "VERIFIED" if verified else "FAILED"
-        self.executor.runtime.audit.record(
-            "verification",
-            "EXECUTION_RESULT",
-            outcome,
-            {
-                "decision_id": decision.decision_id,
-                "action_id": action_id,
-                "execution_key": result.key,
-                "result_fingerprint": _result_fingerprint(result),
-            },
-        )
-        self.executor.runtime._persist_new_audit_events()
+        self._record_verification(decision, action_id, result, outcome)
         if not verified:
             raise VerificationFailed("Independent execution-result verification failed.")
         return result
+
+    def _record_verification(
+        self,
+        decision: ValidatedTrajectoryDecision,
+        action_id: str,
+        result: ExecutionResult,
+        outcome: str,
+        reason: str | None = None,
+    ) -> None:
+        payload = {
+            "decision_id": decision.decision_id,
+            "decision_fingerprint": decision.context_fingerprint,
+            "action_id": action_id,
+            "execution_key": result.key,
+            "result_fingerprint": _result_fingerprint(result),
+        }
+        if reason is not None:
+            payload["reason"] = reason
+        self.executor.runtime.audit.record("verification", "EXECUTION_RESULT", outcome, payload)
+        self.executor.runtime._persist_new_audit_events()
 
     def execute_effect(
         self,
