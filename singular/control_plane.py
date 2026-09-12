@@ -30,11 +30,9 @@ class ControlPlaneDecision:
 class SingularControlPlane:
     """Canonical orchestration surface for decision, execution and learning.
 
-    The verifier is deliberately not a request/composition argument here. The
-    public control-plane surface is the boundary JARVIS is expected to use, so
-    it cannot supply or replace the independent verifier. A deployment that
-    genuinely needs a different trusted verifier must compose the lower-level
-    ValidatedDecisionService in trusted application code.
+    The verifier is a trusted-composition dependency. It is never selected by a
+    request, an LLM, or an execution call. The default verifier is used unless a
+    trusted application explicitly supplies a different verifier at construction.
     """
 
     def __init__(
@@ -44,7 +42,10 @@ class SingularControlPlane:
         attestation_store: DecisionAttestationStore | None = None,
         issuer: str = "singular",
         learning_path: str | Path | None = None,
+        verifier: Callable[[Any, Any], bool] | None = None,
     ) -> None:
+        if verifier is not None and not callable(verifier):
+            raise TypeError("verifier must be callable when supplied at trusted composition time")
         self.runtime = runtime
         self.attestation_store = attestation_store or DecisionAttestationStore(runtime.store.path)
         self.executor = DurableExecutionEngine(runtime, attestation_store=self.attestation_store)
@@ -52,7 +53,7 @@ class SingularControlPlane:
             self.executor,
             attestation_store=self.attestation_store,
             issuer=issuer,
-            verifier=default_execution_result_verifier,
+            verifier=verifier or default_execution_result_verifier,
         )
         self.learning = ContinuousLearningCycle(
             learning_path or runtime.store.path,
