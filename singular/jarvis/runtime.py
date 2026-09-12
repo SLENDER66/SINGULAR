@@ -1,8 +1,10 @@
-"""JARVIS runtime: translate a human request into SINGULAR-governed work.
+"""AZAZEL reasoning runtime: translate a human request into governed work.
 
-JARVIS is the interface/runtime of SINGULAR, not a second authority model.
-Claude proposes; deterministic trajectory logic prioritizes; SINGULAR governs.
+AZAZEL is the public reasoning entity, not a second authority model. A model
+provider proposes; deterministic trajectory logic prioritizes; SINGULAR governs.
 Execution remains behind SINGULAR's validated execution boundary.
+
+The module path is retained temporarily for compatibility with existing imports.
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from .llm import LLMProvider, LLMResponse
 from .trajectory import TrajectoryCandidate, TrajectoryPriority, prioritize
 
 
-_SYSTEM = """Tu es JARVIS, l'interface de raisonnement de SINGULAR.
+_SYSTEM = """Tu es AZAZEL, l'entité de raisonnement de SINGULAR.
 SINGULAR est l'autorité. Tu proposes, tu ne décides pas et tu n'exécutes rien.
 
 Ta boucle conceptuelle est : OBSERVE -> UNDERSTAND -> DIAGNOSE -> PRIORITIZE
@@ -118,12 +120,12 @@ class MissionProposal:
         return tuple(prioritize(action.trajectory_candidate()) for action in self.actions)
 
 
-class JarvisParseError(ValueError):
+class AzazelParseError(ValueError):
     """The model response is not a valid, bounded mission proposal."""
 
 
-class JarvisRuntime:
-    """User-facing orchestration seam above SINGULAR's durable core."""
+class AzazelRuntime:
+    """Public AZAZEL orchestration seam above SINGULAR's durable core."""
 
     DEFAULT_MAX_TOKENS = 1200
     DEFAULT_MAX_ACTIONS = 8
@@ -181,9 +183,9 @@ class JarvisRuntime:
 
         Trajectory priority changes ordering only. Every action still crosses
         DurableMissionRuntime, which owns governance, approvals, audit and
-        replay protection. In particular, the LLM-provided ``capability`` field
-        is never copied into ActionRequest: permissions must come from trusted
-        SINGULAR composition, never from model output.
+        replay protection. In particular, the model-provided ``capability``
+        field is never copied into ActionRequest: permissions must come from
+        trusted SINGULAR composition, never from model output.
         """
         contract = self.missions.create_mission(
             proposal.objective,
@@ -218,43 +220,43 @@ class JarvisRuntime:
         if raw.startswith("```"):
             lines = raw.splitlines()
             if len(lines) < 3 or not lines[-1].strip().startswith("```"):
-                raise JarvisParseError("Incomplete JSON code fence")
+                raise AzazelParseError("Incomplete JSON code fence")
             raw = "\n".join(lines[1:-1]).strip()
         try:
             value = json.loads(raw)
         except json.JSONDecodeError:
-            raise JarvisParseError("LLM response is not valid JSON") from None
+            raise AzazelParseError("LLM response is not valid JSON") from None
         if not isinstance(value, dict):
-            raise JarvisParseError("Mission proposal must be a JSON object")
+            raise AzazelParseError("Mission proposal must be a JSON object")
         return value
 
     @staticmethod
     def _text(data: dict[str, Any], key: str) -> str:
         value = data.get(key)
         if not isinstance(value, str) or not value.strip():
-            raise JarvisParseError(f"{key} must be a non-empty string")
+            raise AzazelParseError(f"{key} must be a non-empty string")
         return value.strip()
 
     @staticmethod
     def _strings(data: dict[str, Any], key: str) -> tuple[str, ...]:
         value = data.get(key, [])
         if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
-            raise JarvisParseError(f"{key} must be a list of non-empty strings")
+            raise AzazelParseError(f"{key} must be a list of non-empty strings")
         return tuple(item.strip() for item in value)
 
     @classmethod
     def _actions(cls, data: dict[str, Any], *, max_actions: int = DEFAULT_MAX_ACTIONS) -> tuple[ProposedAction, ...]:
         value = data.get("actions")
         if not isinstance(value, list):
-            raise JarvisParseError("actions must be a list")
+            raise AzazelParseError("actions must be a list")
         if not value:
-            raise JarvisParseError("at least one proposed action is required")
+            raise AzazelParseError("at least one proposed action is required")
         if len(value) > max_actions:
-            raise JarvisParseError("actions exceed configured proposal limit")
+            raise AzazelParseError("actions exceed configured proposal limit")
         actions: list[ProposedAction] = []
         for item in value:
             if not isinstance(item, dict):
-                raise JarvisParseError("each action must be an object")
+                raise AzazelParseError("each action must be an object")
             numbers: dict[str, float] = {}
             for key in (
                 "impact", "risk", "reversibility", "leverage", "dependency",
@@ -262,11 +264,11 @@ class JarvisRuntime:
             ):
                 number = item.get(key, ProposedAction.__dataclass_fields__[key].default)
                 if isinstance(number, bool) or not isinstance(number, (int, float)) or not isfinite(number) or not 0 <= number <= 10:
-                    raise JarvisParseError(f"action {key} must be finite and between 0 and 10")
+                    raise AzazelParseError(f"action {key} must be finite and between 0 and 10")
                 numbers[key] = float(number)
             capability = item.get("capability")
             if capability is not None and (not isinstance(capability, str) or not capability.strip()):
-                raise JarvisParseError("capability must be null or a non-empty string")
+                raise AzazelParseError("capability must be null or a non-empty string")
             actions.append(
                 ProposedAction(
                     name=cls._text(item, "name"),
@@ -283,8 +285,20 @@ class JarvisRuntime:
     def _bool(data: dict[str, Any], key: str) -> bool:
         value = data.get(key)
         if not isinstance(value, bool):
-            raise JarvisParseError(f"{key} must be boolean")
+            raise AzazelParseError(f"{key} must be boolean")
         return value
 
 
-__all__ = ["JarvisParseError", "JarvisRuntime", "MissionProposal", "ProposedAction"]
+# Compatibility aliases. These do not create a second runtime or authority.
+JarvisRuntime = AzazelRuntime
+JarvisParseError = AzazelParseError
+
+
+__all__ = [
+    "AzazelParseError",
+    "AzazelRuntime",
+    "JarvisParseError",
+    "JarvisRuntime",
+    "MissionProposal",
+    "ProposedAction",
+]
