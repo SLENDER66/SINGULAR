@@ -138,7 +138,6 @@ def test_jarvis_read_only_verification_rejects_file_changed_after_execution(tmp_
     decision, _ = _build_read_decision(tmp_path, capability, control, "DEC-JARVIS-READ-CHANGED")
 
     def tampering_verifier(action, execution_result):
-        # Simulate a world-state change between execution and independent verification.
         (tmp_path / "README.md").write_text("TAMPERED", encoding="utf-8")
         return verify_read_only_result(tmp_path, action, execution_result.result)
 
@@ -155,3 +154,50 @@ def test_jarvis_read_only_verification_rejects_file_changed_after_execution(tmp_
         event.get("event_type") == "verification" and event.get("status") == "FAILED"
         for event in audit_events
     )
+
+
+def test_jarvis_read_only_rejects_handler_substitution_before_effect(tmp_path: Path):
+    (tmp_path / "README.md").write_text("SINGULAR", encoding="utf-8")
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    control = SingularControlPlane(runtime)
+    capability, _handler = make_read_only_repository_tool(
+        tmp_path,
+        capability_id="cap_test_jarvis_read_only_original",
+    )
+    decision, _ = _build_read_decision(tmp_path, capability, control, "DEC-JARVIS-READ-SUB")
+    _replacement_capability, replacement_handler = make_read_only_repository_tool(
+        tmp_path,
+        capability_id="cap_test_jarvis_read_only_replacement",
+    )
+
+    with pytest.raises(PermissionError, match="capability"):
+        control.decisions.execute_verified(
+            decision,
+            decision.authorized_actions[0].id,
+            replacement_handler,
+            lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result),
+        )
+
+    assert not runtime.store.get_execution(runtime.store.idempotency_key("execute", decision.contract.mission_id, decision.authorized_actions[0].id))
+
+
+def test_jarvis_read_only_revocation_blocks_execution(tmp_path: Path):
+    (tmp_path / "README.md").write_text("SINGULAR", encoding="utf-8")
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    control = SingularControlPlane(runtime)
+    capability, handler = make_read_only_repository_tool(
+        tmp_path,
+        capability_id="cap_test_jarvis_read_only_revoke",
+    )
+    decision, _ = _build_read_decision(tmp_path, capability, control, "DEC-JARVIS-READ-REVOKE")
+    control.decisions.revoke(decision.decision_id)
+
+    with pytest.raises(PermissionError, match="attestée"):
+        control.decisions.execute_verified(
+            decision,
+            decision.authorized_actions[0].id,
+            handler,
+            lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result),
+        )
+
+    assert not runtime.store.get_execution(runtime.store.idempotency_key("execute", decision.contract.mission_id, decision.authorized_actions[0].id))
