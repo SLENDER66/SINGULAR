@@ -494,11 +494,26 @@ class AuthenticationService:
 
     @staticmethod
     def _fail(conn: sqlite3.Connection, subject: str, now: float) -> None:
-        row = conn.execute("SELECT failures,first_failure_at FROM auth_attempts WHERE subject_hash=?", (subject,)).fetchone()
-        if row is None or now - row["first_failure_at"] >= RATE_WINDOW:
-            conn.execute("INSERT OR REPLACE INTO auth_attempts VALUES(?,?,?,?)", (subject, 1, now, now))
-        else:
-            conn.execute("UPDATE auth_attempts SET failures=failures+1,last_failure_at=? WHERE subject_hash=?", (now, subject))
+        # A single atomic UPSERT avoids the classic read/modify/write race where
+        # two concurrent authentication failures both observe an absent row and
+        # each insert `failures=1`, losing one security event. SQLite serializes
+        # the conflicting write while the CASE keeps the rate-limit window
+        # semantics durable across restarts.
+        conn.execute(
+            """INSERT INTO auth_attempts(subject_hash,failures,first_failure_at,last_failure_at)
+               VALUES(?,?,?,?)
+               ON CONFLICT(subject_hash) DO UPDATE SET
+                 failures=CASE
+                   WHEN excluded.first_failure_at - auth_attempts.first_failure_at >= ? THEN 1
+                   ELSE auth_attempts.failures + 1
+                 END,
+                 first_failure_at=CASE
+                   WHEN excluded.first_failure_at - auth_attempts.first_failure_at >= ? THEN excluded.first_failure_at
+                   ELSE auth_attempts.first_failure_at
+                 END,
+                 last_failure_at=excluded.last_failure_at""",
+            (subject, 1, now, now, RATE_WINDOW, RATE_WINDOW),
+        )
 
     @staticmethod
     def _clear(conn: sqlite3.Connection, subject: str) -> None:
