@@ -17,7 +17,7 @@ from .decision_attestation import DecisionAttestation, DecisionAttestationStore
 from .execution import DurableExecutionEngine, ExecutionResult
 from .learning import Forecast
 from .mission_runtime import DurableMissionRuntime
-from .validated_decision_service import ValidatedDecisionService
+from .validated_decision_service import ValidatedDecisionService, default_execution_result_verifier
 from .validated_trajectory_decision import ValidatedTrajectoryDecision
 
 
@@ -37,6 +37,7 @@ class SingularControlPlane:
         attestation_store: DecisionAttestationStore | None = None,
         issuer: str = "singular",
         learning_path: str | Path | None = None,
+        verifier: Callable[[Any, Any], bool] | None = None,
     ) -> None:
         self.runtime = runtime
         self.attestation_store = attestation_store or DecisionAttestationStore(runtime.store.path)
@@ -45,6 +46,7 @@ class SingularControlPlane:
             self.executor,
             attestation_store=self.attestation_store,
             issuer=issuer,
+            verifier=verifier or default_execution_result_verifier,
         )
         self.learning = ContinuousLearningCycle(
             learning_path or runtime.store.path,
@@ -72,16 +74,14 @@ class SingularControlPlane:
         control_decision: ControlPlaneDecision,
         action_id: str,
         handler: Callable[[Any], Any],
-        verifier: Callable[[Any, Any], bool],
     ) -> ExecutionResult:
-        """Execute only when an independent verifier accepts the durable result."""
+        """Execute only when the verifier fixed at trusted composition accepts the durable result."""
         if not isinstance(control_decision, ControlPlaneDecision):
             raise TypeError("control plane execution requires a ControlPlaneDecision")
         return self.decisions.execute_verified(
             control_decision.decision,
             action_id,
             handler,
-            verifier,
         )
 
     def execute_effect(
