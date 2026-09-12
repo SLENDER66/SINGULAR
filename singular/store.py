@@ -1,6 +1,7 @@
 from pathlib import Path
-import json
+
 from .models import WorldModel
+
 
 class JsonWorldStore:
     def __init__(self, path='data/world_model.json'):
