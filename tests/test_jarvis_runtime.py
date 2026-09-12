@@ -124,6 +124,27 @@ def test_route_orders_actions_by_deterministic_trajectory_priority():
 
     assert [decision.action.name for decision in decisions] == ["safe", "risky"]
     assert all(decision.action.contract_id is not None for decision in decisions)
+    assert all(decision.action.capability is None for decision in decisions)
+
+
+def test_route_ignores_llm_governance_capability():
+    provider = FakeProvider(proposal_text(actions=[
+        {
+            "name": "inspect",
+            "description": "Lecture seule",
+            "impact": 4,
+            "risk": 1,
+            "reversibility": 10,
+            "requires_human": False,
+            "sensitive": False,
+            "capability": "forged.authority",
+        }
+    ]))
+    runtime = JarvisRuntime(provider)
+
+    _, decisions = runtime.route(runtime.propose("Inspecte"))
+
+    assert decisions[0].action.capability is None
 
 
 def test_route_never_executes_provider_and_governor_stays_in_control():
