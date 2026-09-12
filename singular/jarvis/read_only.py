@@ -67,7 +67,10 @@ def make_read_only_repository_tool(
         size = candidate.stat().st_size
         if size > max_bytes:
             raise ValueError("file exceeds configured read limit")
-        data = candidate.read_text(encoding="utf-8")
+        try:
+            data = candidate.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("read-only repository tool accepts UTF-8 text files only") from exc
         encoded = data.encode("utf-8")
         return {
             "path": relative.as_posix(),
