@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Callable
 
 from .autopilot import ActionRequest, Autonomy, DelegationContract, ExecutionBus, GovernorDecision
 from .audit import AuditTrail
@@ -110,9 +109,6 @@ class RedTeamGate:
             findings.append(RedTeamFinding("HIGH", "Risque modéré/élevé : validation humaine recommandée.", False))
         if action.reversibility <= 2:
             findings.append(RedTeamFinding("CRITICAL", "Action faiblement réversible.", True))
-        # Sensitivity is an authorization signal, not an automatic hard block.
-        # ActionPolicy/capabilities can require human approval while preserving
-        # the approval lifecycle needed to authorize the action explicitly.
         if action.sensitive:
             findings.append(RedTeamFinding("HIGH", "Action sensible : contrôle d'autorité renforcé.", False))
         if contract and action.name in contract.forbidden_actions:
