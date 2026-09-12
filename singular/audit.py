@@ -88,7 +88,10 @@ class AuditTrail:
     """Append-only audit trail with independently verifiable event and chain integrity."""
 
     def __init__(self, events: list[AuditEvent] | tuple[AuditEvent, ...] | None = None) -> None:
-        self._events: list[AuditEvent] = list(events or ())
+        initial = tuple(events or ())
+        if initial and not self.verify_chain([asdict(event) for event in initial]):
+            raise ValueError("L'intégrité de la chaîne d'audit ne peut pas être établie.")
+        self._events: list[AuditEvent] = list(initial)
         self._lock = RLock()
 
     @classmethod
@@ -127,6 +130,8 @@ class AuditTrail:
         event becoming a different one.
         """
         with self._lock:
+            if any(existing.id == event.id for existing in self._events):
+                raise ValueError("Un événement d'audit avec cet identifiant existe déjà.")
             payload = {key: value for key, value in event.payload.items() if key not in CHAIN_KEYS}
             previous = self._events[-1].payload.get("audit_fingerprint", "") if self._events else ""
             positioned = AuditEvent(event.event_type, event.actor, event.outcome, payload, event.timestamp, event.id)
@@ -168,7 +173,12 @@ class AuditTrail:
     def verify_chain(cls, events: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> bool:
         previous = ""
         expected_sequence = 1
+        seen_ids: set[str] = set()
         for event in events:
+            event_id = event.get("id")
+            if not isinstance(event_id, str) or not event_id or event_id in seen_ids:
+                return False
+            seen_ids.add(event_id)
             if not cls.verify_persisted_event(event):
                 return False
             payload = dict(event.get("payload") or {})
@@ -176,7 +186,7 @@ class AuditTrail:
             event_fingerprint = payload.get("audit_fingerprint")
             previous_fingerprint = payload.get("audit_prev_fingerprint")
             chain_fingerprint = payload.get("audit_chain_fingerprint")
-            if not isinstance(sequence, int) or sequence != expected_sequence:
+            if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence != expected_sequence:
                 return False
             if not isinstance(event_fingerprint, str) or not event_fingerprint:
                 return False
