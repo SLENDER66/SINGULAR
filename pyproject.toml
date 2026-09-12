@@ -12,6 +12,7 @@ dependencies = ["pydantic>=2.0,<3"]
 
 [project.scripts]
 singular-jarvis = "singular.jarvis.cli:main"
+singular-redteam = "singular.security_assessment:main"
 
 [project.optional-dependencies]
 runtime = ["openai-agents>=0.14.0"]
