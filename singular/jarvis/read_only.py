@@ -42,12 +42,11 @@ def _resolve_inside(repository: Path, relative: Path) -> Path:
 
 
 def _read_bounded_text(candidate: Path, max_bytes: int) -> str:
-    """Read a bounded UTF-8 file while refusing a final symlink.
+    """Read a bounded UTF-8 file while refusing a final pathname symlink.
 
-    Resolution and opening are separate filesystem operations. Where the
-    platform exposes ``O_NOFOLLOW``, the final path component cannot be swapped
-    to a symlink between those operations. Reading through the opened descriptor
-    also pins the file object against later pathname replacement.
+    Resolution and opening are separate filesystem operations. The opened file
+    descriptor is used for the complete read, preventing later pathname
+    replacement from changing which file object is read.
     """
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     fd = os.open(candidate, flags)
