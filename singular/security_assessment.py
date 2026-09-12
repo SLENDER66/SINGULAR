@@ -58,11 +58,32 @@ class SecurityReport:
 
     @property
     def failures(self) -> tuple[SecurityFinding, ...]:
-        return tuple(f for f in self.findings if f.severity in {FindingSeverity.CRITICAL, FindingSeverity.HIGH})
+        """Return only high-impact findings whose exploitability was validated.
+
+        Static source rules are deliberately triage signals. Treating an
+        ``eval(...)`` observation as a validated vulnerability would collapse
+        OBSERVED and VALIDATED, creating both false positives and a false sense
+        that the scanner had demonstrated exploitability. Dynamic adversarial
+        probes and the execution-boundary audit provide the validation evidence.
+        """
+        return tuple(
+            f
+            for f in self.findings
+            if f.validated and f.severity in {FindingSeverity.CRITICAL, FindingSeverity.HIGH}
+        )
 
     @property
     def clean(self) -> bool:
         return not self.failures
+
+    @property
+    def observed_high_risk(self) -> tuple[SecurityFinding, ...]:
+        """High-impact observations that still require validation."""
+        return tuple(
+            f
+            for f in self.findings
+            if not f.validated and f.severity in {FindingSeverity.CRITICAL, FindingSeverity.HIGH}
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -248,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"SINGULAR RED TEAM mode={report.mode.value} files={report.files_scanned} probes={report.probes_run}")
         for finding in report.findings:
             print(f"{finding.severity.value:8} {finding.rule:32} {finding.path}:{finding.line} {finding.title}")
-        print(f"RESULT clean={report.clean} findings={len(report.findings)}")
+        print(f"RESULT clean={report.clean} findings={len(report.findings)} observed_high_risk={len(report.observed_high_risk)}")
     return 0 if report.clean else 1
 
 
