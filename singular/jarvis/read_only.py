@@ -91,7 +91,7 @@ def verify_read_only_result(
 
     This verifier does not trust the handler's success flag or returned text.
     It independently resolves the bound action path, reads the file, recomputes
-    size and SHA-256, and compares those facts with the reported result.
+    size, SHA-256 and decoded text, and compares those facts with the result.
     """
     repository = Path(root).resolve()
     if not repository.is_dir() or max_bytes < 1:
@@ -104,13 +104,15 @@ def verify_read_only_result(
         data = candidate.read_bytes()
         if len(data) > max_bytes:
             return False
+        text = data.decode("utf-8")
         expected = {
             "path": relative.as_posix(),
             "bytes": len(data),
             "sha256": hashlib.sha256(data).hexdigest(),
+            "text": text,
         }
         return all(result.get(key) == value for key, value in expected.items())
-    except (OSError, PermissionError, ValueError):
+    except (OSError, PermissionError, UnicodeDecodeError, ValueError):
         return False
 
 
