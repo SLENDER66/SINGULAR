@@ -92,3 +92,25 @@ def test_invalid_initial_chain_is_rejected() -> None:
 
     with pytest.raises(ValueError):
         AuditTrail([invalid])
+
+
+def test_non_json_audit_payload_is_rejected() -> None:
+    with pytest.raises(TypeError, match="JSON"):
+        AuditTrail().record("security_test", "actor", "ok", {"value": object()})
+
+
+def test_non_finite_audit_payload_is_rejected() -> None:
+    with pytest.raises(TypeError, match="JSON"):
+        AuditTrail().record("security_test", "actor", "ok", {"value": float("nan")})
+
+
+def test_oversized_audit_payload_is_rejected() -> None:
+    with pytest.raises(ValueError, match="taille maximale"):
+        AuditTrail().record("security_test", "actor", "ok", {"value": "x" * (64 * 1024)})
+
+
+def test_persisted_event_with_non_string_identity_is_rejected() -> None:
+    event = AuditTrail().record("security_test", "actor", "ok", {"value": 1})
+    persisted = event.__dict__.copy()
+    persisted["actor"] = 42
+    assert not AuditTrail.verify_persisted_event(persisted)
