@@ -227,10 +227,17 @@ class AuthenticationService:
 
     def begin_totp_enrollment(self, user_id: str, password: str, *, issuer: str = "SINGULAR", now: float | None = None) -> TotpEnrollment:
         current = self._now() if now is None else now
+        subject = _subject_hash(user_id, self._rate_secret)
         with self._connect() as conn:
+            if self._limited(conn, subject, current):
+                raise RateLimited("authentication temporarily unavailable")
             row = conn.execute("SELECT username,password_salt,password_digest FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
             if row is None or not _password_ok(password, row["password_salt"], row["password_digest"]):
+                self._fail(conn, subject, current)
+                self._audit(conn, "login_failed", user_id if row else None)
+                conn.commit()
                 raise AuthenticationError("authentication failed")
+            self._clear(conn, subject)
             secret = base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
             expires = current + PENDING_TOTP_TTL
             conn.execute("UPDATE auth_users SET pending_totp_ciphertext=?,pending_totp_expires=? WHERE user_id=?", (self._fernet.encrypt(secret.encode()), expires, user_id))
@@ -241,9 +248,15 @@ class AuthenticationService:
 
     def confirm_totp_enrollment(self, user_id: str, code: str, *, now: float | None = None) -> tuple[str, ...]:
         current = self._now() if now is None else now
+        subject = _subject_hash(user_id, self._rate_secret)
         with self._connect() as conn:
+            if self._limited(conn, subject, current):
+                raise RateLimited("authentication temporarily unavailable")
             row = conn.execute("SELECT pending_totp_ciphertext,pending_totp_expires FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
             if row is None or row["pending_totp_ciphertext"] is None or row["pending_totp_expires"] is None or current > row["pending_totp_expires"]:
+                self._fail(conn, subject, current)
+                self._audit(conn, "login_failed", user_id if row else None)
+                conn.commit()
                 raise AuthenticationError("authentication failed")
             try:
                 secret = self._fernet.decrypt(row["pending_totp_ciphertext"]).decode("ascii")
@@ -251,6 +264,9 @@ class AuthenticationService:
                 raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
             ok, counter = _totp_ok(secret, code, current)
             if not ok:
+                self._fail(conn, subject, current)
+                self._audit(conn, "login_failed", user_id)
+                conn.commit()
                 raise AuthenticationError("authentication failed")
             conn.execute("UPDATE auth_users SET totp_ciphertext=?,pending_totp_ciphertext=NULL,pending_totp_expires=NULL,last_totp_counter=?,security_version=security_version+1 WHERE user_id=?", (self._fernet.encrypt(secret.encode()), counter, user_id))
             conn.execute("DELETE FROM auth_recovery_codes WHERE user_id=?", (user_id,))
@@ -261,6 +277,7 @@ class AuthenticationService:
                 conn.execute("INSERT INTO auth_recovery_codes(user_id,code_salt,code_digest) VALUES(?,?,?)", (user_id, salt, digest))
                 codes.append(value)
             self._revoke_all(conn, user_id, current)
+            self._clear(conn, subject)
             self._audit(conn, "totp_enabled", user_id)
             return tuple(codes)
 
@@ -297,7 +314,14 @@ class AuthenticationService:
                         self._audit(conn, "login_failed", row["user_id"])
                         conn.commit()
                         raise AuthenticationError("authentication failed")
-                    conn.execute("UPDATE auth_users SET last_totp_counter=? WHERE user_id=?", (counter, row["user_id"]))
+                    cursor = conn.execute("UPDATE auth_users SET last_totp_counter=? WHERE user_id=? AND (last_totp_counter IS NULL OR last_totp_counter < ?)", (counter, row["user_id"], counter))
+                    if cursor.rowcount != 1:
+                        self._fail(conn, account, current)
+                        if client is not None:
+                            self._fail(conn, client, current)
+                        self._audit(conn, "login_failed", row["user_id"])
+                        conn.commit()
+                        raise AuthenticationError("authentication failed")
                 elif not self._consume_recovery(conn, row["user_id"], recovery_code or "", current):
                     self._fail(conn, account, current)
                     if client is not None:
@@ -344,21 +368,38 @@ class AuthenticationService:
             self._audit(conn, "password_changed", user_id)
 
     def disable_totp(self, user_id: str, password: str, *, otp: str | None = None, recovery_code: str | None = None) -> None:
+        current = self._now()
+        subject = _subject_hash(user_id, self._rate_secret)
         with self._connect() as conn:
+            if self._limited(conn, subject, current):
+                raise RateLimited("authentication temporarily unavailable")
             row = conn.execute("SELECT password_salt,password_digest,totp_ciphertext,last_totp_counter FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
             if row is None or row["totp_ciphertext"] is None or not _password_ok(password, row["password_salt"], row["password_digest"]):
+                self._fail(conn, subject, current)
+                self._audit(conn, "login_failed", user_id if row else None)
+                conn.commit()
                 raise AuthenticationError("authentication failed")
             try:
                 secret = self._fernet.decrypt(row["totp_ciphertext"]).decode("ascii")
             except (InvalidToken, UnicodeDecodeError):
                 raise AuthenticationConfigurationError("stored authentication secret is invalid") from None
-            current = self._now()
             ok, counter = _totp_ok(secret, otp or "", current, row["last_totp_counter"]) if otp else (self._consume_recovery(conn, user_id, recovery_code or "", current), None)
             if not ok:
+                self._fail(conn, subject, current)
+                self._audit(conn, "login_failed", user_id)
+                conn.commit()
                 raise AuthenticationError("authentication failed")
+            if otp:
+                cursor = conn.execute("UPDATE auth_users SET last_totp_counter=? WHERE user_id=? AND (last_totp_counter IS NULL OR last_totp_counter < ?)", (counter, user_id, counter))
+                if cursor.rowcount != 1:
+                    self._fail(conn, subject, current)
+                    self._audit(conn, "login_failed", user_id)
+                    conn.commit()
+                    raise AuthenticationError("authentication failed")
             conn.execute("UPDATE auth_users SET totp_ciphertext=NULL,last_totp_counter=?,security_version=security_version+1 WHERE user_id=?", (counter, user_id))
             conn.execute("DELETE FROM auth_recovery_codes WHERE user_id=?", (user_id,))
             self._revoke_all(conn, user_id, current)
+            self._clear(conn, subject)
             self._audit(conn, "totp_disabled", user_id)
 
     def _session(self, conn: sqlite3.Connection, user_id: str, version: int, now: float) -> str:
