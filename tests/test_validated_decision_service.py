@@ -98,6 +98,22 @@ def test_service_rejects_non_callable_verifier_before_execution(tmp_path):
         service.execute_verified(decision, decision.global_report.action_id, authorized_handler, None)
 
 
+def test_service_execute_verified_rejects_failed_execution_even_if_verifier_returns_true(tmp_path):
+    runtime, service = _service(tmp_path)
+    decision, _ = service.build_and_attest(**_kwargs("DEC-SVC-VERIFY-EXEC-FAIL"))
+    runtime.store.save_mission(decision.contract)
+
+    def failing_handler(_action):
+        raise RuntimeError("handler failure")
+
+    with pytest.raises(VerificationFailed):
+        service.execute_verified(decision, decision.global_report.action_id, failing_handler, lambda *_: True)
+
+    event = [e for e in runtime.audit.events if e.category == "verification"][-1]
+    assert event.outcome == "FAILED"
+    assert event.payload["reason"] == "execution_not_completed"
+
+
 def test_service_revoke_closes_execution_without_mutating_decision(tmp_path):
     runtime, service = _service(tmp_path)
     decision, _ = service.build_and_attest(**_kwargs("DEC-SVC-REVOKE"))
