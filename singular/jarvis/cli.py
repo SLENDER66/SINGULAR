@@ -8,11 +8,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
-from ..mission_runtime import DurableMissionRuntime
 from ..durable import DurableStore
+from ..mission_runtime import DurableMissionRuntime
 from .llm import AnthropicProvider, LLMProvider
 from .runtime import JarvisRuntime
 
@@ -105,7 +105,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             route=args.route,
             mission_runtime=DurableMissionRuntime(DurableStore(args.db)),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - CLI boundary must sanitize unexpected failures
         print(json.dumps({"error": "JARVIS request failed", "type": type(exc).__name__}), file=sys.stderr)
         return 1
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
