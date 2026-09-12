@@ -192,6 +192,32 @@ def test_request_and_context_sizes_are_bounded_before_provider_call():
     assert provider.calls == []
 
 
+def test_model_response_size_is_bounded_before_json_parsing():
+    provider = FakeProvider("{" + "x" * 1000)
+    runtime = JarvisRuntime(provider, max_response_chars=100)
+
+    with pytest.raises(ValueError, match="LLM response exceeds configured size limit"):
+        runtime.propose("Analyse")
+
+
+def test_malformed_provider_response_type_fails_closed():
+    class MalformedProvider:
+        def complete(self, **kwargs):
+            return object()
+
+    with pytest.raises(ValueError, match="LLM response has an invalid type"):
+        JarvisRuntime(MalformedProvider()).propose("Analyse")
+
+
+def test_non_string_model_response_text_fails_closed():
+    class MalformedProvider:
+        def complete(self, **kwargs):
+            return LLMResponse(123, LLMUsage(), "fake")
+
+    with pytest.raises(ValueError, match="LLM response text must be a string"):
+        JarvisRuntime(MalformedProvider()).propose("Analyse")
+
+
 def test_malformed_model_output_fails_closed():
     provider = FakeProvider('{"objective":"x","expected_result":"y","actions":[{')
     runtime = JarvisRuntime(provider)
