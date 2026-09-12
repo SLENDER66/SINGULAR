@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from singular.durable import DurableStore
 from singular.jarvis.cli import main, run
 from singular.jarvis.llm import LLMResponse, LLMUsage
@@ -89,5 +91,7 @@ def test_cli_main_emits_json_and_nonzero_on_missing_anthropic_key(monkeypatch, c
 
 
 def test_cli_has_no_execution_primitive(capsys):
-    assert main(["Inspect the repository", "--execute"]) == 2
+    with pytest.raises(SystemExit) as error:
+        main(["Inspect the repository", "--execute"])
+    assert error.value.code == 2
     assert "unrecognized arguments: --execute" in capsys.readouterr().err
