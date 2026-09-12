@@ -2,6 +2,7 @@
 
 from .llm import AnthropicProvider, LLMProvider, LLMResponse, LLMUsage
 from .runtime import JarvisRuntime, MissionProposal, ProposedAction
+from .trajectory import TrajectoryCandidate, TrajectoryPriority, prioritize
 
 __all__ = [
     "AnthropicProvider",
@@ -11,4 +12,7 @@ __all__ = [
     "JarvisRuntime",
     "MissionProposal",
     "ProposedAction",
+    "TrajectoryCandidate",
+    "TrajectoryPriority",
+    "prioritize",
 ]
