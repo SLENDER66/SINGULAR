@@ -10,18 +10,19 @@ from typing import Any
 
 from ..autopilot import ActionRequest
 from ..mission_runtime import DurableMissionRuntime
-from ..validated_decision_service import ValidatedDecisionService
 from .runtime import MissionProposal
 
 
 class JarvisValidatedBridge:
-    """Translate exactly one proposal action into SINGULAR's validated pipeline."""
+    """Translate exactly one proposal action into SINGULAR's validated pipeline.
 
-    def __init__(
-        self,
-        mission_runtime: DurableMissionRuntime,
-        decision_service: ValidatedDecisionService,
-    ) -> None:
+    The validated decision service is dependency-injected rather than imported
+    here. SINGULAR's boundary audit intentionally forbids orchestration modules
+    from importing execution-causing modules; this bridge therefore depends only
+    on the injected service's public ``build_and_attest`` contract.
+    """
+
+    def __init__(self, mission_runtime: DurableMissionRuntime, decision_service: Any) -> None:
         self.missions = mission_runtime
         self.decisions = decision_service
 
@@ -39,7 +40,7 @@ class JarvisValidatedBridge:
         decision_id: str,
         action_index: int = 0,
         **kwargs: Any,
-    ):
+    ) -> Any:
         """Build and attest without granting JARVIS execution authority.
 
         The execution target must already be an opaque registered capability.
