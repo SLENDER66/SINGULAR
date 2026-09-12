@@ -231,6 +231,42 @@ class AdversarialEngine:
                 SecondFactorRequired,
                 "Changing an already configured second factor requires the existing second factor or a recovery credential.",
             ))
+
+            change_db = Path(directory) / "password-change.db"
+            change = AuthenticationService(change_db, master_key=master_key, now=lambda: 4_000_000.0)
+            change_user = change.create_user("password-change", password)
+            change_enrollment = change.begin_totp_enrollment(change_user, password, now=4_000_020.0)
+            change.confirm_totp_enrollment(change_user, _totp(change_enrollment.secret, 4_000_020.0), now=4_000_020.0)
+
+            def password_change_mfa_bruteforce() -> object:
+                for _ in range(5):
+                    try:
+                        change.change_password(
+                            change_user,
+                            password,
+                            "New secure password 2026!",
+                            otp="000000",
+                            client_key="client-password-change",
+                            now=4_000_050.0,
+                        )
+                    except AuthenticationError:
+                        continue
+                return change.change_password(
+                    change_user,
+                    password,
+                    "New secure password 2026!",
+                    otp=_totp(change_enrollment.secret, 4_000_050.0),
+                    client_key="client-password-change",
+                    now=4_000_050.0,
+                )
+
+            findings.append(cls._probe(
+                "AUTH-016", AttackSeverity.HIGH, AttackClass.AUTH,
+                "password-change MFA brute-force and rate-limit bypass",
+                password_change_mfa_bruteforce,
+                RateLimited,
+                "Password changes for MFA accounts must share durable account/client throttling with other authentication-sensitive operations.",
+            ))
         return AdversarialReport(tuple(findings))
 
     @classmethod
