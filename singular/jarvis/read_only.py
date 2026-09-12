@@ -8,6 +8,7 @@ of that action and is therefore bound into the validated decision fingerprint.
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -40,6 +41,33 @@ def _resolve_inside(repository: Path, relative: Path) -> Path:
     return candidate
 
 
+def _read_bounded_text(candidate: Path, max_bytes: int) -> str:
+    """Read a bounded UTF-8 file while refusing a final symlink.
+
+    Resolution and opening are separate filesystem operations. Where the
+    platform exposes ``O_NOFOLLOW``, the final path component cannot be swapped
+    to a symlink between those operations. Reading through the opened descriptor
+    also pins the file object against later pathname replacement.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(candidate, flags)
+    try:
+        with os.fdopen(fd, "rb") as stream:
+            data = stream.read(max_bytes + 1)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        raise
+    if len(data) > max_bytes:
+        raise ValueError("file exceeds configured read limit")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("read-only repository tool accepts UTF-8 text files only") from exc
+
+
 def make_read_only_repository_tool(
     root: str | Path,
     *,
@@ -64,19 +92,13 @@ def make_read_only_repository_tool(
         candidate = _resolve_inside(repository, relative)
         if not candidate.is_file():
             raise FileNotFoundError(str(relative))
-        size = candidate.stat().st_size
-        if size > max_bytes:
-            raise ValueError("file exceeds configured read limit")
-        try:
-            data = candidate.read_text(encoding="utf-8")
-        except UnicodeDecodeError as exc:
-            raise ValueError("read-only repository tool accepts UTF-8 text files only") from exc
-        encoded = data.encode("utf-8")
+        data = _read_bounded_text(candidate, max_bytes).encode("utf-8")
+        text = data.decode("utf-8")
         return {
             "path": relative.as_posix(),
-            "bytes": len(encoded),
-            "sha256": hashlib.sha256(encoded).hexdigest(),
-            "text": data,
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "text": text,
         }
 
     capability = register_execution_capability(read_repository_file, capability_id)
@@ -104,9 +126,7 @@ def verify_read_only_result(
         candidate = _resolve_inside(repository, relative)
         if not candidate.is_file():
             return False
-        data = candidate.read_bytes()
-        if len(data) > max_bytes:
-            return False
+        data = _read_bounded_text(candidate, max_bytes).encode("utf-8")
         text = data.decode("utf-8")
         expected = {
             "path": relative.as_posix(),
