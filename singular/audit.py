@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from threading import RLock
 from typing import Any
 from uuid import uuid4
 
@@ -21,7 +22,7 @@ class AuditEvent:
     outcome: str
     payload: dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    id: str = field(default_factory=lambda: "AUD-" + uuid4().hex[:10])
+    id: str = field(default_factory=lambda: "AUD-" + uuid4().hex)
 
     @property
     def correlation_id(self) -> str:
@@ -88,6 +89,7 @@ class AuditTrail:
 
     def __init__(self, events: list[AuditEvent] | tuple[AuditEvent, ...] | None = None) -> None:
         self._events: list[AuditEvent] = list(events or ())
+        self._lock = RLock()
 
     @classmethod
     def restore(cls, persisted_events: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> "AuditTrail":
@@ -107,39 +109,41 @@ class AuditTrail:
         return cls(events)
 
     def record(self, event_type: str, actor: str, outcome: str, payload: dict[str, Any] | None = None) -> AuditEvent:
-        base = dict(payload or {})
-        event = AuditEvent(event_type, actor, outcome, base)
-        previous = self._events[-1].payload.get("audit_fingerprint", "") if self._events else ""
-        persisted = event.durable_payload(len(self._events) + 1, str(previous))
-        event = AuditEvent(event_type, actor, outcome, persisted, event.timestamp, event.id)
-        self._events.append(event)
-        return event
+        with self._lock:
+            base = dict(payload or {})
+            event = AuditEvent(event_type, actor, outcome, base)
+            previous = self._events[-1].payload.get("audit_fingerprint", "") if self._events else ""
+            persisted = event.durable_payload(len(self._events) + 1, str(previous))
+            event = AuditEvent(event_type, actor, outcome, persisted, event.timestamp, event.id)
+            self._events.append(event)
+            return event
 
     def append(self, event: AuditEvent) -> AuditEvent:
         """Re-place an existing event at the head of this trail.
 
         An event's own fingerprint deliberately excludes its chain position, so
-        an event recorded by a trail that turned out to be behind can be moved
-        behind whatever really came first without becoming a different one:
-        same id, same timestamp, same content, new position. Rebuilding it with
-        record() would mint a new id and timestamp, which would make the trail
-        lie about when the thing happened.
+        an event recorded by a trail that turned out to be behind writes it had
+        not seen can be moved behind whatever really came first without the
+        event becoming a different one.
         """
-        payload = {key: value for key, value in event.payload.items() if key not in CHAIN_KEYS}
-        previous = self._events[-1].payload.get("audit_fingerprint", "") if self._events else ""
-        positioned = AuditEvent(event.event_type, event.actor, event.outcome, payload, event.timestamp, event.id)
-        anchored = AuditEvent(
-            event.event_type, event.actor, event.outcome,
-            positioned.durable_payload(len(self._events) + 1, str(previous)), event.timestamp, event.id,
-        )
-        self._events.append(anchored)
-        return anchored
+        with self._lock:
+            payload = {key: value for key, value in event.payload.items() if key not in CHAIN_KEYS}
+            previous = self._events[-1].payload.get("audit_fingerprint", "") if self._events else ""
+            positioned = AuditEvent(event.event_type, event.actor, event.outcome, payload, event.timestamp, event.id)
+            anchored = AuditEvent(
+                event.event_type, event.actor, event.outcome,
+                positioned.durable_payload(len(self._events) + 1, str(previous)), event.timestamp, event.id,
+            )
+            self._events.append(anchored)
+            return anchored
 
     def events(self) -> tuple[AuditEvent, ...]:
-        return tuple(self._events)
+        with self._lock:
+            return tuple(self._events)
 
     def export(self) -> list[dict[str, Any]]:
-        return [asdict(event) for event in self._events]
+        with self._lock:
+            return [asdict(event) for event in self._events]
 
     @staticmethod
     def verify_persisted_event(event: dict[str, Any]) -> bool:
