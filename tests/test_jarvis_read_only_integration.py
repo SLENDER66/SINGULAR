@@ -18,15 +18,7 @@ from singular.trajectory import TrajectoryProfile
 from singular.values import Vision
 
 
-def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_verification(tmp_path: Path):
-    (tmp_path / "README.md").write_text("SINGULAR", encoding="utf-8")
-    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
-    control = SingularControlPlane(runtime)
-    capability, handler = make_read_only_repository_tool(
-        tmp_path,
-        capability_id="cap_test_jarvis_read_only_e2e",
-    )
-
+def _read_proposal():
     action = ProposedAction(
         name="read:README.md",
         description="Read one bounded repository file",
@@ -41,13 +33,16 @@ def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_ve
         ownership=1,
         recurrence=1,
     )
-    proposal = MissionProposal(
+    return MissionProposal(
         objective="Inspect repository state",
         expected_result="Bounded repository content is returned",
         context_needed=(),
         actions=(action,),
         llm=LLMResponse(text="{}", model="test"),
     )
+
+
+def _read_inputs():
     state = DomainState(LearningDomain.CAREER, 0.2, confidence=0.9)
     intervention = Intervention(
         "repository_read",
@@ -69,11 +64,13 @@ def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_ve
         resilience=1,
         transmission=1,
     )
-    dimensions = {name: 0.8 for name in profile.weights}
+    return state, intervention, profile, {name: 0.8 for name in profile.weights}
 
-    bridge = JarvisValidatedBridge(runtime, control.decisions)
-    decision, attestation = bridge.build_and_attest(
-        proposal,
+
+def _build_read_decision(tmp_path: Path, capability: str, control: SingularControlPlane, decision_id: str):
+    state, intervention, profile, dimensions = _read_inputs()
+    decision, attestation = JarvisValidatedBridge(control.runtime, control.decisions).build_and_attest(
+        _read_proposal(),
         execution_target=capability,
         intervention_id=intervention.id,
         domain_states=(state,),
@@ -81,9 +78,21 @@ def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_ve
         trajectory_profile=profile,
         trajectory_dimensions=dimensions,
         capacity_budget=2,
-        decision_id="DEC-JARVIS-READ-E2E",
+        decision_id=decision_id,
         mission_kwargs={"autonomy": Autonomy.EXECUTE_REVERSIBLE},
     )
+    return decision, attestation
+
+
+def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_verification(tmp_path: Path):
+    (tmp_path / "README.md").write_text("SINGULAR", encoding="utf-8")
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    control = SingularControlPlane(runtime)
+    capability, handler = make_read_only_repository_tool(
+        tmp_path,
+        capability_id="cap_test_jarvis_read_only_e2e",
+    )
+    decision, attestation = _build_read_decision(tmp_path, capability, control, "DEC-JARVIS-READ-E2E")
 
     assert attestation.decision_id == decision.decision_id
     assert control.decisions.is_attested(decision)
@@ -94,20 +103,14 @@ def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_ve
         decision,
         decision.authorized_actions[0].id,
         handler,
-        lambda action, execution_result: verify_read_only_result(
-            tmp_path,
-            action,
-            execution_result.result,
-        ),
+        lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result),
     )
 
     assert result.status == "COMPLETED"
     assert result.result["path"] == "README.md"
 
     audit_events = runtime.store.audit_events()
-    verification_events = [
-        event for event in audit_events if event.get("event_type") == "verification"
-    ]
+    verification_events = [event for event in audit_events if event.get("event_type") == "verification"]
     assert verification_events
     assert verification_events[-1]["status"] == "VERIFIED"
     assert verification_events[-1]["payload"]["decision_id"] == decision.decision_id
@@ -115,23 +118,16 @@ def test_jarvis_read_only_crosses_validated_boundary_and_requires_independent_ve
     assert verification_events[-1]["payload"]["execution_key"] == result.execution_key
     assert "SINGULAR" not in str(verification_events[-1]["payload"])
 
-    # A second execution with the same validated decision must be idempotent,
-    # not a second filesystem effect; verification is still required for the
-    # returned lifecycle result.
     second = control.decisions.execute_verified(
         decision,
         decision.authorized_actions[0].id,
         handler,
-        lambda action, execution_result: verify_read_only_result(
-            tmp_path,
-            action,
-            execution_result.result,
-        ),
+        lambda action, execution_result: verify_read_only_result(tmp_path, action, execution_result.result),
     )
     assert second.execution_key == result.execution_key
 
 
-def test_jarvis_read_only_verification_rejects_changed_file_after_execution(tmp_path: Path):
+def test_jarvis_read_only_verification_rejects_file_changed_after_execution(tmp_path: Path):
     (tmp_path / "README.md").write_text("SINGULAR", encoding="utf-8")
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
     control = SingularControlPlane(runtime)
@@ -139,75 +135,19 @@ def test_jarvis_read_only_verification_rejects_changed_file_after_execution(tmp_
         tmp_path,
         capability_id="cap_test_jarvis_read_only_changed_file",
     )
+    decision, _ = _build_read_decision(tmp_path, capability, control, "DEC-JARVIS-READ-CHANGED")
 
-    action = ProposedAction(
-        name="read:README.md",
-        description="Read one bounded repository file",
-        impact=2,
-        risk=0,
-        reversibility=10,
-        leverage=8,
-        dependency=7,
-        uncertainty=1,
-        cost=1,
-        learning=7,
-        ownership=1,
-        recurrence=1,
-    )
-    proposal = MissionProposal(
-        objective="Inspect repository state",
-        expected_result="Bounded repository content is returned",
-        context_needed=(),
-        actions=(action,),
-        llm=LLMResponse(text="{}", model="test"),
-    )
-    state = DomainState(LearningDomain.CAREER, 0.2, confidence=0.9)
-    intervention = Intervention(
-        "repository_read",
-        LearningDomain.CAREER,
-        0.9,
-        evidence=0.9,
-        causal_confidence=0.9,
-        capacity=1,
-    )
-    profile = TrajectoryProfile(
-        Vision("Build a resilient long-term system"),
-        money=1,
-        time=1,
-        capability=2,
-        energy=1,
-        freedom=1,
-        ownership=1,
-        learning=2,
-        resilience=1,
-        transmission=1,
-    )
-    dimensions = {name: 0.8 for name in profile.weights}
-    decision, _ = JarvisValidatedBridge(runtime, control.decisions).build_and_attest(
-        proposal,
-        execution_target=capability,
-        intervention_id=intervention.id,
-        domain_states=(state,),
-        interventions=(intervention,),
-        trajectory_profile=profile,
-        trajectory_dimensions=dimensions,
-        capacity_budget=2,
-        decision_id="DEC-JARVIS-READ-CHANGED",
-        mission_kwargs={"autonomy": Autonomy.EXECUTE_REVERSIBLE},
-    )
-
-    (tmp_path / "README.md").write_text("TAMPERED", encoding="utf-8")
+    def tampering_verifier(action, execution_result):
+        # Simulate a world-state change between execution and independent verification.
+        (tmp_path / "README.md").write_text("TAMPERED", encoding="utf-8")
+        return verify_read_only_result(tmp_path, action, execution_result.result)
 
     with pytest.raises(PermissionError, match="verification"):
         control.decisions.execute_verified(
             decision,
             decision.authorized_actions[0].id,
             handler,
-            lambda action, execution_result: verify_read_only_result(
-                tmp_path,
-                action,
-                execution_result.result,
-            ),
+            tampering_verifier,
         )
 
     audit_events = runtime.store.audit_events()
