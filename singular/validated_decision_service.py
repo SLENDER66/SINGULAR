@@ -7,18 +7,38 @@ callers do not have to manually sequence security-critical primitives.
 from __future__ import annotations
 
 from collections.abc import Callable
+from hashlib import sha256
+import json
 from typing import Any
 
 from .decision_attestation import DecisionAttestation, DecisionAttestationStore, ValidatedDecisionIssuer
 from .effects import EffectProvider
 from .execution import DurableExecutionEngine, ExecutionResult
 from .validated_execution import ValidatedExecutionBoundary
-from .validated_trajectory_decision import ValidatedTrajectoryDecision
 from .validated_pipeline import ValidatedTrajectoryPipeline
+from .validated_trajectory_decision import ValidatedTrajectoryDecision
+
+
+class VerificationFailed(PermissionError):
+    """Raised when an independently supplied execution verifier rejects a result."""
+
+
+def _result_fingerprint(result: Any) -> str:
+    """Hash only the result representation used for audit correlation; never persist its payload."""
+    if hasattr(result, "__dataclass_fields__"):
+        from dataclasses import asdict
+
+        material: Any = asdict(result)
+    elif isinstance(result, dict):
+        material = result
+    else:
+        material = repr(result)
+    encoded = json.dumps(material, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return sha256(encoded).hexdigest()
 
 
 class ValidatedDecisionService:
-    """Single lifecycle surface: build -> attest -> execute/revoke."""
+    """Single lifecycle surface: build -> attest -> execute/revoke/verify."""
 
     def __init__(
         self,
@@ -56,6 +76,61 @@ class ValidatedDecisionService:
         handler: Callable[[Any], Any],
     ) -> ExecutionResult:
         return self.boundary.execute(decision, action_id, handler)
+
+    def execute_verified(
+        self,
+        decision: ValidatedTrajectoryDecision,
+        action_id: str,
+        handler: Callable[[Any], Any],
+        verifier: Callable[[Any, Any], bool],
+    ) -> ExecutionResult:
+        """Execute and require an independent verifier before declaring the lifecycle verified.
+
+        The verifier receives the bound action and durable execution result. It is
+        trusted composition, not model output, and cannot grant authority. A
+        rejected result remains durably recorded but is never reported as
+        verified; a verification audit event records only identities and a
+        result fingerprint, not the result payload.
+        """
+        if not callable(verifier):
+            raise TypeError("verifier must be callable")
+        result = self.execute(decision, action_id, handler)
+        action = next((item.to_action() for item in decision.authorized_actions if item.id == action_id), None)
+        if action is None:
+            raise PermissionError("Validated decision does not authorize the requested action.")
+        try:
+            verified = bool(verifier(action, result))
+        except Exception as exc:
+            self.executor.runtime.audit.record(
+                "verification",
+                "EXECUTION_RESULT",
+                "FAILED",
+                {
+                    "decision_id": decision.decision_id,
+                    "action_id": action_id,
+                    "execution_key": result.key,
+                    "result_fingerprint": _result_fingerprint(result),
+                    "reason": type(exc).__name__,
+                },
+            )
+            self.executor.runtime._persist_new_audit_events()
+            raise VerificationFailed("Independent execution-result verification failed.") from None
+        outcome = "VERIFIED" if verified else "FAILED"
+        self.executor.runtime.audit.record(
+            "verification",
+            "EXECUTION_RESULT",
+            outcome,
+            {
+                "decision_id": decision.decision_id,
+                "action_id": action_id,
+                "execution_key": result.key,
+                "result_fingerprint": _result_fingerprint(result),
+            },
+        )
+        self.executor.runtime._persist_new_audit_events()
+        if not verified:
+            raise VerificationFailed("Independent execution-result verification failed.")
+        return result
 
     def execute_effect(
         self,
@@ -96,4 +171,4 @@ class ValidatedDecisionService:
         )
 
 
-__all__ = ["ValidatedDecisionService"]
+__all__ = ["ValidatedDecisionService", "VerificationFailed"]
