@@ -6,10 +6,10 @@ from .trajectory import TrajectoryCandidate, TrajectoryPriority, prioritize
 
 __all__ = [
     "AnthropicProvider",
+    "JarvisRuntime",
     "LLMProvider",
     "LLMResponse",
     "LLMUsage",
-    "JarvisRuntime",
     "MissionProposal",
     "ProposedAction",
     "TrajectoryCandidate",
