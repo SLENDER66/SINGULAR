@@ -84,6 +84,10 @@ def test_cli_route_creates_governed_plan_but_no_execution(tmp_path: Path):
 def test_cli_main_emits_json_and_nonzero_on_missing_anthropic_key(monkeypatch, capsys, tmp_path: Path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert main(["Inspect the repository", "--db", str(tmp_path / "singular.db")]) == 1
-    stderr = capsys.readouterr().err
-    payload = json.loads(stderr.strip().splitlines()[-1])
-    assert payload["error"] == "JARVIS request failed"
+    stderr_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    assert json.loads(stderr_lines[-1])["error"] == "JARVIS request failed"
+
+
+def test_cli_has_no_execution_primitive(capsys):
+    assert main(["Inspect the repository", "--execute"]) == 2
+    assert "unrecognized arguments: --execute" in capsys.readouterr().err
