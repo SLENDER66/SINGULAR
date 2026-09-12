@@ -61,6 +61,21 @@ def test_read_only_tool_rejects_absolute_and_escape_paths(tmp_path: Path):
         handler(_action("read:/etc/passwd"))
 
 
+def test_read_only_tool_rejects_symlink_escape(tmp_path: Path):
+    outside = tmp_path.parent / "jarvis-read-only-secret.txt"
+    outside.write_text("secret", encoding="utf-8")
+    link = tmp_path / "escape.txt"
+    try:
+        link.symlink_to(outside)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlinks are unavailable in this environment")
+
+    _, handler = make_read_only_repository_tool(tmp_path, capability_id="cap_test_read_only_symlink")
+
+    with pytest.raises(PermissionError):
+        handler(_action("read:escape.txt"))
+
+
 def test_read_only_tool_rejects_wrong_action_shape(tmp_path: Path):
     _, handler = make_read_only_repository_tool(tmp_path, capability_id="cap_test_read_only_shape")
 
