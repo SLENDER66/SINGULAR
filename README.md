@@ -1,8 +1,12 @@
-# SINGULAR
+# AZAZEL
 
 [![CI](https://github.com/SLENDER66/SINGULAR/actions/workflows/ci.yml/badge.svg)](https://github.com/SLENDER66/SINGULAR/actions/workflows/ci.yml)
 
-**A governed execution boundary for autonomous agents.**
+**AZAZEL — powered by the SINGULAR governed execution core.**
+
+SINGULAR is the internal authority and execution-security core. JARVIS is the
+user-facing proposal/runtime layer. The final product presented to users will
+be called **AZAZEL**.
 
 An agent decides something. Between that decision and the moment it changes
 something in the world, SINGULAR requires a durable, verifiable authorization —
@@ -20,15 +24,16 @@ cannot answer:
 
 Logging after the fact does not answer these. They have to be structural.
 
-## JARVIS + SINGULAR
+## AZAZEL architecture: JARVIS + SINGULAR
 
 JARVIS is the user-facing interface and proposal/runtime layer. It is **not a
-second authority** and it does not execute tools directly.
+second authority** and it does not execute tools directly. AZAZEL is the final
+product identity; SINGULAR remains the governed execution core.
 
 ```
 THOMAS
   ↓
-JARVIS / Claude
+AZAZEL / JARVIS / Claude
   ↓  proposal only
 SINGULAR
   ↓
@@ -128,7 +133,8 @@ NaN and infinity inputs, schema mismatches and stale execution state.
 ## Status
 
 The current JARVIS slice is implemented on top of SINGULAR's existing authority
-model. CI validation is required after each change; a green test suite is not a
+model. AZAZEL is the final product name; SINGULAR remains the internal governed
+core. CI validation is required after each change; a green test suite is not a
 reason to bypass the next audit or red-team pass.
 
 The project is deliberately built in layers: the face can evolve quickly while
