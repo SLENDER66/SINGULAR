@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from singular.audit import AuditTrail
+from singular.audit import AuditEvent, AuditTrail
 
 
 def test_record_overwrites_caller_supplied_chain_metadata() -> None:
@@ -74,3 +74,21 @@ def test_concurrent_records_produce_one_valid_linear_chain() -> None:
     assert [event.payload["audit_sequence"] for event in events] == list(range(1, 201))
     assert len({event.id for event in events}) == 200
     assert AuditTrail.verify_chain(trail.export())
+
+
+def test_duplicate_event_id_is_rejected() -> None:
+    first = AuditTrail().record("one", "actor", "ok", {"value": 1})
+    trail = AuditTrail([first])
+
+    with pytest.raises(ValueError, match="identifiant"):
+        trail.append(first)
+
+
+def test_invalid_initial_chain_is_rejected() -> None:
+    event = AuditTrail().record("one", "actor", "ok", {"value": 1})
+    forged = copy.deepcopy(event.payload)
+    forged["audit_sequence"] = 42
+    invalid = AuditEvent(event.event_type, event.actor, event.outcome, forged, event.timestamp, event.id)
+
+    with pytest.raises(ValueError):
+        AuditTrail([invalid])
