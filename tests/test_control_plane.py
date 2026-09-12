@@ -18,23 +18,23 @@ def _plane(tmp_path):
 
 def _kwargs(decision_id="DEC-CONTROL"):
     contract, action, state, intervention, profile, dimensions = _inputs()
-    return dict(
-        objective=contract.objective,
-        actions=(action,),
-        action_to_intervention=((action.id, intervention.id),),
-        domain_states=(state,),
-        interventions=(intervention,),
-        trajectory_profile=profile,
-        trajectory_dimensions=dimensions,
-        contract=contract,
-        execution_target=AUTHORIZED_HANDLER_CAPABILITY,
-        decision_id=decision_id,
-        capacity_budget=2,
-    )
+    return {
+        "objective": contract.objective,
+        "actions": (action,),
+        "action_to_intervention": ((action.id, intervention.id),),
+        "domain_states": (state,),
+        "interventions": (intervention,),
+        "trajectory_profile": profile,
+        "trajectory_dimensions": dimensions,
+        "contract": contract,
+        "execution_target": AUTHORIZED_HANDLER_CAPABILITY,
+        "decision_id": decision_id,
+        "capacity_budget": 2,
+    }
 
 
 def test_control_plane_builds_attests_and_executes_through_one_surface(tmp_path):
-    runtime, plane = _plane(tmp_path)
+    _runtime, plane = _plane(tmp_path)
     control_decision = plane.construct_and_attest(**_kwargs())
     result = plane.execute(control_decision, control_decision.decision.global_report.action_id, authorized_handler)
     assert isinstance(control_decision, ControlPlaneDecision)
@@ -55,13 +55,13 @@ def test_control_plane_exposes_verified_execution_as_canonical_safe_path(tmp_pat
 
     assert result.status == "COMPLETED"
     assert any(
-        event.category == "verification" and event.outcome == "VERIFIED"
+        event.event_type == "verification" and event.outcome == "VERIFIED"
         for event in runtime.audit.events()
     )
 
 
 def test_control_plane_revoke_prevents_future_execution(tmp_path):
-    runtime, plane = _plane(tmp_path)
+    _runtime, plane = _plane(tmp_path)
     control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-REVOKE"))
     plane.revoke(control_decision)
     with pytest.raises(PermissionError, match="attestée"):
@@ -72,10 +72,6 @@ def test_control_plane_outcome_closes_learning_loop(tmp_path):
     runtime, plane = _plane(tmp_path)
     control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-LEARN"))
     action_id = control_decision.decision.global_report.action_id
-    # An outcome must observe an execution that really happened: the ledger
-    # derives the expected key from the decision and reads the terminal row from
-    # the durable store. This test used to invent "EXEC-CONTROL" and observe a
-    # decision that had never run.
     execution = plane.execute(control_decision, action_id, authorized_handler)
     forecast = Forecast("F-CONTROL", ForecastKind.BINARY, probability=0.8, confidence=0.9)
     result = plane.observe_outcome(
