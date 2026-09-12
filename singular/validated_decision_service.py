@@ -7,6 +7,7 @@ from typing import Any
 from .decision_attestation import DecisionAttestation, DecisionAttestationStore
 from .execution import DurableExecutionEngine, ExecutionResult
 from .validated_execution import ValidatedExecutionBoundary
+from .validated_pipeline import ValidatedTrajectoryPipeline
 from .validated_trajectory_decision import ValidatedTrajectoryDecision
 
 
@@ -18,10 +19,9 @@ def _result_fingerprint(result: ExecutionResult) -> str:
     """Hash stable execution-result metadata without persisting the result payload."""
     material = repr(
         (
-            result.key,
+            result.execution_key,
             result.status,
             result.action_id,
-            result.capability,
             result.error,
         )
     ).encode("utf-8")
@@ -47,7 +47,7 @@ class ValidatedDecisionService:
         )
 
     def build(self, **kwargs: Any) -> ValidatedTrajectoryDecision:
-        return self.boundary.build(**kwargs)
+        return ValidatedTrajectoryPipeline.build(**kwargs)
 
     def build_and_attest(self, **kwargs: Any) -> tuple[ValidatedTrajectoryDecision, DecisionAttestation]:
         decision = self.build(**kwargs)
@@ -55,7 +55,7 @@ class ValidatedDecisionService:
         return decision, attestation
 
     def is_attested(self, decision: ValidatedTrajectoryDecision) -> bool:
-        return self.attestation_store.is_attested(decision)
+        return self.attestation_store.verify(decision)
 
     def revoke(self, decision_id: str) -> DecisionAttestation:
         return self.attestation_store.revoke(decision_id)
@@ -130,7 +130,7 @@ class ValidatedDecisionService:
             "decision_id": decision.decision_id,
             "decision_fingerprint": decision.context_fingerprint,
             "action_id": action_id,
-            "execution_key": result.key,
+            "execution_key": result.execution_key,
             "result_fingerprint": _result_fingerprint(result),
         }
         if reason is not None:
