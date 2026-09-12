@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from singular.autopilot import ActionRequest, Autonomy
+from singular.autopilot import Autonomy
 from singular.control_plane import SingularControlPlane
-from singular.decision_attestation import DecisionAttestationStore
 from singular.domain_learning import LearningDomain
 from singular.durable import DurableStore
 from singular.human_optimization import DomainState, Intervention
@@ -91,7 +90,7 @@ def test_jarvis_read_only_crosses_validated_boundary_and_is_verified(tmp_path: P
 
     result = control.decisions.execute(decision, decision.authorized_actions[0].id, handler)
 
-    assert result.status == "SUCCEEDED"
+    assert result.status == "COMPLETED"
     assert result.result["path"] == "README.md"
     assert verify_read_only_result(tmp_path, decision.authorized_actions[0], result.result)
 
