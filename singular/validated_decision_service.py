@@ -1,44 +1,35 @@
-"""High-level lifecycle facade for attested validated decisions.
-
-This is the recommended integration surface for production callers. It combines
-construction, durable attestation, optional revocation and strict execution so
-callers do not have to manually sequence security-critical primitives.
-"""
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
-from hashlib import sha256
-import json
 from typing import Any
 
-from .decision_attestation import DecisionAttestation, DecisionAttestationStore, ValidatedDecisionIssuer
-from .effects import EffectProvider
+from .decision_attestation import DecisionAttestation, DecisionAttestationStore
 from .execution import DurableExecutionEngine, ExecutionResult
 from .validated_execution import ValidatedExecutionBoundary
-from .validated_pipeline import ValidatedTrajectoryPipeline
 from .validated_trajectory_decision import ValidatedTrajectoryDecision
 
 
 class VerificationFailed(PermissionError):
-    """Raised when an independently supplied execution verifier rejects a result."""
+    """Raised when an independently verified execution result is not acceptable."""
 
 
-def _result_fingerprint(result: Any) -> str:
-    """Hash only the result representation used for audit correlation; never persist its payload."""
-    if hasattr(result, "__dataclass_fields__"):
-        from dataclasses import asdict
-
-        material: Any = asdict(result)
-    elif isinstance(result, dict):
-        material = result
-    else:
-        material = repr(result)
-    encoded = json.dumps(material, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    return sha256(encoded).hexdigest()
+def _result_fingerprint(result: ExecutionResult) -> str:
+    """Hash stable execution-result metadata without persisting the result payload."""
+    material = repr(
+        (
+            result.key,
+            result.status,
+            result.action_id,
+            result.capability,
+            result.error,
+        )
+    ).encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
 
 
 class ValidatedDecisionService:
-    """Single lifecycle surface: build -> attest -> execute/revoke/verify."""
+    """Canonical façade for validated decision construction and execution lifecycle."""
 
     def __init__(
         self,
@@ -47,24 +38,24 @@ class ValidatedDecisionService:
         attestation_store: DecisionAttestationStore | None = None,
         issuer: str = "singular",
     ) -> None:
-        if not issuer.strip():
-            raise ValueError("issuer is required")
         self.executor = executor
-        self.attestation_store = attestation_store or executor.attestation_store
-        self.issuer = ValidatedDecisionIssuer(self.attestation_store, issuer=issuer)
-        self.boundary = ValidatedExecutionBoundary(executor, self.attestation_store)
+        self.attestation_store = attestation_store or DecisionAttestationStore(executor.runtime.store.path)
+        self.issuer = issuer
+        self.boundary = ValidatedExecutionBoundary(
+            executor,
+            attestation_store=self.attestation_store,
+        )
 
     def build(self, **kwargs: Any) -> ValidatedTrajectoryDecision:
-        """Build the cryptographically self-consistent decision without issuing it."""
-        return ValidatedTrajectoryPipeline.build(**kwargs)
+        return self.boundary.build(**kwargs)
 
     def build_and_attest(self, **kwargs: Any) -> tuple[ValidatedTrajectoryDecision, DecisionAttestation]:
-        """Build and durably issue one executable decision as an atomic lifecycle step."""
         decision = self.build(**kwargs)
-        return decision, self.issuer.issue(decision)
+        attestation = self.attestation_store.issue(decision, issuer=self.issuer)
+        return decision, attestation
 
     def is_attested(self, decision: ValidatedTrajectoryDecision) -> bool:
-        return self.attestation_store.verify(decision)
+        return self.attestation_store.is_attested(decision)
 
     def revoke(self, decision_id: str) -> DecisionAttestation:
         return self.attestation_store.revoke(decision_id)
@@ -77,6 +68,28 @@ class ValidatedDecisionService:
     ) -> ExecutionResult:
         return self.boundary.execute(decision, action_id, handler)
 
+    def execute_effect(
+        self,
+        decision: ValidatedTrajectoryDecision,
+        action_id: str,
+        provider: Any,
+        *,
+        provider_name: str,
+        operation: str,
+        payload: Any,
+    ) -> ExecutionResult:
+        return self.boundary.execute_effect(
+            decision,
+            action_id,
+            provider,
+            provider_name=provider_name,
+            operation=operation,
+            payload=payload,
+        )
+
+    def reconcile_effect(self, *args: Any, **kwargs: Any) -> ExecutionResult:
+        return self.boundary.reconcile_effect(*args, **kwargs)
+
     def execute_verified(
         self,
         decision: ValidatedTrajectoryDecision,
@@ -87,7 +100,7 @@ class ValidatedDecisionService:
         """Execute and require an independent verifier before declaring the lifecycle verified."""
         if not callable(verifier):
             raise TypeError("verifier must be callable")
-        result = self.execute(decision, action_id, handler)
+        result = self.boundary.execute(decision, action_id, handler)
         action = next((item.to_action() for item in decision.authorized_actions if item.id == action_id), None)
         if action is None:
             raise PermissionError("Validated decision does not authorize the requested action.")
@@ -124,44 +137,3 @@ class ValidatedDecisionService:
             payload["reason"] = reason
         self.executor.runtime.audit.record("verification", "EXECUTION_RESULT", outcome, payload)
         self.executor.runtime._persist_new_audit_events()
-
-    def execute_effect(
-        self,
-        decision: ValidatedTrajectoryDecision,
-        action_id: str,
-        provider: EffectProvider,
-        *,
-        provider_name: str,
-        operation: str,
-        payload: Any,
-    ) -> ExecutionResult:
-        return self.boundary.execute_effect(
-            decision,
-            action_id,
-            provider,
-            provider_name=provider_name,
-            operation=operation,
-            payload=payload,
-        )
-
-    def reconcile_effect(
-        self,
-        decision: ValidatedTrajectoryDecision,
-        action_id: str,
-        provider: EffectProvider,
-        *,
-        provider_name: str,
-        operation: str,
-        payload: Any,
-    ) -> ExecutionResult:
-        return self.boundary.reconcile_effect(
-            decision,
-            action_id,
-            provider,
-            provider_name=provider_name,
-            operation=operation,
-            payload=payload,
-        )
-
-
-__all__ = ["ValidatedDecisionService", "VerificationFailed"]
