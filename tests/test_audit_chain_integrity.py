@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -57,3 +58,19 @@ def test_event_content_tampering_is_rejected() -> None:
     forged[0]["payload"]["value"] = "tampered"
 
     assert not AuditTrail.verify_chain(forged)
+
+
+def test_concurrent_records_produce_one_valid_linear_chain() -> None:
+    trail = AuditTrail()
+
+    def record(index: int) -> None:
+        trail.record("concurrency_test", f"worker-{index}", "ok", {"index": index})
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        list(pool.map(record, range(200)))
+
+    events = trail.events()
+    assert len(events) == 200
+    assert [event.payload["audit_sequence"] for event in events] == list(range(1, 201))
+    assert len({event.id for event in events}) == 200
+    assert AuditTrail.verify_chain(trail.export())
