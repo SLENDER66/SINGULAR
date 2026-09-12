@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from singular.jarvis import JarvisRuntime, LLMResponse, LLMUsage
+from singular.jarvis import AnthropicProvider, JarvisRuntime, LLMResponse, LLMUsage
 from singular.jarvis.llm import LLMProviderError
 
 
@@ -35,7 +37,6 @@ def proposal_text(**overrides):
         ],
     }
     data.update(overrides)
-    import json
     return json.dumps(data)
 
 
@@ -46,7 +47,8 @@ def test_provider_response_becomes_bounded_proposal():
     proposal = runtime.propose("Analyse mon dépôt")
 
     assert proposal.objective == "Réduire le temps de traitement"
-    assert proposal.actions[0].risk == 6.0 or proposal.actions[0].impact == 6.0
+    assert proposal.actions[0].impact == 6.0
+    assert proposal.actions[0].risk == 1.0
     assert provider.calls[0]["max_tokens"] == 1200
 
 
@@ -87,11 +89,16 @@ def test_invalid_numeric_input_is_rejected():
         runtime.propose("Fais quelque chose")
 
 
-def test_provider_failure_does_not_expose_provider_exception():
-    class BrokenProvider:
-        def complete(self, **kwargs):
-            raise LLMProviderError("secret-looking detail")
+def test_anthropic_adapter_sanitizes_provider_failure():
+    class BrokenClient:
+        class Messages:
+            @staticmethod
+            def create(**kwargs):
+                raise RuntimeError("Authorization: Bearer SUPER_SECRET")
 
-    runtime = JarvisRuntime(BrokenProvider())
-    with pytest.raises(LLMProviderError, match="secret-looking detail"):
-        runtime.propose("Fais quelque chose")
+        messages = Messages()
+
+    provider = AnthropicProvider(api_key="not-used-by-injected-client", client=BrokenClient())
+    with pytest.raises(LLMProviderError, match="Anthropic request failed") as exc:
+        provider.complete(system="system", user="user", max_tokens=10)
+    assert "SUPER_SECRET" not in str(exc.value)
