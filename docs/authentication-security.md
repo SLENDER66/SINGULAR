@@ -16,6 +16,8 @@ Password changes and TOTP enable/disable increment `security_version` and revoke
 
 TOTP codes are bound to a durable last-used time-step so the same code cannot be replayed successfully.
 
+Changing an already configured TOTP factor is a security-sensitive operation: password authentication alone cannot start a replacement enrollment. The existing TOTP or a recovery code must be presented before a new pending secret is issued. Initial enrollment for an account without TOTP remains password-authenticated so MFA can be bootstrapped.
+
 ## Abuse resistance
 
 Failed password/second-factor attempts are durably rate-limited. Optional `client_key` values are HMAC-derived before storage; raw IP/device identifiers are never stored by this module.
