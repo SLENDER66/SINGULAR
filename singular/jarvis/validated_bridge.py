@@ -40,14 +40,16 @@ class JarvisValidatedBridge:
         decision_id: str,
         action_index: int = 0,
         governance_capability: str | None = None,
+        mission_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
         """Build and attest without granting JARVIS execution authority.
 
-        ``execution_target`` and ``governance_capability`` are trusted
-        composition inputs, never values selected from the LLM proposal. The
-        bridge never registers capabilities, changes policy, approves an action,
-        or calls an execution handler.
+        ``execution_target``, ``governance_capability`` and ``mission_kwargs``
+        are trusted composition inputs, never values selected from the LLM
+        proposal. In particular, mission autonomy may only be supplied by trusted
+        SINGULAR composition. The bridge never registers capabilities, changes
+        policy, approves an action, or calls an execution handler.
         """
         if not 0 <= action_index < len(proposal.actions):
             raise IndexError("action_index out of range")
@@ -59,11 +61,14 @@ class JarvisValidatedBridge:
             raise ValueError("decision_id is required")
         if governance_capability is not None and not governance_capability.strip():
             raise ValueError("governance_capability must be non-empty when provided")
+        if mission_kwargs is not None and not isinstance(mission_kwargs, dict):
+            raise TypeError("mission_kwargs must be a mapping")
 
         selected = proposal.actions[action_index]
         contract = self.missions.create_mission(
             proposal.objective,
             proposal.expected_result,
+            **(mission_kwargs or {}),
         )
         action = ActionRequest(
             name=selected.name,
