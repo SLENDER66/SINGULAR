@@ -35,7 +35,8 @@ def test_totp_replay_is_single_winner_across_two_service_instances(tmp_path):
     setup.confirm_totp_enrollment(user_id, _totp(enrollment.secret, 1_000_020.0))
 
     services = [_service(db, key), _service(db, key)]
-    results = _parallel(lambda: services.pop().authenticate("user", PASSWORD, otp=_totp(enrollment.secret, 1_000_020.0)))
+    login_code = _totp(enrollment.secret, 1_000_050.0)
+    results = _parallel(lambda: services.pop().authenticate("user", PASSWORD, otp=login_code))
     successes = [item for item in results if isinstance(item, str)]
     failures = [item for item in results if isinstance(item, Exception)]
     assert len(successes) == 1
