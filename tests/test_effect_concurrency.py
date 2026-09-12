@@ -1,7 +1,5 @@
 import threading
 
-import pytest
-
 from singular.autopilot import DelegationContract
 from singular.durable import DurableStore
 from singular.effects import EffectInProgress, EffectRequest, ExternalEffectCoordinator, ProviderResult
