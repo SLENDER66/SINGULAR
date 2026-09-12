@@ -131,6 +131,7 @@ class AzazelRuntime:
     DEFAULT_MAX_ACTIONS = 8
     DEFAULT_MAX_REQUEST_CHARS = 12000
     DEFAULT_MAX_CONTEXT_CHARS = 20000
+    DEFAULT_MAX_RESPONSE_CHARS = 24000
 
     def __init__(
         self,
@@ -141,19 +142,21 @@ class AzazelRuntime:
         max_actions: int = DEFAULT_MAX_ACTIONS,
         max_request_chars: int = DEFAULT_MAX_REQUEST_CHARS,
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+        max_response_chars: int = DEFAULT_MAX_RESPONSE_CHARS,
     ) -> None:
         if max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
         if max_actions < 1:
             raise ValueError("max_actions must be positive")
-        if max_request_chars < 1 or max_context_chars < 1:
-            raise ValueError("input limits must be positive")
+        if max_request_chars < 1 or max_context_chars < 1 or max_response_chars < 1:
+            raise ValueError("input and response limits must be positive")
         self.provider = provider
         self.missions = mission_runtime or DurableMissionRuntime()
         self.max_tokens = max_tokens
         self.max_actions = max_actions
         self.max_request_chars = max_request_chars
         self.max_context_chars = max_context_chars
+        self.max_response_chars = max_response_chars
 
     def propose(self, request: str, *, context: str = "") -> MissionProposal:
         if not request.strip():
@@ -169,6 +172,12 @@ class AzazelRuntime:
             user=f"REQUEST:\n{request}\n\nCONTEXT:\n{context}",
             max_tokens=self.max_tokens,
         )
+        if not isinstance(response, LLMResponse):
+            raise AzazelParseError("LLM response has an invalid type")
+        if not isinstance(response.text, str):
+            raise AzazelParseError("LLM response text must be a string")
+        if len(response.text) > self.max_response_chars:
+            raise AzazelParseError("LLM response exceeds configured size limit")
         data = self._decode(response.text)
         return MissionProposal(
             objective=self._text(data, "objective"),
