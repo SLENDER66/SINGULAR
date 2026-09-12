@@ -36,6 +36,12 @@ line-length = 100
 target-version = "py311"
 exclude = ["attic"]
 
+# Keep the CI lint contract deterministic across Ruff versions and runner-level
+# configuration. Security boundary checks are separate blocking CI stages;
+# this linter covers the stable correctness baseline (E4/E7/E9/F).
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
