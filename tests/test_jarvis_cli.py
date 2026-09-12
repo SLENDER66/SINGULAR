@@ -59,7 +59,7 @@ def test_cli_run_returns_proposal_without_execution(tmp_path: Path):
     assert result["actions"][0]["name"] == "inspect"
     assert result["actions"][0]["priority"] > 0
     assert "mission" not in result
-    assert runtime.store.audit_events() == []
+    assert runtime.store.audit_events() == ()
 
 
 def test_cli_route_creates_governed_plan_but_no_execution(tmp_path: Path):
@@ -84,4 +84,6 @@ def test_cli_route_creates_governed_plan_but_no_execution(tmp_path: Path):
 def test_cli_main_emits_json_and_nonzero_on_missing_anthropic_key(monkeypatch, capsys, tmp_path: Path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert main(["Inspect the repository", "--db", str(tmp_path / "singular.db")]) == 1
-    assert json.loads(capsys.readouterr().err)["error"] == "JARVIS request failed"
+    stderr = capsys.readouterr().err
+    payload = json.loads(stderr.strip().splitlines()[-1])
+    assert payload["error"] == "JARVIS request failed"
