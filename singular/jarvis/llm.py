@@ -6,8 +6,8 @@ SINGULAR action directly.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 
@@ -81,7 +81,7 @@ class AnthropicProvider:
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )
-        except Exception as exc:
+        except Exception:  # noqa: BLE001 - provider boundary sanitizes SDK failures
             # Do not expose SDK exception text: depending on SDK/version it may
             # contain request metadata or authentication material.
             raise LLMProviderError("Anthropic request failed") from None
