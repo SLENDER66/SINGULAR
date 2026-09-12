@@ -11,9 +11,12 @@ from tests.test_validated_pipeline import (
 )
 
 
-def _plane(tmp_path):
+def _plane(tmp_path, verifier=None):
     runtime = DurableMissionRuntime(DurableStore(tmp_path / "control.db"))
-    return runtime, SingularControlPlane(runtime, issuer="control-test")
+    kwargs = {"issuer": "control-test"}
+    if verifier is not None:
+        kwargs["verifier"] = verifier
+    return runtime, SingularControlPlane(runtime, **kwargs)
 
 
 def _kwargs(decision_id="DEC-CONTROL"):
@@ -41,23 +44,39 @@ def test_control_plane_builds_attests_and_executes_through_one_surface(tmp_path)
     assert result.status == "COMPLETED"
 
 
-def test_control_plane_exposes_verified_execution_as_canonical_safe_path(tmp_path):
+def test_control_plane_exposes_verified_execution_with_composed_default_verifier(tmp_path):
     runtime, plane = _plane(tmp_path)
     control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-VERIFY"))
     action_id = control_decision.decision.global_report.action_id
 
-    result = plane.execute_verified(
-        control_decision,
-        action_id,
-        authorized_handler,
-        lambda action, execution: execution.result == {"action_id": action.id, "executed": True},
-    )
+    result = plane.execute_verified(control_decision, action_id, authorized_handler)
 
     assert result.status == "COMPLETED"
     assert any(
         event.event_type == "verification" and event.outcome == "VERIFIED"
         for event in runtime.audit.events()
     )
+
+
+def test_control_plane_can_compose_domain_verifier_only_at_construction(tmp_path):
+    runtime, plane = _plane(
+        tmp_path,
+        verifier=lambda action, execution: execution.result == {"action_id": action.id, "executed": True},
+    )
+    control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-COMPOSED-VERIFY"))
+    action_id = control_decision.decision.global_report.action_id
+
+    result = plane.execute_verified(control_decision, action_id, authorized_handler)
+    assert result.status == "COMPLETED"
+    assert any(event.event_type == "verification" and event.outcome == "VERIFIED" for event in runtime.audit.events())
+
+
+def test_control_plane_rejects_per_call_verifier_injection(tmp_path):
+    _runtime, plane = _plane(tmp_path)
+    control_decision = plane.construct_and_attest(**_kwargs("DEC-CONTROL-VERIFY-INJECT"))
+    action_id = control_decision.decision.global_report.action_id
+    with pytest.raises(TypeError):
+        plane.execute_verified(control_decision, action_id, authorized_handler, lambda *_: True)
 
 
 def test_control_plane_revoke_prevents_future_execution(tmp_path):
