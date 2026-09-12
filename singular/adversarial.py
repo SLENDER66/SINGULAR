@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
@@ -156,7 +155,7 @@ class AdversarialEngine:
             ))
 
             def plaintext_totp_storage() -> object:
-                with sqlite3.connect(db_path) as conn:
+                with SqliteLocation(db_path).session() as conn:
                     values = conn.execute("SELECT totp_ciphertext,pending_totp_ciphertext FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
                 if any(value is not None and enrollment.secret.encode("ascii") in bytes(value) for value in values):
                     return None
