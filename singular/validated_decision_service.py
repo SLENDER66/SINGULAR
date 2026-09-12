@@ -28,6 +28,22 @@ def _result_fingerprint(result: ExecutionResult) -> str:
     return hashlib.sha256(material).hexdigest()
 
 
+def default_execution_result_verifier(action: Any, result: ExecutionResult) -> bool:
+    """Trusted structural verifier used by the canonical control-plane composition.
+
+    It deliberately does not inspect or execute handler code and does not trust a
+    caller-supplied verifier. Domain-specific verification can be composed above
+    this boundary by trusted application code, but JARVIS/LLM request data cannot
+    select or replace this dependency.
+    """
+    return (
+        result.status == "COMPLETED"
+        and result.mission_id == action.contract_id
+        and result.action_id == action.id
+        and result.error is None
+    )
+
+
 class ValidatedDecisionService:
     """Canonical façade for validated decision construction and execution lifecycle.
 
@@ -146,4 +162,4 @@ class ValidatedDecisionService:
         self.executor.runtime._persist_new_audit_events()
 
 
-__all__ = ["ValidatedDecisionService", "VerificationFailed"]
+__all__ = ["ValidatedDecisionService", "VerificationFailed", "default_execution_result_verifier"]
