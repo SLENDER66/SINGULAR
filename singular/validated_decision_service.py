@@ -29,7 +29,13 @@ def _result_fingerprint(result: ExecutionResult) -> str:
 
 
 class ValidatedDecisionService:
-    """Canonical façade for validated decision construction and execution lifecycle."""
+    """Canonical façade for validated decision construction and execution lifecycle.
+
+    The verifier is a trusted-composition dependency, not a per-request input.
+    JARVIS/LLM callers receive no API by which they can select or replace the
+    verifier for an execution. A caller that needs multiple verification rules
+    must compose one trusted dispatcher at construction time.
+    """
 
     def __init__(
         self,
@@ -37,10 +43,14 @@ class ValidatedDecisionService:
         *,
         attestation_store: DecisionAttestationStore | None = None,
         issuer: str = "singular",
+        verifier: Callable[[Any, Any], bool] | None = None,
     ) -> None:
+        if verifier is None or not callable(verifier):
+            raise TypeError("a trusted verifier must be supplied at service composition time")
         self.executor = executor
         self.attestation_store = attestation_store or DecisionAttestationStore(executor.runtime.store.path)
         self.issuer = issuer
+        self._verifier = verifier
         self.boundary = ValidatedExecutionBoundary(
             executor,
             attestation_store=self.attestation_store,
@@ -95,11 +105,8 @@ class ValidatedDecisionService:
         decision: ValidatedTrajectoryDecision,
         action_id: str,
         handler: Callable[[Any], Any],
-        verifier: Callable[[Any, Any], bool],
     ) -> ExecutionResult:
-        """Execute and require an independent verifier before declaring the lifecycle verified."""
-        if not callable(verifier):
-            raise TypeError("verifier must be callable")
+        """Execute and require the service's trusted verifier before accepting the result."""
         result = self.boundary.execute(decision, action_id, handler)
         action = next((item.to_action() for item in decision.authorized_actions if item.id == action_id), None)
         if action is None:
@@ -108,7 +115,7 @@ class ValidatedDecisionService:
             self._record_verification(decision, action_id, result, "FAILED", "execution_not_completed")
             raise VerificationFailed("Independent execution-result verification failed.")
         try:
-            verified = bool(verifier(action, result))
+            verified = bool(self._verifier(action, result))
         except Exception as exc:
             self._record_verification(decision, action_id, result, "FAILED", type(exc).__name__)
             raise VerificationFailed("Independent execution-result verification failed.") from None
@@ -137,3 +144,6 @@ class ValidatedDecisionService:
             payload["reason"] = reason
         self.executor.runtime.audit.record("verification", "EXECUTION_RESULT", outcome, payload)
         self.executor.runtime._persist_new_audit_events()
+
+
+__all__ = ["ValidatedDecisionService", "VerificationFailed"]
