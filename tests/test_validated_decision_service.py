@@ -51,7 +51,7 @@ def test_service_execute_verified_requires_independent_verifier(tmp_path):
     )
     assert result.status == "COMPLETED"
     events = runtime.audit.events()
-    assert any(event.category == "verification" and event.outcome == "VERIFIED" for event in events)
+    assert any(event.event_type == "verification" and event.outcome == "VERIFIED" for event in events)
 
 
 def test_service_execute_verified_fails_closed_and_audits_rejection(tmp_path):
@@ -61,19 +61,21 @@ def test_service_execute_verified_fails_closed_and_audits_rejection(tmp_path):
     with pytest.raises(VerificationFailed):
         service.execute_verified(decision, decision.global_report.action_id, authorized_handler, lambda *_: False)
     events = runtime.audit.events()
-    assert any(event.category == "verification" and event.outcome == "FAILED" for event in events)
+    assert any(event.event_type == "verification" and event.outcome == "FAILED" for event in events)
 
 
 def test_service_execute_verified_sanitizes_verifier_exception(tmp_path):
     runtime, service = _service(tmp_path)
     decision, _ = service.build_and_attest(**_kwargs("DEC-SVC-VERIFY-EXC"))
     runtime.store.save_mission(decision.contract)
+
     def exploding_verifier(_action, _execution):
         raise RuntimeError("secret verifier detail")
+
     with pytest.raises(VerificationFailed, match="verification failed") as exc_info:
         service.execute_verified(decision, decision.global_report.action_id, authorized_handler, exploding_verifier)
     assert "secret verifier detail" not in str(exc_info.value)
-    assert any(event.category == "verification" and event.outcome == "FAILED" for event in runtime.audit.events())
+    assert any(event.event_type == "verification" and event.outcome == "FAILED" for event in runtime.audit.events())
 
 
 def test_service_rejects_non_callable_verifier_before_execution(tmp_path):
@@ -86,14 +88,16 @@ def test_service_rejects_non_callable_verifier_before_execution(tmp_path):
 
 def test_service_execute_verified_rejects_failed_execution_even_if_verifier_returns_true(tmp_path):
     runtime, service = _service(tmp_path)
+
     def failing_handler(_action):
         raise RuntimeError("handler failure")
+
     failing_capability = register_execution_capability(failing_handler, "cap_test_service_failing_handler")
     decision, _ = service.build_and_attest(**_kwargs("DEC-SVC-VERIFY-EXEC-FAIL", failing_capability))
     runtime.store.save_mission(decision.contract)
     with pytest.raises(VerificationFailed):
         service.execute_verified(decision, decision.global_report.action_id, failing_handler, lambda *_: True)
-    event = [e for e in runtime.audit.events() if e.category == "verification"][-1]
+    event = [e for e in runtime.audit.events() if e.event_type == "verification"][-1]
     assert event.outcome == "FAILED"
     assert event.payload["reason"] == "execution_not_completed"
 
