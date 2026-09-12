@@ -27,3 +27,15 @@ def test_autopilot_plans_but_never_executes_reversible_steps():
 
 
 def test_autopilot_never_bypasses_governor_for_sensitive_step():
+    from singular.autopilot import MissionManager
+    mm = MissionManager()
+    c = mm.create_contract('X', 'Y', autonomy=Autonomy.EXECUTE_AUTHORIZED)
+    auto = MissionAutopilot()
+    sensitive = ActionRequest('send', 'sensitive', 8, 1, 9, sensitive=True)
+    called = []
+    auto.register_handler('send', lambda a: called.append(True))
+    m = Mission('X', 'Y', c)
+    auto.plan(m, [(sensitive, ())])
+    auto.run(m)
+    assert m.status == StepStatus.BLOCKED
+    assert called == []
