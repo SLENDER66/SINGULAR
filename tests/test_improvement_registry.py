@@ -203,11 +203,51 @@ def test_evaluation_must_cover_the_registered_artifact(tmp_path):
         registry.evaluate(evaluation(artifact=OTHER_ARTIFACT))
 
 
-def test_same_candidate_id_cannot_change_artifact(tmp_path):
+def test_same_candidate_id_cannot_change_its_content(tmp_path):
+    """Le message compte, et l'ancienne version ne le verifiait pas.
+
+    Elle acceptait « different improvement content **ou** different artifact » :
+    les deux refus de `register` vivent l'un sous l'autre, donc retirer le premier
+    laissait le second parler et le test passait quand meme. Une alternative dans
+    un `match` rend un test aveugle a celui des deux gardes qui a repondu.
+
+    Ici seul le contenu change -- meme artefact, autre hypothese -- donc c'est le
+    premier qui doit repondre.
+    """
+    from dataclasses import replace
+
     registry = ImprovementRegistry(tmp_path / "improvements.db")
-    registry.register(candidate())
-    with pytest.raises(ValueError, match="different improvement content|different artifact"):
-        registry.register(candidate(artifact=OTHER_ARTIFACT))
+    premier = candidate()
+    registry.register(premier)
+    autre_contenu = replace(premier, hypothesis="Une autre hypothese, meme artefact.",
+                            fingerprint=ImprovementRegistry.candidate_fingerprint(
+                                kind=premier.kind, target=premier.target,
+                                hypothesis="Une autre hypothese, meme artefact.",
+                                evidence=premier.evidence,
+                                artifact_fingerprint=premier.artifact_fingerprint))
+
+    with pytest.raises(ValueError, match="different improvement content"):
+        registry.register(autre_contenu)
+
+
+def test_same_candidate_id_cannot_change_artifact(tmp_path):
+    """Le second refus, et le seul chemin qui l'atteint vraiment.
+
+    L'empreinte de contenu couvre celle de l'artefact, donc un candidat construit
+    normalement ne peut pas garder la premiere en changeant la seconde : ce garde
+    n'est atteint que par un candidat **forge**, dont l'empreinte de contenu ne
+    couvre plus ses champs. C'est exactement la substitution que ce module existe
+    pour arreter -- evaluer un artefact, en activer un autre sous le meme nom.
+    """
+    from dataclasses import replace
+
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    premier = candidate()
+    registry.register(premier)
+    forge = replace(premier, artifact_fingerprint=artifact_fingerprint(OTHER_ARTIFACT))
+
+    with pytest.raises(ValueError, match="different artifact"):
+        registry.register(forge)
 
 
 def test_artifact_fingerprint_is_part_of_candidate_identity(tmp_path):
