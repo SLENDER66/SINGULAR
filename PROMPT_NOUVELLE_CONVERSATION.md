@@ -557,6 +557,22 @@ fournisseur, opération et charge substitués étaient testés à l'aller, aucun
 retour — alors que la réconciliation atteint le même fournisseur et peut faire
 passer une exécution à COMPLETED.
 
+**Et il y a deux formes de refus, pas une.** L'outil ne connaissait que
+`if ... raise`. Or les refus les plus graves n'en sont pas : `verify`,
+`verify_issuance`, `matches`, `authorised`, `same_origin` rendent `False`. Un
+prédicat qui cesse de refuser ne lève rien et ne trace rien — c'est la forme
+fail-open. Zéro survivant dans le moteur du matin, ce qui est la bonne nouvelle :
+le jeton d'accès du Sage et ses gardes contre un domaine hostile sont prouvés.
+Six dans la frontière, tous des témoins manquants et aucun défaut de
+comportement — dont la mutation d'une décision **après** son émission, sur le
+chemin qui nourrit la calibration.
+
+**L'outil s'est trompé une fois, et c'est la leçon qui vaut le plus.** Il a
+dénoncé comme non prouvé un refus que la suite entière tue, parce que sa
+sous-suite ciblée ne couvre pas tout. Un instrument qui se trompe fabrique du
+travail : chaque survivant est désormais **revérifié contre la suite entière**
+avant d'être annoncé. Ne crois pas un survivant du sous-ensemble seul.
+
 **Et sur ce que j'utilise vraiment**, trouvé en tapant les commandes comme toi :
 `list --status ouverte` refusait en anglais en proposant les valeurs de la base ;
 « Journal vide » s'affichait sur un journal de trois décisions dont aucune n'était
@@ -609,8 +625,9 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 ## Pistes d'audit encore ouvertes
 
 1. **Des refus de la frontière n'ont toujours pas de témoin**, et c'est en
-   partie normal : `tools/gardes_sans_test.py` les liste, sa docstring dit les
-   trois familles, et seule la première est un trou. Les deux autres sont des
+   partie normal : `tools/gardes_sans_test.py` les liste -- les deux formes, le
+   `raise` et le `return False` -- sa docstring dit les trois familles, et seule
+   la première est un trou. Les deux autres sont des
    assurances derrière un contrôle qui les précède — leur écrire un test
    demanderait de désactiver `verify()`, donc de tester un chemin qui n'existe
    pas. Relance l'outil après avoir touché à la frontière, pas avant.
