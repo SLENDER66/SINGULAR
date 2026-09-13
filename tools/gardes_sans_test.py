@@ -5,12 +5,19 @@ il neutralise chaque refus des modules vises, un par un, relance une sous-suite
 ciblee, et nomme ceux qui survivent. Un survivant est un refus qu'aucun test
 n'atteint.
 
-**Deux formes de refus, parce qu'il y en a deux.** Un `if ... raise` -- sa
-condition devient fausse. Et un `return False` dans une fonction qui rend un
-booleen -- il devient `return True`. La premiere version ne connaissait que la
-premiere forme, et passait donc a cote de tous les predicats : `verify`,
-`matches`, `authorised`, `same_origin`. Ce sont les refus les plus graves du
-depot, et ils refusent sans lever.
+**Trois formes, parce qu'il y en a trois.**
+
+1. Un `if ... raise` : sa condition devient fausse.
+2. Un `return False` dans une fonction qui rend un booleen : il devient
+   `return True`. La premiere version ne connaissait que la forme 1, et passait
+   donc a cote de tous les predicats -- `verify`, `matches`, `authorised`,
+   `same_origin` -- qui sont les refus les plus graves du depot et qui refusent
+   sans lever.
+3. **Une moitie** d'un garde compose. `if a or b: raise` neutralise en entier ne
+   dit pas si `a` et `b` sont tous les deux prouves : on remplace donc une moitie
+   a la fois par son element neutre -- `False` dans un `or`, `True` dans un `and`
+   -- et l'autre continue de garder. C'est la forme la plus fine : elle nomme la
+   moitie de condition que personne n'essaie.
 
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
@@ -148,6 +155,27 @@ GROUPES = {
 REFUS = frozenset({"PermissionError", "ValueError", "RuntimeError", "TypeError"})
 
 
+class RendUneMoitieFausse(ast.NodeTransformer):
+    """Neutralise **une** moitie d'un garde compose, en laissant l'autre garder.
+
+    L'element neutre depend de l'operateur : `a or False` vaut `a`, `a and True`
+    vaut `a`. Remplacer par la mauvaise constante ferait un mutant qui ne mesure
+    rien -- `a or True` refuse toujours, `a and False` ne refuse jamais.
+    """
+
+    def __init__(self, clef: tuple[int, int]) -> None:
+        self.ligne, self.index = clef
+        self.touche = False
+
+    def visit_BoolOp(self, node: ast.BoolOp) -> ast.BoolOp:
+        self.generic_visit(node)
+        if node.lineno == self.ligne and self.index < len(node.values) and not self.touche:
+            neutre = isinstance(node.op, ast.And)
+            node.values[self.index] = ast.Constant(value=neutre)
+            self.touche = True
+        return node
+
+
 class RendLeRefusVrai(ast.NodeTransformer):
     """`return False` -> `return True` : le refus cesse de refuser, sans rien lever.
 
@@ -219,10 +247,40 @@ def refus_booleens_d_un_fichier(arbre: ast.AST) -> list[tuple[int, str]]:
     return trouves
 
 
+def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
+    """Chaque moitie d'un garde compose, par (ligne, rang de la moitie).
+
+    Une ligne portant deux `BoolOp` rendrait la clef ambigue : on ne mute alors
+    ni l'une ni l'autre. Refuser de deviner vaut mieux que mesurer la mauvaise.
+    """
+    par_ligne: dict[int, list[ast.BoolOp]] = {}
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.If) or noeud.orelse or len(noeud.body) != 1:
+            continue
+        if not isinstance(noeud.body[0], ast.Raise):
+            continue
+        leve = noeud.body[0].exc
+        nom = ""
+        if isinstance(leve, ast.Call):
+            nom = getattr(leve.func, "id", "") or getattr(leve.func, "attr", "")
+        if nom not in REFUS or not isinstance(noeud.test, ast.BoolOp):
+            continue
+        par_ligne.setdefault(noeud.test.lineno, []).append(noeud.test)
+    trouves = []
+    for ligne, tests in sorted(par_ligne.items()):
+        if len(tests) != 1:
+            continue
+        operateur = "and" if isinstance(tests[0].op, ast.And) else "or"
+        for index in range(len(tests[0].values)):
+            trouves.append(((ligne, index), f"moitie {index + 1} du {operateur}"))
+    return trouves
+
+
 #: Chaque forme de refus : ce qui la trouve, ce qui la neutralise.
 FORMES = (
     (refus_d_un_fichier, RendLaConditionFausse),
     (refus_booleens_d_un_fichier, RendLeRefusVrai),
+    (moities_d_un_fichier, RendUneMoitieFausse),
 )
 
 
@@ -259,12 +317,13 @@ def _un_groupe(nom: str) -> int:
         original = chemin.read_text(encoding="utf-8")
         lignes = original.split("\n")
         try:
-            trouves = [(ligne, refus, transformateur)
+            trouves = [(clef, refus, transformateur)
                        for collecteur, transformateur in FORMES
-                       for ligne, refus in collecteur(ast.parse(original))]
-            for ligne, refus, transformateur in trouves:
+                       for clef, refus in collecteur(ast.parse(original))]
+            for clef, refus, transformateur in trouves:
                 total += 1
-                mutant = transformateur(ligne)
+                ligne = clef[0] if isinstance(clef, tuple) else clef
+                mutant = transformateur(clef)
                 arbre = mutant.visit(ast.parse(original))
                 if not mutant.touche:
                     continue

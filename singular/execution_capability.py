@@ -553,6 +553,14 @@ class ExecutionCapabilityRegistry:
             token = capability_id or f"cap_{token_urlsafe(24)}"
             if not token.strip():
                 raise ValueError("capability id cannot be empty")
+            # Un jeton qu'aucune decision ne pourra nommer n'a pas a etre frappe.
+            # `ActionRequest` refuse une capacite d'execution sans ce prefixe et
+            # les trois entrees validees du moteur le reverifient : frapper
+            # "pas_une_capacite" donnait un jeton qui matchait ici et que la
+            # frontiere refusait toujours, le plus tard possible. La regle vit
+            # ou le jeton nait.
+            if not token.startswith("cap_"):
+                raise ValueError("capability id must be an opaque cap_ token")
             bound = self._targets.get(token)
             if bound is not None and bound is not target:
                 raise ValueError("capability id is already bound to another target")

@@ -33,11 +33,12 @@ from __future__ import annotations
 import pytest
 
 from singular.autopilot import Autonomy
-from singular.durable import DurableStore
+from singular.durable import DurableStore, MissionStatus
 from singular.effects import ExternalEffectCoordinator
 from singular.execution import DurableExecutionEngine
 from singular.mission_runtime import DurableMissionRuntime
 from singular.security import ActionPolicy
+from tests.support import build_decision
 from tests.test_validated_pipeline import (
     AUTHORIZED_PROVIDER,
     OtherProvider,
@@ -58,6 +59,23 @@ def _moteur(decision, tmp_path, *, avec_coordinateur: bool = True):
     moteur = DurableExecutionEngine(runtime, effect_coordinator=coordinateur)
     ValidatedDecisionIssuer(moteur.attestation_store).issue(decision)
     return moteur
+
+
+def _pendant(moteur, methode: str, geste) -> None:
+    """Fait `geste` dans la fenetre que les controles du haut de l'appel laissent ouverte.
+
+    Meme forme que `_revoke_during` de `test_effect_capability_time_of_use.py` :
+    une revocation qui arrive avant l'appel serait refusee par le premier garde,
+    donc elle ne prouverait rien du dernier.
+    """
+    original = getattr(moteur, methode)
+
+    def enveloppe(*args, **kwargs):
+        geste()
+        return original(*args, **kwargs)
+
+    setattr(moteur, methode, enveloppe)
+
 
 
 # --- le genre d'execution, dans les deux sens ---------------------------------
@@ -484,3 +502,206 @@ def test_rejouer_une_decision_n_ecrit_pas_un_deuxieme_succes_dans_l_audit(tmp_pa
               if evenement["event_type"] == "execution" and evenement["outcome"] == "COMPLETED"]
     assert len(succes) == 1, f"{len(succes)} succes enregistres pour une seule execution"
     assert moteur.store.verify_audit_integrity() is True
+
+
+# --- ce que chaque moitie d'un garde compose garde ----------------------------
+#
+# `tools/gardes_sans_test.py` neutralise desormais **une moitie** a la fois d'un
+# garde compose : `if a or b: raise` devient `if False or b: raise`, et l'autre
+# moitie continue de garder. Un garde entier peut donc passer pour prouve alors
+# qu'une de ses deux moities ne l'est pas. Le meme triage en trois familles
+# s'applique, et il donne :
+#
+# * le garde de type des trois entrees validees : un trou. Sans lui,
+#   `decision.verify()` part sur un objet quelconque.
+# * le nom du fournisseur sur le chemin d'execution : un trou. La reconciliation
+#   testait le fournisseur renomme, l'execution non -- et c'est l'execution qui
+#   agit.
+# * l'etat de la ligne d'execution avant une reconciliation : un trou. Les tests
+#   n'essayaient que le cas « aucune ligne », jamais « une ligne, mais RUNNING ».
+# * la gouvernance de la reconciliation : un trou. Le chemin d'execution avait
+#   son contrat qui interdit l'action ; la reconciliation, non.
+# * la moitie en memoire du controle de derniere seconde : un trou, le plus
+#   etroit -- il faut revoquer dans la fenetre, et dans un seul des deux
+#   registres.
+# * `actual is None` a cote de `actual != expected` dans la liaison d'approbation :
+#   rien ne produit leur entree. Une decision validee ne porte pas ESCALATE, donc
+#   aucune execution validee ne passe par une approbation -- meme famille que les
+#   quatre refus d'approbation deja triés ici. (Le meme couple existe pour
+#   l'identite d'execution, lui, et il a deja deux temoins.)
+# * le prefixe `cap_` des trois memes entrees : rien ne produit leur entree, et
+#   le test ci-dessous le prouve au lieu de l'affirmer.
+# * `mode == BLOCK` et `not governed.can_prepare`, dans les deux copies du garde
+#   de gouvernance : les deux moities sont co-extensives, et c'est mesure. Les
+#   trois producteurs de BLOCK -- `RedTeamGate` bloquant, une politique qui
+#   refuse la preparation, `_blocked` du runtime -- rendent tous les trois
+#   `can_prepare=False` en meme temps, et le gouverneur BLOCK du bus est
+#   inatteignable parce que le red team bloque avant lui. Aucune entree ne
+#   distingue donc les deux moities : on ne peut prouver que le garde entier,
+#   et c'est ce que fait le test de la reconciliation ci-dessous.
+
+
+@pytest.mark.parametrize("faux", [None, object(), "DEC-DEMO", 42, {"decision_id": "DEC-X"}])
+def test_le_moteur_refuse_ce_qui_n_est_pas_une_decision(tmp_path, faux):
+    """Les trois entrees validees ont le meme garde de type, et personne ne l'essayait.
+
+    Sans lui, `decision.verify()` part sur un objet quelconque et leve
+    `AttributeError` : un accident, pas un refus. Un appelant qui rattrape
+    `PermissionError` -- ce que fait la frontiere elle-meme -- ne le verrait pas
+    venir.
+    """
+    decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+
+    with pytest.raises(PermissionError, match="missing or invalid"):
+        moteur.execute_validated(faux, authorized_handler)
+    with pytest.raises(PermissionError, match="missing or invalid"):
+        moteur.execute_effect_validated(faux, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+                                        operation="apply", payload=payload)
+    with pytest.raises(PermissionError, match="missing or invalid"):
+        moteur.reconcile_effect_validated(faux, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+                                          operation="apply", payload=payload)
+
+
+def test_aucune_decision_ne_peut_nommer_une_cible_sans_prefixe():
+    """Pourquoi le prefixe `cap_` de la frontiere est une assurance, mesure ici.
+
+    Trois entrees validees exigent `execution_target.startswith("cap_")`, et la
+    mutation dit que ce refus ne tue aucun test. Ce n'est pas un trou : une
+    decision qui porterait une telle cible n'existe pas. Mais « n'existe pas »
+    se prouve, sinon c'est une croyance -- donc les trois portes sont essayees.
+
+    Le registre etait la seule des trois a laisser passer : il frappait un jeton
+    qu'aucune decision ne pourrait jamais nommer, et que la frontiere refusait
+    donc toujours, le plus tard possible. Un jeton inutilisable n'a pas a etre
+    frappable ; la regle vit maintenant la ou le jeton nait.
+    """
+    from singular.autopilot import ActionRequest
+    from singular.execution_capability import ExecutionCapabilityRegistry
+
+    def executable(action):
+        return {"action_id": action.id}
+
+    with pytest.raises(ValueError, match="opaque cap_ token"):
+        ActionRequest("une_action", "une action", 4, 1, 9, contract_id="MIS-X",
+                      execution_capability="pas_une_capacite")
+
+    with pytest.raises(ValueError, match="opaque execution capability"):
+        build_decision(decision_id="DEC-SANS-PREFIXE", mission_id="MIS-SANS-PREFIXE",
+                       execution_target="pas_une_capacite")
+
+    with pytest.raises(ValueError, match="opaque cap_ token"):
+        ExecutionCapabilityRegistry().register(executable, "pas_une_capacite")
+
+
+def test_l_execution_d_un_effet_refuse_un_fournisseur_renomme(tmp_path):
+    """Le meme nom que la decision, ou rien -- sur le chemin qui agit.
+
+    `reconcile_effect_validated` etait teste avec un fournisseur renomme ;
+    `execute_effect_validated`, non : seule l'operation substituee etait
+    essayee. Les deux moities vivent dans la meme ligne, donc le garde entier
+    passait pour prouve. Le nom du fournisseur decide de quel cote du reseau
+    part l'effet.
+    """
+    decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+
+    with pytest.raises(PermissionError, match="Provider or operation"):
+        moteur.execute_effect_validated(
+            decision, AUTHORIZED_PROVIDER, provider_name="autre-provider",
+            operation="apply", payload=payload,
+        )
+
+
+def test_la_reconciliation_refuse_une_execution_qui_n_est_pas_en_recuperation(tmp_path):
+    """Une ligne existe, mais pas dans l'etat qui autorise une reconciliation.
+
+    Le seul cas joue etait « aucune ligne du tout ». Celui-ci est l'autre moitie
+    du meme garde, et c'est le dangereux : une execution RUNNING appartient a un
+    bail que quelqu'un detient. Reconcilier par-dessus irait demander a un
+    fournisseur ce qu'il a fait d'un effet dont un autre ouvrier repond encore,
+    et pourrait ecrire un etat terminal sous lui.
+
+    `AUTHORIZED_PROVIDER` leve si on l'appelle : le test prouve donc aussi que
+    le refus arrive avant le reseau.
+    """
+    decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+    mission = decision.contract.mission_id
+    action_id = decision.global_report.action_id
+    cle = moteur.store.idempotency_key("execute", mission, action_id)
+    moteur.store.set_mission_status(mission, MissionStatus.PLANNED)
+    moteur.store.begin_execution_and_start_mission(cle, mission, action_id, lease_seconds=300)
+    assert moteur.store.get_execution(cle)["status"] == "RUNNING"
+
+    with pytest.raises(ValueError, match="RECOVERY_REQUIRED"):
+        moteur.reconcile_effect_validated(
+            decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+            operation="apply", payload=payload,
+        )
+
+
+def test_la_reconciliation_refuse_une_action_que_le_contrat_interdit_desormais(tmp_path):
+    """La gouvernance de la reconciliation, que le chemin d'execution avait seul.
+
+    `_authorize_reconciliation` a le meme premier garde que `_validate_governance`,
+    et une seule des deux copies etait exercee : une interdiction arrivee apres
+    l'emission bloquait l'execution et pas la reconciliation, qui atteint le meme
+    fournisseur.
+
+    Ce test tue le garde entier, pas une de ses moities : une action interdite
+    fait bloquer le red team, qui rend `BLOCK` **et** `can_prepare=False` dans le
+    meme objet. C'est pour cela que la passe par moities ne peut rien prouver
+    ici, et que ce temoin-la est le bon niveau.
+    """
+    decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+    _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                               forbidden_actions=[decision.authorized_actions[0].name])
+
+    with pytest.raises(PermissionError, match="bloquée par la gouvernance"):
+        moteur.reconcile_effect_validated(
+            decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+            operation="apply", payload=payload,
+        )
+
+
+def test_une_revocation_en_memoire_seule_arrete_l_execution(tmp_path):
+    """La moitie en memoire du controle de derniere seconde, que rien n'essayait.
+
+    Le moteur relit deux registres juste avant de rendre la main a l'executable :
+    celui en memoire -- cet objet exactement, cette empreinte -- et le durable,
+    qui survit au restart. Les tests de revocation dans la fenetre revoquaient
+    toujours le **durable**, donc la moitie en memoire pouvait disparaitre sans
+    qu'un test rougisse.
+
+    Les deux ne disent pas la meme chose. `revoke` sur le registre global n'a pas
+    de base derriere lui -- rien n'appelle `set_durable` -- donc il retire le
+    jeton d'ici et laisse l'enregistrement durable du moteur ACTIF. Il faut alors
+    que la moitie en memoire refuse, sinon un jeton retire continue d'executer.
+
+    Revoquer avant l'appel ne prouverait rien de ce controle : le garde du haut
+    refuserait d'abord. La revocation se fait donc dans la fenetre, comme la vraie.
+
+    Le jeton et l'executable sont jetables, crees pour ce test seul : revoquer un
+    jeton partage casserait les tests suivants selon l'ordre.
+    """
+    from singular.execution_capability import (
+        GLOBAL_EXECUTION_CAPABILITIES,
+        register_execution_capability,
+    )
+
+    def executable_jetable(action):
+        return {"action_id": action.id, "executed": True}
+
+    jeton = register_execution_capability(executable_jetable, "cap_revoquee_en_memoire")
+    decision = build_decision(decision_id="DEC-REVOC-MEM", mission_id="MIS-REVOC-MEM",
+                              execution_target=jeton)
+    moteur = _moteur(decision, tmp_path)
+    _pendant(moteur, "_authorize", lambda: GLOBAL_EXECUTION_CAPABILITIES.revoke(jeton))
+
+    with pytest.raises(PermissionError, match="n'est plus valide"):
+        moteur.execute_validated(decision, executable_jetable)
+
+    # Ce qui isole la moitie testee : le durable, lui, dit encore oui.
+    assert moteur.capability_store.verify(jeton, executable_jetable) is True
