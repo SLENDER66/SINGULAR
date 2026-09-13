@@ -76,7 +76,7 @@ class LearningReviewQueue:
         if not self.outcome_ledger.verify():
             raise PermissionError("outcome ledger integrity is invalid")
         persisted = next((item for item in self.outcome_ledger.list() if item.record_id == outcome.record_id), None)
-        if persisted is None or persisted != outcome:
+        if persisted != outcome:
             raise PermissionError("learning proposal must reference the exact persisted outcome record")
         return persisted
 

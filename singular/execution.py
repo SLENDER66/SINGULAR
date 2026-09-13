@@ -461,7 +461,7 @@ class DurableExecutionEngine:
         ApprovalIntegrityStore(self.store.path).validate(approval_id, action, mission_id, contract)
         expected = self.runtime._action_fingerprint(action, mission_id)
         actual = ApprovalBindingStore(self.store.path).fingerprint(approval_id)
-        if actual is None or actual != expected:
+        if actual != expected:
             raise PermissionError("L'action ou son contexte a changé depuis l'approbation : liaison d'identité invalide.")
 
     def _handle_existing_execution(self, key: str, existing: dict[str, Any]) -> ExecutionResult:

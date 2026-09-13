@@ -158,7 +158,7 @@ class DurableMissionRuntime:
         if any(native[name] is None for name in native):
             raise ValueError("Approbation sans empreintes natives complètes : validation refusée.")
         legacy = self.approval_bindings.fingerprint(approval_id)
-        if legacy is None or legacy != native["action_fingerprint"]:
+        if legacy != native["action_fingerprint"]:
             raise ValueError("La liaison d'identité de l'approbation est incohérente : validation refusée.")
         self.store.update_approval(approval_id, ApprovalStatus.APPROVED)
         if mission_id:
