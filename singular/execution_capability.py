@@ -550,7 +550,13 @@ class ExecutionCapabilityRegistry:
                 if capability_id is not None and capability_id != existing:
                     raise ValueError("target is already bound to a different capability")
                 return existing
-            token = capability_id or f"cap_{token_urlsafe(24)}"
+            # `is None`, et pas la verite de la chaine : `register(f, "")` frappait
+            # un jeton **aleatoire** au lieu de refuser, parce que la chaine vide
+            # est fausse. L'appelant demandait un identifiant precis et en
+            # recevait un autre, en silence -- meme faute que `if args.title:`
+            # dans le clavier, trouvee le meme jour. Le vide passe maintenant par
+            # le refus qui le nomme.
+            token = f"cap_{token_urlsafe(24)}" if capability_id is None else capability_id
             if not token.strip():
                 raise ValueError("capability id cannot be empty")
             # Un jeton qu'aucune decision ne pourra nommer n'a pas a etre frappe.

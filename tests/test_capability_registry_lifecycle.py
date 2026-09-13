@@ -187,3 +187,28 @@ def test_un_objet_deja_frappe_ne_recoit_pas_un_second_nom():
 
     with pytest.raises(ValueError, match="already bound to a different capability"):
         registry.register(authorized, "cap_second_nom")
+
+
+# --- ce que le registre refuse de frapper --------------------------------------
+#
+# Deux refus d'entree de `register`, nommes par la passe complete. Ils gardent le
+# cas ou l'appelant se trompe, pas un attaquant -- et ils sont la premiere et la
+# troisieme ligne de la fonction, donc ce qui decide si le reste a un sens.
+
+def test_il_faut_un_executable_pour_frapper_un_jeton():
+    """`None` n'est pas un executable, et un jeton qui ne designe rien serait pire
+    qu'une erreur : `matches` rendrait faux pour toujours sans dire pourquoi."""
+    with pytest.raises(ValueError, match="an execution target is required"):
+        ExecutionCapabilityRegistry().register(None)
+
+
+@pytest.mark.parametrize("vide", ["", "   ", "\t"])
+def test_un_jeton_vide_est_refuse_avant_le_prefixe(vide):
+    """Le refus qui parle du vide, pas celui qui parle du prefixe.
+
+    Les deux se suivent, et le message compte : « capability id cannot be empty »
+    dit quoi corriger, la ou « must be an opaque cap_ token » enverrait chercher un
+    prefixe sur une chaine qui n'a rien du tout.
+    """
+    with pytest.raises(ValueError, match="capability id cannot be empty"):
+        ExecutionCapabilityRegistry().register(authorized, vide)
