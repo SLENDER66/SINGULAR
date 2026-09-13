@@ -363,6 +363,28 @@ def test_l_adaptateur_refuse_aussi_une_decision_de_handler_sur_le_chemin_de_l_ef
         )
 
 
+@pytest.mark.parametrize("chemin", ["execute_effect", "reconcile_effect"])
+def test_l_adaptateur_refuse_un_fournisseur_renomme(tmp_path, chemin):
+    """Le meme trou que dans le moteur, dans la copie que porte l'adaptateur.
+
+    `_validate_effect_binding` sert les deux chemins d'effet de l'adaptateur et
+    compare deux choses dans la meme ligne : le nom du fournisseur et l'operation.
+    Seule l'operation etait essayee -- ici comme dans le moteur. Le nom decide de
+    quel cote du reseau part l'effet, et il est ce qu'un appelant fournit.
+    """
+    from singular.validated_execution import ValidatedExecutionBoundary
+
+    decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+    frontiere = ValidatedExecutionBoundary(moteur)
+
+    with pytest.raises(PermissionError, match="fournisseur ou l'opération"):
+        getattr(frontiere, chemin)(
+            decision, decision.global_report.action_id, AUTHORIZED_PROVIDER,
+            provider_name="autre-provider", operation="apply", payload=payload,
+        )
+
+
 def test_une_frontiere_sans_registre_d_attestation_refuse_d_exister():
     """Fail-closed a la construction : pas de registre, pas de frontiere.
 
@@ -377,6 +399,30 @@ def test_une_frontiere_sans_registre_d_attestation_refuse_d_exister():
 
     with pytest.raises(TypeError, match="explicit DecisionAttestationStore"):
         ValidatedExecutionBoundary(ExecuteurSansBase())
+
+
+def test_une_frontiere_dont_la_base_n_en_est_pas_une_refuse_aussi():
+    """L'autre cas du meme garde, et le seul que quelque chose puisse distinguer.
+
+    Un executeur peut porter un `store` qui n'est pas une base : un double de
+    test, un adaptateur maison, un objet a moitie construit. Le garde le refuse
+    parce qu'il n'a pas de `path` d'ou tirer un registre d'attestation -- et rien
+    ne l'essayait. Le cas « aucun store du tout » etait joue, celui-la non, et la
+    mutation par moities l'a nomme.
+    """
+    from singular.validated_execution import ValidatedExecutionBoundary
+
+    class PasUneBase:
+        """Il a tout d'un store, sauf ce dont la frontiere a besoin."""
+
+        def get_execution(self, key):
+            return None
+
+    class ExecuteurAvecUnFauxStore:
+        store = PasUneBase()
+
+    with pytest.raises(TypeError, match="explicit DecisionAttestationStore"):
+        ValidatedExecutionBoundary(ExecuteurAvecUnFauxStore())
 
 
 # --- le coordinateur d'effets -------------------------------------------------
@@ -531,6 +577,15 @@ def test_rejouer_une_decision_n_ecrit_pas_un_deuxieme_succes_dans_l_audit(tmp_pa
 #   l'identite d'execution, lui, et il a deja deux temoins.)
 # * le prefixe `cap_` des trois memes entrees : rien ne produit leur entree, et
 #   le test ci-dessous le prouve au lieu de l'affirmer.
+# * dans l'adaptateur, `not expected_target` a cote de la comparaison des cibles :
+#   meme famille. `_validated_action` verifie la decision avant, et une decision
+#   d'effet qui passe `verify()` porte forcement un `provider_target` -- son
+#   `_validate` l'exige. La moitie garde un objet qui n'a pas ete verifie, et il
+#   n'y a pas de chemin qui en presente un.
+# * `store is None` a cote de `not hasattr(store, "path")` : celle-la n'etait ni
+#   un trou ni une assurance, elle etait **morte** -- `hasattr(None, "path")` est
+#   faux, donc la seconde moitie refusait deja. Retiree, et l'autre moitie a
+#   maintenant son temoin.
 # * `mode == BLOCK` et `not governed.can_prepare`, dans les deux copies du garde
 #   de gouvernance : les deux moities sont co-extensives, et c'est mesure. Les
 #   trois producteurs de BLOCK -- `RedTeamGate` bloquant, une politique qui

@@ -27,7 +27,12 @@ class ValidatedExecutionBoundary:
                 self.attestation_store = inherited
                 return
             store = getattr(executor, "store", None)
-            if store is None or not hasattr(store, "path"):
+            # `store is None` vivait ici a cote, et ne pouvait jamais decider :
+            # `hasattr(None, "path")` est faux, donc la seconde moitie refusait
+            # deja. Une moitie qu'aucune entree ne distingue est du bruit dans
+            # l'outil de mutation a chaque passe -- et elle laissait croire que
+            # deux cas etaient couverts quand un seul l'etait.
+            if not hasattr(store, "path"):
                 raise TypeError("an explicit DecisionAttestationStore is required for this executor")
             self.attestation_store = DecisionAttestationStore(store.path)
 
