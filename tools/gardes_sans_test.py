@@ -1,12 +1,34 @@
 """Quel refus de la frontiere peut-on retirer sans qu'aucun test ne rougisse ?
 
 « Les tests passent » ne dit pas quels refus sont prouves. Cet outil le mesure :
-il neutralise chaque `if ... raise` des modules de la frontiere, un par un, en
-rendant sa condition fausse, relance une sous-suite ciblee, et nomme ceux qui
-survivent. Un survivant est un refus qu'aucun test n'atteint.
+il neutralise chaque refus des modules vises, un par un, relance une sous-suite
+ciblee, et nomme ceux qui survivent. Un survivant est un refus qu'aucun test
+n'atteint.
 
-**Un survivant est une question, pas un defaut.** Trois reponses possibles, et il
-faut choisir la bonne avant d'ecrire une ligne :
+**Deux formes de refus, parce qu'il y en a deux.** Un `if ... raise` -- sa
+condition devient fausse. Et un `return False` dans une fonction qui rend un
+booleen -- il devient `return True`. La premiere version ne connaissait que la
+premiere forme, et passait donc a cote de tous les predicats : `verify`,
+`matches`, `authorised`, `same_origin`. Ce sont les refus les plus graves du
+depot, et ils refusent sans lever.
+
+**Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
+ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
+refus que cet outil a denonce comme non prouve l'etait, par
+`tests/test_outcome_ledger.py`, qui n'est pas dans la liste. Chaque survivant du
+sous-ensemble est donc **reverifie contre la suite entiere** avant d'etre annonce,
+et l'outil distingue les deux cas. Il ment alors dans le sens alarmant plutot que
+dans le sens rassurant, ce qui est le bon sens pour un instrument de mesure.
+
+Le sous-ensemble reste etroit expres, et c'est un arbitrage mesure : un faux
+positif coute une passe de la suite entiere, et elargir le sous-ensemble aux
+fichiers qui touchent ces modules coute quelques secondes **par mutant**, soit
+autant. Elargir ne ferait donc pas gagner de temps -- ca rendrait seulement la
+passe rapide plus lente. Ce qui rend l'outil juste est la confirmation, pas la
+largeur du sous-ensemble.
+
+**Un survivant confirme est une question, pas un defaut.** Trois reponses
+possibles, et il faut choisir la bonne avant d'ecrire une ligne :
 
 1. *Le refus est atteignable et personne ne l'essaie.* C'est un trou. Ecris le
    test. La reconciliation etait dans ce cas : la substitution de fournisseur,
@@ -126,6 +148,26 @@ GROUPES = {
 REFUS = frozenset({"PermissionError", "ValueError", "RuntimeError", "TypeError"})
 
 
+class RendLeRefusVrai(ast.NodeTransformer):
+    """`return False` -> `return True` : le refus cesse de refuser, sans rien lever.
+
+    C'est la forme fail-open : la fonction repond « oui » la ou elle repondait
+    « non », et l'appelant qui s'y fiait laisse passer. Aucune exception, aucune
+    trace -- le seul temoin possible est un test qui attendait `False`.
+    """
+
+    def __init__(self, ligne: int) -> None:
+        self.ligne = ligne
+        self.touche = False
+
+    def visit_Return(self, node: ast.Return) -> ast.Return:
+        if (node.lineno == self.ligne and isinstance(node.value, ast.Constant)
+                and node.value.value is False):
+            node.value = ast.Constant(value=True)
+            self.touche = True
+        return node
+
+
 class RendLaConditionFausse(ast.NodeTransformer):
     def __init__(self, ligne: int) -> None:
         self.ligne = ligne
@@ -156,10 +198,47 @@ def refus_d_un_fichier(arbre: ast.AST) -> list[tuple[int, str]]:
     return trouves
 
 
+def refus_booleens_d_un_fichier(arbre: ast.AST) -> list[tuple[int, str]]:
+    """Les `return False` des fonctions annotees `-> bool`, par ligne.
+
+    L'annotation est le critere, et c'est deliberement etroit : une fonction qui
+    declare rendre un booleen declare etre un predicat. Une qui rend `False` sans
+    l'annoncer peut rendre autre chose ailleurs, et muter son refus ne dirait pas
+    la meme chose.
+    """
+    trouves = []
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.FunctionDef):
+            continue
+        if not (isinstance(noeud.returns, ast.Name) and noeud.returns.id == "bool"):
+            continue
+        for interne in ast.walk(noeud):
+            if (isinstance(interne, ast.Return) and isinstance(interne.value, ast.Constant)
+                    and interne.value.value is False):
+                trouves.append((interne.lineno, f"return False ({noeud.name})"))
+    return trouves
+
+
+#: Chaque forme de refus : ce qui la trouve, ce qui la neutralise.
+FORMES = (
+    (refus_d_un_fichier, RendLaConditionFausse),
+    (refus_booleens_d_un_fichier, RendLeRefusVrai),
+)
+
+
 def _la_sous_suite_passe(sous_suite: tuple[str, ...]) -> bool:
     acheve = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider",
          "-p", "no:randomly", *sous_suite],
+        capture_output=True, text=True, cwd=RACINE, check=False,
+    )
+    return acheve.returncode == 0
+
+
+def _la_suite_entiere_passe() -> bool:
+    """Le juge de derniere instance. Lent -- on ne l'appelle que sur un survivant."""
+    acheve = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "-p", "no:randomly"],
         capture_output=True, text=True, cwd=RACINE, check=False,
     )
     return acheve.returncode == 0
@@ -180,17 +259,24 @@ def _un_groupe(nom: str) -> int:
         original = chemin.read_text(encoding="utf-8")
         lignes = original.split("\n")
         try:
-            for ligne, refus in refus_d_un_fichier(ast.parse(original)):
+            trouves = [(ligne, refus, transformateur)
+                       for collecteur, transformateur in FORMES
+                       for ligne, refus in collecteur(ast.parse(original))]
+            for ligne, refus, transformateur in trouves:
                 total += 1
-                mutant = RendLaConditionFausse(ligne)
+                mutant = transformateur(ligne)
                 arbre = mutant.visit(ast.parse(original))
                 if not mutant.touche:
                     continue
                 ast.fix_missing_locations(arbre)
                 chemin.write_text(ast.unparse(arbre), encoding="utf-8")
                 if _la_sous_suite_passe(sous_suite):
-                    survivants += 1
-                    print(f"SURVIT  {cible}:{ligne}  {refus}  {lignes[ligne - 1].strip()[:100]}", flush=True)
+                    ou = f"{cible}:{ligne}  {refus}  {lignes[ligne - 1].strip()[:90]}"
+                    if _la_suite_entiere_passe():
+                        survivants += 1
+                        print(f"SURVIT  {ou}", flush=True)
+                    else:
+                        print(f"(sous-suite trop etroite)  {ou}", flush=True)
                 chemin.write_text(original, encoding="utf-8")
         finally:
             chemin.write_text(original, encoding="utf-8")
