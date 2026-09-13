@@ -521,7 +521,7 @@ importait le greffon, ce qui l'installait pour tous les tests suivants du même
 processus. Lancé seul, le test adversarial de ce chemin échouait. Et `mypy` le
 disait depuis le début, à l'étape du CI qui n'est qu'informative.
 
-Quatre leçons, et ce sont elles qu'il faut garder :
+Six leçons, et ce sont elles qu'il faut garder :
 
 - **`pytest -q` dans un processus n'est pas un programme qui démarre.** Ce qu'un
   import installe survit à tous les tests d'après. Un sous-processus ne peut pas
@@ -536,6 +536,22 @@ Quatre leçons, et ce sont elles qu'il faut garder :
   mon conteneur.
 - **L'étape informative du CI dit peut-être vrai.** L'erreur `mypy` décrivait ce
   défaut exactement, depuis le début.
+- **Un instrument qui mesure l'arbre où tu travailles mesure ton travail.**
+  L'outil de mutation écrivait ses sabotages dans le dépôt lui-même. Trois
+  conséquences le même jour : un garde neutralisé visible dans `git status` au
+  moment de committer — rattrapé par un hook de sortie, pas par moi ; une passe
+  dont les verdicts étaient contaminés par les tests que j'écrivais pendant
+  qu'elle tournait ; et un survivant de `validated_execution.py` qui a disparu à
+  la relance. Il mesure une **copie jetable** maintenant, qui porte aussi le
+  non-commité — sinon un audit lancé avant de committer ne verrait pas les
+  témoins qu'on vient d'écrire.
+- **Un rapport vide n'est une bonne nouvelle que si le juge était vert.** La copie
+  n'est pas un dépôt git ; les tests de l'outil appellent `git ls-files` ; donc
+  ils échouaient **dans la copie**, donc la suite entière y échouait, donc chaque
+  survivant était annoncé comme un faux positif. Soixante-douze mutants, « rien à
+  signaler », et rien de mesuré. Le contrôle d'entrée porte désormais sur la suite
+  entière et pas seulement sur la sous-suite : si le juge de dernière instance est
+  déjà rouge, l'outil refuse de mesurer et le dit.
 - **`pgrep -f motif` et `pkill -f motif` trouvent la commande qui les lance.**
   Le motif est dans sa ligne de commande, donc elle se compte comme un résultat
   et, avec `pkill`, se tue elle-même. Trois fois dans la séance : deux shells
@@ -563,8 +579,13 @@ qui est facile à écrire. Mon premier garde contre la recopie d'un mot ne compa
 que des littéraux entiers ; personne n'écrit `"abandonnée"` tout seul, on écrit
 `f"  {id}  abandonnée - {lesson}"`. Il ne tenait rien.
 
-**Un refus sans témoin n'est pas un refus.** `tools/gardes_sans_test.py` neutralise
-chaque `if ... raise` de la frontière, un par un, et relance la suite. Ceux qui
+**Un refus sans témoin n'est pas un refus.** `tools/gardes_sans_test.py` sabote
+chaque refus de la frontière, un par un, et relance la suite. **Trois formes**, et
+la troisième est la plus fine : un `if ... raise` dont la condition devient fausse,
+un `return False` qui devient `return True` — les prédicats sont les refus les plus
+graves du dépôt et la première version les ignorait —, et **une moitié** d'un garde
+composé, remplacée par l'élément neutre de son opérateur, pour savoir si les deux
+moitiés d'un `if a or b` sont prouvées ou une seule. Ceux qui
 survivent sont retirables sans qu'un test rougisse — la première passe en a nommé
 beaucoup, et le compte n'est pas écrit ici : l'outil le donne en dix minutes. Le
 travail n'est pas de tous les tester, c'est de les **trier** en trois familles,
@@ -641,9 +662,9 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 ## Pistes d'audit encore ouvertes
 
 1. **Des refus de la frontière n'ont toujours pas de témoin**, et c'est en
-   partie normal : `tools/gardes_sans_test.py` les liste -- les deux formes, le
-   `raise` et le `return False` -- sa docstring dit les trois familles, et seule
-   la première est un trou. Les deux autres sont des
+   partie normal : `tools/gardes_sans_test.py` les liste -- les trois formes, le
+   `raise`, le `return False` et la moitié d'un garde composé -- sa docstring dit
+   les trois familles, et seule la première est un trou. Les deux autres sont des
    assurances derrière un contrôle qui les précède — leur écrire un test
    demanderait de désactiver `verify()`, donc de tester un chemin qui n'existe
    pas. Relance l'outil après avoir touché à la frontière, pas avant.
