@@ -427,3 +427,60 @@ def test_une_capacite_ecrite_sous_un_autre_interpreteur_est_refusee(tmp_path):
         registre.bind("cap_temoin", authorized_handler)
 
     assert registre.verify("cap_temoin", authorized_handler) is False
+
+
+# --- « exactement une fois », sur le chemin du handler ------------------------
+
+def test_rejouer_une_decision_ne_relance_pas_le_handler(tmp_path):
+    """Le README le promet ; la demo le prouve pour un effet, rien pour un handler.
+
+    « Replaying a decision returns the first result without re-acting » : le
+    compte d'appels au serveur de `examples/governed_http_effect.py` le montre
+    pour un effet externe. Sur le chemin du handler, personne ne le regardait --
+    `tests/support.py` tient `HANDLER_CALLS` depuis le debut pour cela, avec une
+    docstring qui dit « so a suite can assert a replay did not re-run it », et
+    aucune suite ne le faisait.
+
+    Le temoin est partage par tout le paquet de tests : on mesure donc un
+    **ecart**, pas une longueur. Une longueur serait vraie ou fausse selon les
+    tests passes avant, et c'est exactement le defaut corrige ailleurs
+    aujourd'hui -- un test qui ne passait que parce qu'il tournait en premier.
+
+    Ce que ce test ne fait pas, dit ici pour que personne ne le croie : il ne
+    pointe aucun mecanisme en particulier. Deux tiennent la promesse
+    independamment -- la porte qui rend le premier resultat quand une execution
+    existe deja, et l'echec de la reclamation durable derriere elle. Mesure en
+    retirant la premiere : ces deux tests passent encore. Ils pointent donc la
+    promesse du README, pas son implementation, et c'est ce qu'on veut d'eux.
+    """
+    from tests.support import HANDLER_CALLS, build_decision, support_handler
+
+    decision = build_decision(decision_id="DEC-REJEU", mission_id="MIS-REJEU")
+    moteur = _moteur(decision, tmp_path)
+    avant = len(HANDLER_CALLS)
+
+    premier = moteur.execute_validated(decision, support_handler)
+    apres_un = len(HANDLER_CALLS)
+    second = moteur.execute_validated(decision, support_handler)
+
+    assert premier.status == "COMPLETED"
+    assert second.status == "COMPLETED"
+    assert second.result == premier.result, "le rejeu doit rendre le premier resultat"
+    assert apres_un - avant == 1, "le premier appel doit avoir lance le handler une fois"
+    assert len(HANDLER_CALLS) - avant == 1, "le rejeu a relance le handler"
+
+
+def test_rejouer_une_decision_n_ecrit_pas_un_deuxieme_succes_dans_l_audit(tmp_path):
+    """Deux COMPLETED pour une execution feraient croire a deux effets."""
+    from tests.support import build_decision, support_handler
+
+    decision = build_decision(decision_id="DEC-REJEU-AUDIT", mission_id="MIS-REJEU-AUDIT")
+    moteur = _moteur(decision, tmp_path)
+
+    moteur.execute_validated(decision, support_handler)
+    moteur.execute_validated(decision, support_handler)
+
+    succes = [evenement for evenement in moteur.store.audit_events()
+              if evenement["event_type"] == "execution" and evenement["outcome"] == "COMPLETED"]
+    assert len(succes) == 1, f"{len(succes)} succes enregistres pour une seule execution"
+    assert moteur.store.verify_audit_integrity() is True
