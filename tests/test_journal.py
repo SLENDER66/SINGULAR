@@ -46,8 +46,10 @@ def test_an_entry_without_one_of_its_three_texts_is_refused(tmp_path, champ, bla
 
     Ce refus est le contrat de bibliotheque -- il leve en anglais, et les trois
     surfaces refusent maintenant en francais avant de l'atteindre. Il reste la
-    derniere porte : un appelant qui n'est pas une de ces surfaces existe (le
-    prototype de suivi de candidatures ecrit dans le meme journal).
+    derniere porte, et elle compte : le journal est importable, et rien n'oblige
+    un appelant futur a passer par `singular.saisie`. C'est exactement ce que le
+    balayage de `tests/test_saisie_au_clavier.py` verifie du cote des surfaces --
+    ici on verifie que la porte du fond tient toute seule.
     """
     journal = _journal(tmp_path)
     champs = {"title": "x", "action": "y", "predicted": "z"} | {champ: blanc}
