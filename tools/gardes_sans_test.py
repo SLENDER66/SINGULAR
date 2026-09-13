@@ -125,6 +125,11 @@ CIBLES_FRONTIERE = (
     # qu'ailleurs.
     "singular/improvement_registry.py",
     "singular/outcome_ledger.py",
+    # Le socle : le bail, la revendication, les transitions de mission et la
+    # machine de recuperation. C'est lui qui tient l'exactement-une-fois dont tout
+    # le reste depend, et il n'avait jamais vu un mutant non plus.
+    "singular/durable.py",
+    "singular/mission_runtime.py",
 )
 
 #: La sous-suite qui couvre ces modules. Ciblee exprès : la suite entiere est
@@ -152,6 +157,14 @@ SOUS_SUITE_FRONTIERE = (
     "tests/test_improvement_registry.py", "tests/test_self_improvement.py",
     "tests/test_outcome_ledger.py", "tests/test_economic_learning_ledger.py",
     "tests/test_learning_review_queue.py", "tests/test_control_plane.py",
+    # Et ce qui couvre le socle durable.
+    "tests/test_v33_durable.py", "tests/test_v35_recovery.py",
+    "tests/test_durable_audit.py", "tests/test_durable_integrity.py",
+    "tests/test_durable_integrity_fail_closed.py", "tests/test_durable_integrity_lifecycle.py",
+    "tests/test_durable_integrity_snapshot.py", "tests/test_audit_chain_growth.py",
+    "tests/test_effect_recovery_integrity.py", "tests/test_recovery_completed_effect_routing.py",
+    "tests/test_store_owns_its_transitions.py", "tests/test_governance_route_provenance.py",
+    "tests/test_approval_immutability.py", "tests/test_ecriture_atomique.py",
 )
 
 #: Le moteur deterministe : ce qu'il lance chaque matin, sans jeton ni reseau.
