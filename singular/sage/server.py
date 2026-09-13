@@ -347,16 +347,23 @@ class SageApp:
         heures = _number(payload, "cost_hours", cast=float)
         jours = _number(payload, "horizon_days", cast=int)
         gain = _gain(payload)
+        # Les textes sont lus avant la porte, pas apres : le formulaire du
+        # telephone les laissait vides et c'est le journal qui refusait, en
+        # anglais, `title, action and predicted outcome are all required`.
+        titre = _text(payload, "title")
+        action = _text(payload, "action")
+        attendu = _text(payload, "predicted")
         try:
             verifie_decision(probability=probabilite, cost_hours=heures,
-                             horizon_days=jours, expected_gain_eur=gain)
+                             horizon_days=jours, expected_gain_eur=gain,
+                             title=titre, action=action, predicted=attendu)
         except ValueError as refus:
             raise SageError(HTTPStatus.BAD_REQUEST, str(refus)) from None
         try:
             entry = self.journal.add(
-                title=_text(payload, "title"),
-                action=_text(payload, "action"),
-                predicted=_text(payload, "predicted"),
+                title=titre,
+                action=action,
+                predicted=attendu,
                 probability=probabilite,
                 tier=_tier(payload.get("tier", Tier.REVENUS.value)),
                 cost_hours=heures,

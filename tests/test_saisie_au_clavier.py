@@ -457,6 +457,12 @@ def test_the_scan_actually_sees_the_writes():
     ["apply", "Boite", "Charge d'etudes", "--days", "0"],
     ["apply", "Boite", "Charge d'etudes", "--hours", "-2"],
     ["add", "--title", "T", "--action", "a", "--predicted", "p", "--probability", "30"],
+    # Les textes vides, la ou le journal refusait en anglais apres coup.
+    ["add", "--title", "   ", "--action", "a", "--predicted", "p"],
+    ["add", "--title", "T", "--action", " ", "--predicted", "p"],
+    ["add", "--title", "T", "--action", "a", "--predicted", ""],
+    ["apply", "   ", "Charge d'etudes"],
+    ["apply", "Boite", ""],
 ])
 def test_the_fast_paths_refuse_in_his_language(tmp_path, capsys, commande):
     """Le cas reel : il cherche un poste, donc `sj apply` est ce qu'il tape le plus."""
@@ -466,6 +472,27 @@ def test_the_fast_paths_refuse_in_his_language(tmp_path, capsys, commande):
     sortie = capsys.readouterr().out
     for anglais in ("must be", "cannot be", "needs a horizon", "is not a forecast"):
         assert anglais not in sortie, f"{commande} rend « {sortie.strip()} »"
+
+
+def test_un_titre_vide_refuse_au_lieu_de_demarrer_l_entretien(tmp_path, capsys, monkeypatch):
+    """Le pire des trois : `sj add --title ""` ne refusait pas, il posait des questions.
+
+    `if args.title:` lit la verite de la chaine, donc la chaine vide passait pour
+    une option absente et la branche interactive demarrait -- huit questions a un
+    stdin qui n'est peut-etre pas un terminal, apres une commande qui nommait
+    pourtant tous ses champs. Le refus doit arriver tout de suite, et rien ne doit
+    etre lu au clavier.
+    """
+    def pas_de_question(*args, **kwargs):
+        raise AssertionError("l'entretien a demarre alors que la commande etait complete")
+
+    monkeypatch.setattr("builtins.input", pas_de_question)
+
+    assert main(["--db", str(tmp_path / "journal.db"), "add", "--title", "",
+                 "--action", "a", "--predicted", "p"]) == 1
+    sortie = capsys.readouterr().out
+    assert "La décision" in sortie, sortie
+    assert not DecisionJournal(tmp_path / "journal.db").entries()
 
 
 # --- plus aucune porte ne parle la langue de la bibliotheque -------------------
@@ -496,6 +523,14 @@ REFUS_ATTENDUS = [
     ("add", {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
              "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14,
              "expected_gain_eur": "-100"}),
+    # Les trois textes, vides et blancs : le formulaire du telephone les laissait
+    # passer et c'est le journal qui refusait, en anglais.
+    ("add", {"title": "", "action": "a", "predicted": "p", "probability": 0.6,
+             "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14}),
+    ("add", {"title": "T", "action": "   ", "predicted": "p", "probability": 0.6,
+             "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14}),
+    ("add", {"title": "T", "action": "a", "predicted": " ", "probability": 0.6,
+             "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14}),
 ]
 
 

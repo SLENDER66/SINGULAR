@@ -39,11 +39,22 @@ def test_non_finite_inputs_are_refused(tmp_path):
         _add(_journal(tmp_path), hours=float("inf"))
 
 
-def test_an_entry_without_a_predicted_outcome_is_refused(tmp_path):
+@pytest.mark.parametrize("champ", ["title", "action", "predicted"])
+@pytest.mark.parametrize("blanc", ["", "   "])
+def test_an_entry_without_one_of_its_three_texts_is_refused(tmp_path, champ, blanc):
+    """Les trois textes, chacun vide puis blanc. Un seul des trois etait essaye.
+
+    Ce refus est le contrat de bibliotheque -- il leve en anglais, et les trois
+    surfaces refusent maintenant en francais avant de l'atteindre. Il reste la
+    derniere porte : un appelant qui n'est pas une de ces surfaces existe (le
+    prototype de suivi de candidatures ecrit dans le meme journal).
+    """
     journal = _journal(tmp_path)
-    with pytest.raises(ValueError, match="required"):
-        journal.add(title="x", action="y", predicted="   ", probability=0.5,
-                    tier=Tier.REVENUS, cost_hours=1, horizon_days=1)
+    champs = {"title": "x", "action": "y", "predicted": "z"} | {champ: blanc}
+
+    with pytest.raises(ValueError, match="title, action and predicted outcome are all required"):
+        journal.add(**champs, probability=0.5, tier=Tier.REVENUS, cost_hours=1, horizon_days=1)
+    assert not journal.entries()
 
 
 # --- the activity / result detector ------------------------------------------
@@ -225,11 +236,22 @@ def test_the_journal_survives_a_restart(tmp_path):
     assert reopened.verify() is True
 
 
-def test_a_schema_from_another_version_is_refused(tmp_path):
+@pytest.mark.parametrize("version", [99, 0, -1])
+def test_a_schema_from_another_version_is_refused(tmp_path, version):
+    """Trop neuve, et aussi trop vieille pour exister.
+
+    Seule la version future etait essayee. Une version inferieure a 1 est l'autre
+    moitie du meme refus, et c'est celle qui passerait le plus discretement :
+    `_migrate` ne connait que les etapes 1 et 2, donc une base marquee 0 --
+    ecriture tronquee, outil exterieur, base editee a la main -- traverserait la
+    migration sans rien faire et le code lirait ensuite des colonnes qu'il n'a
+    jamais ajoutees. C'est exactement ce que la section 13 du mandat interdit de
+    laisser a `CREATE TABLE IF NOT EXISTS`.
+    """
     path = tmp_path / "journal.db"
     journal = DecisionJournal(path)
     with journal._connect() as conn:
-        conn.execute("UPDATE journal_schema SET version=99")
+        conn.execute("UPDATE journal_schema SET version=?", (version,))
     with pytest.raises(RuntimeError, match="does not match"):
         DecisionJournal(path)
 

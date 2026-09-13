@@ -38,6 +38,7 @@ from .saisie import verifie_gain as _verifie_gain
 from .saisie import verifie_heures as _verifie_heures
 from .saisie import verifie_jours as _verifie_jours
 from .saisie import verifie_probabilite as _verifie_probabilite
+from .saisie import verifie_texte as _verifie_texte
 from .sage import notice as _notice
 from .sage.notice import calibration_verdict, foundation_item
 
@@ -296,7 +297,10 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
 
 
 def cmd_add(journal: DecisionJournal, args) -> int:
-    if args.title:
+    # `is not None`, et pas la verite de la chaine : `sj add --title ""` prenait
+    # la branche de l'entretien, donc huit questions posees a un stdin qui n'est
+    # peut-etre pas un terminal, au lieu d'un refus immediat.
+    if args.title is not None:
         champs = dict(
             title=args.title, action=args.action, predicted=args.predicted,
             probability=args.probability, tier=Tier(args.tier.upper()),
@@ -307,9 +311,14 @@ def cmd_add(journal: DecisionJournal, args) -> int:
         )
     else:
         print(_colour("\nUne décision, avant de la prendre.\n", BOLD))
-        title = _ask("  Décision (une ligne)")
-        action = _ask("  Ce que tu vas faire concrètement")
-        predicted = _ask("  Ce que tu attends comme résultat observable")
+        # Chaque question garde sa propre reponse : une ligne vide etait acceptee
+        # ici et ne se voyait refuser qu'a l'ecriture, en anglais, apres les huit.
+        title = _ask("  Décision (une ligne)",
+                     validate=lambda valeur: _verifie_texte("La décision", valeur))
+        action = _ask("  Ce que tu vas faire concrètement",
+                      validate=lambda valeur: _verifie_texte("Ce que tu vas faire", valeur))
+        predicted = _ask("  Ce que tu attends comme résultat observable",
+                         validate=lambda valeur: _verifie_texte("Ce que tu attends", valeur))
         probability = _ask("  Probabilité que ça arrive (0.05 à 0.95)", cast=_nombre,
                            default=0.6, validate=_verifie_probabilite)
         tier = _tier_prompt()
@@ -329,7 +338,9 @@ def cmd_add(journal: DecisionJournal, args) -> int:
     # anglais.
     _verifie_decision(probability=champs["probability"], cost_hours=champs["cost_hours"],
                       horizon_days=champs["horizon_days"],
-                      expected_gain_eur=champs["expected_gain_eur"])
+                      expected_gain_eur=champs["expected_gain_eur"],
+                      title=champs["title"], action=champs["action"],
+                      predicted=champs["predicted"])
     entry = journal.add(**champs)
 
     due = datetime.fromisoformat(entry.due_at).strftime("%d/%m/%Y")
@@ -354,12 +365,21 @@ def cmd_apply(journal: DecisionJournal, args) -> int:
     """
     # Le chemin le plus rapide etait le seul sans verification : une
     # probabilite tapee en pourcents rendait le refus anglais du journal.
+    # L'entreprise et le poste sont verifies pour eux-memes : compose, le titre
+    # « - » aurait passe le controle du texte, et une candidature sans nom
+    # d'entreprise n'est pas verifiable dans trois semaines.
+    _verifie_texte("L'entreprise", args.company)
+    _verifie_texte("Le poste", args.role)
+    titre = f"{args.company} - {args.role}"
+    action = args.action or "candidature envoyée"
+    attendu = f"entretien décroché sous {args.days} jours"
     _verifie_decision(probability=args.probability, cost_hours=args.hours,
-                      horizon_days=args.days)
+                      horizon_days=args.days, title=titre, action=action,
+                      predicted=attendu)
     entry = journal.add(
-        title=f"{args.company} - {args.role}",
-        action=args.action or "candidature envoyée",
-        predicted=f"entretien décroché sous {args.days} jours",
+        title=titre,
+        action=action,
+        predicted=attendu,
         probability=args.probability,
         tier=Tier(args.tier.upper()),
         cost_hours=args.hours,

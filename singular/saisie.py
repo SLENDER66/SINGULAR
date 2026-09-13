@@ -103,8 +103,27 @@ def verifie_gain(valeur: float | None) -> None:
         raise ValueError("un coût n'est pas un gain : laisse vide si tu ne sais pas")
 
 
+def verifie_texte(nom: str, valeur: object) -> None:
+    """Une ligne ecrite, pas une ligne vide.
+
+    Les trois textes d'une decision -- ce qu'elle est, ce que tu vas faire, ce
+    que tu attends -- sont exiges par le journal, qui refuse en anglais :
+    `title, action and predicted outcome are all required`. Les trois surfaces
+    laissaient ce message remonter jusqu'a lui.
+
+    Au clavier c'etait pire que l'anglais. `sj add --title ""` ne refusait pas du
+    tout : la chaine vide est fausse, donc l'option passait pour absente et
+    l'entretien demarrait -- sans terminal, sur huit questions posees a un
+    stdin ferme. Et l'entretien lui-meme acceptait une ligne vide a chaque
+    question de texte, pour ne refuser qu'a l'ecriture, apres tout le reste.
+    """
+    if not str(valeur).strip():
+        raise ValueError(f"{nom} : une ligne, même courte, mais pas vide")
+
+
 def verifie_decision(*, probability: float, cost_hours: float, horizon_days: int,
-                     expected_gain_eur: float | None = None) -> None:
+                     expected_gain_eur: float | None = None,
+                     title: str, action: str, predicted: str) -> None:
     """Les quatre regles d'une decision, dans l'ordre ou on les saisit.
 
     Elles etaient appelees une par une par chaque surface, ce qui laissait a
@@ -118,11 +137,20 @@ def verifie_decision(*, probability: float, cost_hours: float, horizon_days: int
 
     Une seule porte, donc, et `tests/test_saisie_au_clavier.py` refuse un appel
     a `journal.add` qui ne la traverse pas.
+
+    Les trois textes sont exiges sans valeur par defaut, exprès : une surface qui
+    oublierait de les passer ne compile pas au premier appel, au lieu de laisser
+    passer une decision sans titre. C'est la seule facon de ne pas avoir a se
+    souvenir de la regle -- et la mutation par moities a montre que personne ne
+    l'essayait.
     """
     verifie_probabilite(probability)
     verifie_heures(cost_hours)
     verifie_jours(horizon_days)
     verifie_gain(expected_gain_eur)
+    verifie_texte("La décision", title)
+    verifie_texte("Ce que tu vas faire", action)
+    verifie_texte("Ce que tu attends", predicted)
 
 
 #: Ce que voit quelqu'un qui tranche deux fois la meme decision.
@@ -175,4 +203,4 @@ def introuvable(entry_id: str) -> str:
 
 __all__ = ["CONFLIT", "CONFLIT_CLAVIER", "CONFLIT_PAGE", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",
            "verifie_decision", "verifie_gain",
-           "verifie_heures", "verifie_jours", "verifie_probabilite"]
+           "verifie_heures", "verifie_jours", "verifie_probabilite", "verifie_texte"]
