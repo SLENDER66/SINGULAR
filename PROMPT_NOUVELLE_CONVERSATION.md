@@ -616,6 +616,47 @@ avant d'être annoncé. Ne crois pas un survivant du sous-ensemble seul.
 ouverte ; et le même état portait trois noms selon la commande — « échoué » dans
 `list`, « PAS ARRIVÉ » dans `resolve`. « échoué » était un jugement, pas un fait.
 
+### L'après-midi : la mutation a fini de parler, l'usage a pris le relais
+
+La passe par moitiés est allée au bout : **20 moitiés sans témoin sur 72, zéro
+faux positif**. Seize ont un témoin maintenant, quatre sont des assurances dont la
+raison est écrite là où vit le garde. Une moitié était **morte** — `store is None`
+à côté de `not hasattr(store, "path")`, qu'aucune entrée ne distingue — et elle a
+été retirée : ni trou ni assurance, du bruit qui laissait croire à deux cas
+couverts.
+
+Puis la méthode a changé, parce que la mutation avait fini de rendre. **Lance les
+commandes comme lui, une par une, et regarde l'écran.** Quatre défauts en une
+heure, tous sur le chemin du matin, aucun qu'un test aurait vu :
+
+- `sj add --title ""` ne refusait pas : la chaîne vide est fausse, donc l'option
+  passait pour absente et l'entretien démarrait — huit questions à un stdin qui
+  n'est peut-être pas un terminal. Et l'entretien acceptait une ligne vide, pour
+  refuser à l'écriture, en anglais, après les huit.
+- `status` annonçait « calibration -85% » **après un seul verdict**, pendant que
+  la Notice se taisait sur les mêmes données. Cinquième fois pour ce défaut : la
+  ligne vit dans le moteur, et le fichier qui garde « une règle, un domicile » ne
+  liste que les interfaces. Les deux seuils vivent maintenant dans le journal, et
+  le garde couvre le moteur quand il affiche.
+- `sj due` disait « 1 décision(s) attendent un verdict ». Le pluriel a un
+  domicile depuis le matin ; la forme parenthésée y échappait.
+- `sj import mon-export.csv` rendait une pile Python. `export` écrit un CSV,
+  `import` attend une base : le geste est naturel, et le refus français existait
+  déjà pour l'ouverture du journal — pas pour la source d'une reprise.
+
+**Ce que ça dit de la méthode** : la mutation trouve les refus que personne
+n'essaie, elle ne trouve pas une option qu'on lit avec le mauvais test de vérité,
+une pile Python, ni un pluriel. Les deux passes sont complémentaires, et celle qui
+coûte le moins est de taper ses commandes.
+
+**Et l'instrument s'est encore trompé, dans le sens rassurant.** En le faisant
+mesurer une copie jetable — la bonne correction, il sabotait le dépôt depuis
+lequel je committe — j'ai rendu ses propres tests incapables de passer dans la
+copie : ils appellent `git`, et une copie n'est pas un dépôt. La suite entière y
+échouait, donc chaque survivant passait pour un faux positif : soixante-douze
+mutants, « rien à signaler », et rien de mesuré. Le contrôle d'entrée porte
+maintenant sur la suite entière, pas seulement sur la sous-suite.
+
 ## Ce qui décide de la suite
 
 Pas un compilateur, pas une liste de facultés : **une semaine d'usage**, et

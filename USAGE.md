@@ -454,6 +454,12 @@ SINGULAR · 3 à trancher · 42h sans verdict · calibration +35%
 
 Un journal qu'il faut penser à ouvrir est un journal qu'on arrête d'ouvrir.
 
+La calibration n'apparaît sur cette ligne qu'aux conditions décrites plus bas
+pour la Notice — assez de verdicts, et un écart voyant. Le seuil est le même
+parce qu'il n'est écrit qu'une fois, dans le moteur : la ligne avait longtemps le
+sien, et annonçait donc un écart après un seul verdict pendant que la Notice se
+taisait sur les mêmes données.
+
 ## Les règles qui font que ça marche
 
 **La probabilité doit être entre 0.05 et 0.95.** La certitude est refusée :
