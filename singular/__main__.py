@@ -16,6 +16,7 @@ import argparse
 import csv
 import sqlite3
 import sys
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -471,7 +472,7 @@ def cmd_resolve(journal: DecisionJournal, args) -> int:
         print(_colour("  Précise --yes ou --no.", RED))
         return 2
     entry = journal.resolve(args.entry_id, happened=args.yes, lesson=args.lesson or "")
-    verdict = _colour("ARRIVÉ", GREEN) if entry.status is Status.HAPPENED else _colour("PAS ARRIVÉ", RED)
+    verdict = _colour(entry.status.label.upper(), _COULEUR_DU_STATUT[entry.status])
     print(f"\n  {entry.entry_id}  {verdict}   tu disais {entry.probability:.0%}   Brier {entry.brier_score:.3f}")
     if entry.lesson:
         print(_colour(f"  {entry.lesson}\n", DIM))
@@ -480,23 +481,74 @@ def cmd_resolve(journal: DecisionJournal, args) -> int:
 
 def cmd_abandon(journal: DecisionJournal, args) -> int:
     entry = journal.abandon(args.entry_id, reason=args.reason)
-    print(f"\n  {entry.entry_id}  abandonné - {entry.lesson}\n")
+    print(f"\n  {entry.entry_id}  {entry.status.label} - {entry.lesson}\n")
     return 0
 
 
+#: La couleur de chaque état. Le mot, lui, vit dans `Status.label`.
+_COULEUR_DU_STATUT = {
+    Status.OPEN: YELLOW,
+    Status.HAPPENED: GREEN,
+    Status.DID_NOT_HAPPEN: RED,
+    Status.ABANDONED: DIM,
+}
+
+
+def _mot_nu(mot: str) -> str:
+    """Le mot tel qu'on le reconnaît : sans accents, sans casse, sans séparateurs.
+
+    Appliquée aux deux côtés de la comparaison, jamais à un seul. Elle ne l'était
+    qu'à ce qu'il tape, et `--status did_not_happen` était donc refusé : les
+    soulignés devenaient des espaces d'un côté et restaient de l'autre.
+    """
+    decompose = unicodedata.normalize("NFD", mot.lower())
+    sans_accents = "".join(c for c in decompose if not unicodedata.combining(c))
+    return "".join(sans_accents.replace("-", " ").replace("_", " ").split())
+
+
+def _statut_tape(brut: str) -> Status:
+    """L'état qu'il a tapé, en français, avec ou sans accents.
+
+    `--status` n'acceptait que `open`, `happened`, `did_not_happen`,
+    `abandoned` -- dans un outil dont chaque phrase est française et dont
+    `--tier` accepte déjà `revenus`. `--status ouverte` répondait « invalid
+    choice » en anglais, en proposant quatre mots qu'il n'a lus nulle part
+    ailleurs : ce sont les valeurs de la base, pas son vocabulaire.
+
+    Les valeurs anglaises restent acceptées, parce qu'elles sont ce que la base
+    contient. Espaces, tirets et soulignés sont équivalents : « pas arrivée » se
+    tape aussi « pas-arrivee », et c'est ce qu'on fait dans un shell.
+    """
+    demande = _mot_nu(brut)
+    for statut in Status:
+        if demande in {_mot_nu(statut.value), _mot_nu(statut.label)}:
+            return statut
+    mots = ", ".join(statut.label for statut in Status)
+    raise ValueError(f"Je ne connais pas l'état « {brut} ». Les quatre : {mots}.")
+
+
 def cmd_list(journal: DecisionJournal, args) -> int:
-    entries = journal.entries(status=Status(args.status.upper()) if args.status else None)
+    try:
+        voulu = _statut_tape(args.status) if args.status else None
+    except ValueError as refus:
+        print(_colour(f"\n  {refus}\n", RED))
+        return 2
+    entries = journal.entries(status=voulu)
+    if not entries and voulu is not None:
+        # « Journal vide » était la réponse, et elle était fausse : le journal
+        # peut être plein et ne porter aucune décision de cet état. Trois
+        # décisions tranchées et `--status ouverte` donnaient exactement l'écran
+        # d'un journal neuf -- la confusion que `_vide` existe pour éviter.
+        total = len(journal.entries())
+        print(_colour(f"\n  Aucune décision {voulu.label}. "
+                      f"{total} décision{'s' if total > 1 else ''} dans le journal.\n", DIM))
+        return 0
     if not entries:
         print(_vide(journal))
         return 0
     print()
     for entry in entries:
-        state = {
-            Status.OPEN: _colour("ouvert", YELLOW),
-            Status.HAPPENED: _colour("arrivé", GREEN),
-            Status.DID_NOT_HAPPEN: _colour("échoué", RED),
-            Status.ABANDONED: _colour("abandonné", DIM),
-        }[entry.status]
+        state = _colour(entry.status.label, _COULEUR_DU_STATUT[entry.status])
         print(f"  {entry.entry_id}  {state:>18}  {entry.probability:.0%}  {entry.cost_hours:>5g}h  "
               f"{entry.tier.label.lower():<13} {entry.title}")
     print()
@@ -537,7 +589,8 @@ def cmd_review(journal: DecisionJournal, args) -> int:
     # justes, c'est leur juxtaposition qui mentait.
     retard = f", dont {report['overdue']} en retard" if report["overdue"] else ""
     print(_colour(f"  {unresolved:g}h encore sans verdict "
-                  f"({report['open']} ouverte{'s' if report['open'] > 1 else ''}{retard})", warn))
+                  f"({report['open']} {Status.OPEN.label}"
+                  f"{'s' if report['open'] > 1 else ''}{retard})", warn))
 
     if report["hit_rate"] is not None:
         print(_colour("\n  CE QUE TA CONFIANCE VAUT\n", BOLD))
@@ -642,7 +695,11 @@ def build_parser() -> argparse.ArgumentParser:
     abandon.set_defaults(func=cmd_abandon)
 
     listing = sub.add_parser("list", help="tout le journal")
-    listing.add_argument("--status", choices=[s.value.lower() for s in Status])
+    # Pas de `choices` : argparse refuserait en anglais, avec les valeurs de la
+    # base pour seule proposition. `_statut_tape` refuse dans sa langue.
+    etats = [statut.label for statut in Status]
+    listing.add_argument("--status", metavar="ÉTAT",
+                         help=f"{', '.join(etats[:-1])} ou {etats[-1]}")
     listing.set_defaults(func=cmd_list)
 
     review = sub.add_parser("review", help="où vont tes heures, où ta confiance se trompe")

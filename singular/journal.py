@@ -79,6 +79,31 @@ class Status(str, Enum):
     DID_NOT_HAPPEN = "DID_NOT_HAPPEN"
     ABANDONED = "ABANDONED"
 
+    @property
+    def label(self) -> str:
+        """Le mot que les écrans montrent pour cet état, et il n'y en a qu'un.
+
+        Il y en avait trois, tous dans `__main__.py` : `list` affichait
+        « échoué », `resolve` « PAS ARRIVÉ », `abandon` « abandonné ». Le même
+        état portait donc deux noms sur deux écrans du même outil, et le bouton
+        de l'app disait encore autrement.
+
+        « échoué » n'était pas seulement un troisième mot, c'était un jugement :
+        une prédiction qui ne s'est pas réalisée n'est pas un échec, et ce dépôt
+        a déjà payé le reproche prématuré une fois. Le fait se dit « pas
+        arrivée », comme dans l'app et comme dans la Notice.
+
+        Féminin, parce que ce qui est ouvert ou arrivé est une décision. Les
+        valeurs stockées restent l'anglais en majuscules : une base écrite hier
+        doit rester lisible demain.
+        """
+        return {
+            Status.OPEN: "ouverte",
+            Status.HAPPENED: "arrivée",
+            Status.DID_NOT_HAPPEN: "pas arrivée",
+            Status.ABANDONED: "abandonnée",
+        }[self]
+
 
 class ImportRefused(PermissionError):
     """Une reprise refusée, et laquelle des trois raisons.
