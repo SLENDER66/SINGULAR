@@ -115,3 +115,30 @@ def test_une_approbation_ne_vaut_plus_pour_une_mission_qui_n_attend_plus(tmp_pat
     with pytest.raises(ValueError, match="plus valide pour l'état actuel"):
         runtime.approve(approval_id)
     assert store.get_approval(approval_id).status is ApprovalStatus.PENDING
+
+
+@pytest.mark.parametrize("sabotage", ["effacee", "changee"])
+def test_une_liaison_d_approbation_incoherente_refuse_la_validation(tmp_path, sabotage):
+    """Les deux magasins de liaison doivent dire la meme chose, et rien ne l'essayait.
+
+    Une approbation porte son empreinte d'action a deux endroits : le magasin
+    natif, qui la calcule, et la table de liaison historique. Le runtime exige
+    qu'ils concordent avant de valider -- c'est la garantie que l'approbation
+    couvre bien l'action qu'on croit, et pas une autre glissee entre-temps.
+
+    Les deux moities sont jouees : la liaison effacee, et la liaison changee. La
+    premiere est le cas d'une base a moitie ecrite ; la seconde est la substitution
+    elle-meme.
+    """
+    runtime, store, approval_id = _runtime_en_attente(tmp_path)
+
+    with runtime.approval_bindings._connect() as conn:
+        if sabotage == "effacee":
+            conn.execute("DELETE FROM approval_bindings WHERE approval_id=?", (approval_id,))
+        else:
+            conn.execute("UPDATE approval_bindings SET action_fingerprint=? WHERE approval_id=?",
+                         ("0" * 64, approval_id))
+
+    with pytest.raises(ValueError, match="liaison d'identité de l'approbation est incohérente"):
+        runtime.approve(approval_id)
+    assert store.get_approval(approval_id).status is ApprovalStatus.PENDING

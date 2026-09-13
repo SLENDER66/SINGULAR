@@ -425,6 +425,21 @@ def test_summary_line_stays_quiet_when_calibration_is_fine(tmp_path):
     assert "calibration" not in journal.summary_line()
 
 
+# --- les deux seuls refus du journal que rien n'essaie -------------------------
+#
+# La passe complete des trois formes sur le moteur du matin -- 40 mutants -- laisse
+# exactement deux survivants, et ce sont les deux memes : le `rowcount != 1` qui
+# suit l'ecriture de `resolve` et celui d'`abandon`. Ils sont inatteignables par
+# construction et leur code le dit deja : les deux methodes tiennent un
+# `BEGIN IMMEDIATE`, donc aucun autre ecrivain ne peut s'interposer entre la
+# lecture du statut et l'ecriture conditionnee par ce statut. Un intrus avec sa
+# propre connexion se heurterait au verrou, pas au garde.
+#
+# Ils gardent une regression future -- « si la course se rouvrait un jour par un
+# autre chemin » --, ce qui est exactement ce qu'une assurance est. C'est ecrit ici
+# pour que la prochaine passe ne renvoie personne les chercher.
+
+
 # --- export -------------------------------------------------------------------
 
 def test_export_carries_every_entry_and_its_verdict(tmp_path):
