@@ -1,3 +1,5 @@
+import pytest
+
 from pathlib import Path
 
 from singular.autopilot import ActionRequest, ApprovalStatus, Autonomy
@@ -95,3 +97,48 @@ def test_une_cle_d_execution_ne_se_reutilise_pas_pour_une_autre_mission(tmp_path
 # qu'on vient d'inserer ne se relit pas -- reste sans temoin et le restera :
 # l'insertion et la lecture sont dans la meme transaction, donc seule une panne de
 # la base peut le declencher. Assurance, pas trou.
+
+
+# --- un bail nul n'est pas un bail ---------------------------------------------
+#
+# Les deux entrees qui posent un bail le refusent nul ou negatif, et aucune des
+# deux n'avait de temoin ici. Le moteur d'execution a le meme refus a la
+# construction, teste ce matin ; le socle, lui, l'avait sans preuve.
+#
+# La consequence est celle qui a justifie le test du moteur : un bail nul rend
+# chaque execution immediatement perimee, donc la tentative suivante la lit comme
+# une execution eventee -- une recuperation a demander a un fournisseur, c'est-a-dire
+# une ambiguite inventee sur un effet qui n'a jamais commence.
+
+@pytest.mark.parametrize("bail", [0, -1, -300])
+def test_un_bail_non_positif_est_refuse_a_la_revendication(tmp_path: Path, bail):
+    from singular.autopilot import DelegationContract
+    from singular.durable import MissionStatus
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-BAIL", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-BAIL", MissionStatus.PLANNED)
+
+    with pytest.raises(ValueError, match="lease doit être positive"):
+        store.begin_execution_and_start_mission("cle-bail", "MIS-BAIL", "ACT-BAIL",
+                                                lease_seconds=bail)
+    assert store.get_execution("cle-bail") is None, "rien ne doit avoir ete revendique"
+
+
+@pytest.mark.parametrize("bail", [0, -1])
+def test_un_battement_de_coeur_ne_raccourcit_pas_le_bail_a_zero(tmp_path: Path, bail):
+    """Prolonger un bail avec une duree nulle serait le rendre, pas le tenir."""
+    from singular.autopilot import DelegationContract
+    from singular.durable import MissionStatus
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-BATT", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-BATT", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-batt", "MIS-BATT", "ACT-BATT")
+    avant = store.get_execution("cle-batt")["lease_until"]
+
+    with pytest.raises(ValueError, match="lease doit être positive"):
+        store.heartbeat_execution("cle-batt", lease_seconds=bail)
+    assert store.get_execution("cle-batt")["lease_until"] == avant
