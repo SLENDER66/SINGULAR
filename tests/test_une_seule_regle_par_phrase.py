@@ -21,8 +21,16 @@ corrigée, et la vignette dorée qui l'accompagne garde l'ancienne condition.
    rapport escalade en CRITIQUE au-delà de `LATE_DAYS`. Deux copies du même
    nombre : déplacer le seuil aurait teint la ligne sur l'ancien.
 
-Quatre fois, donc on arrête de corriger. Le moteur calcule le verdict une fois,
-les interfaces le lisent, et ce fichier échoue si l'une d'elles le refait.
+5. La ligne que son profil shell imprime — `summary_line`, dans le moteur — tenait
+   sa propre règle : aucun minimum de verdicts, et une copie du seuil d'écart à
+   0.10 contre 0.15. Elle annonçait donc « calibration -85% » après **un seul**
+   verdict, pendant que la Notice se taisait sur les mêmes données, et elle
+   parlait sur un écart de douze points là où la Notice se tait. Ce fichier ne la
+   regardait pas : il liste les interfaces, et celle-là est dans le moteur.
+
+Cinq fois, donc on arrête de corriger. Le moteur calcule le verdict une fois,
+les interfaces le lisent, et ce fichier échoue si l'une d'elles le refait —
+**le moteur compris**, quand il affiche au lieu de calculer.
 """
 from __future__ import annotations
 
@@ -131,6 +139,64 @@ def test_the_engine_still_owns_the_thresholds():
     source = DOMICILE.read_text(encoding="utf-8")
     assert "CALIBRATION_GAP" in source and "CALIBRATION_HASARD" in source
     assert "LATE_DAYS" in source
+
+
+#: Un seuil compare a un nombre ecrit sur place, dans le moteur : « >= 0.1 »,
+#: « >= 3 ». Le moteur porte les seuils, donc il les nomme.
+COMPARE_UN_NOMBRE = re.compile(r"[<>]=?\s*\d")
+
+#: Les deux seuils que la ligne de statut du journal lit aussi. Ils vivent dans
+#: le moteur et pas dans la Notice, parce que `singular/journal.py` ne peut pas
+#: importer le Sage — la dépendance va dans l'autre sens.
+SEUILS_DU_JOURNAL = ("CALIBRATION_MINIMUM", "CALIBRATION_GAP")
+
+
+def test_les_deux_seuils_partages_n_ont_qu_un_domicile():
+    """Un seuil défini deux fois est deux seuils, et ils divergent.
+
+    C'est arrivé : `CALIBRATION_GAP` valait 0.15 dans la Notice et 0.10, écrit
+    sur place, dans la ligne de statut. Le moteur les porte, la Notice les
+    importe, et personne ne les réécrit.
+    """
+    moteur = (RACINE / "singular/journal.py").read_text(encoding="utf-8")
+    notice = DOMICILE.read_text(encoding="utf-8")
+
+    for nom in SEUILS_DU_JOURNAL:
+        assert f"{nom} = " in moteur, f"{nom} a quitté le moteur"
+        assert f"{nom} = " not in notice, (
+            f"{nom} est redéfini dans la Notice : deux écritures du même seuil")
+        assert nom in notice, f"la Notice ne lit plus {nom}"
+
+
+def test_la_ligne_de_statut_du_moteur_ne_reecrit_aucun_seuil():
+    """La cinquième occurrence : le moteur affiche, donc il est une interface aussi.
+
+    `summary_line` est imprimée par son profil shell. Elle comparait
+    `abs(...) >= 0.1` sur place et ne comptait pas les verdicts. Le test lit le
+    corps de la fonction, pas le fichier : le moteur a le droit de calculer les
+    seuils, pas de les recopier là où il affiche.
+    """
+    import ast
+
+    source = (RACINE / "singular/journal.py").read_text(encoding="utf-8")
+    arbre = ast.parse(source)
+    fonction = next(
+        (noeud for noeud in ast.walk(arbre)
+         if isinstance(noeud, ast.FunctionDef) and noeud.name == "summary_line"), None)
+    assert fonction is not None, "`summary_line` a été renommée : ce test ne la voit plus"
+
+    corps = ast.get_source_segment(source, fonction) or ""
+    assert PARLE_DE_CALIBRATION.search(corps), (
+        "`summary_line` ne parle plus de calibration : ce test ne garde plus rien")
+    for nom in SEUILS_DU_JOURNAL:
+        assert nom in corps, f"`summary_line` n'utilise pas {nom}"
+    # Le moteur a le droit de comparer -- c'est lui qui porte les seuils -- mais
+    # pas de comparer a un nombre ecrit sur place. C'est ce qui distingue son cas
+    # de celui des interfaces, qui doivent lire `conclusive` sans rien comparer.
+    compare = COMPARE_UN_NOMBRE.search(corps)
+    assert not compare, (
+        f"`summary_line` compare un nombre ecrit sur place ({compare.group(0)!r}) : "
+        "c'est exactement ce qui l'a fait parler après un seul verdict")
 
 
 # --- le retard : le même seuil que le rapport ---------------------------------

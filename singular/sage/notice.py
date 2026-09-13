@@ -19,7 +19,26 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from ..journal import DecisionJournal, Entry, Reversibility, Status, Tier
+# `CALIBRATION_GAP` et `CALIBRATION_MINIMUM` vivent dans le moteur : la ligne de
+# statut du journal les lit aussi et ne peut pas importer le Sage. Ils sont
+# reexportes ci-dessous pour que la surface publique du Sage ne change pas.
+#
+# Ce seuil d'ecart a longtemps decide des deux choses. Un ecart de dix points sur
+# deux cents verdicts, que le hasard seul produirait une fois sur deux cents, ne
+# s'affichait donc pas -- le Sage se taisait sur ce qu'il pouvait prouver, dans
+# l'outil construit exactement pour repondre a « est-ce que mes 70 % arrivent sept
+# fois sur dix ? ». Thomas a tranche le 9 septembre, questionnaire a l'appui :
+# « des que c'est prouve ». Le seuil ne garde que son autre emploi, montrer un
+# ecart voyant en disant qu'il n'est pas encore etabli.
+from ..journal import (
+    CALIBRATION_GAP,
+    CALIBRATION_MINIMUM,
+    DecisionJournal,
+    Entry,
+    Reversibility,
+    Status,
+    Tier,
+)
 
 #: Au-delà, un retard n'est plus un oubli : c'est une décision qu'on évite.
 LATE_DAYS = 7
@@ -27,22 +46,10 @@ LATE_DAYS = 7
 #: Écart de calibration à partir duquel un constat non démontré vaut d'être
 #: montré. Ce n'est plus la condition pour conclure : la preuve l'est.
 #:
-#: Ce seuil a longtemps decidé des deux. Un écart de dix points sur deux cents
-#: verdicts, que le hasard seul produirait une fois sur deux cents, ne
-#: s'affichait donc pas — le Sage se taisait sur ce qu'il pouvait prouver, dans
-#: l'outil construit exactement pour répondre à « est-ce que mes 70 % arrivent
-#: sept fois sur dix ? ». Thomas a tranché le 9 septembre, questionnaire à
-#: l'appui : « dès que c'est prouvé ». Le seuil ne garde que son autre emploi,
-#: montrer un écart voyant en disant qu'il n'est pas encore établi.
-CALIBRATION_GAP = 0.15
-
 #: Un demi-point : en deçà, la phrase dirait « tu te surestimes de +0% ».
 #: Plancher d'arrondi, pas plancher de jugement — la nuance est le sujet même
-#: du choix ci-dessus.
+#: du choix ci-dessous.
 CALIBRATION_ARRONDI = 0.005
-
-#: Nombre de verdicts en dessous duquel une calibration ne veut rien dire.
-CALIBRATION_MINIMUM = 3
 
 #: Au-delà de quelle rareté un écart cesse de s'expliquer par le hasard.
 #: Une fois sur vingt : le seuil est conventionnel, il est écrit ici plutôt que

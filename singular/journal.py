@@ -36,6 +36,25 @@ from .sqlite_support import SqliteLocation
 SCHEMA_VERSION = 3
 DEFAULT_PATH = Path.home() / ".singular" / "journal.db"
 
+#: Nombre de verdicts en dessous duquel une calibration ne veut rien dire.
+#:
+#: Le seuil vivait dans `singular/sage/notice.py`, que le moteur ne peut pas
+#: importer -- la dependance va dans l'autre sens. Resultat : `summary_line`, la
+#: ligne que son profil shell imprime, tenait sa propre regle, sans minimum du
+#: tout, et annoncait « calibration -85% » **apres un seul verdict** pendant que
+#: la Notice se taisait sur les memes donnees. C'est la cinquieme fois que ce
+#: defaut se produit -- lire l'en-tete de `tests/test_une_seule_regle_par_phrase.py`
+#: -- et la premiere ou il est dans le moteur lui-meme. Les deux seuils
+#: d'affichage vivent donc ici, ou la seule chose qui les lit sans pouvoir
+#: importer le Sage peut les lire, et le Sage les importe.
+CALIBRATION_MINIMUM = 3
+
+#: L'ecart voyant : en dessous, on ne montre un chiffre que s'il est demontre.
+#:
+#: La ligne de statut en avait une copie a 0.10, la Notice tranche a 0.15 : sur
+#: un ecart de 12 % la ligne parlait et la Notice se taisait. Une seule valeur.
+CALIBRATION_GAP = 0.15
+
 
 class Tier(str, Enum):
     """The constitution's hierarchy, in its own order.
@@ -786,7 +805,13 @@ class DecisionJournal:
         parts.append(f"{overdue} à trancher" if overdue else "rien à trancher")
         if report["hours_unresolved"]:
             parts.append(f"{report['hours_unresolved']:g}h sans verdict")
-        if report["overconfidence"] is not None and abs(report["overconfidence"]) >= 0.1:
+        # Les deux seuils sont ceux du moteur, pas des copies : un chiffre de
+        # calibration sur un verdict ou deux ne veut rien dire, et la Notice se
+        # tait sur les memes donnees. Deux reponses a la meme question sur le
+        # meme ecran, c'est le defaut que ce depot a deja paye quatre fois.
+        if (report["overconfidence"] is not None
+                and report["resolved"] >= CALIBRATION_MINIMUM
+                and abs(report["overconfidence"]) >= CALIBRATION_GAP):
             parts.append(f"calibration {report['overconfidence']:+.0%}")
         return "SINGULAR · " + " · ".join(parts)
 

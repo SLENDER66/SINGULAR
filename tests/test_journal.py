@@ -5,7 +5,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from singular.journal import DecisionJournal, Status, Tier
+from singular.journal import (
+    CALIBRATION_GAP,
+    CALIBRATION_MINIMUM,
+    DecisionJournal,
+    Status,
+    Tier,
+)
+
+#: Le seuil que la ligne de statut portait pour elle seule, garde ici pour
+#: nommer le cas qui la trahissait -- et nulle part dans le code.
+CALIBRATION_ANCIENNE_COPIE = 0.10
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
@@ -361,10 +371,48 @@ def test_summary_line_counts_what_needs_a_verdict(tmp_path):
 
 def test_summary_line_surfaces_calibration_once_it_is_meaningful(tmp_path):
     journal = _journal(tmp_path)
-    for _ in range(3):
+    for _ in range(CALIBRATION_MINIMUM):
         entry = _add(journal, probability=0.9)
         journal.resolve(entry.entry_id, happened=False)
     assert "calibration +90%" in journal.summary_line()
+
+
+@pytest.mark.parametrize("verdicts", range(1, CALIBRATION_MINIMUM))
+def test_summary_line_says_nothing_about_calibration_before_it_means_anything(tmp_path, verdicts):
+    """Le nom du test d'au-dessus promettait « once it is meaningful » ; le code ne
+    l'avait pas.
+
+    La ligne de statut n'avait aucun minimum de verdicts : sur une seule decision
+    tranchee a 15 % qui arrive, elle imprimait « calibration -85% » dans son
+    profil shell, pendant que la Notice se taisait sur les memes donnees. Deux
+    reponses a la meme question sur le meme ecran -- le defaut que ce depot a
+    deja paye quatre fois, et cette fois il etait dans le moteur.
+    """
+    journal = _journal(tmp_path)
+    for _ in range(verdicts):
+        entry = _add(journal, probability=0.15)
+        journal.resolve(entry.entry_id, happened=True)
+
+    assert journal.review()["overconfidence"] == -0.85, "l'ecart est bien la"
+    assert "calibration" not in journal.summary_line()
+
+
+def test_summary_line_and_the_sage_use_the_same_visible_gap(tmp_path):
+    """La ligne avait sa propre copie du seuil d'ecart, a 0.10 contre 0.15.
+
+    Sur un ecart de douze points, elle parlait et la Notice se taisait. Le cas
+    est construit exactement la : au-dessus du minimum de verdicts, au-dessus de
+    l'ancienne copie, en dessous du seuil du moteur.
+    """
+    journal = _journal(tmp_path)
+    # Dix verdicts annonces a 80 %, sept arrives : un ecart de pile dix points.
+    for index in range(10):
+        entry = _add(journal, probability=0.8)
+        journal.resolve(entry.entry_id, happened=index < 7)
+
+    ecart = journal.review()["overconfidence"]
+    assert CALIBRATION_ANCIENNE_COPIE <= abs(ecart) < CALIBRATION_GAP, ecart
+    assert "calibration" not in journal.summary_line()
 
 
 def test_summary_line_stays_quiet_when_calibration_is_fine(tmp_path):
