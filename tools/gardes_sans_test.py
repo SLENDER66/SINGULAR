@@ -25,10 +25,24 @@ faut choisir la bonne avant d'ecrire une ligne :
    la frontiere. C'est ce que le README annonce -- « human approval is currently
    not an authorization channel » -- et cet outil le mesure au lieu de le croire.
 
-Il ne tourne pas dans le CI : une passe complete prend une dizaine de minutes.
-C'est un instrument d'audit, a relancer quand on touche a la frontiere.
+Il ne tourne pas dans le CI : compte une dizaine de minutes par groupe. C'est un
+instrument d'audit, a relancer quand on touche a ce qu'il mesure.
 
-    python3 tools/gardes_sans_test.py
+    python3 tools/gardes_sans_test.py              # les deux groupes
+    python3 tools/gardes_sans_test.py frontiere    # decision, autorisation, effet
+    python3 tools/gardes_sans_test.py matins       # journal, saisie, Scout, Notice, Sage
+
+**Deux groupes, parce que la priorite du depot est celle de la section 0 du
+mandat** : ce qui tourne sans jeton passe avant ce qui en consomme. Le moteur
+qu'il lance chaque matin s'en sort mieux que la frontiere -- c'est la partie la
+mieux testee du depot -- et il avait quand meme des refus sans temoin, dont deux
+gardes qui refusaient l'infini tape au clavier.
+
+Le premier defaut trouve en lancant cet outil apres l'avoir ecrit etait dans
+l'outil : sa sous-suite nommait un fichier de tests renomme entre-temps, donc
+pytest refusait de collecter et chaque refus paraissait prouve. Un instrument de
+mesure qui se trompe dans le sens rassurant est pire qu'aucun -- d'ou le controle
+d'entree : si la sous-suite ne passe pas sans mutant, il s'arrete.
 
 Le depot n'est jamais laisse modifie : chaque fichier est restaure avant le
 mutant suivant, et dans un `finally`. Si le processus est tue en cours,
@@ -44,7 +58,7 @@ import sys
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
 #: Les modules qui portent la frontiere : decision, autorisation, execution, effet.
-CIBLES = (
+CIBLES_FRONTIERE = (
     "singular/execution.py",
     "singular/validated_execution.py",
     "singular/validated_trajectory_decision.py",
@@ -53,9 +67,9 @@ CIBLES = (
     "singular/effects.py",
 )
 
-#: La sous-suite qui couvre ces modules. Ciblee exprès : la suite entiere prend
-#: 70 secondes, et il faut la relancer une fois par refus.
-SOUS_SUITE = (
+#: La sous-suite qui couvre ces modules. Ciblee exprès : la suite entiere est
+#: trop longue, et il faut la relancer une fois par refus.
+SOUS_SUITE_FRONTIERE = (
     "tests/test_validated_execution.py", "tests/test_validated_trajectory_decision.py",
     "tests/test_execution_bypass_resistance.py", "tests/test_validated_boundary_invariants.py",
     "tests/test_decision_execution_binding.py", "tests/test_validated_capability_binding.py",
@@ -73,8 +87,39 @@ SOUS_SUITE = (
     "tests/test_validated_pipeline.py", "tests/test_validated_decision_service.py",
     "tests/test_approval_durability.py", "tests/test_no_raw_execution_call_sites.py",
     "tests/test_decision_serialization_guard.py", "tests/test_action_request_validation.py",
-    "tests/test_le_moteur_refuse_de_lui_meme.py",
+    "tests/test_refus_sans_temoin.py",
 )
+
+#: Le moteur deterministe : ce qu'il lance chaque matin, sans jeton ni reseau.
+CIBLES_MATINS = (
+    "singular/journal.py",
+    "singular/saisie.py",
+    "singular/collecte.py",
+    "singular/sage/notice.py",
+    "singular/sage/server.py",
+    "singular/fichiers.py",
+    "singular/sqlite_support.py",
+    "proto/suivi_candidatures.py",
+)
+
+SOUS_SUITE_MATINS = (
+    "tests/test_journal.py", "tests/test_journal_business_fields.py",
+    "tests/test_journal_concurrence.py", "tests/test_deux_journaux.py",
+    "tests/test_le_journal_ecrit_seul.py", "tests/test_saisie_au_clavier.py",
+    "tests/test_collecte.py", "tests/test_sage_notice.py", "tests/test_notice_business.py",
+    "tests/test_sage_server.py", "tests/test_sage_web_client.py", "tests/test_sage_isolation.py",
+    "tests/test_sage_independence.py", "tests/test_ecriture_atomique.py",
+    "tests/test_sqlite_location.py", "tests/test_review_se_lit.py",
+    "tests/test_reproche_premature.py", "tests/test_proto_suivi.py",
+    "tests/test_etat_en_francais.py", "tests/test_notice_vectors.py",
+    "tests/test_une_seule_regle_par_phrase.py", "tests/test_commandes_de_sa_fenetre.py",
+    "tests/test_messages_recopies.py", "tests/test_windows_console.py",
+)
+
+GROUPES = {
+    "frontiere": (CIBLES_FRONTIERE, SOUS_SUITE_FRONTIERE),
+    "matins": (CIBLES_MATINS, SOUS_SUITE_MATINS),
+}
 
 #: Les exceptions qui disent « refuse ». Une `KeyError` ou une `AttributeError`
 #: n'est pas un refus, c'est un accident -- on ne les mute pas.
@@ -111,22 +156,26 @@ def refus_d_un_fichier(arbre: ast.AST) -> list[tuple[int, str]]:
     return trouves
 
 
-def _la_sous_suite_passe() -> bool:
+def _la_sous_suite_passe(sous_suite: tuple[str, ...]) -> bool:
     acheve = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider",
-         "-p", "no:randomly", *SOUS_SUITE],
+         "-p", "no:randomly", *sous_suite],
         capture_output=True, text=True, cwd=RACINE, check=False,
     )
     return acheve.returncode == 0
 
 
-def main() -> int:
-    if not _la_sous_suite_passe():
-        print("la sous-suite echoue deja sans mutant : rien a mesurer", file=sys.stderr)
-        return 2
+def _un_groupe(nom: str) -> int:
+    """Les refus survivants d'un groupe. Rend leur nombre, ou -1 si rien n'a pu etre mesure."""
+    cibles, sous_suite = GROUPES[nom]
+    print(f"--- {nom} ---", flush=True)
+    if not _la_sous_suite_passe(sous_suite):
+        print(f"la sous-suite de « {nom} » echoue deja sans mutant : rien a mesurer",
+              file=sys.stderr)
+        return -1
     survivants = 0
     total = 0
-    for cible in CIBLES:
+    for cible in cibles:
         chemin = RACINE / cible
         original = chemin.read_text(encoding="utf-8")
         lignes = original.split("\n")
@@ -139,15 +188,25 @@ def main() -> int:
                     continue
                 ast.fix_missing_locations(arbre)
                 chemin.write_text(ast.unparse(arbre), encoding="utf-8")
-                if _la_sous_suite_passe():
+                if _la_sous_suite_passe(sous_suite):
                     survivants += 1
                     print(f"SURVIT  {cible}:{ligne}  {refus}  {lignes[ligne - 1].strip()[:100]}", flush=True)
                 chemin.write_text(original, encoding="utf-8")
         finally:
             chemin.write_text(original, encoding="utf-8")
-    print(f"\n{survivants} refus survivant(s) sur {total} mutes")
-    return 0
+    print(f"\n{nom} : {survivants} refus survivant(s) sur {total} mutes\n")
+    return survivants
+
+
+def main(arguments: list[str] | None = None) -> int:
+    demandes = arguments if arguments else list(GROUPES)
+    inconnus = [nom for nom in demandes if nom not in GROUPES]
+    if inconnus:
+        print(f"groupe inconnu : {', '.join(inconnus)}. Les deux : {', '.join(GROUPES)}.",
+              file=sys.stderr)
+        return 2
+    return 2 if any(_un_groupe(nom) < 0 for nom in demandes) else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
