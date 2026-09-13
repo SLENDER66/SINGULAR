@@ -347,6 +347,33 @@ def _la_suite_entiere_passe(racine: pathlib.Path = RACINE) -> bool:
     return acheve.returncode == 0
 
 
+#: Les racines dont la suite entiere a deja ete jugee utilisable, pour ne pas
+#: payer deux fois la meme passe quand on demande les deux groupes.
+_JUGES_VERIFIES: set[pathlib.Path] = set()
+
+
+def _le_juge_est_utilisable(racine: pathlib.Path = RACINE) -> bool:
+    """La suite entiere doit passer SANS mutant, sinon rien ne peut etre confirme.
+
+    Le controle d'entree ne portait que sur la sous-suite, et ca ne suffit pas :
+    si la suite entiere est deja rouge, chaque survivant du sous-ensemble est
+    annonce comme un faux positif et l'outil devient aveugle dans le sens
+    rassurant -- il dit « rien a signaler » en ne mesurant plus rien.
+
+    C'est arrive le jour meme ou la copie jetable a ete introduite : les tests de
+    l'outil appellent `git ls-files`, la copie n'est pas un depot git, donc les
+    trois tests de la copie echouaient **dans la copie**. Une passe entiere de
+    soixante-douze mutants a ete rendue sans valeur, et rien ne le disait. Ce
+    controle le dit maintenant, et refuse de mesurer.
+    """
+    if racine in _JUGES_VERIFIES:
+        return True
+    if not _la_suite_entiere_passe(racine):
+        return False
+    _JUGES_VERIFIES.add(racine)
+    return True
+
+
 def _un_groupe(nom: str, racine: pathlib.Path = RACINE) -> int:
     """Les refus survivants d'un groupe. Rend leur nombre, ou -1 si rien n'a pu etre mesure."""
     cibles, sous_suite = GROUPES[nom]
@@ -354,6 +381,10 @@ def _un_groupe(nom: str, racine: pathlib.Path = RACINE) -> int:
     if not _la_sous_suite_passe(sous_suite, racine):
         print(f"la sous-suite de « {nom} » echoue deja sans mutant : rien a mesurer",
               file=sys.stderr)
+        return -1
+    if not _le_juge_est_utilisable(racine):
+        print("la suite entiere echoue deja sans mutant : aucun survivant ne pourrait "
+              "etre confirme, donc rien n'est mesure", file=sys.stderr)
         return -1
     survivants = 0
     total = 0

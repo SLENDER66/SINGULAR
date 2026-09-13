@@ -20,6 +20,8 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 from tools.gardes_sans_test import (
     CIBLES_FRONTIERE,
     CIBLES_MATINS,
@@ -28,6 +30,7 @@ from tools.gardes_sans_test import (
     RendLeRefusVrai,
     RendUneMoitieFausse,
     _la_sous_suite_passe,
+    _un_groupe,
     copie_a_mesurer,
     fichiers_a_copier,
 )
@@ -35,8 +38,26 @@ from tools.gardes_sans_test import (
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
 
+def _dans_un_depot_git() -> bool:
+    acheve = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True,
+                            text=True, cwd=RACINE, check=False)
+    return acheve.returncode == 0
+
+
+#: Trois tests d'ici mesurent le depot lui-meme, donc ils appellent `git`. Ils
+#: doivent sauter la ou il n'y en a pas -- **dans la copie jetable que l'outil
+#: fabrique**, qui n'est pas un depot. Sans ce saut, ces trois tests echouaient
+#: dans la copie, donc la suite entiere y echouait, donc l'outil ne pouvait plus
+#: confirmer aucun survivant : une passe de soixante-douze mutants annoncee sans
+#: rien signaler. La faute la plus couteuse de la journee, et elle etait dans
+#: l'instrument, encore.
+hors_depot = pytest.mark.skipif(not _dans_un_depot_git(),
+                                reason="mesure le depot lui-meme ; ici il n'y en a pas")
+
+
 # --- la copie -----------------------------------------------------------------
 
+@hors_depot
 def test_saboter_dans_la_copie_ne_touche_pas_le_depot():
     """Le defaut qu'un hook de sortie a rattrape : un garde sabote pret a etre commite."""
     cible = "singular/execution.py"
@@ -49,6 +70,7 @@ def test_saboter_dans_la_copie_ne_touche_pas_le_depot():
     assert (RACINE / cible).read_bytes() == avant
 
 
+@hors_depot
 def test_la_copie_est_ce_que_python_importe():
     """Mesure, pas deduction : le paquet est installe en editable.
 
@@ -65,6 +87,7 @@ def test_la_copie_est_ce_que_python_importe():
         assert acheve.stdout.strip().startswith(str(copie))
 
 
+@hors_depot
 def test_la_copie_porte_ce_qui_n_est_pas_encore_commite():
     """Un audit lance avant de committer doit mesurer les temoins qu'on vient d'ecrire."""
     temoin = RACINE / ".gardes_temoin_non_suivi"
@@ -134,3 +157,19 @@ def test_une_moitie_prend_l_element_neutre_de_son_operateur():
     assert "if a or False:" in _mute(RendUneMoitieFausse((3, 1)))
     assert "if True and b:" in _mute(RendUneMoitieFausse((5, 0)))
     assert "if a and True:" in _mute(RendUneMoitieFausse((5, 1)))
+
+
+def test_une_suite_entiere_deja_rouge_arrete_l_outil(monkeypatch: pytest.MonkeyPatch):
+    """Le controle d'entree qui manquait, et qui a coute une passe entiere.
+
+    Si la suite entiere echoue sans mutant, chaque survivant du sous-ensemble est
+    annonce comme un faux positif : l'outil ne mesure plus rien et dit que tout
+    va bien. Il doit refuser de mesurer, et le dire.
+    """
+    import tools.gardes_sans_test as outil
+
+    monkeypatch.setattr(outil, "_JUGES_VERIFIES", set())
+    monkeypatch.setattr(outil, "_la_sous_suite_passe", lambda *args, **kwargs: True)
+    monkeypatch.setattr(outil, "_la_suite_entiere_passe", lambda *args, **kwargs: False)
+
+    assert _un_groupe("frontiere") == -1
