@@ -1,3 +1,5 @@
+import pytest
+
 from singular.durable import DurableStore, MissionStatus
 from singular.learning import Forecast, ForecastKind, LearningEngine
 from singular.outcome_ledger import OutcomeLedger
@@ -288,3 +290,175 @@ def test_une_ligne_illisible_ne_se_verifie_pas(tmp_path):
         conn.execute("UPDATE outcome_ledger SET forecast_kind='CHOSE'")
 
     assert ledger.verify() is False
+
+
+# --- a quelle execution un resultat a le droit de se rattacher ------------------
+#
+# `_validate_execution_observation` refuse cinq choses et aucune n'avait de temoin
+# -- mesure contre la suite entiere. C'est la provenance du grand livre : sans ces
+# refus, un appelant attache un resultat reel a une autre execution, ou invente un
+# statut terminal, et la calibration apprend d'un fait qui n'a pas eu lieu.
+
+def _decision_attestee(tmp_path):
+    """Une decision attestee, sans execution : chaque test cree la sienne."""
+    decision = _build_decision()
+    ledger = OutcomeLedger(tmp_path / "outcomes.db")
+    ledger.attestation_store.issue(decision)
+    return decision, ledger
+
+
+def _forecast(forecast_id="F1"):
+    from singular.learning import Forecast, ForecastKind
+
+    return Forecast(forecast_id, ForecastKind.BINARY, probability=0.8, confidence=0.9)
+
+
+def test_une_cle_d_execution_qui_n_est_pas_celle_de_la_decision_est_refusee(tmp_path):
+    """La cle derive de la mission et de l'action : une autre cle est un autre fait."""
+    decision, ledger = _decision_attestee(tmp_path)
+    _completed_execution(decision, tmp_path / "outcomes.db")
+
+    with pytest.raises(PermissionError, match="clé d'exécution"):
+        ledger.record(decision=decision, forecast=_forecast(), actual=True,
+                      execution_key="execute-quelque-chose-d-autre", execution_status="COMPLETED")
+
+
+@pytest.mark.parametrize("champ", ["mission_id", "action_id"])
+def test_une_execution_qui_nomme_autre_chose_que_la_decision_est_refusee(tmp_path, champ):
+    """La ligne durable est l'autorite, et les deux champs sont lus.
+
+    La cle derive de la mission et de l'action, donc une ligne legitime les porte
+    forcement : ce refus garde une base touchee a la main. Sans lui, la cle seule
+    suffirait -- et c'est exactement ce que ce module refuse de croire.
+
+    La mission est contrainte par une cle etrangere, donc l'autre mission existe
+    vraiment : c'est aussi le cas le plus realiste, deux missions dans la meme base.
+    """
+    from singular.autopilot import Autonomy, DelegationContract
+    from singular.durable import DurableStore
+
+    decision, ledger = _decision_attestee(tmp_path)
+    key = _completed_execution(decision, tmp_path / "outcomes.db")
+    store = DurableStore(tmp_path / "outcomes.db")
+    store.save_mission(DelegationContract("MIS-AUTRE", "autre objectif", "autre résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    with store._connect() as conn:
+        conn.execute(
+            f"UPDATE executions SET {champ}=? WHERE execution_key=?",
+            ("MIS-AUTRE" if champ == "mission_id" else "ACT-AUTRE", key),
+        )
+
+    with pytest.raises(PermissionError, match="n'est pas liée à la mission"):
+        ledger.record(decision=decision, forecast=_forecast(), actual=True,
+                      execution_key=key, execution_status="COMPLETED")
+
+
+def test_un_statut_annonce_qui_ne_correspond_pas_au_durable_est_refuse(tmp_path):
+    """Le cas le plus banal : un appelant qui sait mal. L'execution a echoue."""
+    decision, ledger = _decision_attestee(tmp_path)
+    key = _completed_execution(decision, tmp_path / "outcomes.db")
+
+    with pytest.raises(ValueError, match="statut observé ne correspond pas"):
+        ledger.record(decision=decision, forecast=_forecast(), actual=True,
+                      execution_key=key, execution_status="FAILED")
+
+
+def test_une_execution_en_cours_ne_nourrit_pas_le_grand_livre(tmp_path):
+    """RUNNING n'est pas un resultat, meme annonce fidelement.
+
+    Les deux valeurs correspondent ici -- la ligne durable dit RUNNING et
+    l'appelant aussi -- donc c'est bien le refus des etats non terminaux qui doit
+    parler. Une reprise en cours n'est pas un fait : le mandat le dit,
+    l'ambiguite se resout en demandant au fournisseur, pas en apprenant d'elle.
+    """
+    from singular.durable import DurableStore, MissionStatus
+
+    decision, ledger = _decision_attestee(tmp_path)
+    store = DurableStore(tmp_path / "outcomes.db")
+    store.save_mission(decision.contract)
+    store.set_mission_status(decision.contract.mission_id, MissionStatus.PLANNED)
+    key = store.idempotency_key("execute", decision.contract.mission_id,
+                                decision.global_report.action_id)
+    store.begin_execution_and_start_mission(key, decision.contract.mission_id,
+                                            decision.global_report.action_id)
+
+    with pytest.raises(ValueError, match="exécutions terminales"):
+        ledger.record(decision=decision, forecast=_forecast(), actual=True,
+                      execution_key=key, execution_status="RUNNING")
+
+
+@pytest.mark.parametrize("cle, statut", [("", "COMPLETED"), ("   ", "COMPLETED"),
+                                         ("execute-x", ""), ("execute-x", "  ")])
+def test_une_cle_ou_un_statut_vide_est_refuse_avant_tout(tmp_path, cle, statut):
+    """Le premier refus de `record`, avant meme de regarder la decision."""
+    decision, ledger = _decision_attestee(tmp_path)
+
+    with pytest.raises(ValueError, match="execution key and status are required"):
+        ledger.record(decision=decision, forecast=_forecast(), actual=True,
+                      execution_key=cle, execution_status=statut)
+
+
+def test_un_resultat_binaire_doit_etre_un_booleen(tmp_path):
+    """1 n'est pas True ici : l'ecart et le Brier d'une prevision binaire se
+    calculent sur un fait arrive ou non, pas sur un nombre."""
+    decision, ledger = _decision_attestee(tmp_path)
+    key = _completed_execution(decision, tmp_path / "outcomes.db")
+
+    with pytest.raises(TypeError, match="binary forecast outcomes must be bool"):
+        ledger.record(decision=decision, forecast=_forecast(), actual=1,
+                      execution_key=key, execution_status="COMPLETED")
+
+
+@pytest.mark.parametrize("actual", [True, False, float("nan"), float("inf")])
+def test_un_resultat_numerique_doit_etre_un_nombre_fini(tmp_path, actual):
+    """Un booleen et un NaN passeraient tous les deux `float()`.
+
+    Le premier ferait une prevision numerique evaluee sur 1.0 ; le second
+    contaminerait toute moyenne qui le croise, sans jamais lever.
+    """
+    from singular.learning import Forecast, ForecastKind
+
+    decision, ledger = _decision_attestee(tmp_path)
+    key = _completed_execution(decision, tmp_path / "outcomes.db")
+    numerique = Forecast("F-NUM", ForecastKind.NUMERIC, expected_value=10.0, confidence=0.9)
+
+    with pytest.raises(ValueError, match="numeric forecast outcomes must be finite"):
+        ledger.record(decision=decision, forecast=numerique, actual=actual,
+                      execution_key=key, execution_status="COMPLETED")
+
+
+def test_le_meme_resultat_deux_fois_est_idempotent(tmp_path):
+    """Deux appels identiques ne font pas deux faits."""
+    decision, ledger = _decision_attestee(tmp_path)
+    key = _completed_execution(decision, tmp_path / "outcomes.db")
+    champs = {"decision": decision, "forecast": _forecast(), "actual": True,
+              "execution_key": key, "execution_status": "COMPLETED"}
+
+    premier = ledger.record(**champs)
+    second = ledger.record(**champs)
+
+    assert premier == second
+    assert len(ledger.list()) == 1
+    assert ledger.verify() is True
+
+
+def test_le_meme_resultat_avec_un_autre_contenu_est_refuse(tmp_path):
+    """Le meme fait ne peut pas avoir deux issues, et c'est la promesse du journal
+    reprise ici : l'histoire ne se reecrit pas.
+
+    L'identifiant derive de la decision, de l'execution et de la prevision -- donc
+    rejouer avec un autre resultat tombe sur le meme identifiant. Sans ce refus,
+    le second appel ecraserait le premier ou en ajouterait un second sous le meme
+    nom, et la calibration compterait deux fois ce qui est arrive une.
+    """
+    decision, ledger = _decision_attestee(tmp_path)
+    key = _completed_execution(decision, tmp_path / "outcomes.db")
+    champs = {"decision": decision, "forecast": _forecast(), "execution_key": key,
+              "execution_status": "COMPLETED"}
+
+    ledger.record(actual=True, **champs)
+
+    with pytest.raises(ValueError, match="already exists with different observed content"):
+        ledger.record(actual=False, **champs)
+    assert len(ledger.list()) == 1
+    assert ledger.verify() is True
