@@ -287,3 +287,29 @@ def test_un_resultat_d_execution_n_a_que_deux_mots(tmp_path: Path, statut):
         store.finish_execution_and_mission("cle-mots", statut)
     assert store.get_execution("cle-mots")["status"] == "RUNNING"
     assert store.get_mission_status("MIS-MOTS") is MissionStatus.RUNNING
+
+
+@pytest.mark.parametrize("etat", ["RUNNING", "COMPLETED", "FAILED"])
+def test_seule_une_execution_en_recuperation_se_confirme_par_preuve(tmp_path: Path, etat):
+    """La porte de `confirm_execution_recovery_from_effect`, et rien ne l'essayait.
+
+    C'est la seule transition qui transforme « je ne sais pas si l'effet est
+    parti » en succes durable. Elle n'a de sens que depuis RECOVERY_REQUIRED : sur
+    une execution qui tourne encore, elle volerait le bail d'un autre ; sur une
+    execution deja terminee, elle reecrirait un verdict rendu. Les trois autres
+    refus de la meme methode -- preuve absente, preuve d'une autre execution,
+    preuve pas COMPLETED -- ont deja leurs temoins ; celui-la, non.
+    """
+    from singular.autopilot import DelegationContract
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-PREUVE2", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-PREUVE2", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-preuve2", "MIS-PREUVE2", "ACT-PREUVE2")
+    if etat != "RUNNING":
+        store.finish_execution_and_mission("cle-preuve2", etat, result={"ok": True})
+
+    with pytest.raises(ValueError, match="Seule une exécution RECOVERY_REQUIRED"):
+        store.confirm_execution_recovery_from_effect("cle-preuve2", "cle-fournisseur")
+    assert store.get_execution("cle-preuve2")["status"] == etat
