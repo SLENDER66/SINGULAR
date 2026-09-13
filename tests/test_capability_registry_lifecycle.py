@@ -145,3 +145,45 @@ def test_revoking_a_token_never_bound_durably_is_not_an_error(tmp_path: Path):
     registry._targets["cap_memory_only"] = authorized
     registry.revoke("cap_memory_only")
     assert registry.matches("cap_memory_only", authorized) is False
+
+
+# --- frapper deux fois le meme objet ------------------------------------------
+#
+# `register` est idempotent par objet : reenregistrer la meme fonction rend le
+# jeton qu'elle a deja. Deux refus vivent dans cette ligne et aucun n'etait
+# essaye -- la mutation par moities les a nommes.
+#
+# Ce n'est pas theorique : `examples/governed_http_effect.py` appelle
+# `register_execution_capability(provider)` **sans jeton**. Sans la premiere
+# moitie, ce meme appel repete leverait ; sans la seconde, le rappeler avec son
+# propre jeton leverait aussi. Et le refus que les deux gardent est reel : un
+# objet deja frappe ne peut pas recevoir un second nom, sinon un jeton revoque
+# se remplacerait par un jeton neuf pour le meme code.
+
+def test_reenregistrer_le_meme_objet_rend_le_jeton_qu_il_a_deja():
+    registry = ExecutionCapabilityRegistry()
+    jeton = registry.register(authorized, "cap_idempotence")
+
+    assert registry.register(authorized) == jeton, "sans jeton : celui qu'il a deja"
+    assert registry.register(authorized, "cap_idempotence") == jeton, "avec le sien : le meme"
+
+
+# Un troisieme refus de `register` n'a pas de temoin et n'en aura pas :
+# `bound is not target`, quand le jeton demande designe deja cet objet-la. Pour
+# l'atteindre il faudrait que les deux tables internes se contredisent -- que
+# `_targets[jeton]` soit cet objet alors que `_by_object[id(objet)]` ne dit pas ce
+# jeton -- et l'API publique les tient ensemble : `register` ecrit les deux,
+# `revoke` retire les deux. Un test peut fabriquer cet etat en ecrivant dans
+# `_targets` a la main ; la production, non. Assurance contre un etat interne
+# desynchronise, troisieme famille du triage.
+
+def test_un_objet_deja_frappe_ne_recoit_pas_un_second_nom():
+    """Le refus que les deux moities gardent, et qui compte : un jeton revoque se
+
+    remplacerait par un jeton neuf pour exactement le meme code.
+    """
+    registry = ExecutionCapabilityRegistry()
+    registry.register(authorized, "cap_premier_nom")
+
+    with pytest.raises(ValueError, match="already bound to a different capability"):
+        registry.register(authorized, "cap_second_nom")
