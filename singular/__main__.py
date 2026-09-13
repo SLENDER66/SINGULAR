@@ -433,7 +433,8 @@ def cmd_import(journal: DecisionJournal, args) -> int:
         print(_colour(f"\n  {source} ne contient aucune décision. Rien repris.\n", DIM))
         return 0
 
-    print(f"\n  {len(reprises)} décision(s) reprises depuis {source}")
+    print(f"\n  {_pluriel(len(reprises), 'décision reprise', 'décisions reprises')}"
+          f" depuis {source}")
     for entree in reprises:
         jour = datetime.fromisoformat(entree.created_at).strftime("%d/%m/%Y")
         print(f"  {_colour(entree.entry_id, BOLD)}  {jour}  {entree.title}")
@@ -472,9 +473,11 @@ def cmd_due(journal: DecisionJournal, args) -> int:
             print(_vide(journal))
             return 0
         open_count = len(journal.entries(status=Status.OPEN))
-        print(f"\n  Rien à trancher. {open_count} décision(s) encore dans les temps.\n")
+        print(f"\n  Rien à trancher. {_pluriel(open_count, 'décision')}"
+              " encore dans les temps.\n")
         return 0
-    print(_colour(f"\n  {len(pending)} décision(s) attendent un verdict\n", BOLD))
+    print(_colour(f"\n  {_pluriel(len(pending), 'décision attend', 'décisions attendent')}"
+                  " un verdict\n", BOLD))
     for entry in pending:
         late = entry.overdue_days()
         # Le rouge dit la même chose que le CRITIQUE du rapport : au-delà de

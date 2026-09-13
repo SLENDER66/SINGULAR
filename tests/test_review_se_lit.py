@@ -20,6 +20,7 @@ fichier teste ce que l'œil en fait.
 """
 from __future__ import annotations
 
+import pathlib
 import re
 from datetime import UTC, datetime, timedelta
 
@@ -94,6 +95,70 @@ def test_le_temoin_du_pluriel_attraperait_la_faute(tmp_path, capsys):
     assert UN_PLURIEL.findall("  1 décisions   4h engagées") == ["décision"]
     assert UN_PLURIEL.findall("  1 décision   4h engagées") == []
     assert [m for m in UN_PLURIEL.findall("il y a 1 mois") if f"{m}s" not in EN_S_AU_SINGULIER] == []
+
+
+# --- et « décision(s) », qui échappait au garde --------------------------------
+#
+# Le pluriel a un domicile depuis le 13 septembre, et trois phrases gardaient la
+# forme parenthésée : `sj due` disait « 2 décision(s) encore dans les temps » et
+# « 1 décision(s) attendent un verdict ». Ce n'est pas la même faute que
+# « 1 décisions » — le garde au-dessus ne la voit pas, puisqu'il cherche un mot
+# au pluriel — et c'est la même paresse : une règle recopiée, juste nulle part.
+#
+# Trouvé en lançant la commande, pas en relisant le code.
+
+def test_les_echeances_se_disent_au_singulier_quand_il_n_y_en_a_qu_une(tmp_path, capsys):
+    journal = DecisionJournal(tmp_path / "journal.db")
+    # `due` lit l'horloge reelle, pas NOW : l'echeance doit etre devant nous,
+    # sinon la decision est en retard et c'est l'autre phrase qui s'affiche.
+    journal.add(title="La seule", action="a", predicted="b", probability=0.5,
+                tier=Tier.REVENUS, cost_hours=1, horizon_days=9,
+                now=datetime.now(UTC))
+    capsys.readouterr()
+
+    assert main(["--db", str(tmp_path / "journal.db"), "due"]) == 0
+    sortie = capsys.readouterr().out
+    assert "1 décision encore dans les temps" in sortie, sortie
+
+
+def test_un_verdict_attendu_se_dit_au_singulier(tmp_path, capsys):
+    """Le nom **et** le verbe : « 1 décision attendent » serait la meme faute."""
+    journal = DecisionJournal(tmp_path / "journal.db")
+    journal.add(title="En retard", action="a", predicted="b", probability=0.5,
+                tier=Tier.REVENUS, cost_hours=1, horizon_days=1, now=NOW)
+    capsys.readouterr()
+
+    assert main(["--db", str(tmp_path / "journal.db"), "due"]) == 0
+    sortie = capsys.readouterr().out
+    assert "1 décision attend un verdict" in sortie, sortie
+
+
+def test_aucune_phrase_du_clavier_ne_met_le_pluriel_entre_parentheses():
+    """La forme est refusée à la source, pas commande par commande.
+
+    Deux des trois phrases fautives étaient dans `due` et une dans `import` --
+    celle-ci ne s'affiche qu'en reprenant un journal exporté, donc aucun
+    scénario de test ne passait dessus. Un garde qui lit les chaînes du fichier
+    les couvre toutes les trois, et celles que personne n'a encore écrites.
+    """
+    import ast
+
+    source = (pathlib.Path(__file__).resolve().parent.parent
+              / "singular/__main__.py").read_text(encoding="utf-8")
+    arbre = ast.parse(source)
+    docstrings = {id(noeud.body[0].value) for noeud in ast.walk(arbre)
+                  if isinstance(noeud, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+                  and noeud.body and isinstance(noeud.body[0], ast.Expr)
+                  and isinstance(noeud.body[0].value, ast.Constant)
+                  and isinstance(noeud.body[0].value.value, str)}
+
+    fautifs = [noeud.value for noeud in ast.walk(arbre)
+               if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)
+               and "(s)" in noeud.value and id(noeud) not in docstrings]
+
+    assert not fautifs, (
+        "ces phrases mettent le pluriel entre parentheses au lieu de passer par "
+        f"`_pluriel` : {fautifs}")
 
 
 # --- ce qui est un sous-ensemble se dit comme un sous-ensemble ----------------
