@@ -100,6 +100,52 @@ def test_seule_une_decision_se_verifie_contre_le_registre(tmp_path, objet):
     assert store.verify_issuance(objet) is False
 
 
+@pytest.mark.parametrize("objet", [None, object(), "DEC-DEMO", 42, {"decision_id": "DEC-DEMO"}])
+def test_seule_une_decision_s_atteste(tmp_path, objet):
+    """L'emission a le meme garde de type, et lui non plus n'avait rien.
+
+    Sans lui, `decision.verify()` part sur un objet quelconque : `AttributeError`
+    au lieu de `ValueError`. Et le registre est ecrit juste apres -- un objet qui
+    porterait un `verify()` complaisant et un `decision_id` obtiendrait une
+    attestation durable, que la frontiere relirait comme une autorisation.
+    """
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+
+    with pytest.raises(ValueError, match="only a valid active decision"):
+        store.issue(objet, issuer="test-suite")
+    with pytest.raises(ValueError, match="only a valid active decision"):
+        ValidatedDecisionIssuer(store, issuer="test-suite").issue(objet)
+
+
+def test_une_decision_alteree_ne_s_atteste_pas(tmp_path):
+    """L'autre moitie du meme garde : une vraie decision, mais dont le contenu a bouge.
+
+    Le type ne suffit pas -- c'est `verify()` qui refait l'empreinte sur les
+    champs presents. Une decision alteree apres sa construction est du bon type et
+    ne se verifie plus ; sans cette moitie, elle obtiendrait une attestation
+    durable, et la frontiere relit l'attestation comme une autorisation. Mutation
+    apres validation, du cote de l'emission cette fois.
+    """
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+
+    object.__setattr__(decision, "expires_at", decision.expires_at + 1.0)
+    assert decision.verify() is False
+
+    with pytest.raises(ValueError, match="only a valid active decision"):
+        store.issue(decision, issuer="test-suite")
+    assert store.get(decision.decision_id) is None
+
+
+# Le refus suivant de `issue` -- « cannot attest an inactive decision », la fenetre
+# lue a l'instant de l'emission -- n'a pas de temoin et n'en aura pas : ses deux
+# moities sont inatteignables. `verify()` juste au-dessus appelle `_validate(now)`,
+# qui refuse deja une decision pas encore active ou expiree. Mesure, pas deduit :
+# une decision dont la fenetre est fermee ressort avec « only a valid active
+# decision can be attested », le message de la ligne d'avant. C'est une assurance
+# derriere un controle qui la precede -- la deuxieme des trois familles.
+
+
 def test_une_decision_alteree_apres_son_emission_ne_se_verifie_plus(tmp_path):
     """Mutation apres validation, sur le chemin qui nourrit l'apprentissage.
 
