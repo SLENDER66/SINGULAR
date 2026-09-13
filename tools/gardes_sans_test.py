@@ -48,7 +48,14 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    refuse avant. Ce sont des assurances, pas des trous. Leur ecrire un test
    demanderait de desactiver `verify()`, donc de tester un chemin qui n'existe
    pas -- ce que la regle 18 du depot appelle un test suspect.
-3. *Le refus ne peut pas se declencher parce que rien ne produit son entree.*
+3. *La moitie est morte.* Ni trou ni assurance : aucune entree ne peut la
+   distinguer de sa voisine, donc elle ne decide jamais. `store is None` a cote de
+   `not hasattr(store, "path")` -- `hasattr(None, "path")` est faux de toute
+   facon. `rows is not None` apres un `SELECT COUNT(*)`, qui rend toujours une
+   ligne. Celles-la se retirent : elles laissent croire que deux cas sont couverts
+   quand un seul l'est, et elles reviennent dans chaque rapport. Deux trouvees le
+   13 septembre 2026, dans deux modules differents.
+4. *Le refus ne peut pas se declencher parce que rien ne produit son entree.*
    Les quatre refus lies a l'approbation humaine sont dans ce cas : une decision
    validee ne peut pas porter ESCALATE, donc aucune execution escaladee n'atteint
    la frontiere. C'est ce que le README annonce -- « human approval is currently

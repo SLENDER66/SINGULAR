@@ -342,8 +342,14 @@ class ImprovementRegistry:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(improvement_candidates)")}
         if "artifact_fingerprint" in columns:
             return
+        # `SELECT COUNT(*)` sur une table qui existe rend toujours exactement une
+        # ligne -- et si elle n'existait pas, on est deja reparti plus haut. Le
+        # `rows is not None` qui vivait ici ne pouvait donc jamais decider :
+        # deuxieme moitie morte trouvee aujourd'hui, apres `store is None` a cote
+        # de `not hasattr(store, "path")`. Une moitie qu'aucune entree ne
+        # distingue laisse croire que deux cas sont couverts quand un seul l'est.
         rows = conn.execute("SELECT COUNT(*) AS total FROM improvement_candidates").fetchone()
-        if rows is not None and int(rows["total"]) > 0:
+        if int(rows["total"]) > 0:
             raise RuntimeError(
                 "improvement registry holds unversioned candidates with no artifact identity; "
                 "migrate them explicitly before opening this database"

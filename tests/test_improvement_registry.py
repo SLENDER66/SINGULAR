@@ -121,6 +121,42 @@ def test_une_revue_n_a_que_deux_mots(tmp_path, status):
         registry.review("IMP-1", status)
 
 
+def test_une_revue_refusee_ne_promeut_pas(tmp_path):
+    """Le cas ou un humain a dit non, et que rien n'essayait.
+
+    `promote` refuse « pas de revue » **ou** « revue non ACCEPTED » dans la meme
+    ligne, et seule l'absence de revue etait jouee. C'est pourtant le second qui
+    porte la decision humaine : REJECTED doit arreter la promotion aussi
+    fermement qu'une revue manquante, sinon dire non ne sert a rien.
+    """
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    registry.register(candidate())
+    registry.evaluate(evaluation())
+    registry.review("IMP-1", "REJECTED")
+
+    with pytest.raises(PermissionError, match="ACCEPTED human review"):
+        registry.promote("IMP-1")
+    assert registry.active("forecast.model") is None
+
+
+def test_une_evaluation_effacee_apres_la_revue_arrete_la_promotion(tmp_path):
+    """L'evaluation disparait entre la revue et la promotion : fail-closed.
+
+    Le chemin normal ne peut pas l'atteindre -- une revue exige une evaluation --
+    donc ce refus garde une base touchee a la main, ou une ecriture a moitie
+    faite. Sans lui, `_evaluation_from_row(None)` leverait une erreur de type au
+    lieu de dire ce qui manque.
+    """
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    _accepted(registry)
+    with registry._connect() as conn:
+        conn.execute("DELETE FROM improvement_evaluations WHERE candidate_id=?", ("IMP-1",))
+
+    with pytest.raises(PermissionError, match="evaluated before promotion"):
+        registry.promote("IMP-1")
+    assert registry.active("forecast.model") is None
+
+
 def test_successful_promotion_is_durable_and_visible_after_restart(tmp_path):
     path = tmp_path / "improvements.db"
     registry = ImprovementRegistry(path)
