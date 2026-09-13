@@ -1,6 +1,6 @@
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from singular.autopilot import ActionRequest, ApprovalStatus, Autonomy
 from singular.durable import DurableStore, MissionStatus
@@ -209,3 +209,56 @@ def test_entrer_en_recuperation_deux_fois_ne_leve_pas(tmp_path: Path):
 # lecture -- un etat que l'API ne sait pas produire. Le simuler demanderait de
 # forcer la base dans une forme qu'elle n'a jamais, ce qui ne prouverait rien de ce
 # code. Assurance, pas trou.
+
+
+# --- une recuperation ne se conclut pas en succes -------------------------------
+#
+# `resolve_execution_recovery` n'accepte que FAIL et CANCEL, et ce refus n'avait
+# aucun temoin. C'est l'invariant que le mandat nomme « recovery ambiguity » : une
+# execution dont personne ne sait si l'effet est parti ne devient un succes que par
+# la preuve du fournisseur -- `confirm_execution_recovery_from_effect` --, jamais
+# par la decision de l'appelant.
+#
+# Sans ce refus, un appelant presse resout en « SUCCESS » et le systeme compte un
+# virement qui n'a peut-etre jamais eu lieu.
+
+@pytest.mark.parametrize("verdict", ["SUCCESS", "COMPLETED", "OK", "fail", "cancel", ""])
+def test_une_recuperation_ne_se_resout_pas_en_succes(tmp_path: Path, verdict):
+    from singular.autopilot import DelegationContract
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-PREUVE", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-PREUVE", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-preuve", "MIS-PREUVE", "ACT-PREUVE")
+    store.mark_execution_recovery_required("cle-preuve")
+
+    with pytest.raises(ValueError, match="sans preuve externe"):
+        store.resolve_execution_recovery("cle-preuve", verdict)
+    assert store.get_execution("cle-preuve")["status"] == "RECOVERY_REQUIRED"
+
+
+def test_une_recuperation_exige_une_mission_encore_en_cours(tmp_path: Path):
+    """La mission doit etre RUNNING pendant une recuperation, et rien ne l'essayait.
+
+    Le cas atteignable : la mission est annulee -- gouvernance, abandon -- pendant
+    qu'une execution attend sa resolution. Resoudre alors ecrirait un etat
+    d'execution sous une mission qui n'est plus en cours, donc un couple que le
+    verificateur d'integrite considere impossible.
+
+    La moitie voisine (`mission is None`) reste une assurance : une cle etrangere
+    lie l'execution a sa mission, donc la ligne existe forcement.
+    """
+    from singular.autopilot import DelegationContract
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-ANNUL", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-ANNUL", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-annul", "MIS-ANNUL", "ACT-ANNUL")
+    store.mark_execution_recovery_required("cle-annul")
+    store.set_mission_status("MIS-ANNUL", MissionStatus.CANCELLED)
+
+    with pytest.raises(ValueError, match="mission doit être RUNNING"):
+        store.resolve_execution_recovery("cle-annul", "FAIL", reason="abandonnée")
+    assert store.get_execution("cle-annul")["status"] == "RECOVERY_REQUIRED"
