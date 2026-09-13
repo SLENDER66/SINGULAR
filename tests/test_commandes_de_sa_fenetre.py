@@ -167,3 +167,86 @@ def test_le_scan_lit_bien_les_messages() -> None:
     assert len(trouves) == 1, f"un message, pas la docstring : {trouves}"
     assert "tape python -m" in trouves[0][1]
     assert len(AFFICHE_PAR_LE_PROGRAMME) > 10
+
+
+# --- une commande citee doit exister -----------------------------------------
+#
+# L'orthographe est gardee au-dessus : `python3`, pas `python`. Restait l'autre
+# moitie, jamais verifiee -- la commande existe-t-elle encore ? Ses pages citent
+# des dizaines de `python3 -m singular ...` avec leurs options, et rien ne les
+# reliait au parseur. Le defaut est le meme que celui des commandes PowerShell
+# restees apres le passage au Mac : la page a raison hier, elle a tort demain, et
+# c'est lui qui l'apprend en tapant.
+#
+# Le parseur est lu sur l'arbre, pas lance : `--help` demanderait d'importer le
+# paquet, donc d'installer ses dependances, et ce test doit tourner partout.
+
+#: `python3 -m singular parle --blanc --modele x` : la sous-commande, puis ses options.
+COMMANDE_CITEE = re.compile(r"python3 -m singular\s+([a-z]+)((?:\s+--[a-z-]+)*)")
+
+
+def _parseur_declare() -> dict[str, set[str]]:
+    """Chaque sous-commande de `__main__.py` et les options qu'elle accepte."""
+    source = (RACINE / "singular" / "__main__.py").read_text(encoding="utf-8")
+    arbre = ast.parse(source)
+
+    nom_par_variable: dict[str, str] = {}
+    declare: dict[str, set[str]] = {}
+    for noeud in ast.walk(arbre):
+        if not (isinstance(noeud, ast.Assign) and isinstance(noeud.value, ast.Call)):
+            continue
+        appel = noeud.value
+        if not (isinstance(appel.func, ast.Attribute) and appel.func.attr == "add_parser"):
+            continue
+        if not (appel.args and isinstance(appel.args[0], ast.Constant)):
+            continue
+        if isinstance(noeud.targets[0], ast.Name):
+            nom_par_variable[noeud.targets[0].id] = appel.args[0].value
+            declare[appel.args[0].value] = set()
+
+    for noeud in ast.walk(arbre):
+        if not (isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Attribute)):
+            continue
+        if noeud.func.attr != "add_argument" or not isinstance(noeud.func.value, ast.Name):
+            continue
+        commande = nom_par_variable.get(noeud.func.value.id)
+        if commande and noeud.args and isinstance(noeud.args[0], ast.Constant):
+            declare[commande].add(noeud.args[0].value)
+    return declare
+
+
+def test_toute_commande_citee_dans_ses_pages_existe() -> None:
+    declare = _parseur_declare()
+    assert declare, "le parseur doit etre lu, pas un dictionnaire vide"
+
+    fautes = []
+    citations = 0
+    for chemin in LUS_PAR_LUI:
+        if chemin.suffix != ".md":
+            continue
+        texte = chemin.read_text(encoding="utf-8")
+        for commande, options in COMMANDE_CITEE.findall(texte):
+            citations += 1
+            if commande not in declare:
+                fautes.append(f"{chemin.name} : `{commande}` n'est pas une sous-commande")
+                continue
+            for option in re.findall(r"--[a-z-]+", options):
+                if option not in declare[commande]:
+                    fautes.append(f"{chemin.name} : `{commande} {option}` n'existe pas")
+
+    assert citations, "aucune commande lue dans ses pages : l'expression ne reconnait plus rien"
+    assert not fautes, (
+        "ces commandes sont ecrites dans ses pages et n'existent pas :\n  "
+        + "\n  ".join(sorted(set(fautes)))
+        + "\n  Il les tape et lit une erreur d'argparse, en anglais.")
+
+
+def test_le_lecteur_du_parseur_attraperait_une_commande_disparue() -> None:
+    """Le temoin : sans lui, le test au-dessus passerait sur un parseur mal lu."""
+    declare = _parseur_declare()
+
+    assert "parle" in declare and "--blanc" in declare["parle"]
+    assert "list" in declare and "--status" in declare["list"]
+    assert "--oubli" not in declare.get("review", set()), (
+        "une option d'une sous-commande ne doit pas etre attribuee a une autre")
+    assert COMMANDE_CITEE.findall("python3 -m singular parle --blanc") == [("parle", " --blanc")]
