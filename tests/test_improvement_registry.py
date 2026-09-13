@@ -421,3 +421,76 @@ def test_an_object_that_declares_its_identity_is_accepted():
 
     assert artifact_fingerprint(Declared([1.0, 2.0])) == artifact_fingerprint(Declared([1.0, 2.0]))
     assert artifact_fingerprint(Declared([1.0, 2.0])) != artifact_fingerprint(Declared([9.0, 9.0]))
+
+
+# --- ce qu'un candidat et une evaluation doivent etre pour exister --------------
+#
+# Six refus de construction, aucun essaye -- la premiere passe de mutation sur ce
+# module les a tous nommes. Ils sont le contrat de la bibliotheque : un candidat
+# sans identite, sans empreinte, ou dont l'artefact n'est pas nommable, ne doit pas
+# pouvoir etre construit. Et `_evaluation_from_row` reconstruit une evaluation
+# depuis la base : ces refus sont donc aussi la porte de sortie d'une ligne abimee.
+#
+# L'espace au lieu de la chaine vide n'est pas un detail : c'est ce qui distingue
+# `not champ` de `not champ.strip()`.
+
+@pytest.mark.parametrize("blanc", ["", "   "])
+@pytest.mark.parametrize("champ", ["candidate_id", "target", "hypothesis"])
+def test_un_candidat_sans_identite_ne_se_construit_pas(champ, blanc):
+    from dataclasses import replace
+
+    with pytest.raises(ValueError, match="identity and hypothesis are required"):
+        replace(candidate(), **{champ: blanc})
+
+
+@pytest.mark.parametrize("champ, message", [
+    ("fingerprint", "candidate fingerprint is required"),
+    ("artifact_fingerprint", "candidate artifact fingerprint is required"),
+])
+def test_un_candidat_sans_empreinte_ne_se_construit_pas(champ, message):
+    """Les deux empreintes, et elles ne disent pas la meme chose : l'une identifie
+    la proposition, l'autre ce qui tournerait."""
+    from dataclasses import replace
+
+    with pytest.raises(ValueError, match=message):
+        replace(candidate(), **{champ: "  "})
+
+
+@pytest.mark.parametrize("champ", ["candidate_id", "incumbent_version", "candidate_version"])
+def test_une_evaluation_sans_identite_ne_se_construit_pas(champ):
+    from dataclasses import replace
+
+    with pytest.raises(ValueError, match="evaluation identity fields are required"):
+        replace(evaluation(), **{champ: " "})
+
+
+def test_une_evaluation_qui_ne_nomme_pas_son_artefact_ne_se_construit_pas():
+    """Sans ce refus, la chaine repart d'un label : une evaluation qui ne nomme
+    aucun artefact ne peut pas etre comparee a celui du candidat."""
+    from dataclasses import replace
+
+    with pytest.raises(ValueError, match="must name the artifact it evaluated"):
+        replace(evaluation(), artifact_fingerprint="   ")
+
+
+@pytest.mark.parametrize("artefact", [
+    {1: "un"},
+    {"ok": {2: "deux"}},
+    {"ok": [{"encore": {None: "rien"}}]},
+])
+def test_un_artefact_indexe_autrement_que_par_des_chaines_est_refuse(artefact):
+    """Le refus vit dans la recursion, pas seulement au sommet.
+
+    Une cle qui n'est pas une chaine ne survit pas au tri (`sorted`) ni au JSON :
+    l'empreinte serait soit une erreur, soit deux empreintes pour un artefact. Les
+    trois cas descendent d'un niveau a chaque fois, parce qu'un garde ecrit au
+    sommet seulement laisserait passer les deux derniers.
+
+    Le `TypeError` interne ressort en `ValueError` : c'est le signal que
+    `artifact_fingerprint` utilise pour essayer les deux autres formes d'artefact --
+    un appelable, un objet qui se declare -- avant de refuser. Le message du refus
+    initial est conserve, et c'est lui qu'on verifie : sans lui, celui qui lit
+    l'erreur ne sait pas **quoi** corriger dans son artefact.
+    """
+    with pytest.raises(ValueError, match="keyed by strings"):
+        artifact_fingerprint(artefact)
