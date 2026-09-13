@@ -292,6 +292,14 @@ def test_une_ligne_illisible_ne_se_verifie_pas(tmp_path):
     assert ledger.verify() is False
 
 
+# Un refus de `record` reste sans temoin et le restera : la moitie
+# `not decision.verify(...)` a cote de `not verify_issuance(...)`. Les deux sont
+# co-extensives, et c'est mesure -- `verify_issuance` recalcule l'empreinte depuis
+# les champs de la decision, donc tout ce qui fait tomber `verify()` la fait tomber
+# aussi. Une decision alteree rend les deux faux dans le meme mouvement ; aucune
+# entree ne les distingue. Assurance, pas trou.
+
+
 # --- a quelle execution un resultat a le droit de se rattacher ------------------
 #
 # `_validate_execution_observation` refuse cinq choses et aucune n'avait de temoin
