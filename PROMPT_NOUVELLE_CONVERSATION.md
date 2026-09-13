@@ -521,7 +521,7 @@ importait le greffon, ce qui l'installait pour tous les tests suivants du même
 processus. Lancé seul, le test adversarial de ce chemin échouait. Et `mypy` le
 disait depuis le début, à l'étape du CI qui n'est qu'informative.
 
-Trois leçons, et ce sont elles qu'il faut garder :
+Quatre leçons, et ce sont elles qu'il faut garder :
 
 - **`pytest -q` dans un processus n'est pas un programme qui démarre.** Ce qu'un
   import installe survit à tous les tests d'après. Un sous-processus ne peut pas
@@ -533,6 +533,19 @@ Trois leçons, et ce sont elles qu'il faut garder :
   une liste partagée que trois autres tests vidaient à la main, et pas lui.
 - **L'étape informative du CI dit peut-être vrai.** L'erreur `mypy` décrivait ce
   défaut exactement, depuis le début.
+- **`pgrep -f motif` et `pkill -f motif` trouvent la commande qui les lance.**
+  Le motif est dans sa ligne de commande, donc elle se compte comme un résultat
+  et, avec `pkill`, se tue elle-même. Trois fois dans la séance : deux shells
+  tués au milieu d'un travail, et un processus fantôme annoncé comme en cours.
+
+  Le crochet — `pgrep -f "[p]ytest"` — empêche le motif de se reconnaître
+  lui-même, et **ça ne suffit pas** : je l'ai écrit, puis mesuré, et il a trouvé
+  quelque chose quand même. La même ligne lançait `python3 -m pytest` plus loin,
+  donc le shell correspondait pour cette raison-là. Dans une commande qui ne
+  nomme la cible nulle part ailleurs, il ne trouve rien — vérifié.
+
+  Ce qui tient sans condition : identifier un processus par son **identifiant**,
+  pas par son nom.
 
 **Trois gardes annonçaient plus qu'ils ne vérifiaient.** Celui qui interdit au
 Sage d'atteindre la frontière d'exécution promettait « directement ou non » et ne
