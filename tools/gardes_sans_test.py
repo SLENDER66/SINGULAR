@@ -73,16 +73,32 @@ pytest refusait de collecter et chaque refus paraissait prouve. Un instrument de
 mesure qui se trompe dans le sens rassurant est pire qu'aucun -- d'ou le controle
 d'entree : si la sous-suite ne passe pas sans mutant, il s'arrete.
 
-Le depot n'est jamais laisse modifie : chaque fichier est restaure avant le
-mutant suivant, et dans un `finally`. Si le processus est tue en cours,
-`git checkout -- singular/` remet tout.
+**L'outil mesure une copie, jamais l'arbre depuis lequel on commite.** Il ecrit
+un garde sabote dans le fichier qu'il mesure ; tant que ce fichier etait celui du
+depot, deux choses fausses etaient possibles, et les deux sont arrivees le meme
+jour. Un `git status` montrant un garde neutralise au moment de committer -- c'est
+un hook de sortie qui l'a rattrape, pas moi. Et un processus tue avant son
+`finally`, qui laisse ce garde en place : le caveat « si le processus est tue,
+`git checkout -- singular/` remet tout » demandait au prochain lecteur de se
+souvenir d'une reparation. Une copie jetable rend les deux impossibles.
+
+La copie porte ce que le depot suit **et** ce qui n'est pas ignore : on mesure donc
+les temoins qu'on vient d'ecrire, pas seulement ceux du dernier commit -- c'est
+tout l'usage de l'outil. Et c'est mesure, pas suppose : le paquet est installe en
+editable, donc un finder de site-packages pointe vers l'arbre d'origine, mais
+`python -m pytest` met son repertoire courant en tete de `sys.path` et la copie
+gagne. `tests/test_l_outil_de_mesure.py` le verifie en sabotant dans la copie.
 """
 from __future__ import annotations
 
 import ast
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
@@ -284,36 +300,65 @@ FORMES = (
 )
 
 
-def _la_sous_suite_passe(sous_suite: tuple[str, ...]) -> bool:
+def fichiers_a_copier(racine: pathlib.Path = RACINE) -> tuple[str, ...]:
+    """Ce que le depot suit, plus ce qui n'est ni suivi ni ignore.
+
+    Les deux, parce qu'un audit lance avant de committer doit mesurer les temoins
+    qu'on vient d'ecrire. Ce que `.gitignore` couvre est laisse dehors : bases
+    SQLite de travail, caches, environnements.
+    """
+    acheve = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        capture_output=True, text=True, cwd=racine, check=True,
+    )
+    return tuple(nom for nom in acheve.stdout.split("\0") if nom)
+
+
+@contextmanager
+def copie_a_mesurer(racine: pathlib.Path = RACINE) -> Iterator[pathlib.Path]:
+    """Un depot jetable, identique a celui-ci, ou l'on peut saboter sans rien risquer."""
+    with tempfile.TemporaryDirectory(prefix="gardes-") as dossier:
+        copie = pathlib.Path(dossier) / "depot"
+        for relatif in fichiers_a_copier(racine):
+            source = racine / relatif
+            if not source.is_file():
+                continue
+            cible = copie / relatif
+            cible.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, cible)
+        yield copie
+
+
+def _la_sous_suite_passe(sous_suite: tuple[str, ...], racine: pathlib.Path = RACINE) -> bool:
     acheve = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider",
          "-p", "no:randomly", *sous_suite],
-        capture_output=True, text=True, cwd=RACINE, check=False,
+        capture_output=True, text=True, cwd=racine, check=False,
     )
     return acheve.returncode == 0
 
 
-def _la_suite_entiere_passe() -> bool:
+def _la_suite_entiere_passe(racine: pathlib.Path = RACINE) -> bool:
     """Le juge de derniere instance. Lent -- on ne l'appelle que sur un survivant."""
     acheve = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "-p", "no:randomly"],
-        capture_output=True, text=True, cwd=RACINE, check=False,
+        capture_output=True, text=True, cwd=racine, check=False,
     )
     return acheve.returncode == 0
 
 
-def _un_groupe(nom: str) -> int:
+def _un_groupe(nom: str, racine: pathlib.Path = RACINE) -> int:
     """Les refus survivants d'un groupe. Rend leur nombre, ou -1 si rien n'a pu etre mesure."""
     cibles, sous_suite = GROUPES[nom]
     print(f"--- {nom} ---", flush=True)
-    if not _la_sous_suite_passe(sous_suite):
+    if not _la_sous_suite_passe(sous_suite, racine):
         print(f"la sous-suite de « {nom} » echoue deja sans mutant : rien a mesurer",
               file=sys.stderr)
         return -1
     survivants = 0
     total = 0
     for cible in cibles:
-        chemin = RACINE / cible
+        chemin = racine / cible
         original = chemin.read_text(encoding="utf-8")
         lignes = original.split("\n")
         try:
@@ -329,9 +374,9 @@ def _un_groupe(nom: str) -> int:
                     continue
                 ast.fix_missing_locations(arbre)
                 chemin.write_text(ast.unparse(arbre), encoding="utf-8")
-                if _la_sous_suite_passe(sous_suite):
+                if _la_sous_suite_passe(sous_suite, racine):
                     ou = f"{cible}:{ligne}  {refus}  {lignes[ligne - 1].strip()[:90]}"
-                    if _la_suite_entiere_passe():
+                    if _la_suite_entiere_passe(racine):
                         survivants += 1
                         print(f"SURVIT  {ou}", flush=True)
                     else:
@@ -350,7 +395,9 @@ def main(arguments: list[str] | None = None) -> int:
         print(f"groupe inconnu : {', '.join(inconnus)}. Les deux : {', '.join(GROUPES)}.",
               file=sys.stderr)
         return 2
-    return 2 if any(_un_groupe(nom) < 0 for nom in demandes) else 0
+    with copie_a_mesurer() as copie:
+        print(f"mesure dans une copie jetable : {copie}", flush=True)
+        return 2 if any(_un_groupe(nom, copie) < 0 for nom in demandes) else 0
 
 
 if __name__ == "__main__":
