@@ -77,3 +77,49 @@ def test_un_evenement_sans_empreinte_n_entre_pas(tmp_path, champ, valeur) -> Non
 
     with pytest.raises(ValueError, match="empreintes valides"):
         store.record_audit(AuditEvent("DECISION", "commander", "PROPOSED", charge))
+
+
+# --- un evenement forge n'entre pas dans la chaine durable ----------------------
+#
+# Le dernier refus de `record_audit` verifie deux choses dans la meme ligne :
+# l'empreinte de chaine annoncee est bien celle que le magasin recalcule, et
+# l'evenement porte une empreinte qui couvre son propre contenu. Aucune des deux
+# moities n'avait de temoin.
+#
+# C'est ce qui empeche d'ecrire dans l'audit durable un evenement fabrique a la
+# main : le rang et le precedent peuvent etre justes -- ils sont lisibles -- alors
+# que le contenu ou le chainage ne le sont pas. Un audit ou l'on peut inserer ce
+# qu'on veut n'explique plus rien.
+
+def test_une_empreinte_de_chaine_fausse_n_entre_pas(tmp_path) -> None:
+    from dataclasses import replace
+
+    store = DurableStore(tmp_path / "singular.db")
+    trail = AuditTrail()
+    event = trail.record("DECISION", "commander", "PROPOSED", {"decision_id": "d1"})
+    charge = dict(event.payload)
+    charge["audit_chain_fingerprint"] = "0" * 64
+
+    with pytest.raises(ValueError, match="intégrité de l'événement d'audit"):
+        store.record_audit(replace(event, payload=charge))
+    assert store.audit_events() == ()
+
+
+def test_un_evenement_dont_le_contenu_a_bouge_n_entre_pas(tmp_path) -> None:
+    """L'autre moitie : le chainage est juste, le contenu ne l'est plus.
+
+    L'empreinte propre d'un evenement exclut sa position dans la chaine -- c'est
+    voulu, ca permet de le replacer derriere des ecritures qu'il n'avait pas vues.
+    Elle couvre donc le reste, et c'est cette moitie-la qui le verifie : changer
+    l'acteur en gardant les empreintes laisse le chainage coherent et le contenu
+    faux.
+    """
+    from dataclasses import replace
+
+    store = DurableStore(tmp_path / "singular.db")
+    trail = AuditTrail()
+    event = trail.record("DECISION", "commander", "PROPOSED", {"decision_id": "d1"})
+
+    with pytest.raises(ValueError, match="intégrité de l'événement d'audit"):
+        store.record_audit(replace(event, actor="quelqu-un-d-autre"))
+    assert store.audit_events() == ()
