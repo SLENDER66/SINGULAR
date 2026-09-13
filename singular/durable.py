@@ -290,7 +290,12 @@ class DurableStore:
         fingerprint = payload.get("audit_fingerprint")
         previous = payload.get("audit_prev_fingerprint")
         chain_fingerprint = payload.get("audit_chain_fingerprint")
-        if not isinstance(sequence, int) or sequence < 1:
+        # `isinstance(True, int)` est vrai en Python, et `True < 1` est faux : un
+        # booleen passait donc pour le rang 1. Deux evenements diraient alors
+        # porter le meme rang, et l'ordre de la chaine d'audit -- qui trie sur ce
+        # nombre -- deviendrait indecidable. Le meme piege est deja refuse
+        # explicitement dans le grand livre des resultats, pour la meme raison.
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
             raise ValueError("L'événement d'audit doit porter une séquence positive.")
         if not all(isinstance(value, str) and value for value in (fingerprint, chain_fingerprint)):
             raise ValueError("L'événement d'audit doit porter des empreintes valides.")
