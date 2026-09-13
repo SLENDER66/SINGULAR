@@ -53,8 +53,15 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    `not hasattr(store, "path")` -- `hasattr(None, "path")` est faux de toute
    facon. `rows is not None` apres un `SELECT COUNT(*)`, qui rend toujours une
    ligne. Celles-la se retirent : elles laissent croire que deux cas sont couverts
-   quand un seul l'est, et elles reviennent dans chaque rapport. Deux trouvees le
-   13 septembre 2026, dans deux modules differents.
+   quand un seul l'est, et elles reviennent dans chaque rapport. Trois trouvees le
+   13 septembre 2026, dans trois modules differents.
+
+   La troisieme a declenche la regle du troisieme passage :
+   `tests/test_moitie_morte.py` refuse desormais la forme la plus commune de cette
+   famille -- `X is None` a cote de `X != Y`, et sa symetrique sous un `and` --
+   dans tout le Python du depot. Cet outil ne devrait donc plus la rencontrer ;
+   s'il la nomme, c'est que le garde a ete contourne, pas que le triage est a
+   refaire.
 4. *Le refus ne peut pas se declencher parce que rien ne produit son entree.*
    Les quatre refus lies a l'approbation humaine sont dans ce cas : une decision
    validee ne peut pas porter ESCALATE, donc aucune execution escaladee n'atteint
