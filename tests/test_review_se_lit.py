@@ -54,6 +54,48 @@ def _review(tmp_path, capsys, **kwargs) -> str:
     return capsys.readouterr().out
 
 
+# --- un seul de quelque chose se dit au singulier ------------------------------
+
+#: « 1 décisions », « 1 verdicts » : un chiffre juste dans une phrase fausse.
+UN_PLURIEL = re.compile(r"\b1 ([a-zéèêàçîû]+)s\b")
+
+#: Des mots qui finissent par s au singulier. « 1 mois » est correct.
+EN_S_AU_SINGULIER = {"mois", "fois", "puis", "sans", "dans", "jamais", "plus", "moins",
+                     "progres", "progrès", "succes", "succès"}
+
+
+@pytest.mark.parametrize(("ouvertes", "tranchees"), [(1, 0), (0, 1), (1, 1)])
+def test_un_seul_de_quelque_chose_ne_se_dit_pas_au_pluriel(tmp_path, capsys, ouvertes, tranchees):
+    """Le bilan annonçait « 1 décisions   4h engagées » en tête de l'écran.
+
+    Cinq pluriels étaient écrits à la main dans `__main__.py`, refaits sur place à
+    chaque endroit. Trois étaient justes — c'est exactement la forme du défaut :
+    une règle recopiée est juste la plupart du temps. Les deux autres s'affichaient
+    le dimanche, et le jour de la reprise d'un journal.
+
+    Le test ne liste pas les cas, il refuse la forme : un « 1 » suivi d'un mot au
+    pluriel, où que ce soit dans la sortie. Le prochain pluriel oublié tombera
+    ici sans que personne ait à y penser.
+
+    Trois formes, parce qu'une seule ne suffisait pas : ma première version jouait
+    une ouverte **et** une tranchée, donc le total valait deux et l'en-tête
+    — « 1 décisions », la faute de départ — ne s'affichait jamais. Il faut un
+    total de un pour l'atteindre, un seul verdict pour la ligne de calibration,
+    et une seule ouverte pour celle des heures.
+    """
+    sortie = _review(tmp_path, capsys, ouvertes=ouvertes, tranchees=tranchees)
+
+    fautes = [mot for mot in UN_PLURIEL.findall(sortie) if f"{mot}s" not in EN_S_AU_SINGULIER]
+    assert not fautes, f"« 1 {fautes[0]}s » : un chiffre juste dans une phrase fausse"
+
+
+def test_le_temoin_du_pluriel_attraperait_la_faute(tmp_path, capsys):
+    """Sans lui, le test au-dessus passerait sur une sortie qui ne dit jamais « 1 »."""
+    assert UN_PLURIEL.findall("  1 décisions   4h engagées") == ["décision"]
+    assert UN_PLURIEL.findall("  1 décision   4h engagées") == []
+    assert [m for m in UN_PLURIEL.findall("il y a 1 mois") if f"{m}s" not in EN_S_AU_SINGULIER] == []
+
+
 # --- ce qui est un sous-ensemble se dit comme un sous-ensemble ----------------
 
 def test_les_retards_se_disent_comme_une_partie_des_ouvertes(tmp_path, capsys):

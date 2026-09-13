@@ -417,7 +417,7 @@ def cmd_import(journal: DecisionJournal, args) -> int:
     for entree in reprises:
         jour = datetime.fromisoformat(entree.created_at).strftime("%d/%m/%Y")
         print(f"  {_colour(entree.entry_id, BOLD)}  {jour}  {entree.title}")
-    print(_colour(f"\n  {len(journal.entries())} décisions en tout. "
+    print(_colour(f"\n  {_pluriel(len(journal.entries()), 'décision')} en tout. "
                   f"Chaîne {'intacte' if journal.verify() else 'ROMPUE'}.\n", DIM))
     return 0
 
@@ -485,6 +485,25 @@ def cmd_abandon(journal: DecisionJournal, args) -> int:
     return 0
 
 
+def _pluriel(combien: float, singulier: str, pluriel: str | None = None) -> str:
+    """« 1 décision », « 3 décisions ». Ecrit une fois, pas cinq.
+
+    Il y avait cinq pluriels a la main dans ce fichier, chacun refait sur place,
+    et **deux d'entre eux manquaient** : le bilan du dimanche annoncait
+    « 1 décisions   4h engagées » en tete de l'ecran qu'il lit en entier, et la
+    reprise d'un journal finissait par « 1 décisions en tout ». Les trois autres
+    etaient justes, ce qui est exactement la forme du defaut : une regle refaite
+    a chaque endroit est juste la plupart du temps.
+
+    Un au lieu de zero : « 0 décision » est correct en francais, et c'est le
+    contraire d'un detail ici -- le rapport d'un journal vide affiche ce zero.
+
+    La Notice garde le sien : ses phrases sont epinglees au port Swift par des
+    vecteurs generes, et les deux moteurs doivent rendre la meme chaine.
+    """
+    return f"{combien:g} {singulier if abs(combien) <= 1 else (pluriel or singulier + 's')}"
+
+
 #: La couleur de chaque état. Le mot, lui, vit dans `Status.label`.
 _COULEUR_DU_STATUT = {
     Status.OPEN: YELLOW,
@@ -541,7 +560,7 @@ def cmd_list(journal: DecisionJournal, args) -> int:
         # d'un journal neuf -- la confusion que `_vide` existe pour éviter.
         total = len(journal.entries())
         print(_colour(f"\n  Aucune décision {voulu.label}. "
-                      f"{total} décision{'s' if total > 1 else ''} dans le journal.\n", DIM))
+                      f"{_pluriel(total, 'décision')} dans le journal.\n", DIM))
         return 0
     if not entries:
         print(_vide(journal))
@@ -573,7 +592,7 @@ def cmd_review(journal: DecisionJournal, args) -> int:
         return 0
 
     print(_colour("\n  OÙ VONT TES HEURES\n", BOLD))
-    print(f"  {report['decisions']} décisions   {report['hours_total']:g}h engagées")
+    print(f"  {_pluriel(report['decisions'], 'décision')}   {report['hours_total']:g}h engagées")
     unresolved = report["hours_unresolved"]
     worked = report["hours_that_worked"]
     print(f"  {worked:g}h ont produit le résultat attendu")
@@ -589,8 +608,7 @@ def cmd_review(journal: DecisionJournal, args) -> int:
     # justes, c'est leur juxtaposition qui mentait.
     retard = f", dont {report['overdue']} en retard" if report["overdue"] else ""
     print(_colour(f"  {unresolved:g}h encore sans verdict "
-                  f"({report['open']} {Status.OPEN.label}"
-                  f"{'s' if report['open'] > 1 else ''}{retard})", warn))
+                  f"({_pluriel(report['open'], Status.OPEN.label)}{retard})", warn))
 
     if report["hit_rate"] is not None:
         print(_colour("\n  CE QUE TA CONFIANCE VAUT\n", BOLD))
@@ -603,8 +621,7 @@ def cmd_review(journal: DecisionJournal, args) -> int:
         gap = report["overconfidence"]
         verdict = calibration_verdict(report)
         if verdict is None or not verdict["conclusive"]:
-            print(_colour(f"  écart de {gap:+.0%} sur {report['resolved']} verdict"
-                          f"{'s' if report['resolved'] > 1 else ''}"
+            print(_colour(f"  écart de {gap:+.0%} sur {_pluriel(report['resolved'], 'verdict')}"
                           " - le hasard seul en produit autant, rien a conclure", DIM))
         elif gap > 0:
             print(_colour(f"  surconfiance de {gap:+.0%} - tu crois plus que ce qui arrive", RED))
