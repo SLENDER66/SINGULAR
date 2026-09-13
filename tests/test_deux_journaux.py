@@ -533,3 +533,55 @@ def test_un_journal_plus_recent_est_refuse_plutot_que_dit_casse(tmp_path) -> Non
 
     with pytest.raises(RuntimeError, match=f"v{SCHEMA_VERSION + 1}"):
         DecisionJournal(chemin, lecture_seule=True)
+
+
+# --- et ce qui n'est pas un journal du tout -----------------------------------
+
+@pytest.mark.parametrize("nom, contenu", [
+    ("export.csv", "entry_id,created_at,title\nDEC-abc,2026-09-01T09:00:00+00:00,Une\n"),
+    ("moitie.db", "SQLite format 3\x00 mais coupé au milieu"),
+])
+def test_reprendre_un_fichier_qui_n_est_pas_un_journal_refuse_dans_sa_langue(
+        tmp_path, capsys, nom, contenu) -> None:
+    """`sj import mon-export.csv` rendait une pile Python.
+
+    Le piège est naturel : `export` écrit un CSV, `import` attend une base, et
+    les deux noms se font face dans l'aide. Ce qui arrivait sur son écran était
+    `sqlite3.DatabaseError: file is not a database`, pile comprise -- alors que
+    le même refus existait déjà, écrit en français, pour l'ouverture de son
+    propre journal. La même règle avec un trou.
+
+    Le second cas est l'autre forme réelle : un fichier à moitié copié.
+    """
+    from singular.__main__ import main
+    from tests.test_saisie_au_clavier import LANGUE_DE_LA_MACHINE
+
+    _journal(tmp_path / "journal.db", "A", 1)
+    source = tmp_path / nom
+    source.write_text(contenu, encoding="utf-8")
+    capsys.readouterr()
+
+    assert main(["--db", str(tmp_path / "journal.db"), "import", str(source)]) == 1
+    sortie = capsys.readouterr().out
+    assert "n'est pas un journal SINGULAR" in sortie, sortie
+    fautifs = [mot for mot in LANGUE_DE_LA_MACHINE if mot in sortie]
+    assert not fautifs, f"ce refus arrive en anglais sur son écran : {fautifs}"
+
+
+def test_le_refus_ne_conseille_pas_de_supprimer_un_csv(tmp_path, capsys) -> None:
+    """Le message jumeau, celui de son propre journal, dit « ne le supprime pas ».
+
+    Il a raison là-bas -- un journal illisible est peut-être son journal. Ici le
+    fichier est le plus souvent un export, donc le conseil utile n'est pas le
+    même : ce que `import` attend, et ce que le CSV est.
+    """
+    from singular.__main__ import main
+
+    _journal(tmp_path / "journal.db", "A", 1)
+    source = tmp_path / "export.csv"
+    source.write_text("entry_id\nDEC-abc\n", encoding="utf-8")
+    capsys.readouterr()
+
+    main(["--db", str(tmp_path / "journal.db"), "import", str(source)])
+    sortie = capsys.readouterr().out
+    assert "`.db`" in sortie and "CSV" in sortie, sortie

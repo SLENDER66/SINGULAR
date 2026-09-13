@@ -429,6 +429,17 @@ def cmd_import(journal: DecisionJournal, args) -> int:
     except ImportRefused as refus:
         print(_colour(f"\n  {_REPRISE_REFUSEE[refus.reason]}\n", RED))
         return 1
+    except sqlite3.DatabaseError:
+        # `sj import mon-export.csv` rendait une pile Python finissant par
+        # `sqlite3.DatabaseError: file is not a database`. Le piege est naturel :
+        # `export` ecrit un CSV, `import` attend une base, et les deux noms se
+        # font face dans l'aide. Le message le dit donc au lieu de le laisser
+        # deviner -- et il ne conseille pas de supprimer le fichier : un CSV
+        # d'export est peut-etre la seule copie de quelque chose.
+        print(_colour(f"\n  Ce fichier n'est pas un journal SINGULAR :\n  {source}\n", RED))
+        print(_colour("  `import` reprend une base `.db`. Le CSV d'`export` ne se reprend\n"
+                      "  pas : il est fait pour être lu, pas relu par l'outil.\n", DIM))
+        return 1
     if not reprises:
         print(_colour(f"\n  {source} ne contient aucune décision. Rien repris.\n", DIM))
         return 0
