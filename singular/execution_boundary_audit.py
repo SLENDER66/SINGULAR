@@ -56,6 +56,22 @@ def _dynamic_import_names(node: ast.Call) -> set[str]:
     return set(argument.value.split("."))
 
 
+def _names_bound_from_a_package(node: ast.ImportFrom) -> set[str]:
+    """The modules a `from <package> import x, y` binds, which are not in its module.
+
+    This rule read `node.module` alone, so `from . import execution` offered it
+    the empty string and `from singular import effects` offered it "singular".
+    Both reach the execution stack; both were reported clean. The idiom is not
+    exotic -- it is how one imports a sibling module -- and this is the pass that
+    exists precisely because the call-site rules cannot resolve every receiver.
+    """
+    if node.level and node.module is None:
+        return {alias.name for alias in node.names}
+    if node.level == 0 and node.module == "singular":
+        return {alias.name for alias in node.names}
+    return set()
+
+
 @dataclass(frozen=True)
 class BoundaryFinding:
     #: Always posix-separated, so a report reads the same on every platform and
@@ -276,13 +292,23 @@ class ExecutionBoundaryAuditor:
 
         The call-site rules can only judge receivers they can resolve; an engine
         arriving through an unannotated parameter is invisible to them. A module
-        that names the execution stack to reach it is not, whether it does so in
-        an import statement or in a string handed to importlib.
+        that names the execution stack to reach it is not -- in any of the four
+        ways this package actually spells it:
+
+        - `from .execution import ...` and `import singular.execution`;
+        - `from . import execution`, `from singular import execution`: the module
+          is in the alias, and reading `node.module` alone saw nothing at all;
+        - `importlib.import_module("singular.execution")`;
+        - `singular.execution` as an attribute, which is an import here because
+          `singular/__init__.py` resolves its names on demand.
+
+        The middle two were reported clean until they were tried. The plainest
+        spelling of reaching for a sibling module was the one that walked through.
 
         What this still does not see: a module handed an already-constructed
-        boundary object, which names nothing. Both passes together narrow the
-        ways execution can reach code that has no business with it; neither is a
-        proof that it cannot.
+        boundary object, which names nothing, and a module name computed at
+        runtime. Both passes together narrow the ways execution can reach code
+        that has no business with it; neither is a proof that it cannot.
         """
         if path.stem in AUTHORITY_MODULES or path.parent.name in AUTHORITY_MODULES:
             return []
@@ -290,10 +316,16 @@ class ExecutionBoundaryAuditor:
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
                 names = set((node.module or "").split("."))
+                names |= _names_bound_from_a_package(node)
             elif isinstance(node, ast.Import):
                 names = {segment for alias in node.names for segment in alias.name.split(".")}
             elif isinstance(node, ast.Call):
                 names = _dynamic_import_names(node)
+            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                # `import singular` then `singular.execution`: the package
+                # resolves its own names on demand (PEP 562), so an attribute is
+                # an import here, with no import statement to read.
+                names = {node.attr} if node.value.id == "singular" else set()
             else:
                 continue
             reached = sorted(names & EXECUTION_CAUSING_MODULES)

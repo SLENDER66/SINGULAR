@@ -268,3 +268,63 @@ def test_a_dynamic_import_cannot_walk_past_the_rule(tmp_path: Path):
 
     report = ExecutionBoundaryAuditor(package).audit()
     assert any(f.rule == "AUTHORITY_IMPORT_LEAK" and f.detail == "execution" for f in report.findings)
+
+
+def test_a_sibling_import_cannot_walk_past_the_rule(tmp_path: Path):
+    """`from . import execution` is how one imports a sibling, and it was invisible.
+
+    The rule read the module a `from` names, and this form names none: the module
+    is in the alias. So the plainest spelling of "reach for the execution stack"
+    was reported clean, while the spelling nobody uses was caught.
+    """
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "planner.py").write_text("from . import execution\n", encoding="utf-8")
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "AUTHORITY_IMPORT_LEAK" and f.detail == "execution" for f in report.findings)
+
+
+def test_an_absolute_package_import_cannot_walk_past_the_rule(tmp_path: Path):
+    """`from singular import effects` offered the rule only the package's own name."""
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "planner.py").write_text("from singular import effects\n", encoding="utf-8")
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "AUTHORITY_IMPORT_LEAK" and f.detail == "effects" for f in report.findings)
+
+
+def test_an_attribute_of_the_package_is_an_import_here(tmp_path: Path):
+    """`singular/__init__.py` resolves its names on demand, so an attribute imports.
+
+    That lazy resolution exists so the journal runs on a phone without pydantic.
+    Its cost is that `import singular` plus one attribute reaches any module in
+    the package, with no import statement for a rule to read.
+    """
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "planner.py").write_text(
+        "import singular\n"
+        "\n"
+        "def run():\n"
+        "    return singular.tool_fabric\n",
+        encoding="utf-8",
+    )
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert any(f.rule == "AUTHORITY_IMPORT_LEAK" and f.detail == "tool_fabric" for f in report.findings)
+
+
+def test_an_attribute_of_something_else_is_not_an_import(tmp_path: Path):
+    """A false positive here gets the rule disabled, which is the only real failure."""
+    package = tmp_path / "singular"
+    package.mkdir()
+    (package / "planner.py").write_text(
+        "def run(report):\n"
+        "    return report.effects, report.execution\n",
+        encoding="utf-8",
+    )
+
+    report = ExecutionBoundaryAuditor(package).audit()
+    assert not [f for f in report.findings if f.rule == "AUTHORITY_IMPORT_LEAK"]
