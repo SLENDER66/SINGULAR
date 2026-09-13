@@ -529,6 +529,11 @@ qu'il demande, brièvement. S'il te demande d'enregistrer une décision, dis-lui
 la commande -- `python3 -m singular add` -- au lieu de prétendre l'avoir fait :
 tu n'as aucun moyen d'écrire dans son journal, et faire semblant serait le
 pire service possible.
+
+Une conversation a des tours, donc le registre en gagne un geste : un acte nommé
+au tour précédent se réclame au tour suivant. S'il ne l'a pas rendu, c'est le
+premier sujet de ta réponse, avant ce qu'il vient de demander. Un acte nommé et
+non rendu est le seul vrai échec.
 """
 
 

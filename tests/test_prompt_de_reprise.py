@@ -29,6 +29,11 @@ PROMPT = RACINE / "PROMPT_NOUVELLE_CONVERSATION.md"
 SECTIONS = {
     "0. POUR QUI TU TRAVAILLES": "1. TON RÔLE",
     "24. MODE DE COLLABORATION": "25. CE QUE TU DOIS FAIRE MAINTENANT",
+    # Le registre voyage avec le bloc pour la meme raison que les deux autres :
+    # c'est une regle sur la facon dont l'outil lui parle, et elle doit etre
+    # lisible la ou il colle le bloc -- y compris hors du depot, ou `CLAUDE.md`
+    # n'existe pas.
+    "26. LE REGISTRE : AZAZEL": "27. OBJECTIF FINAL",
 }
 
 

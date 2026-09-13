@@ -62,6 +62,16 @@ SPEAKS_TO_THE_CONSOLE = [
     # Les refus de saisie y sont ecrits une fois, et le clavier les affiche.
     # Le fichier a suivi les messages : la liste doit suivre aussi.
     "singular/saisie.py",
+    # Les trois facultes qui appellent un modele : leur instruction s'affiche.
+    # `--blanc` imprime exactement ce qui quittera la machine, instruction
+    # comprise, et c'est la seule facon pour lui de relire ce qui est dit de lui
+    # avant que ca parte. Le registre de la section 26 du mandat vit la : il
+    # vient d'y ajouter plusieurs paragraphes de texte francais, du mauvais cote
+    # du garde. Troisieme fois aujourd'hui qu'un texte affiche sort de cette
+    # liste sans que personne le voie -- apres les mots des enums du journal.
+    "singular/analyse.py",
+    "singular/parle.py",
+    "singular/offres.py",
     "proto/suivi_candidatures.py",
     "singular/sage/server.py",
     "tools/check_xcode_project.py",
