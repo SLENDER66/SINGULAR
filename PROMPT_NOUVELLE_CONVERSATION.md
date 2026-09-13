@@ -449,6 +449,66 @@ L'autre comparait deux constantes qui partagent leur premier tiers. Quand tu
 écris un garde-fou, sabote-le dans les deux sens : montre qu'il tombe, et
 montre qu'il porte encore quelque chose.
 
+## La séance du 13 septembre — la preuve qui ne prouvait rien
+
+Aucune de ces corrections ne vient d'avoir relu la logique. Elles viennent
+d'avoir demandé, de chaque garde-fou : **qu'est-ce qu'il vérifie exactement, et
+qu'est-ce que je peux casser sans le faire rougir ?** Puis d'avoir essayé.
+Retiens la méthode, la liste ne sert qu'à la montrer.
+
+**Un défaut de production que la suite entière cachait.** La transition qui
+finalise un effet externe ambigu — RECOVERY_REQUIRED → COMPLETED, le seul
+passage qui transforme « je ne sais pas si le virement est parti » en succès
+durable — était **absente** de tout processus qui n'importait pas le module
+qui la greffe. Le moteur d'exécution l'appelle à trois endroits et n'importe
+rien qui l'installe : la réconciliation mourait sur `AttributeError` après avoir
+prouvé que l'effet avait abouti. La suite passait parce qu'**un fichier de tests**
+importait le greffon, ce qui l'installait pour tous les tests suivants du même
+processus. Lancé seul, le test adversarial de ce chemin échouait. Et `mypy` le
+disait depuis le début, à l'étape du CI qui n'est qu'informative.
+
+Trois leçons, et ce sont elles qu'il faut garder :
+
+- **`pytest -q` dans un processus n'est pas un programme qui démarre.** Ce qu'un
+  import installe survit à tous les tests d'après. Un sous-processus ne peut pas
+  hériter de cet accident : c'est pourquoi la démo du README et la transition du
+  store sont désormais vérifiées comme ça.
+- **Lance chaque fichier de tests seul**, et la suite en ordre aléatoire
+  (`pytest -p randomly`). Les deux ont trouvé quelque chose : le défaut ci-dessus,
+  et un test qui ne passait que parce qu'il tournait en premier — son témoin était
+  une liste partagée que trois autres tests vidaient à la main, et pas lui.
+- **L'étape informative du CI dit peut-être vrai.** L'erreur `mypy` décrivait ce
+  défaut exactement, depuis le début.
+
+**Trois gardes annonçaient plus qu'ils ne vérifiaient.** Celui qui interdit au
+Sage d'atteindre la frontière d'exécution promettait « directement ou non » et ne
+lisait que les imports directs — un import ajouté dans `analyse.py` lui échappait.
+L'auditeur du paquet, seule étape bloquante du CI en dehors des tests, ne voyait
+pas `from . import execution` : la forme la plus banale d'importer un module
+voisin. Et le garde qui empêche la Notice de nommer la faculté qui coûte ne voyait
+pas `from .. import parle`. Un seul lecteur les sert maintenant, dans l'auditeur.
+
+**Sabote un garde dans la forme sous laquelle la faute se commet**, pas dans celle
+qui est facile à écrire. Mon premier garde contre la recopie d'un mot ne comparait
+que des littéraux entiers ; personne n'écrit `"abandonnée"` tout seul, on écrit
+`f"  {id}  abandonnée - {lesson}"`. Il ne tenait rien.
+
+**Un refus sans témoin n'est pas un refus.** `tools/gardes_sans_test.py` neutralise
+chaque `if ... raise` de la frontière, un par un, et relance la suite. Ceux qui
+survivent sont retirables sans qu'un test rougisse — la première passe en a nommé
+beaucoup, et le compte n'est pas écrit ici : l'outil le donne en dix minutes. Le
+travail n'est pas de tous les tester, c'est de les **trier** en trois familles,
+et la docstring de l'outil les nomme. La plus grave était la réconciliation :
+fournisseur, opération et charge substitués étaient testés à l'aller, aucun au
+retour — alors que la réconciliation atteint le même fournisseur et peut faire
+passer une exécution à COMPLETED.
+
+**Et sur ce que j'utilise vraiment**, trouvé en tapant les commandes comme toi :
+`list --status ouverte` refusait en anglais en proposant les valeurs de la base ;
+« Journal vide » s'affichait sur un journal de trois décisions dont aucune n'était
+ouverte ; et le même état portait trois noms selon la commande — « échoué » dans
+`list`, « PAS ARRIVÉ » dans `resolve`. « échoué » était un jugement, pas un fait.
+
 ## Ce qui décide de la suite
 
 Pas un compilateur, pas une liste de facultés : **une semaine d'usage**, et
@@ -494,21 +554,31 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 
 ## Pistes d'audit encore ouvertes
 
-1. Ce à quoi **un nom global se résout** n'est pas couvert par l'empreinte de
+1. **Des refus de la frontière n'ont toujours pas de témoin**, et c'est en
+   partie normal : `tools/gardes_sans_test.py` les liste, sa docstring dit les
+   trois familles, et seule la première est un trou. Les deux autres sont des
+   assurances derrière un contrôle qui les précède — leur écrire un test
+   demanderait de désactiver `verify()`, donc de tester un chemin qui n'existe
+   pas. Relance l'outil après avoir touché à la frontière, pas avant.
+2. **« La suite passe en ordre aléatoire » est mesuré, pas garanti.** Quelques
+   graines, à la main, et rien dans le CI ne l'exige. Le défaut trouvé cette
+   fois était un témoin partagé ; le prochain sera de la même famille, et il
+   faudra la même graine pour le voir.
+3. Ce à quoi **un nom global se résout** n'est pas couvert par l'empreinte de
    capability (limite assumée, testée).
-2. Un objet sans `artifact_identity()` est identifié par sa seule classe
+4. Un objet sans `artifact_identity()` est identifié par sa seule classe
    (opt-in, testé).
-3. L'auditeur ne voit pas un module à qui l'on **passe** un objet frontière
+5. L'auditeur ne voit pas un module à qui l'on **passe** un objet frontière
    déjà construit — hygiène, pas escalade, vérifié.
-4. `DurableIntegrityChecker.check()` sans argument n'a plus d'appelant en
+6. `DurableIntegrityChecker.check()` sans argument n'a plus d'appelant en
    production.
-5. Le contrat des vecteurs de parité ne porte que **sévérité, titre et
+7. Le contrat des vecteurs de parité ne porte que **sévérité, titre et
    détail** — ni `action` ni `entry_ids`. Donc *quelle* décision une carte
    nomme reste hors parité, et c'est exactement là que les deux moteurs
    divergeaient le 10 septembre. L'étendre demanderait de modifier le test
    Swift, que rien ici ne peut exécuter ; l'ordre est tenu côté Python par
    `tests/test_sage_notice.py`.
-6. Côté port iOS : que le Swift **compile** reste hors de portée d'ici.
+8. Côté port iOS : que le Swift **compile** reste hors de portée d'ici.
    L'équivalence arithmétique avec le moteur Python est tenue par
    `tests/test_notice_rounding_port.py`, la correspondance du JSON des
    vecteurs avec les structures Swift par `tests/test_notice_vector_schema.py`,
