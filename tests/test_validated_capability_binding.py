@@ -1,7 +1,6 @@
 import pytest
 from dataclasses import replace
 
-from singular.autopilot import ActionRequest
 from singular.execution_capability import register_execution_capability
 from singular.validated_pipeline import ValidatedTrajectoryPipeline
 from tests.test_validated_pipeline import _inputs

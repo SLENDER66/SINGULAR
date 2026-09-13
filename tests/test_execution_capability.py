@@ -1,5 +1,13 @@
 from singular.execution_capability import ExecutionCapabilityRegistry
 
+# Les `lambda` de ce fichier ne sont pas un raccourci, et `pyproject.toml` y tait
+# E731 pour cette raison : deux lambdas ecrites cote a cote ont le meme
+# `qualname` -- `<lambda>` -- donc la meme empreinte d'artefact. C'est ce qui
+# rend le test honnete : quand `matches(capability, second)` refuse, il refuse un
+# objet que rien ne distingue du premier, ce qui prouve que la liaison porte sur
+# l'objet. Deux `def` nommes `first` et `second` auraient deux empreintes, et le
+# refus ne prouverait plus que le code differe. Mesure, pas suppose.
+
 
 def test_registry_binds_to_exact_object_identity():
     registry = ExecutionCapabilityRegistry()

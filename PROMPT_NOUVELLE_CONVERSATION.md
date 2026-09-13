@@ -413,9 +413,12 @@ et les étapes suivantes échouent sans dire pourquoi.
 - **Aucun compilateur Swift dans ton environnement, impossible à installer** :
   la passerelle refuse swift.org et les binaires GitHub. Vérifié.
 - CI ignore `**/*.md` et `docs/**` : un commit de doc ne déclenche aucun run.
-- `attic/` hors périmètre. `ruff check` sur tout le dépôt sort des dizaines
-  d'erreurs préexistantes, dans du code historique : vérifie **tes** fichiers,
-  pas le dépôt entier.
+- `attic/` hors périmètre, et désormais hors `ruff` aussi : `extend-exclude`
+  dans `pyproject.toml`. `ruff check .` est propre sur tout le dépôt et **bloque**
+  le CI depuis le 13 septembre 2026 — le conseil d'avant, « vérifie tes fichiers,
+  pas le dépôt entier », n'a plus lieu d'être. Son jeu de règles est déclaré dans
+  `pyproject.toml` au lieu d'être hérité, pour qu'une version de ruff plus large
+  ne fasse pas rougir le CI sans qu'une ligne ait changé.
 - Commentaires en anglais dans les modules historiques, en français dans
   `singular/sage/`, `singular/__main__.py` et `ios/`.
 
@@ -535,7 +538,12 @@ Six leçons, et ce sont elles qu'il faut garder :
   est une dépendance `dev` déclarée, et non plus ce qui se trouvait installé dans
   mon conteneur.
 - **L'étape informative du CI dit peut-être vrai.** L'erreur `mypy` décrivait ce
-  défaut exactement, depuis le début.
+  défaut exactement, depuis le début. Suite de cette leçon, le 13 septembre 2026 :
+  une étape en `continue-on-error` rouge depuis toujours ne peut plus rien
+  signaler de neuf. `ruff` a donc été nettoyé puis rendu bloquant ; `mypy` reste
+  un rapport, mais pour une raison écrite dans le workflow — ses 37 constats ont
+  été triés, et les deux plus gros amas sont le même artefact de narrowing, pas
+  des défauts.
 - **Un instrument qui mesure l'arbre où tu travailles mesure ton travail.**
   L'outil de mutation écrivait ses sabotages dans le dépôt lui-même. Trois
   conséquences le même jour : un garde neutralisé visible dans `git status` au

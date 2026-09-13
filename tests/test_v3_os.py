@@ -1,5 +1,12 @@
 from singular.models import WorldModel
-from singular.v3_operating_system import *
+from singular.v3_operating_system import (
+    CandidateAction,
+    DecisionEngine,
+    LearningRecord,
+    Signal,
+    SignalType,
+    SingularV3,
+)
 
 
 def test_decision_engine_prefers_high_leverage_reversible_action():

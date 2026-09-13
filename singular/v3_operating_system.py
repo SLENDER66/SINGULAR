@@ -1,13 +1,22 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+# `Any`, `Callable`, `Autonomy` et `Action` ne servent pas dans ce fichier, et ils
+# ne peuvent pas partir : la table paresseuse de `singular/__init__.py` resout
+# `singular.Any`, `singular.Callable`, `singular.Autonomy` et `singular.Action`
+# **ici** -- ce module est le dernier inscrit pour ces quatre noms, et le dernier
+# gagne. La table reproduit exprès ce que le paquet exposait quand il importait
+# tout au chargement ; la retirer serait un changement d'API, pas un nettoyage.
+# `ruff --fix` les a supprimes une fois : `tests/test_lazy_package.py` a rougi, et
+# c'est la seule chose qui l'a vu. Le `noqa` existe pour que la prochaine passe
+# lise cette phrase au lieu de refaire le trajet.
+from typing import Any, Callable  # noqa: F401 - reexportes par singular/__init__.py
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from .autopilot import ActionRequest, DelegationContract, ExecutionBus, Autonomy
-from .models import WorldModel, Evidence, Certainty, Action, Decision, Learning
-from .security import ActionPolicy, PolicyDecision
+from .autopilot import ActionRequest, DelegationContract, ExecutionBus, Autonomy  # noqa: F401
+from .models import WorldModel, Evidence, Certainty, Action, Decision, Learning  # noqa: F401
+from .security import ActionPolicy
 from .audit import AuditTrail
 
 

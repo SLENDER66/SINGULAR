@@ -448,7 +448,7 @@ def _la_reprise_existe() -> bool:
     return "import" in commandes and hasattr(DecisionJournal, "import_from")
 
 
-def _documents_markdown() -> list[pathlib.Path]:
+def _documents_markdown() -> list[Path]:
     return [c for c in sorted(ROOT.rglob("*.md"))
             if ".git" not in c.parts and c.name != "CHANGELOG.md"]
 

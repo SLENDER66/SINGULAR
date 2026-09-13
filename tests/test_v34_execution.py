@@ -4,7 +4,7 @@ import pytest
 
 from singular.autopilot import ActionRequest, Autonomy
 from singular.durable import DurableStore, MissionStatus
-from singular.execution import DurableExecutionEngine, ExecutionInProgress, ExecutionRecoveryRequired
+from singular.execution import DurableExecutionEngine
 from singular.mission_runtime import DurableMissionRuntime
 
 

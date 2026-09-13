@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Any
 
-from .autopilot import ActionRequest, ExecutionBus, Autonomy, ApprovalStatus
+from .autopilot import ActionRequest, ExecutionBus
 
 
 @dataclass(frozen=True)

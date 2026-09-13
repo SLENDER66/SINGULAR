@@ -110,7 +110,6 @@ def test_the_coordinator_does_not_declare_the_table_a_second_time(tmp_path):
     whichever ran first decided whether a missing action identity could even be
     written. The store owns the database.
     """
-    import sqlite3
 
     from singular.durable import DurableStore
     from singular.effects import ExternalEffectCoordinator

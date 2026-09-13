@@ -1,6 +1,5 @@
 import threading
 
-import pytest
 
 from singular.autopilot import DelegationContract
 from singular.durable import DurableStore

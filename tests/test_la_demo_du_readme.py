@@ -53,9 +53,10 @@ def _bloc_du_readme() -> list[str]:
             continue
         if courant is not None:
             courant.append(ligne)
-    candidats = [bloc for bloc in blocs if any(l.startswith("decision      DEC-DEMO") for l in bloc)]
+    candidats = [bloc for bloc in blocs
+                 if any(ligne.startswith("decision      DEC-DEMO") for ligne in bloc)]
     assert len(candidats) == 1, "le README doit montrer la sortie de la demo une fois, et une seule"
-    return [l for l in candidats[0] if l.strip()]
+    return [ligne for ligne in candidats[0] if ligne.strip()]
 
 
 def _sortie_de_la_demo() -> list[str]:
@@ -64,7 +65,7 @@ def _sortie_de_la_demo() -> list[str]:
         timeout=120, check=False,
     )
     assert acheve.returncode == 0, f"la demo du README echoue :\n{acheve.stdout}\n{acheve.stderr}"
-    return [l for l in acheve.stdout.split("\n") if l.strip()]
+    return [ligne for ligne in acheve.stdout.split("\n") if ligne.strip()]
 
 
 @pytest.fixture(scope="module")
@@ -73,8 +74,8 @@ def sortie() -> list[str]:
 
 
 def test_la_demo_dit_exactement_ce_que_le_readme_montre(sortie: list[str]):
-    attendu = [_masque(l) for l in _bloc_du_readme()]
-    obtenu = [_masque(l) for l in sortie]
+    attendu = [_masque(ligne) for ligne in _bloc_du_readme()]
+    obtenu = [_masque(ligne) for ligne in sortie]
     assert obtenu == attendu, (
         "la sortie de la demo et le bloc du README ont divergé.\n"
         f"README : {attendu}\ndemo   : {obtenu}"

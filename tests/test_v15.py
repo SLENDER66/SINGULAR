@@ -5,8 +5,6 @@ from singular.mission_autopilot import Mission, MissionAutopilot, StepStatus
 
 def test_autopilot_plans_but_never_executes_reversible_steps():
     auto = MissionAutopilot()
-    contract = auto.bus
-    # Use a minimal fake contract via manager.
     from singular.autopilot import MissionManager
     mm = MissionManager()
     c = mm.create_contract('X', 'Y', autonomy=Autonomy.EXECUTE_REVERSIBLE)

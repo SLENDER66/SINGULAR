@@ -1,5 +1,4 @@
 import pytest
-from dataclasses import replace
 
 from singular.autopilot import ActionRequest, Autonomy, DelegationContract
 from singular.decision_attestation import DecisionAttestationStore, ValidatedDecisionIssuer

@@ -29,6 +29,30 @@ include = ["singular*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# `attic/` est une archive : son README dit qu'elle ne fait pas partie de
+# SINGULAR, rien ne l'importe, et `packages.find` ne l'installe pas. La linter y
+# comptait 56 constats que personne ne corrigera jamais -- c'est ce genre de
+# bruit qui rend une etape decorative.
+extend-exclude = ["attic"]
+
+[tool.ruff.lint]
+# Le jeu de regles est declare, pas herite. L'etape du CI bloque depuis
+# aujourd'hui : si ruff elargissait ses defauts, le CI rougirait sans qu'une
+# ligne du depot ait change, et la premiere reaction serait de le remettre en
+# « informational ». C'etait justement l'etat d'avant -- rouge depuis toujours,
+# 153 constats, donc incapable de signaler quoi que ce soit de nouveau.
+select = ["E4", "E7", "E9", "F"]
+# Un garde d'une ligne -- `if steps <= 0: return 0.0` -- est la forme assumee de
+# ce depot, sur 25 sites. Une regle qu'on ne satisfera pas rend l'etape inutile ;
+# on la retire explicitement plutot que de la laisser crier.
+ignore = ["E701", "E702"]
+
+[tool.ruff.lint.per-file-ignores]
+# Deux lambdas au code identique prouvent que la liaison d'une capability porte
+# sur l'objet et non sur son code. Mesure : `artifact_fingerprint` inclut le
+# `qualname`, donc deux `def` voisins ont deux empreintes differentes et le test
+# ne prouverait plus rien. La raison longue est dans le fichier.
+"tests/test_execution_capability.py" = ["E731"]
 
 [tool.mypy]
 python_version = "3.11"
