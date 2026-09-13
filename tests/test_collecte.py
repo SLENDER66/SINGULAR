@@ -98,6 +98,23 @@ def test_un_fait_sans_source_est_refuse() -> None:
         Fait("candidatures", "trois candidatures", "")
 
 
+@pytest.mark.parametrize(("sujet", "texte", "source", "attendu"), [
+    ("", "trois candidatures", "suivi", "sujet"),
+    ("candidatures", "", "suivi", "texte"),
+])
+def test_un_fait_vide_d_un_de_ses_trois_champs_est_refuse(sujet, texte, source, attendu) -> None:
+    """Les trois champs sont obligatoires ; un seul des trois refus avait un temoin.
+
+    Un fait sans sujet ne se range nulle part et un fait sans texte n'apprend
+    rien -- c'est ce que dit `collecte.py`, et on pouvait retirer ces deux refus
+    sans qu'un test rougisse. Ils arriveraient sur l'ecran du matin sous la forme
+    d'une ligne vide, ce qui est le pire des deux mondes : elle occupe la place
+    d'une observation et n'en dit aucune.
+    """
+    with pytest.raises(ValueError, match=attendu):
+        Fait(sujet, texte, source)
+
+
 def test_chaque_fait_collecte_nomme_son_fichier(tmp_path) -> None:
     chemin = _suivi(tmp_path / "c.json",
                     [{"statut": "envoyee", "date_statut": _il_y_a(5)}])

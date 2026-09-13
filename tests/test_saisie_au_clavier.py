@@ -32,6 +32,9 @@ from singular.saisie import (
     nombre as _nombre,
 )
 from singular.saisie import (
+    verifie_gain as _verifie_gain,
+)
+from singular.saisie import (
     verifie_heures as _verifie_heures,
 )
 from singular.saisie import (
@@ -88,9 +91,18 @@ def test_something_that_is_not_a_number_says_so_in_his_language():
 
 # --- la question accepte exactement ce que le journal accepte -----------------
 
-PROBABILITES = [0.0, 0.01, 0.05, 0.5, 0.75, 0.95, 0.99, 1.0, 1.5, 60.0, 75.0, 100.0, -0.5]
+#: L'infini et le NaN sont dans les trois listes, et ils ne l'etaient que dans
+#: une. `saisie.py` refuse les trois cas -- « une probabilite, pas l'infini »,
+#: « un nombre d'heures, pas l'infini », « un montant, pas l'infini » -- et deux
+#: de ces refus n'avaient aucun temoin : on pouvait les retirer sans qu'un test
+#: rougisse. Le mecanisme de ce fichier existait deja ; il etait applique a un
+#: cas sur trois. Un clavier tape « inf » plus facilement qu'on ne le croit, et
+#: une valeur infinie ecrite dans le journal y reste : la chaine ne se reecrit pas.
+PROBABILITES = [0.0, 0.01, 0.05, 0.5, 0.75, 0.95, 0.99, 1.0, 1.5, 60.0, 75.0, 100.0, -0.5,
+                float("inf"), float("-inf"), float("nan")]
 HEURES = [0.0, 0.5, 4.0, 1000.0, -0.5, -1.0, float("inf"), float("nan")]
 JOURS = [0, 1, 14, 365, -1]
+GAINS = [None, 0.0, 1500.0, -100.0, -0.01, float("inf"), float("nan")]
 
 
 @pytest.mark.parametrize("valeur", PROBABILITES)
@@ -109,6 +121,25 @@ def test_the_question_and_the_journal_agree_on_hours(tmp_path, valeur):
 def test_the_question_and_the_journal_agree_on_a_horizon(tmp_path, valeur):
     assert _accepte_par_la_question(_verifie_jours, valeur) is \
         _accepte_par_le_journal(tmp_path, horizon_days=valeur)
+
+
+@pytest.mark.parametrize("verifie", [_verifie_probabilite, _verifie_heures, _verifie_gain])
+@pytest.mark.parametrize("valeur", [float("inf"), float("-inf"), float("nan")])
+def test_un_refus_d_infini_nomme_l_infini(verifie, valeur):
+    """Ces trois gardes existent pour le message, et c'est donc lui qu'on teste.
+
+    `nombre("inf")` rend bien l'infini -- mesuré -- donc la valeur arrive jusqu'à
+    la vérification. Ce qui suit refuserait de toute façon : une borne de
+    probabilité, un signe d'heures, un signe de montant. La garde `isfinite` ne
+    change pas le verdict, elle change ce qu'il lui dit.
+
+    Sans elle, « inf » répondrait « entre 0.05 et 0.95 » -- vrai, et inutile :
+    il ne s'est pas trompé de borne, il a tapé l'infini. Les deux tests
+    d'équivalence au-dessus ne pouvaient pas le voir, puisque des deux côtés la
+    décision est refusée.
+    """
+    with pytest.raises(ValueError, match="l'infini"):
+        verifie(valeur)
 
 
 def test_typing_percent_says_what_to_write_instead():
@@ -180,7 +211,7 @@ def test_the_phone_and_the_journal_agree_on_a_horizon(tmp_path, valeur):
         _accepte_par_le_journal(tmp_path, horizon_days=valeur)
 
 
-@pytest.mark.parametrize("valeur", [None, 0.0, 1500.0, -100.0, -0.01])
+@pytest.mark.parametrize("valeur", GAINS)
 def test_the_phone_and_the_journal_agree_on_a_gain(tmp_path, valeur):
     """Le champ du gain est en texte libre, exprès : « vide » doit rester possible.
 
@@ -203,8 +234,14 @@ def test_no_refusal_reaches_him_in_the_language_of_the_library(tmp_path):
     app = SageApp(DecisionJournal(tmp_path / "journal.db"))
     charge = {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
               "tier": "REVENUS", "cost_hours": 4, "horizon_days": 14}
+    # L'infini et le NaN sont ici parce que c'est le seul endroit ou leur refus
+    # se distingue : sans la garde de `saisie.py`, la decision est refusee quand
+    # meme -- par le journal, en anglais, sur un ecran de six pouces. Les deux
+    # gardes `isfinite` pouvaient donc etre retirees sans qu'un test rougisse.
     fautifs = [{"probability": 1.0}, {"probability": 0.0}, {"probability": 75},
-               {"cost_hours": -1}, {"horizon_days": 0}, {"expected_gain_eur": "-5"}]
+               {"cost_hours": -1}, {"horizon_days": 0}, {"expected_gain_eur": "-5"},
+               {"probability": "inf"}, {"probability": "nan"},
+               {"cost_hours": "inf"}, {"expected_gain_eur": "inf"}]
 
     for faute in fautifs:
         with pytest.raises(SageError) as refus:

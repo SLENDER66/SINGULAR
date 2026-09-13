@@ -122,8 +122,20 @@ def test_trancher_et_abandonner_en_meme_temps_n_en_laisse_passer_qu_un(tmp_path)
 
 
 @pytest.mark.parametrize("statut", [Status.HAPPENED, Status.ABANDONED])
-def test_le_refus_reste_lisible_sans_concurrence(tmp_path, statut: Status) -> None:
-    """La correction ne doit pas remplacer le message clair par un message de course."""
+@pytest.mark.parametrize("deuxieme", ["resolve", "abandon"])
+def test_le_refus_reste_lisible_sans_concurrence(tmp_path, statut: Status, deuxieme: str) -> None:
+    """La correction ne doit pas remplacer le message clair par un message de course.
+
+    `abandon` porte les deux mêmes refus que `resolve` -- le statut, puis le
+    compte de lignes écrites -- et seul le premier dit quelque chose d'utile :
+    « déjà tranchée ». Le second parle d'une course (« tranché par quelqu'un
+    d'autre entre-temps »), ce qui serait faux et déroutant pour un deuxième
+    `abandon` tapé dans la même fenêtre.
+
+    Le test ne jouait que `resolve` en deuxième geste. Le refus de statut
+    d'`abandon` pouvait donc être retiré sans qu'un test rougisse : le compte de
+    lignes refusait encore, mais avec le mauvais message.
+    """
     journal = DecisionJournal(tmp_path / "j.db")
     entree = journal.add(title="X", action="Y", predicted="Z", probability=0.6,
                          tier=Tier.REVENUS, cost_hours=1, horizon_days=1)
@@ -133,7 +145,10 @@ def test_le_refus_reste_lisible_sans_concurrence(tmp_path, statut: Status) -> No
         journal.abandon(entree.entry_id, reason="stop")
 
     with pytest.raises(PermissionError, match="already resolved"):
-        journal.resolve(entree.entry_id, happened=False)
+        if deuxieme == "resolve":
+            journal.resolve(entree.entry_id, happened=False)
+        else:
+            journal.abandon(entree.entry_id, reason="stop encore")
 
 
 # --- écrire en même temps, et la chaîne qui doit y survivre --------------------

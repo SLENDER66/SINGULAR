@@ -51,6 +51,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: interdirait des accents que personne n'affiche.
 SPEAKS_TO_THE_CONSOLE = [
     "singular/__main__.py",
+    # Les mots des trois enums -- `Status.label`, `Tier.label`,
+    # `Reversibility.label` -- sont affiches par definition : la ligne de
+    # commande les imprime tels quels. Ils vivent ici, donc hors de portee de
+    # cette liste, et ils l'etaient deja avant que `Status` en ait un : « pas
+    # arrivee » a rejoint « Stabilite » et « couteuse a defaire » du mauvais cote
+    # du garde. Le reste du fichier est de l'anglais de bibliotheque et du SQL,
+    # qui passent sans rien demander a personne.
+    "singular/journal.py",
     # Les refus de saisie y sont ecrits une fois, et le clavier les affiche.
     # Le fichier a suivi les messages : la liste doit suivre aussi.
     "singular/saisie.py",

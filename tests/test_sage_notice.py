@@ -309,6 +309,18 @@ def test_a_notice_item_refuses_an_unknown_severity():
         NoticeItem("URGENT", "titre", "détail")
 
 
+@pytest.mark.parametrize("titre", ["", "   "])
+def test_a_notice_item_refuses_a_missing_title(titre):
+    """Les deux refus de `NoticeItem` sont voisins ; un seul avait un témoin.
+
+    Une observation sans titre occuperait une ligne du rapport du matin sans rien
+    y dire — la place d'une observation, et aucune observation. Le refus existait
+    et on pouvait le retirer sans qu'un test rougisse.
+    """
+    with pytest.raises(ValueError, match="titre"):
+        NoticeItem("ATTENTION", titre, "détail")
+
+
 def test_the_report_is_serialisable(tmp_path):
     journal = _journal(tmp_path)
     _add(journal)
