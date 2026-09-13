@@ -171,7 +171,7 @@ Une **application personnelle** qui doit m'accompagner toute ma vie, façon
 conseille — **il ne décide jamais à ma place**. C'est l'invariant que le dépôt
 protège : penser ≠ décider ≠ autoriser ≠ exécuter.
 `tests/test_sage_isolation.py` interdit tout import de la frontière
-d'exécution depuis `singular/sage/` ; `tests/test_sage_independence.py`
+d'exécution depuis `singular/sage/` **et depuis tout ce que le Sage charge** ; `tests/test_sage_independence.py`
 interdit au cœur de dépendre d'une clé d'API, d'un service ou du réseau.
 
 **Facultés :** Notice (faite, en usage) → **Analyse, Offres, Parle** (faites,

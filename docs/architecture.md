@@ -39,8 +39,9 @@ journal (what you predicted)
 waiting for a verdict, where stated confidence misses, which rung of the
 constitution is being neglected. It computes; it never authorizes.
 `tests/test_sage_isolation.py` refuses any import of the execution boundary from
-that package, so a new feature cannot quietly turn an HTTP request into an
-action on the world. `ios/SingularSage/` is the same engine in Swift, pinned to
+that package *or from anything it loads*, so a new feature cannot quietly turn an
+HTTP request into an action on the world -- nor reach the boundary through a
+faculty, a dynamic `import_module` or an attribute of the package. `ios/SingularSage/` is the same engine in Swift, pinned to
 this one by generated vectors.
 
 ## The invariant both layers serve
