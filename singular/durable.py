@@ -342,8 +342,7 @@ class DurableStore:
         with self._connect() as conn:
             conn.execute("INSERT OR IGNORE INTO idempotency(key,fingerprint,result,created_at) VALUES(?,?,?,?)", (key, fingerprint, encoded, now))
             row = conn.execute("SELECT fingerprint,result FROM idempotency WHERE key=?", (key,)).fetchone()
-        if row is None:
-            raise RuntimeError("Idempotency record could not be persisted")
+        row = self._relu_apres_ecriture(row, "Idempotency record")
         if row["fingerprint"] != fingerprint:
             raise ValueError("Identité d'action réutilisée avec un contenu différent.")
         return json.loads(row["result"])
@@ -356,6 +355,26 @@ class DurableStore:
     @staticmethod
     def _execution_fields() -> str:
         return "execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until"
+
+    @staticmethod
+    def _relu_apres_ecriture(row: sqlite3.Row | None, quoi: str) -> sqlite3.Row:
+        """La ligne qu'on vient d'ecrire, relue dans la transaction qui l'a ecrite.
+
+        Ce refus est inatteignable par construction : la relecture porte sur la
+        cle qu'on vient d'inserer ou de mettre a jour, et `rowcount` a deja ete
+        verifie quand il y avait une mise a jour a compter. Il ne peut se
+        declencher que si SQLite contredisait sa propre ecriture. Il reste parce
+        qu'il refuse alors, au lieu de rendre `None` a un appelant qui ferait
+        `dict(None)` -- un `TypeError` deux etages plus loin, sur un chemin de
+        recuperation, est la pire facon d'apprendre que la base a menti.
+
+        Il tenait cinq fois dans ce fichier, cinq copies de la meme phrase. La
+        passe de mutation les denoncait donc cinq fois, et la reponse etait cinq
+        fois la meme : une regle, un domicile.
+        """
+        if row is None:
+            raise RuntimeError(f"{quoi} could not be persisted")
+        return row
 
     def begin_execution_and_start_mission(self, execution_key: str, mission_id: str, action_id: str, lease_seconds: int = 300) -> dict[str, Any]:
         """The only way an execution is claimed.
@@ -384,8 +403,7 @@ class DurableStore:
             self._transition_mission_status(conn, mission_id, MissionStatus.RUNNING, expected_current=MissionStatus.PLANNED)
             conn.execute("INSERT INTO executions(execution_key,mission_id,action_id,status,started_at,lease_until) VALUES(?,?,?,?,?,?)", (execution_key, mission_id, action_id, "RUNNING", now.isoformat(), lease_until))
             row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
-        if row is None:
-            raise RuntimeError("Execution record could not be persisted")
+        row = self._relu_apres_ecriture(row, "Execution record")
         self._validate_execution_identity(row, mission_id, action_id)
         result = dict(row)
         result["claimed"] = True
@@ -447,8 +465,7 @@ class DurableStore:
                 raise RuntimeError("La résolution de récupération n'a pas été persistée.")
             self._transition_mission_status(conn, row["mission_id"], mission_status, expected_current=MissionStatus.RUNNING)
             final = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
-        if final is None:
-            raise RuntimeError("Execution record could not be persisted")
+        final = self._relu_apres_ecriture(final, "Execution record")
         return dict(final)
 
     def confirm_execution_recovery_from_effect(self, execution_key: str, provider_idempotency_key: str) -> dict[str, Any]:
@@ -518,8 +535,7 @@ class DurableStore:
                 f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?",
                 (execution_key,),
             ).fetchone()
-        if final is None:
-            raise RuntimeError("Execution record could not be persisted")
+        final = self._relu_apres_ecriture(final, "Execution record")
         return dict(final)
 
 
@@ -549,8 +565,7 @@ class DurableStore:
                 raise KeyError(execution_key)
             self._transition_mission_status(conn, row["mission_id"], MissionStatus.COMPLETED if status == "COMPLETED" else MissionStatus.FAILED, expected_current=MissionStatus.RUNNING)
             final = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
-        if final is None:
-            raise RuntimeError("Execution record could not be persisted")
+        final = self._relu_apres_ecriture(final, "Execution record")
         return dict(final)
 
     def get_execution(self, execution_key: str) -> dict[str, Any] | None:
