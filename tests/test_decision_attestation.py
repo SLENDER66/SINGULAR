@@ -139,3 +139,76 @@ def test_une_decision_qui_leve_au_lieu_de_repondre_est_refusee(tmp_path):
     object.__setattr__(decision, "verify", leve)
 
     assert store.verify_issuance(decision) is False
+
+
+# --- une ligne d'attestation abimee -------------------------------------------
+#
+# Les trois champs d'identite d'une attestation sont verifies a la construction,
+# et `_row` construit l'objet depuis la base : une ligne dont une identite a ete
+# videe doit donc etre refusee a la relecture, pas rendue vide. La mutation par
+# moities a nomme ce refus -- ses trois moities dans une seule ligne, et aucune
+# n'etait essayee.
+#
+# L'espace au lieu de la chaine vide n'est pas un detail : c'est ce qui distingue
+# `not champ` de `not champ.strip()`. Une identite faite d'un espace est un nom
+# que rien ne porte.
+
+@pytest.mark.parametrize("champ", ["decision_id", "context_fingerprint", "issuer"])
+def test_une_identite_videe_dans_la_base_est_refusee_a_la_relecture(tmp_path, champ):
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    ValidatedDecisionIssuer(store, issuer="test-suite").issue(decision)
+
+    with store._connect() as conn:
+        conn.execute(
+            f"UPDATE decision_attestations SET {champ}=' ' WHERE decision_id=?",
+            (decision.decision_id,),
+        )
+    # Vider `decision_id` deplace la clef : on relit la ligne la ou elle est.
+    clef = " " if champ == "decision_id" else decision.decision_id
+
+    with pytest.raises(ValueError, match="identity fields are required"):
+        store.get(clef)
+
+
+# --- et son intervalle de validite --------------------------------------------
+#
+# Meme forme, meme chemin : trois refus dans une ligne, aucun essaye. Une
+# attestation dont la fenetre de validite n'est pas un intervalle fini n'a pas de
+# sens -- `now < expires_at` est faux pour tout `now` si `expires_at` est NaN, et
+# vrai pour tout `now` si c'est l'infini. Le premier est fail-closed par accident,
+# le second est un jeton eternel.
+
+@pytest.mark.parametrize("champ, valeur", [
+    ("issued_at", "inf"),
+    ("issued_at", "nan"),
+    ("expires_at", "inf"),
+    ("expires_at", "nan"),
+])
+def test_une_attestation_dont_la_fenetre_n_est_pas_finie_est_refusee(tmp_path, champ, valeur):
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    ValidatedDecisionIssuer(store, issuer="test-suite").issue(decision)
+
+    with store._connect() as conn:
+        conn.execute(
+            f"UPDATE decision_attestations SET {champ}=? WHERE decision_id=?",
+            (valeur, decision.decision_id),
+        )
+
+    with pytest.raises(ValueError, match="validity interval is invalid"):
+        store.get(decision.decision_id)
+
+
+def test_une_attestation_qui_expire_avant_d_etre_emise_est_refusee(tmp_path):
+    """Une fenetre nulle ou negative n'est pas une fenetre : elle autorise zero instant."""
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    attestation = ValidatedDecisionIssuer(store, issuer="test-suite").issue(decision)
+
+    with store._connect() as conn:
+        conn.execute("UPDATE decision_attestations SET expires_at=? WHERE decision_id=?",
+                     (attestation.issued_at, decision.decision_id))
+
+    with pytest.raises(ValueError, match="validity interval is invalid"):
+        store.get(decision.decision_id)
