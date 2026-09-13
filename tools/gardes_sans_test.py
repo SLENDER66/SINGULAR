@@ -110,6 +110,14 @@ CIBLES_FRONTIERE = (
     "singular/decision_attestation.py",
     "singular/execution_capability.py",
     "singular/effects.py",
+    # Le cycle d'apprentissage et le grand livre des resultats n'avaient jamais
+    # ete mesures. Ils ne franchissent pas la frontiere, mais ils decident ce qui
+    # s'active -- candidat, artefact, evaluation, approbation, activation -- et la
+    # section 13 du mandat demande explicitement de verifier que l'artefact active
+    # est bien celui qui a ete evalue. Un refus sans temoin y a la meme valeur
+    # qu'ailleurs.
+    "singular/improvement_registry.py",
+    "singular/outcome_ledger.py",
 )
 
 #: La sous-suite qui couvre ces modules. Ciblee exprès : la suite entiere est
@@ -133,6 +141,10 @@ SOUS_SUITE_FRONTIERE = (
     "tests/test_approval_durability.py", "tests/test_no_raw_execution_call_sites.py",
     "tests/test_decision_serialization_guard.py", "tests/test_action_request_validation.py",
     "tests/test_refus_sans_temoin.py",
+    # Ce qui couvre les deux modules d'apprentissage ajoutes aux cibles.
+    "tests/test_improvement_registry.py", "tests/test_self_improvement.py",
+    "tests/test_outcome_ledger.py", "tests/test_economic_learning_ledger.py",
+    "tests/test_learning_review_queue.py", "tests/test_control_plane.py",
 )
 
 #: Le moteur deterministe : ce qu'il lance chaque matin, sans jeton ni reseau.
