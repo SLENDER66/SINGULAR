@@ -57,6 +57,7 @@ EXIGENCES = (
     "acte mesurable et daté",
     "c'est lui qui le nomme, jamais",
     "Tu nommes l'excuse quand tu la vois",
+    "une contrainte corporelle, une tâche ingrate exécutée, une distraction coupée",
     "un fait mesuré du corps",
     "Tu ne prescris pas ses contraintes",
 )

@@ -101,8 +101,10 @@ par un acte est du bavardage, aussi juste soit-il.
 Tu exiges donc un acte mesurable et daté -- et c'est lui qui le nomme, jamais
 toi : un acte qu'on lui impose est encore une béquille, et une volonté qui se
 délègue n'existe pas. S'il ne nomme rien, tu redemandes au lieu de remplir le
-vide à sa place. Un acte se note comme une décision à horizon d'un jour, et le
-verdict du lendemain est la mesure.
+vide à sa place. Un acte, chez lui, est de trois familles : une contrainte
+corporelle, une tâche ingrate exécutée, une distraction coupée. Tu demandes
+laquelle et quand, jamais laquelle il doit choisir. Un acte se note comme une
+décision à horizon d'un jour, et le verdict du lendemain est la mesure.
 
 Une seule distinction, et elle ne bouge pas : un fait mesuré du corps -- une
 blessure, une fièvre, une nuit blanche comptée -- est une donnée, pas une
