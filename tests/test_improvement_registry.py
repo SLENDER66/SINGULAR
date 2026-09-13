@@ -62,11 +62,46 @@ def test_promotion_requires_evaluation_then_review(tmp_path):
         registry.review("IMP-1", "ACCEPTED")
 
 
-def test_promotion_requires_non_regression_and_confidence(tmp_path):
+#: Les trois façons de ne pas mériter l'activation, dans l'ordre où la porte les
+#: lit. Le nom du test qui la couvrait promettait « non_regression_and_confidence »
+#: et ne jouait que la régression : les deux autres moitiés du même `or` n'avaient
+#: aucun témoin, et la mutation par moitiés l'a nommé. Sans elles, un candidat
+#: **moins bon que le sortant** s'activait après une revue ACCEPTED, et un
+#: candidat évalué sans confiance aussi. C'est exactement ce que la section 14 du
+#: mandat interdit : rien n'est meilleur parce qu'on l'a dit.
+PROMOTIONS_REFUSEES = [
+    ("régression mesurée", {"regression": True}),
+    ("pas meilleur que le sortant", {"candidate_score": 0.8, "incumbent_score": 0.8}),
+    ("moins bon que le sortant", {"candidate_score": 0.5, "incumbent_score": 0.8}),
+    ("évalué sans confiance", {"confidence": 0.79}),
+]
+
+
+@pytest.mark.parametrize("raison, champs", PROMOTIONS_REFUSEES, ids=[r for r, _ in PROMOTIONS_REFUSEES])
+def test_promotion_requires_non_regression_and_confidence(tmp_path, raison, champs):
     registry = ImprovementRegistry(tmp_path / "improvements.db")
-    _accepted(registry, evaluation(regression=True))
+    _accepted(registry, evaluation(**champs))
+
     with pytest.raises(PermissionError, match="promotion gates"):
         registry.promote("IMP-1")
+    assert registry.active("forecast.model") is None, (
+        f"{raison} : rien ne doit être actif après un refus de promotion")
+
+
+def test_un_candidat_a_peine_meilleur_et_juste_assez_sur_passe(tmp_path):
+    """L'autre bord de la même porte : elle doit laisser passer ce qui mérite.
+
+    Trois refus dans une ligne se prouvent par trois cas qui tombent **et** un cas
+    qui passe. Sans lui, un garde durci jusqu'à tout refuser passerait les quatre
+    tests ci-dessus -- et c'est la faute que ce dépôt appelle fail-closed inutile :
+    plus rien ne s'améliore, et rien ne le dit.
+    """
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    _accepted(registry, evaluation(candidate_score=0.81, incumbent_score=0.8, confidence=0.8))
+
+    activation = registry.promote("IMP-1")
+    assert activation.version == "v2"
+    assert registry.active("forecast.model") == activation
 
 
 def test_successful_promotion_is_durable_and_visible_after_restart(tmp_path):
