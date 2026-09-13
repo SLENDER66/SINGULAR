@@ -93,10 +93,12 @@ def test_une_cle_d_execution_ne_se_reutilise_pas_pour_une_autre_mission(tmp_path
         store.begin_execution_and_start_mission("meme-cle", "MIS-UN", "ACT-DEUX")
 
 
-# Le refus voisin -- « Idempotency record could not be persisted », quand la ligne
-# qu'on vient d'inserer ne se relit pas -- reste sans temoin et le restera :
-# l'insertion et la lecture sont dans la meme transaction, donc seule une panne de
-# la base peut le declencher. Assurance, pas trou.
+# Deux refus voisins restent sans temoin et le resteront : « Idempotency record
+# could not be persisted » et « Execution record could not be persisted », quand la
+# ligne qu'on vient d'inserer ne se relit pas. L'insertion et la lecture sont dans
+# la meme transaction, donc seule une panne de la base les declenche -- et une base
+# qui perd une ligne inseree ne se simule pas sans simuler la base elle-meme, ce
+# qui ne prouverait rien de ce code. Assurances, pas trous.
 
 
 # --- un bail nul n'est pas un bail ---------------------------------------------
@@ -142,3 +144,68 @@ def test_un_battement_de_coeur_ne_raccourcit_pas_le_bail_a_zero(tmp_path: Path, 
     with pytest.raises(ValueError, match="lease doit être positive"):
         store.heartbeat_execution("cle-batt", lease_seconds=bail)
     assert store.get_execution("cle-batt")["lease_until"] == avant
+
+
+def test_un_battement_de_coeur_sur_une_execution_finie_est_refuse(tmp_path: Path):
+    """Le bail ne se prolonge que sur ce qui tourne encore.
+
+    Le cas reel : un ouvrier prolonge son bail alors que son execution a ete
+    finie entre-temps -- par une recuperation, ou par lui-meme au tour precedent.
+    Sans ce refus, la prolongation ne toucherait aucune ligne et l'ouvrier
+    continuerait de se croire titulaire du bail : deux acteurs pensant tenir la
+    meme execution, ce que le bail existe precisement pour empecher.
+
+    Une cle inconnue tombe sur le meme refus, et c'est la meme phrase qui
+    convient : « inexistante ou non active ».
+    """
+    from singular.autopilot import DelegationContract
+    from singular.durable import MissionStatus
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-COEUR", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-COEUR", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-coeur", "MIS-COEUR", "ACT-COEUR")
+    store.finish_execution_and_mission("cle-coeur", "COMPLETED", result={"ok": True})
+
+    with pytest.raises(RuntimeError, match="inexistante ou non active"):
+        store.heartbeat_execution("cle-coeur")
+    with pytest.raises(RuntimeError, match="inexistante ou non active"):
+        store.heartbeat_execution("cle-qui-n-a-jamais-existe")
+
+
+def test_entrer_en_recuperation_deux_fois_ne_leve_pas(tmp_path: Path):
+    """L'idempotence de l'entree en recuperation, et ce qu'elle garde.
+
+    Le refus qui suit l'ecriture ne parle que du cas impossible : aucune ligne
+    touchee **alors que** la ligne dit encore RUNNING. La seconde moitie de cette
+    condition est ce qui rend le second appel legal -- sans elle, rappeler la
+    methode sur une execution deja en recuperation leverait, et la reprise apres
+    un redemarrage deviendrait un echec au lieu d'un no-op.
+
+    Le cas est reel : deux ouvriers, ou un ouvrier qui reessaie apres un
+    redemarrage, peuvent tous deux constater le bail perime.
+    """
+    from singular.autopilot import DelegationContract
+    from singular.durable import MissionStatus
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-RECUP", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-RECUP", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-recup", "MIS-RECUP", "ACT-RECUP")
+
+    premier = store.mark_execution_recovery_required("cle-recup")
+    second = store.mark_execution_recovery_required("cle-recup")
+
+    assert premier["status"] == "RECOVERY_REQUIRED"
+    assert second["status"] == "RECOVERY_REQUIRED"
+    assert second["finished_at"] == premier["finished_at"], "le second appel ne rejoue rien"
+
+
+# Le refus « Execution state could not enter recovery » garde le cas impossible :
+# aucune ligne touchee alors que la ligne dit encore RUNNING. Pour l'atteindre il
+# faudrait remettre une execution terminee sur RUNNING entre l'ecriture et la
+# lecture -- un etat que l'API ne sait pas produire. Le simuler demanderait de
+# forcer la base dans une forme qu'elle n'a jamais, ce qui ne prouverait rien de ce
+# code. Assurance, pas trou.
