@@ -446,6 +446,78 @@ class DurableStore:
             raise RuntimeError("Execution record could not be persisted")
         return dict(final)
 
+    def confirm_execution_recovery_from_effect(self, execution_key: str, provider_idempotency_key: str) -> dict[str, Any]:
+        """Atomically finalize recovery from persisted provider completion evidence.
+
+        RECOVERY_REQUIRED -> COMPLETED, the transition that turns an ambiguous
+        external effect into a durable success. It lived in `durable_recovery.py` and
+        was grafted onto this class at import time -- so it was absent from any
+        process that did not happen to import that module, and the execution engine
+        is one of them: it calls this method in three places and imports nothing that
+        installs it. A reconciliation that had proved the effect completed then died
+        on AttributeError, leaving the execution RECOVERY_REQUIRED and the mission
+        RUNNING for ever, with the effect already out in the world.
+
+        The whole suite hid it: one test file imports `durable_recovery`, which
+        grafted the method for every test that ran after it. Run alone, the
+        adversarial test of this very path failed.
+
+        Approval integrity arrived the same way once and was moved here for the same
+        reason. A transition belongs to whoever holds the store, not to whoever
+        imported well.
+        """
+        now = datetime.now(UTC).isoformat()
+        with self._connect() as conn:
+            execution = conn.execute(
+                "SELECT execution_key,mission_id,action_id,status,result,error,started_at,finished_at,lease_until "
+                "FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+            if execution is None:
+                raise KeyError(execution_key)
+            if execution["status"] != "RECOVERY_REQUIRED":
+                raise ValueError("Seule une exécution RECOVERY_REQUIRED peut être confirmée par preuve externe.")
+            mission = conn.execute(
+                "SELECT status FROM mission_states WHERE mission_id=?",
+                (execution["mission_id"],),
+            ).fetchone()
+            if mission is None:
+                raise KeyError(execution["mission_id"])
+            if mission["status"] != MissionStatus.RUNNING.value:
+                raise ValueError("La mission doit être RUNNING pendant une récupération.")
+            effect = conn.execute(
+                "SELECT provider_idempotency_key,execution_key,status,result,error "
+                "FROM external_effects WHERE provider_idempotency_key=?",
+                (provider_idempotency_key,),
+            ).fetchone()
+            if effect is None:
+                raise ValueError("Aucune preuve durable d'effet externe correspondante n'est disponible.")
+            if effect["execution_key"] != execution_key:
+                raise ValueError("La preuve d'effet externe appartient à une autre exécution.")
+            if effect["status"] != "COMPLETED":
+                raise ValueError("La preuve d'effet externe n'est pas dans un état COMPLETED.")
+            cur = conn.execute(
+                "UPDATE executions SET status='COMPLETED',result=?,error=NULL,finished_at=?,lease_until=NULL "
+                "WHERE execution_key=? AND status='RECOVERY_REQUIRED'",
+                (effect["result"], now, execution_key),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError("La finalisation de récupération a échoué à cause d'une concurrence d'état.")
+            self._transition_mission_status(
+                conn,
+                execution["mission_id"],
+                MissionStatus.COMPLETED,
+                expected_current=MissionStatus.RUNNING,
+            )
+            final = conn.execute(
+                f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?",
+                (execution_key,),
+            ).fetchone()
+        if final is None:
+            raise RuntimeError("Execution record could not be persisted")
+        return dict(final)
+
+
     def finish_execution_and_mission(self, execution_key: str, status: str, result: Any = None, error: str | None = None) -> dict[str, Any]:
         """The only way an execution reaches a terminal state.
 
@@ -480,31 +552,3 @@ class DurableStore:
         with self._connect() as conn:
             row = conn.execute(f"SELECT {self._execution_fields()} FROM executions WHERE execution_key=?", (execution_key,)).fetchone()
         return dict(row) if row else None
-
-
-def install_store_extension(name: str, function: Any) -> None:
-    """Attach a method defined outside this module, refusing a stranger's version.
-
-    Several transitions are implemented in their own modules and grafted onto
-    DurableStore at import time. The two installers disagreed about conflicts:
-    the recovery one skipped silently if anything was already bound, the
-    approval one overwrote unless the binding was already its own. Both were
-    silent, in opposite directions, about the same question -- and the graft the
-    recovery module installs governs RECOVERY_REQUIRED -> COMPLETED, where a
-    weaker definition winning by import order is precisely the fail-open shape
-    the boundary exists to prevent.
-
-    Re-installing the same function stays a no-op; anything else raises rather
-    than picking a winner quietly. Nothing may replace a method this module
-    defines: an approval hardening used to arrive that way, leaving a weaker
-    implementation live in the class for any tidy-up to fall back to.
-    """
-    current = getattr(DurableStore, name, None)
-    if current is not None:
-        owner = getattr(current, "__module__", "")
-        if owner != getattr(function, "__module__", ""):
-            raise RuntimeError(
-                f"DurableStore.{name} is already defined by {owner or 'an unknown module'}: "
-                "refusing to install a second definition"
-            )
-    setattr(DurableStore, name, function)

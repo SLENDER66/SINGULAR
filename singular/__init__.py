@@ -189,7 +189,6 @@ def _table() -> None:
         "ImprovementActivation", "ImprovementCandidate", "ImprovementEvaluation",
         "ImprovementKind", "ImprovementRegistry", "artifact_fingerprint",
     )
-    _depuis("durable_recovery", "confirm_execution_recovery_from_effect")
     _depuis(
         "durable_integrity",
         "DurableIntegrityChecker", "DurableIntegrityReport", "IntegrityViolation",
