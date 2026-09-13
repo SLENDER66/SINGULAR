@@ -12,7 +12,10 @@ dependencies = ["pydantic>=2.0,<3"]
 
 [project.optional-dependencies]
 runtime = ["openai-agents>=0.14.0"]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "anthropic>=1.0"]
+# `pytest-randomly` n'est pas un confort : le README affirme que la suite passe
+# « in randomised order », et cette phrase a longtemps repose sur des graines que
+# je passais a la main. Le CI ne l'installait pas, donc il ne l'exigeait jamais.
+dev = ["pytest>=8.0", "pytest-randomly>=3.15", "ruff>=0.6", "mypy>=1.11", "anthropic>=1.0"]
 # La faculte « Analyse » est la seule chose de ce depot qui consomme des jetons.
 # Elle est optionnelle par construction : le journal, la chaine d'integrite, la
 # Notice et la calibration tournent sans elle, et tests/test_sage_independence.py
@@ -22,9 +25,6 @@ analyse = ["anthropic>=1.0"]
 
 [tool.setuptools.packages.find]
 include = ["singular*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100

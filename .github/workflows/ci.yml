@@ -44,7 +44,17 @@ jobs:
       - name: Type check (informational)
         continue-on-error: true
         run: mypy singular
-      - name: Tests
+      # Deux ordres, et les deux bloquent. L'ordre du disque est reproductible :
+      # c'est celui qu'on relance pour comprendre un echec. L'ordre aleatoire
+      # attrape ce que le premier ne peut pas voir -- un temoin partage entre
+      # deux tests, defaut trouve a la main le 13 septembre 2026, et qu'aucune
+      # etape du CI n'aurait vu. La graine est imprimee par pytest-randomly :
+      # un echec ici se rejoue avec `pytest -p randomly --randomly-seed=<graine>`.
+      - name: Tests (ordre du disque)
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: pytest -q -p no:randomly
+      - name: Tests (ordre aleatoire)
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: pytest -q

@@ -531,6 +531,9 @@ Quatre leçons, et ce sont elles qu'il faut garder :
   (`pytest -p randomly`). Les deux ont trouvé quelque chose : le défaut ci-dessus,
   et un test qui ne passait que parce qu'il tournait en premier — son témoin était
   une liste partagée que trois autres tests vidaient à la main, et pas lui.
+  Le CI exige désormais les deux ordres ; le greffon qui rend le hasard possible
+  est une dépendance `dev` déclarée, et non plus ce qui se trouvait installé dans
+  mon conteneur.
 - **L'étape informative du CI dit peut-être vrai.** L'erreur `mypy` décrivait ce
   défaut exactement, depuis le début.
 - **`pgrep -f motif` et `pkill -f motif` trouvent la commande qui les lance.**
@@ -644,10 +647,16 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
    assurances derrière un contrôle qui les précède — leur écrire un test
    demanderait de désactiver `verify()`, donc de tester un chemin qui n'existe
    pas. Relance l'outil après avoir touché à la frontière, pas avant.
-2. **« La suite passe en ordre aléatoire » est mesuré, pas garanti.** Quelques
-   graines, à la main, et rien dans le CI ne l'exige. Le défaut trouvé cette
-   fois était un témoin partagé ; le prochain sera de la même famille, et il
-   faudra la même graine pour le voir.
+2. ~~**« La suite passe en ordre aléatoire » est mesuré, pas garanti.**~~ Réglé
+   le 13 septembre 2026, et la cause était plus bête que la piste : `pytest-randomly`
+   n'était pas dans les dépendances `dev`, donc le CI ne l'installait pas et
+   `pytest -q` y tournait dans l'ordre du disque. La phrase du README —
+   « in randomised order » — était tenue par les graines que je passais à la main.
+   Le CI lance maintenant **les deux ordres**, tous deux bloquants : celui du
+   disque, qu'on relance pour comprendre un échec, et un ordre aléatoire dont
+   pytest imprime la graine. `tests/test_les_deux_ordres_du_ci.py` épingle les
+   deux, et lit la dépendance dans la liste `dev` analysée — pas dans le texte du
+   fichier, où le commentaire qui l'explique suffisait à contenter l'assertion.
 3. Ce à quoi **un nom global se résout** n'est pas couvert par l'empreinte de
    capability (limite assumée, testée).
 4. Un objet sans `artifact_identity()` est identifié par sa seule classe
