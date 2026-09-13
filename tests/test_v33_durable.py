@@ -57,3 +57,41 @@ def test_idempotency_key_is_deterministic(tmp_path: Path):
     key2 = store.idempotency_key("mission", "action", "v1")
     assert key1 == key2
     assert len(key1) == 64
+
+
+# --- une cle d'execution ne sert qu'a une mission et une action -----------------
+#
+# `_validate_execution_identity` refuse une ligne dont la mission ou l'action ne
+# sont pas celles qu'on annonce. Le refus n'avait aucun temoin -- nomme par la
+# passe de mutation sur le socle.
+#
+# Le chemin est direct : la cle est un **argument** de
+# `begin_execution_and_start_mission`. Elle derive normalement de la mission et de
+# l'action, mais rien n'oblige l'appelant a la calculer ainsi -- et c'est ce garde
+# qui rattrape le cas ou deux travaux differents se retrouveraient sous la meme
+# cle : le second lirait le resultat du premier comme si c'etait le sien.
+
+def test_une_cle_d_execution_ne_se_reutilise_pas_pour_une_autre_mission(tmp_path: Path):
+    import pytest
+
+    from singular.autopilot import DelegationContract
+    from singular.durable import MissionStatus
+
+    store = DurableStore(tmp_path / "singular.db")
+    for mission in ("MIS-UN", "MIS-DEUX"):
+        store.save_mission(DelegationContract(mission, "objectif", "résultat",
+                                              autonomy=Autonomy.EXECUTE_REVERSIBLE))
+        store.set_mission_status(mission, MissionStatus.PLANNED)
+
+    store.begin_execution_and_start_mission("meme-cle", "MIS-UN", "ACT-UN")
+
+    with pytest.raises(ValueError, match="réutilisée pour une autre mission ou action"):
+        store.begin_execution_and_start_mission("meme-cle", "MIS-DEUX", "ACT-UN")
+    with pytest.raises(ValueError, match="réutilisée pour une autre mission ou action"):
+        store.begin_execution_and_start_mission("meme-cle", "MIS-UN", "ACT-DEUX")
+
+
+# Le refus voisin -- « Idempotency record could not be persisted », quand la ligne
+# qu'on vient d'inserer ne se relit pas -- reste sans temoin et le restera :
+# l'insertion et la lecture sont dans la meme transaction, donc seule une panne de
+# la base peut le declencher. Assurance, pas trou.
