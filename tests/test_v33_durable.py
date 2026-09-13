@@ -93,9 +93,10 @@ def test_une_cle_d_execution_ne_se_reutilise_pas_pour_une_autre_mission(tmp_path
         store.begin_execution_and_start_mission("meme-cle", "MIS-UN", "ACT-DEUX")
 
 
-# Deux refus voisins restent sans temoin et le resteront : « Idempotency record
-# could not be persisted » et « Execution record could not be persisted », quand la
-# ligne qu'on vient d'inserer ne se relit pas. L'insertion et la lecture sont dans
+# Quatre refus voisins restent sans temoin et le resteront : « Idempotency record
+# could not be persisted », « Execution record could not be persisted » et les deux
+# `final is None` des chemins de recuperation -- quand la ligne qu'on vient d'ecrire
+# ne se relit pas. L'insertion et la lecture sont dans
 # la meme transaction, donc seule une panne de la base les declenche -- et une base
 # qui perd une ligne inseree ne se simule pas sans simuler la base elle-meme, ce
 # qui ne prouverait rien de ce code. Assurances, pas trous.
@@ -262,3 +263,27 @@ def test_une_recuperation_exige_une_mission_encore_en_cours(tmp_path: Path):
     with pytest.raises(ValueError, match="mission doit être RUNNING"):
         store.resolve_execution_recovery("cle-annul", "FAIL", reason="abandonnée")
     assert store.get_execution("cle-annul")["status"] == "RECOVERY_REQUIRED"
+
+
+@pytest.mark.parametrize("statut", ["SUCCESS", "RUNNING", "RECOVERY_REQUIRED", "completed", ""])
+def test_un_resultat_d_execution_n_a_que_deux_mots(tmp_path: Path, statut):
+    """`finish_execution_and_mission` est « the only way an execution reaches a
+    terminal state », et son vocabulaire n'etait pas garde.
+
+    Les deux mots comptent parce que la transition de mission juste en dessous ne
+    connait qu'eux : ecrire « SUCCESS » ou « RECOVERY_REQUIRED » par cette porte
+    laisserait une execution dans un etat que la machine ne sait pas lire, et une
+    mission qui ne suit pas. « completed » en minuscules est le cas realiste.
+    """
+    from singular.autopilot import DelegationContract
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-MOTS", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-MOTS", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-mots", "MIS-MOTS", "ACT-MOTS")
+
+    with pytest.raises(ValueError, match="COMPLETED ou FAILED"):
+        store.finish_execution_and_mission("cle-mots", statut)
+    assert store.get_execution("cle-mots")["status"] == "RUNNING"
+    assert store.get_mission_status("MIS-MOTS") is MissionStatus.RUNNING
