@@ -217,3 +217,74 @@ def test_concurrent_records_keep_one_unbroken_chain(tmp_path):
     assert errors == []
     assert len(ledger.list()) == 6
     assert ledger.verify()
+
+
+# --- la chaine du grand livre, que rien ne verifiait ---------------------------
+#
+# `verify()` refuse trois choses et deux n'avaient aucun temoin -- la mutation sur
+# ce module, mesuree contre la suite entiere, l'a nomme. Ce sont celles qui
+# tiennent la chaine : un enregistrement dont l'identifiant ne derive pas de ce
+# qu'il dit etre, et un maillon qui ne pointe pas sur le precedent.
+#
+# C'est la propriete pour laquelle ce fichier existe : un resultat attache apres
+# coup a une autre decision, ou une ligne deplacee dans l'ordre, nourrirait la
+# calibration avec un fait qui n'a jamais eu lieu sous cette forme. Le journal a la
+# meme propriete et elle y est testee depuis toujours ; ici, non.
+
+def _un_enregistrement(tmp_path, forecast_id="F1"):
+    from singular.learning import Forecast, ForecastKind
+
+    decision = _build_decision()
+    ledger = OutcomeLedger(tmp_path / "outcomes.db")
+    ledger.attestation_store.issue(decision)
+    execution_key = _completed_execution(decision, tmp_path / "outcomes.db")
+    ledger.record(
+        decision=decision,
+        forecast=Forecast(forecast_id, ForecastKind.BINARY, probability=0.8, confidence=0.9),
+        actual=True,
+        execution_key=execution_key,
+        execution_status="COMPLETED",
+    )
+    assert ledger.verify() is True
+    return ledger
+
+
+def test_un_maillon_qui_ne_pointe_plus_sur_le_precedent_ne_se_verifie_pas(tmp_path):
+    """Le chainage, casse en SQL comme le ferait n'importe quel acces direct."""
+    ledger = _un_enregistrement(tmp_path)
+
+    with ledger._connect() as conn:
+        conn.execute("UPDATE outcome_ledger SET previous_fingerprint='autre chose'")
+
+    assert ledger.verify() is False
+
+
+def test_un_enregistrement_renomme_ne_se_verifie_pas(tmp_path):
+    """L'identifiant derive de la decision, de l'execution et de la prevision.
+
+    Le renommer -- ou attacher ce resultat a une autre decision en ne changeant
+    que l'identifiant -- doit rompre la verification, sinon la calibration
+    apprendrait d'un fait attribue a autre chose.
+    """
+    ledger = _un_enregistrement(tmp_path)
+
+    with ledger._connect() as conn:
+        conn.execute("UPDATE outcome_ledger SET record_id='REC-INVENTE'")
+
+    assert ledger.verify() is False
+
+
+def test_une_ligne_illisible_ne_se_verifie_pas(tmp_path):
+    """Le troisieme refus : ce qui ne se relit meme pas.
+
+    Un genre de prevision que l'enum ne connait pas rend `_row` incapable de
+    reconstruire l'observation. `verify()` doit rendre faux -- pas lever, parce que
+    son appelant est un affichage : la Notice demande « la chaine tient-elle ? » et
+    doit recevoir oui ou non.
+    """
+    ledger = _un_enregistrement(tmp_path)
+
+    with ledger._connect() as conn:
+        conn.execute("UPDATE outcome_ledger SET forecast_kind='CHOSE'")
+
+    assert ledger.verify() is False

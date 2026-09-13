@@ -104,6 +104,23 @@ def test_un_candidat_a_peine_meilleur_et_juste_assez_sur_passe(tmp_path):
     assert registry.active("forecast.model") == activation
 
 
+@pytest.mark.parametrize("status", ["", "accepted", "ACCEPTE", "PEUT-ETRE", "OUI"])
+def test_une_revue_n_a_que_deux_mots(tmp_path, status):
+    """Le vocabulaire de la revue humaine, que personne n'essayait de tromper.
+
+    Le cas reel n'est pas un attaquant, c'est une casse : `accepted` en minuscules
+    passe par une interface qui recopie une chaine. Accepte, il ne vaudrait pas
+    ACCEPTED a la promotion -- donc un candidat revu resterait bloque sans que
+    personne comprenne pourquoi. Refuse ici, la faute se voit tout de suite.
+    """
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    registry.register(candidate())
+    registry.evaluate(evaluation())
+
+    with pytest.raises(ValueError, match="ACCEPTED or REJECTED"):
+        registry.review("IMP-1", status)
+
+
 def test_successful_promotion_is_durable_and_visible_after_restart(tmp_path):
     path = tmp_path / "improvements.db"
     registry = ImprovementRegistry(path)
@@ -317,6 +334,27 @@ def test_a_newer_schema_is_refused_rather_than_read(tmp_path):
     with registry._connect() as conn:
         conn.execute("UPDATE improvement_schema SET version=?", (SCHEMA_VERSION + 1,))
     with pytest.raises(RuntimeError, match="newer version of SINGULAR"):
+        ImprovementRegistry(path)
+
+
+@pytest.mark.parametrize("version", range(1, SCHEMA_VERSION))
+def test_an_older_schema_is_refused_rather_than_migrated_silently(tmp_path, version):
+    """L'autre bord du meme garde, et celui que la section 13 du mandat nomme.
+
+    Une base ecrite par une version precedente n'a pas les colonnes que ce code
+    lit. `CREATE TABLE IF NOT EXISTS` ne migre rien -- il ne s'execute pas quand la
+    table est la -- donc sans ce refus la base d'hier serait ouverte et lue comme
+    si elle etait a jour. Seule la version **plus recente** etait essayee.
+
+    Il n'y a pas de migration automatique ici, et c'est assume : le refus doit donc
+    le dire, et nommer la version trouvee.
+    """
+    path = tmp_path / "improvements.db"
+    registry = ImprovementRegistry(path)
+    with registry._connect() as conn:
+        conn.execute("UPDATE improvement_schema SET version=?", (version,))
+
+    with pytest.raises(RuntimeError, match=f"v{version} predates v{SCHEMA_VERSION}"):
         ImprovementRegistry(path)
 
 
