@@ -38,7 +38,15 @@ from urllib.parse import unquote_plus, urlsplit
 from ..fichiers import ecrire_atomique
 from ..collecte import collecter
 from ..journal import DEFAULT_PATH, DecisionJournal, Reversibility, Status, Tier
-from ..saisie import CONFLIT_PAGE, introuvable, verifie_decision
+from ..saisie import (
+    CHAMP_ACTION,
+    CHAMP_ATTENDU,
+    CHAMP_DECISION,
+    CONFLIT_PAGE,
+    introuvable,
+    verifie_decision,
+    verifie_texte,
+)
 from .icon import render_icon
 from .notice import build_notice
 
@@ -204,10 +212,30 @@ def _reversibility(payload: dict[str, Any]) -> Reversibility | None:
         raise SageError(HTTPStatus.BAD_REQUEST, f"réversibilité inconnue : {brut}") from None
 
 
+#: Le nom de chaque champ dans sa langue. Les trois premiers viennent de
+#: `singular.saisie`, ou vit la regle : le refus doit nommer ce qu'il lit a
+#: l'ecran, pas la clef JSON que le formulaire envoie.
+NOMS_DES_CHAMPS = {
+    "title": CHAMP_DECISION,
+    "action": CHAMP_ACTION,
+    "predicted": CHAMP_ATTENDU,
+    "reason": "La raison",
+    "question": "La question",
+}
+
+
 def _text(payload: dict[str, Any], name: str) -> str:
+    """Un texte obligatoire, refuse dans sa langue.
+
+    Il refusait « « title » est obligatoire » : une phrase francaise autour d'un
+    mot anglais qui n'apparait sur aucun ecran. La phrase est celle de
+    `singular.saisie`, la meme que le clavier affiche.
+    """
     value = str(payload.get(name, "")).strip()
-    if not value:
-        raise SageError(HTTPStatus.BAD_REQUEST, f"« {name} » est obligatoire")
+    try:
+        verifie_texte(NOMS_DES_CHAMPS.get(name, name), value)
+    except ValueError as refus:
+        raise SageError(HTTPStatus.BAD_REQUEST, str(refus)) from None
     return value
 
 

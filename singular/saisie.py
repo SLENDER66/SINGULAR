@@ -103,6 +103,17 @@ def verifie_gain(valeur: float | None) -> None:
         raise ValueError("un coût n'est pas un gain : laisse vide si tu ne sais pas")
 
 
+#: Le nom de chaque texte d'une decision, dans sa langue et une seule fois.
+#:
+#: Les trois surfaces les ecrivaient pour elles : le clavier dans ses questions,
+#: le serveur pas du tout -- il refusait avec la clef JSON, « « title » est
+#: obligatoire », un mot qu'il ne voit nulle part a l'ecran. Une phrase recopiee
+#: finit par dire deux choses ; celle-la disait deja deux langues.
+CHAMP_DECISION = "La décision"
+CHAMP_ACTION = "Ce que tu vas faire"
+CHAMP_ATTENDU = "Ce que tu attends"
+
+
 def verifie_texte(nom: str, valeur: object) -> None:
     """Une ligne ecrite, pas une ligne vide.
 
@@ -148,9 +159,9 @@ def verifie_decision(*, probability: float, cost_hours: float, horizon_days: int
     verifie_heures(cost_hours)
     verifie_jours(horizon_days)
     verifie_gain(expected_gain_eur)
-    verifie_texte("La décision", title)
-    verifie_texte("Ce que tu vas faire", action)
-    verifie_texte("Ce que tu attends", predicted)
+    verifie_texte(CHAMP_DECISION, title)
+    verifie_texte(CHAMP_ACTION, action)
+    verifie_texte(CHAMP_ATTENDU, predicted)
 
 
 #: Ce que voit quelqu'un qui tranche deux fois la meme decision.
@@ -201,6 +212,6 @@ def introuvable(entry_id: str) -> str:
     return f"{entry_id} n'est dans aucune ligne de ce journal (python3 -m singular list)."
 
 
-__all__ = ["CONFLIT", "CONFLIT_CLAVIER", "CONFLIT_PAGE", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",
+__all__ = ["CHAMP_ACTION", "CHAMP_ATTENDU", "CHAMP_DECISION","CONFLIT", "CONFLIT_CLAVIER", "CONFLIT_PAGE", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",
            "verifie_decision", "verifie_gain",
            "verifie_heures", "verifie_jours", "verifie_probabilite", "verifie_texte"]

@@ -570,3 +570,43 @@ def test_le_balayage_declenche_bien_des_refus(tmp_path):
         with pytest.raises(SageError):
             getattr(app, route)(charge)
     assert len(REFUS_ATTENDUS) >= 4
+
+
+# --- et le nom du champ, lu a l'ecran et pas dans le JSON ----------------------
+
+def test_le_serveur_nomme_le_champ_comme_il_s_affiche(tmp_path):
+    """Le refus du formulaire nommait la clef JSON : « « title » est obligatoire ».
+
+    Une phrase francaise autour d'un mot anglais qu'il ne voit sur aucun ecran --
+    le formulaire affiche « La décision ». Et c'etait une deuxieme ecriture de la
+    meme regle : le clavier refusait deja avec la phrase de `singular.saisie`.
+    """
+    from singular.saisie import CHAMP_ACTION, CHAMP_ATTENDU, CHAMP_DECISION
+    from singular.sage.server import SageApp, SageError
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    complet = {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+               "tier": "REVENUS", "cost_hours": 2, "horizon_days": 14}
+
+    for clef, nom in (("title", CHAMP_DECISION), ("action", CHAMP_ACTION),
+                      ("predicted", CHAMP_ATTENDU)):
+        with pytest.raises(SageError) as refus:
+            app.add(complet | {clef: "   "})
+        assert refus.value.message.startswith(nom), refus.value.message
+        assert clef not in refus.value.message, (
+            f"le refus nomme la clef JSON « {clef} » : ce mot n'est sur aucun ecran")
+
+
+def test_les_noms_des_champs_n_ont_qu_un_domicile():
+    """Trois chaines recopiees dans deux surfaces sont deux surfaces qui divergent."""
+    from singular.saisie import CHAMP_ACTION, CHAMP_ATTENDU, CHAMP_DECISION
+
+    racine = pathlib.Path(__file__).resolve().parent.parent
+    domicile = (racine / "singular/saisie.py").read_text(encoding="utf-8")
+    surfaces = [racine / "singular/__main__.py", racine / "singular/sage/server.py"]
+
+    for nom in (CHAMP_DECISION, CHAMP_ACTION, CHAMP_ATTENDU):
+        assert f'"{nom}"' in domicile, f"« {nom} » a quitté `singular.saisie`"
+        for surface in surfaces:
+            assert f'"{nom}"' not in surface.read_text(encoding="utf-8"), (
+                f"{surface.name} récrit « {nom} » au lieu de le lire")

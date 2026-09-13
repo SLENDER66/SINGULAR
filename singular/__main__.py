@@ -38,6 +38,9 @@ from .saisie import verifie_gain as _verifie_gain
 from .saisie import verifie_heures as _verifie_heures
 from .saisie import verifie_jours as _verifie_jours
 from .saisie import verifie_probabilite as _verifie_probabilite
+from .saisie import CHAMP_ACTION as _CHAMP_ACTION
+from .saisie import CHAMP_ATTENDU as _CHAMP_ATTENDU
+from .saisie import CHAMP_DECISION as _CHAMP_DECISION
 from .saisie import verifie_texte as _verifie_texte
 from .sage import notice as _notice
 from .sage.notice import calibration_verdict, foundation_item
@@ -314,11 +317,11 @@ def cmd_add(journal: DecisionJournal, args) -> int:
         # Chaque question garde sa propre reponse : une ligne vide etait acceptee
         # ici et ne se voyait refuser qu'a l'ecriture, en anglais, apres les huit.
         title = _ask("  Décision (une ligne)",
-                     validate=lambda valeur: _verifie_texte("La décision", valeur))
+                     validate=lambda valeur: _verifie_texte(_CHAMP_DECISION, valeur))
         action = _ask("  Ce que tu vas faire concrètement",
-                      validate=lambda valeur: _verifie_texte("Ce que tu vas faire", valeur))
+                      validate=lambda valeur: _verifie_texte(_CHAMP_ACTION, valeur))
         predicted = _ask("  Ce que tu attends comme résultat observable",
-                         validate=lambda valeur: _verifie_texte("Ce que tu attends", valeur))
+                         validate=lambda valeur: _verifie_texte(_CHAMP_ATTENDU, valeur))
         probability = _ask("  Probabilité que ça arrive (0.05 à 0.95)", cast=_nombre,
                            default=0.6, validate=_verifie_probabilite)
         tier = _tier_prompt()
