@@ -74,6 +74,30 @@ AUTHORIZED_CAPABILITY = register_execution_capability(AUTHORIZED_PROVIDER, "cap_
 HANDLER_CAPABILITY = register_execution_capability(authorized_handler, "cap_test_time_of_use_handler")
 
 
+@pytest.fixture(autouse=True)
+def _temoin_vide():
+    """Le temoin partage repart vide a chaque test, sans que personne y pense.
+
+    `AUTHORIZED_PROVIDER` porte la capacite : l'empreinte d'artefact est celle de
+    **cet objet**, donc les tests ne peuvent pas en fabriquer un par test. Sa
+    liste d'appels est donc de l'etat partage, et c'est elle qui prouve le fait
+    qui compte ici -- « rien n'a atteint le fournisseur ».
+
+    Trois tests la vidaient a la main. Le quatrieme ne le faisait pas : il
+    passait parce qu'il tournait en premier. `pytest -p randomly
+    --randomly-seed=424242` le fait tourner apres un autre et
+    `assert AUTHORIZED_PROVIDER.calls == []` rend `['execute']` -- le refus a bien
+    eu lieu, mais le temoin ne prouvait plus rien.
+
+    Un `clear()` recopie dans chaque test est une regle a quatre exemplaires, et
+    le quatrieme manquait. Ici elle est a un seul, et elle s'applique meme aux
+    tests qui n'existent pas encore.
+    """
+    AUTHORIZED_PROVIDER.calls.clear()
+    yield
+    AUTHORIZED_PROVIDER.calls.clear()
+
+
 def _handler_decision(decision_id: str) -> object:
     return _decision(decision_id, execution_target=HANDLER_CAPABILITY, execution_kind="handler")
 
@@ -202,7 +226,6 @@ def test_external_effect_refuses_a_decision_revoked_after_validation(tmp_path):
     """Revoking a decision mid-flight must stop the effect, not arrive too late."""
     decision = _effect_decision("DEC-TOU-DECISION-REVOKE")
     executor = _executor(decision, tmp_path)
-    AUTHORIZED_PROVIDER.calls.clear()
     _revoke_decision_during(executor, decision, "_authorize")
 
     with pytest.raises(PermissionError, match="durablement attestée"):
@@ -243,7 +266,6 @@ def test_a_refused_execution_does_not_invent_recovery(tmp_path):
     """
     decision = _effect_decision("DEC-TOU-CLAIM")
     executor = _executor(decision, tmp_path)
-    AUTHORIZED_PROVIDER.calls.clear()
     _revoke_during(executor, decision.execution_target, "_authorize")
 
     with pytest.raises(PermissionError):
@@ -277,7 +299,6 @@ def test_authorized_external_effect_still_executes(tmp_path):
     decision = _effect_decision("DEC-TOU-OK")
     executor = _executor(decision, tmp_path)
     provider = AUTHORIZED_PROVIDER
-    provider.calls.clear()
 
     result = executor.execute_effect_validated(decision, provider, provider_name="bounded-provider",
                                                operation="apply", payload=PAYLOAD)
