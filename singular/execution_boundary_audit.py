@@ -56,6 +56,53 @@ def _dynamic_import_names(node: ast.Call) -> set[str]:
     return set(argument.value.split("."))
 
 
+def modules_named_by(node: ast.AST) -> set[str]:
+    """Every module segment one node names, in every spelling this package uses.
+
+    One reader, because the same blindness was fixed three times in three files:
+    a guard that reads `node.module` alone, or import statements alone, forbids
+    nothing -- it publishes the way through. The spellings, all of them real here:
+
+        import singular.execution          -> {"singular", "execution"}
+        from .execution import ...         -> {"execution"}
+        from . import execution            -> {"execution"}
+        from singular import execution     -> {"singular", "execution"}
+        import_module("singular.execution") -> {"singular", "execution"}
+        singular.execution                 -> {"execution"}
+
+    Aliases count as modules only after `from .` or `from singular` -- where they
+    are modules. `from dataclasses import dataclass` names `dataclasses`, not a
+    module called `dataclass`, so a guard with an allowlist can still use this.
+
+    What no static reader resolves, and no caller should assume it does: a module
+    name computed at runtime.
+
+    This answers "what does this file put within reach". It does not answer "what
+    must be installed to run it" -- a relative import names no distribution -- so
+    a guard asking that second question reads level-0 imports itself.
+    """
+    if isinstance(node, ast.ImportFrom):
+        names = set((node.module or "").split(".")) - {""}
+        return names | _names_bound_from_a_package(node)
+    if isinstance(node, ast.Import):
+        return {segment for alias in node.names for segment in alias.name.split(".")}
+    if isinstance(node, ast.Call):
+        return _dynamic_import_names(node)
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        # The package resolves its own names on demand (PEP 562), so an attribute
+        # of it is an import, with no import statement for a rule to read.
+        return {node.attr} if node.value.id == "singular" else set()
+    return set()
+
+
+def modules_named(tree: ast.AST) -> set[str]:
+    """Every module segment a whole file names. See `modules_named_by`."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        names |= modules_named_by(node)
+    return names
+
+
 def _names_bound_from_a_package(node: ast.ImportFrom) -> set[str]:
     """The modules a `from <package> import x, y` binds, which are not in its module.
 
@@ -314,21 +361,7 @@ class ExecutionBoundaryAuditor:
             return []
         findings: list[BoundaryFinding] = []
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                names = set((node.module or "").split("."))
-                names |= _names_bound_from_a_package(node)
-            elif isinstance(node, ast.Import):
-                names = {segment for alias in node.names for segment in alias.name.split(".")}
-            elif isinstance(node, ast.Call):
-                names = _dynamic_import_names(node)
-            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-                # `import singular` then `singular.execution`: the package
-                # resolves its own names on demand (PEP 562), so an attribute is
-                # an import here, with no import statement to read.
-                names = {node.attr} if node.value.id == "singular" else set()
-            else:
-                continue
-            reached = sorted(names & EXECUTION_CAUSING_MODULES)
+            reached = sorted(modules_named_by(node) & EXECUTION_CAUSING_MODULES)
             if reached:
                 findings.append(BoundaryFinding(path.as_posix(), node.lineno, "AUTHORITY_IMPORT_LEAK", ", ".join(reached)))
         return findings
@@ -407,4 +440,5 @@ class ExecutionBoundaryAuditor:
         return True
 
 
-__all__ = ["BoundaryFinding", "BoundaryAuditReport", "ExecutionBoundaryAuditor"]
+__all__ = ["BoundaryFinding", "BoundaryAuditReport", "ExecutionBoundaryAuditor",
+           "modules_named", "modules_named_by"]

@@ -33,7 +33,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from singular.execution_boundary_audit import EXECUTION_CAUSING_MODULES
+from singular.execution_boundary_audit import EXECUTION_CAUSING_MODULES, modules_named
 
 SAGE = Path(__file__).resolve().parent.parent / "singular" / "sage"
 
@@ -101,55 +101,13 @@ ALLOWED = frozenset({"journal", "sage", "icon", "notice", "server", "learning",
 
 
 def _imports_du_paquet(source: Path) -> set[str]:
-    """Les modules du paquet que ce fichier met à portée, par tous les chemins d'ici.
+    """Les modules du paquet que ce fichier met a portee, par tous les chemins d'ici.
 
-    Trois façons de nommer un module coexistent dans ce dépôt, et une seule
-    était lue : l'instruction `import`. Les deux autres ne sont pas
-    hypothétiques -- `sage/server.py` charge `offres` par
-    `importlib.import_module`, exprès, et `singular/__init__.py` résout ses noms
-    à la demande, donc `singular.execution` se lit aussi en attribut. Une règle
-    qui ne voit qu'une des trois n'interdit rien : elle indique par où passer.
-
-    Reste dehors ce qu'aucune lecture statique ne résout : un nom de module
-    calculé à l'exécution (`import_module(f"singular.{nom}")`). C'est la limite
-    connue de l'empreinte de capability, et elle est la même ici.
+    Le lecteur vit dans l'auditeur de frontiere, qui porte deja la regle d'import
+    du paquet : trois fichiers avaient chacun le leur, et chacun etait aveugle a
+    une orthographe differente. Un seul garde ne peut plus naitre aveugle.
     """
-    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-    found: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            if node.module:
-                found.add(node.module.split(".")[-1])
-            # `from . import offres` et `from singular import offres` nomment
-            # des modules dans leurs alias, pas dans leur module.
-            if (node.level and node.module is None) or node.module == "singular":
-                found.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.startswith("singular"):
-                    found.add(alias.name.split(".")[-1])
-        elif isinstance(node, ast.Call):
-            found |= _noms_importes_dynamiquement(node)
-        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            if node.value.id == "singular":
-                found.add(node.attr)
-    return found
-
-
-def _noms_importes_dynamiquement(node: ast.Call) -> set[str]:
-    """Les segments d'un module nommé par une chaîne littérale.
-
-    `importlib.import_module("singular.execution")` est un import ; le lire
-    comme un appel anodin suffisait à traverser ce fichier.
-    """
-    func = node.func
-    called = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
-    if called not in {"import_module", "__import__"}:
-        return set()
-    argument = node.args[0] if node.args else None
-    if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
-        return set()
-    return set(argument.value.split("."))
+    return modules_named(ast.parse(source.read_text(encoding="utf-8"), filename=str(source)))
 
 
 def _modules_du_paquet() -> dict[str, Path]:

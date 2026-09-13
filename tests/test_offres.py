@@ -71,6 +71,8 @@ def test_il_ne_connait_ni_le_journal_ni_l_execution() -> None:
     interessante » pourrait enregistrer la decision de postuler. Il n'a pas
     de quoi.
     """
+    from singular.execution_boundary_audit import modules_named
+
     arbre = ast.parse(SOURCE.read_text(encoding="utf-8"))
     importes = set()
     for noeud in ast.walk(arbre):
@@ -79,6 +81,10 @@ def test_il_ne_connait_ni_le_journal_ni_l_execution() -> None:
         elif isinstance(noeud, ast.ImportFrom):
             importes.add(noeud.module or "")
             importes.update(a.name for a in noeud.names)
+    # Ajoute, jamais remplace : la collecte ci-dessus attrape aussi des symboles
+    # (`DecisionJournal`), le lecteur attrape les orthographes qu'elle ne voit
+    # pas -- `import_module("singular.journal")` et `singular.journal`.
+    importes |= modules_named(arbre)
 
     interdits = {"journal", "DecisionJournal", "singular.journal", ".journal",
                  "execution", "durable_execution", "capabilities", "effects",

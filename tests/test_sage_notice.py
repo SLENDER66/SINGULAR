@@ -633,13 +633,14 @@ def test_la_notice_se_construit_avec_les_facultes_desinstallees(tmp_path) -> Non
     import ast
     import pathlib
 
+    from singular.execution_boundary_audit import modules_named
+
     source = (pathlib.Path(__file__).resolve().parent.parent
               / "singular" / "sage" / "notice.py").read_text(encoding="utf-8")
-    for noeud in ast.walk(ast.parse(source)):
-        if isinstance(noeud, ast.ImportFrom):
-            assert "parle" not in (noeud.module or ""), "la Notice importe la faculte"
-        elif isinstance(noeud, ast.Import):
-            assert not any("parle" in a.name for a in noeud.names)
+    # `from . import parle` ne met pas « parle » dans le module de l'import : il
+    # est dans l'alias. Ce garde lisait le module seul, donc la forme la plus
+    # simple d'importer un voisin passait devant lui. Le lecteur les lit toutes.
+    assert "parle" not in modules_named(ast.parse(source)), "la Notice nomme la faculte"
 
 
 # --- la recherche d'emploi, jugee sur les faits du Scout ----------------------

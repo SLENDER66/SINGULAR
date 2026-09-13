@@ -76,6 +76,8 @@ def test_elle_n_ecrit_rien_dans_le_journal() -> None:
     contenir des choses que personne n'a decidees -- et la chaine d'integrite
     du journal ne vaut que si chaque entree vient d'un geste volontaire.
     """
+    from singular.execution_boundary_audit import modules_named
+
     arbre = ast.parse(SOURCE.read_text(encoding="utf-8"))
     importes = set()
     for noeud in ast.walk(arbre):
@@ -84,6 +86,10 @@ def test_elle_n_ecrit_rien_dans_le_journal() -> None:
         elif isinstance(noeud, ast.ImportFrom):
             importes.add(noeud.module or "")
             importes.update(a.name for a in noeud.names)
+    # Ajoute, jamais remplace : la collecte ci-dessus attrape aussi des symboles
+    # (`DecisionJournal`), le lecteur attrape les orthographes qu'elle ne voit
+    # pas -- `import_module("singular.journal")` et `singular.journal`.
+    importes |= modules_named(arbre)
 
     interdits = {"journal", "DecisionJournal", "singular.journal", ".journal",
                  "execution", "durable_execution", "effects"}
