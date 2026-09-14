@@ -39,6 +39,15 @@ n'atteint.
    Trouve le 14 septembre 2026, en verifiant a la main une condition que l'outil
    disait couverte et qu'il n'avait jamais touchee.
 
+   **Ce qu'elle saute, et pourquoi il faut le savoir.** Une ligne portant
+   plusieurs `BoolOp` imbriques est ignoree. `calibration_verdict['montrable']`
+   en est une -- un `and` dans un `or` -- donc la regle qui decide si la
+   calibration s'affiche *du tout*, dans trois interfaces, n'est mesuree par
+   aucune forme. Elle a ete eprouvee a la main le meme jour : les deux moities
+   neutralisees font echouer la suite. Le silence de l'outil sur cette ligne
+   n'est donc pas une couverture, c'est un angle mort connu -- et la prochaine
+   personne qui la modifie doit refaire la mesure a la main.
+
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
 refus que cet outil a denonce comme non prouve l'etait, par
