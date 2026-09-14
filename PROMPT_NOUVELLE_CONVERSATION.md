@@ -620,11 +620,26 @@ passer une exécution à COMPLETED.
 `if ... raise`. Or les refus les plus graves n'en sont pas : `verify`,
 `verify_issuance`, `matches`, `authorised`, `same_origin` rendent `False`. Un
 prédicat qui cesse de refuser ne lève rien et ne trace rien — c'est la forme
-fail-open. Zéro survivant dans le moteur du matin, ce qui est la bonne nouvelle :
+fail-open. Zéro survivant dans le moteur du matin, ce qui était la bonne nouvelle :
 le jeton d'accès du Sage et ses gardes contre un domaine hostile sont prouvés.
 Six dans la frontière, tous des témoins manquants et aucun défaut de
 comportement — dont la mutation d'une décision **après** son émission, sur le
 chemin qui nourrit la calibration.
+
+**Ce « zéro » n'a pas tenu, et la façon dont il est tombé vaut la leçon.** Un
+passage suivant en a trouvé quatre dans le moteur du matin. Deux sont des
+assurances derrière `BEGIN IMMEDIATE`, triées dans l'outil pour qu'on ne les
+retrie pas. Les deux autres étaient un vrai trou, sous la forme la plus
+sournoise : **un test existait et ne couvrait aucune des deux moitiés qu'il
+visait**. `is_shared_memory_target` — ses trois cas passaient à l'identique avec
+l'une ou l'autre moitié remplacée par `True`, et ce qu'elle décide est si un
+journal vit sur le disque ou en RAM. Un « zéro survivant » est donc daté : il
+vaut pour le code de ce jour-là, pas pour celui d'après.
+
+L'outil a un troisième groupe depuis, `genesis`. Premier passage : treize
+survivants sur vingt-deux, dans du code écrit le jour même, dont la garantie
+fail-closed du juge — un vérificateur qui plante valait un succès. Zéro sur
+treize après correction. Relance-le quand tu touches à ce qu'il mesure.
 
 **L'outil s'est trompé une fois, et c'est la leçon qui vaut le plus.** Il a
 dénoncé comme non prouvé un refus que la suite entière tue, parce que sa
@@ -659,7 +674,10 @@ heure, tous sur le chemin du matin, aucun qu'un test aurait vu :
   la Notice se taisait sur les mêmes données. Cinquième fois pour ce défaut : la
   ligne vit dans le moteur, et le fichier qui garde « une règle, un domicile » ne
   liste que les interfaces. Les deux seuils vivent maintenant dans le journal, et
-  le garde couvre le moteur quand il affiche.
+  le garde couvre le moteur quand il affiche. **Sixième fois depuis** : nommer
+  les bons seuils tout en les recombinant soi-même est encore tenir sa propre
+  règle, donc c'est la règle entière qui vit dans le journal, `montrable`
+  compris, et le garde exige que cette ligne n'en nomme **aucun**.
 - `sj due` disait « 1 décision(s) attendent un verdict ». Le pluriel a un
   domicile depuis le matin ; la forme parenthésée y échappait.
 - `sj import mon-export.csv` rendait une pile Python. `export` écrit un CSV,
