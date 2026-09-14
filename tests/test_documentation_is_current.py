@@ -535,3 +535,33 @@ def test_un_document_qui_parle_de_deux_journaux_nomme_la_reprise() -> None:
         + "\n  ".join(manquants)
         + "\nDis `python3 -m singular import`, ou dis pourquoi il ne s'applique pas."
     )
+
+
+#: Un nombre de tests ecrit en toutes lettres, dans un document qui se lit comme
+#: l'etat courant. « 2038 tests passent », « 1925 tests ».
+COMPTE_DE_TESTS = re.compile(r"\b\d{3,5}\s+tests?\b", re.IGNORECASE)
+
+
+def test_aucun_document_n_ecrit_le_nombre_de_tests() -> None:
+    """Le `README` a pris cette decision pour lui ; elle vaut pour tout le depot.
+
+    « Le compte est deliberement pas ecrit ici — il etait faux en une semaine,
+    deux fois. » Une session l'a quand meme ecrit trois fois de suite dans des
+    messages de commit, en se trompant deux fois, dont une en corrigeant la
+    premiere. Troisieme passage, donc la regle cesse d'etre un conseil.
+
+    Un message de commit deja pousse ne se reecrit pas : ce garde tient les
+    documents, qui eux se lisent comme l'etat courant. Le chiffre ne prouve rien
+    que le CI ne prouve mieux, et le verifier coute une passe complete.
+    """
+    fautifs = []
+    for chemin in _documents_markdown():
+        for numero, ligne in enumerate(chemin.read_text(encoding="utf-8").splitlines(), 1):
+            trouve = COMPTE_DE_TESTS.search(ligne)
+            if trouve and "nombre de tests" not in ligne and "compte" not in ligne.lower():
+                fautifs.append(f"{chemin.relative_to(ROOT)}:{numero} — {trouve.group(0)}")
+    assert not fautifs, (
+        "ces documents ecrivent un nombre de tests, qui sera faux au prochain commit :\n  "
+        + "\n  ".join(fautifs)
+        + "\nDis que la suite passe, pas combien elle compte."
+    )

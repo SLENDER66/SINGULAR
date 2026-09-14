@@ -126,6 +126,15 @@ rends-la impossible.** Un chiffre qui décroît, une doc qui vieillit, un
 invariant qu'on oublie : au troisième passage, écris le test qui échoue à la
 place du prochain lecteur.
 
+**N'écris jamais le nombre de tests.** Ni dans un message de commit, ni dans le
+corps d'une PR, ni dans un document. Le `README` a pris cette décision pour
+lui-même — « le compte n'est pas écrit ici : il était faux en une semaine, deux
+fois » — et une session l'a quand même écrit trois fois de suite en se trompant
+deux fois, dont une en corrigeant la précédente. Le chiffre ne prouve rien que
+le CI ne prouve mieux, il vieillit à chaque commit, et le vérifier coûte une
+passe complète de la suite. « La suite passe » suffit ; si le nombre compte,
+l'outil le donne.
+
 Si une correction révèle une nouvelle faiblesse :
 
 poursuis.
