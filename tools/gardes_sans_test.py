@@ -39,14 +39,23 @@ n'atteint.
    Trouve le 14 septembre 2026, en verifiant a la main une condition que l'outil
    disait couverte et qu'il n'avait jamais touchee.
 
-   **Ce qu'elle saute, et pourquoi il faut le savoir.** Une ligne portant
-   plusieurs `BoolOp` imbriques est ignoree. `calibration_verdict['montrable']`
-   en est une -- un `and` dans un `or` -- donc la regle qui decide si la
-   calibration s'affiche *du tout*, dans trois interfaces, n'est mesuree par
-   aucune forme. Elle a ete eprouvee a la main le meme jour : les deux moities
-   neutralisees font echouer la suite. Le silence de l'outil sur cette ligne
-   n'est donc pas une couverture, c'est un angle mort connu -- et la prochaine
-   personne qui la modifie doit refaire la mesure a la main.
+   **L'angle mort sur les imbrications est ferme, et il etait pire qu'annonce.**
+   Cette place disait qu'une ligne portant plusieurs `BoolOp` imbriques etait
+   ignoree, et demandait au prochain lecteur de mesurer `calibration_verdict
+   ['montrable']` a la main. C'etait vrai de la forme 5 seule. Les formes 3 et 4
+   affirmaient la meme prudence sans l'appliquer : elles ne regardaient que le
+   `BoolOp` de tete -- le test d'un `if`, la valeur d'un `return` -- et ne voyaient
+   donc jamais les imbriques. Elles ne sautaient rien : elles annoncaient une
+   moitie et le transformateur, qui visait la ligne, en neutralisait une autre.
+
+   Mesure le 14 septembre 2026 sur `GlobalDecisionReport.requires_human`, celui-la
+   meme dont la forme 4 se reclame : trois de ses cinq raisons annoncees comme
+   mesurees ne l'etaient pas, et une passe entiere de la frontiere a ete triee sur
+   ces etiquettes. La clef porte desormais la colonne du `BoolOp`, l'etiquette
+   porte le texte de l'operande, et les trois formes descendent dans les
+   imbrications au lieu de les confondre ou de les sauter.
+   `tests/test_l_outil_de_mesure.py` tient le temoin : deux `BoolOp` sur une meme
+   ligne, et chacun doit recevoir exactement ce que son etiquette annonce.
 
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
@@ -382,15 +391,27 @@ class RendUneMoitieFausse(ast.NodeTransformer):
     L'element neutre depend de l'operateur : `a or False` vaut `a`, `a and True`
     vaut `a`. Remplacer par la mauvaise constante ferait un mutant qui ne mesure
     rien -- `a or True` refuse toujours, `a and False` ne refuse jamais.
+
+    **La clef porte la colonne, pas seulement la ligne.** Une ligne peut porter
+    plusieurs `BoolOp` -- `a or b or (c and d)` en porte deux -- et `generic_visit`
+    visite les enfants avant leur parent : viser « la ligne 45 » mutait donc le
+    `and` imbrique en croyant muter le `or` exterieur. Le rapport nommait une
+    moitie et en neutralisait une autre, et les deux premieres moities du `or`
+    n'etaient jamais mutees du tout. Mesure sur
+    `GlobalDecisionReport.requires_human`, l'exemple meme dont cet outil se
+    reclame : trois de ses cinq raisons annoncees comme mesurees ne l'etaient pas.
+    La colonne distingue deux `BoolOp` d'une meme ligne ; l'etiquette porte en
+    plus le texte de l'operande, pour qu'un mauvais ciblage se voie.
     """
 
-    def __init__(self, clef: tuple[int, int]) -> None:
-        self.ligne, self.index = clef
+    def __init__(self, clef: tuple[int, int, int]) -> None:
+        self.ligne, self.colonne, self.index = clef
         self.touche = False
 
     def visit_BoolOp(self, node: ast.BoolOp) -> ast.BoolOp:
         self.generic_visit(node)
-        if node.lineno == self.ligne and self.index < len(node.values) and not self.touche:
+        vise = node.lineno == self.ligne and node.col_offset == self.colonne
+        if vise and self.index < len(node.values) and not self.touche:
             neutre = isinstance(node.op, ast.And)
             node.values[self.index] = ast.Constant(value=neutre)
             self.touche = True
@@ -468,13 +489,33 @@ def refus_booleens_d_un_fichier(arbre: ast.AST) -> list[tuple[int, str]]:
     return trouves
 
 
-def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
-    """Chaque moitie d'un garde compose, par (ligne, rang de la moitie).
+def _operande(valeur: ast.expr) -> str:
+    """Le texte de la moitie neutralisee, pour que l'etiquette ne puisse pas mentir.
 
-    Une ligne portant deux `BoolOp` rendrait la clef ambigue : on ne mute alors
-    ni l'une ni l'autre. Refuser de deviner vaut mieux que mesurer la mauvaise.
+    Une etiquette qui ne dit que « moitie 2 » oblige a recompter les operandes a
+    la main, et un mauvais ciblage passe alors inapercu -- c'est exactement ce qui
+    est arrive. Le texte de l'operande rend la verification immediate.
     """
-    par_ligne: dict[int, list[ast.BoolOp]] = {}
+    texte = ast.unparse(valeur).replace("\n", " ")
+    return texte if len(texte) <= 60 else texte[:57] + "..."
+
+
+def _boolops(racine: ast.expr) -> list[ast.BoolOp]:
+    """Tous les `BoolOp` d'une expression, imbriques compris, du plus externe au plus interne."""
+    return [noeud for noeud in ast.walk(racine) if isinstance(noeud, ast.BoolOp)]
+
+
+def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int, int], str]]:
+    """Chaque moitie d'un garde compose, par (ligne, colonne, rang de la moitie).
+
+    La clef portait autrefois la seule ligne, et sautait les lignes ambigues. Les
+    deux choix etaient faux : une ligne peut porter plusieurs `BoolOp` imbriques,
+    que cette forme ne voyait meme pas -- elle ne regardait que le `BoolOp` de tete
+    -- donc elle ne sautait rien et laissait le transformateur muter l'imbrique a la
+    place de celui qu'elle annoncait. La colonne les distingue, et l'imbrique
+    devient mesurable au lieu d'etre confondu ou saute.
+    """
+    trouves = []
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.If) or noeud.orelse or len(noeud.body) != 1:
             continue
@@ -486,15 +527,12 @@ def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
             nom = getattr(leve.func, "id", "") or getattr(leve.func, "attr", "")
         if nom not in REFUS or not isinstance(noeud.test, ast.BoolOp):
             continue
-        par_ligne.setdefault(noeud.test.lineno, []).append(noeud.test)
-    trouves = []
-    for ligne, tests in sorted(par_ligne.items()):
-        if len(tests) != 1:
-            continue
-        operateur = "and" if isinstance(tests[0].op, ast.And) else "or"
-        for index in range(len(tests[0].values)):
-            trouves.append(((ligne, index), f"moitie {index + 1} du {operateur}"))
-    return trouves
+        for boolop in _boolops(noeud.test):
+            operateur = "and" if isinstance(boolop.op, ast.And) else "or"
+            for index, valeur in enumerate(boolop.values):
+                trouves.append(((boolop.lineno, boolop.col_offset, index),
+                                f"moitie {index + 1} du {operateur} :: {_operande(valeur)}"))
+    return sorted(trouves)
 
 
 def moities_rendues_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
@@ -516,25 +554,22 @@ def moities_rendues_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], 
     fonction annotee `-> bool` declare etre un predicat. Une propriete compte, c'est
     une fonction annotee comme les autres.
     """
-    par_ligne: dict[int, list[ast.BoolOp]] = {}
-    noms: dict[int, str] = {}
+    trouves = []
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.FunctionDef):
             continue
         if not (isinstance(noeud.returns, ast.Name) and noeud.returns.id == "bool"):
             continue
         for interne in ast.walk(noeud):
-            if isinstance(interne, ast.Return) and isinstance(interne.value, ast.BoolOp):
-                par_ligne.setdefault(interne.value.lineno, []).append(interne.value)
-                noms[interne.value.lineno] = noeud.name
-    trouves = []
-    for ligne, rendus in sorted(par_ligne.items()):
-        if len(rendus) != 1:
-            continue
-        operateur = "and" if isinstance(rendus[0].op, ast.And) else "or"
-        for index in range(len(rendus[0].values)):
-            trouves.append(((ligne, index), f"moitie {index + 1} du {operateur} rendu ({noms[ligne]})"))
-    return trouves
+            if not (isinstance(interne, ast.Return) and isinstance(interne.value, ast.BoolOp)):
+                continue
+            for boolop in _boolops(interne.value):
+                operateur = "and" if isinstance(boolop.op, ast.And) else "or"
+                for index, valeur in enumerate(boolop.values):
+                    trouves.append(((boolop.lineno, boolop.col_offset, index),
+                                    f"moitie {index + 1} du {operateur} rendu ({noeud.name})"
+                                    f" :: {_operande(valeur)}"))
+    return sorted(trouves)
 
 
 def moities_d_un_verdict_en_dictionnaire(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
@@ -551,14 +586,13 @@ def moities_d_un_verdict_en_dictionnaire(arbre: ast.AST) -> list[tuple[tuple[int
     c'est la regle de calibration, celle qui s'est deja corrigee six fois, qui
     vivait dans l'angle mort. Le defaut que l'outil traque etait dans l'outil.
 
-    Meme prudence que la forme 3 sur la clef : une ligne portant plus d'un
-    `BoolOp` -- imbrication comprise -- rend l'etiquette ambigue, parce que le
-    transformateur visite les enfants avant leur parent et muterait donc autre
-    chose que ce que le rapport annonce. Ces lignes-la sont sautees plutot que
-    mal nommees.
+    Cette forme etait la seule a voir les imbrications, et elle les sautait :
+    l'etiquette aurait ete ambigue, parce que le transformateur visait une ligne et
+    visite les enfants avant leur parent. La clef porte maintenant la colonne, donc
+    l'ambiguite n'existe plus et rien n'est saute -- `calibration_verdict
+    ['montrable']`, un `and` dans un `or`, redevient mesurable.
     """
-    par_ligne: dict[int, list[ast.BoolOp]] = {}
-    noms: dict[int, str] = {}
+    trouves = []
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.FunctionDef):
             continue
@@ -567,19 +601,14 @@ def moities_d_un_verdict_en_dictionnaire(arbre: ast.AST) -> list[tuple[tuple[int
                 continue
             for clef, valeur in zip(interne.value.keys, interne.value.values, strict=False):
                 etiquette = clef.value if isinstance(clef, ast.Constant) else "?"
-                for descendant in ast.walk(valeur):
-                    if isinstance(descendant, ast.BoolOp):
-                        par_ligne.setdefault(descendant.lineno, []).append(descendant)
-                        noms[descendant.lineno] = f"{noeud.name}[{etiquette!r}]"
-    trouves = []
-    for ligne, rendus in sorted(par_ligne.items()):
-        if len(rendus) != 1:
-            continue
-        operateur = "and" if isinstance(rendus[0].op, ast.And) else "or"
-        for index in range(len(rendus[0].values)):
-            trouves.append(((ligne, index),
-                            f"moitie {index + 1} du {operateur} en dictionnaire ({noms[ligne]})"))
-    return trouves
+                for boolop in _boolops(valeur):
+                    operateur = "and" if isinstance(boolop.op, ast.And) else "or"
+                    for index, operande in enumerate(boolop.values):
+                        trouves.append((
+                            (boolop.lineno, boolop.col_offset, index),
+                            f"moitie {index + 1} du {operateur} en dictionnaire "
+                            f"({noeud.name}[{etiquette!r}]) :: {_operande(operande)}"))
+    return sorted(trouves)
 
 
 #: Chaque forme de refus : ce qui la trouve, ce qui la neutralise.

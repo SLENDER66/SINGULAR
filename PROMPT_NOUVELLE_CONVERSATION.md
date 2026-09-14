@@ -607,16 +607,22 @@ que des littéraux entiers ; personne n'écrit `"abandonnée"` tout seul, on éc
 `f"  {id}  abandonnée - {lesson}"`. Il ne tenait rien.
 
 **Un refus sans témoin n'est pas un refus.** `tools/gardes_sans_test.py` sabote
-chaque refus de la frontière, un par un, et relance la suite. **Quatre formes** :
-un `if ... raise` dont la condition devient fausse ; un `return False` qui devient
-`return True` — les prédicats sont les refus les plus graves du dépôt et la première
-version les ignorait — ; **une moitié** d'un garde composé, remplacée par l'élément
-neutre de son opérateur, pour savoir si les deux moitiés d'un `if a or b` sont
-prouvées ou une seule ; et **une moitié d'un booléen rendu**, parce que les trois
-premières ne voient que ce qui refuse. `global_control.py` n'avait aucun mutant :
-il ne lève rien, il rend un verdict que tout le reste lit — et
-`requires_human` réunit cinq raisons d'exiger un humain par des `or`, dont une
-seule non prouvée suffit à ce qu'une catégorie entière cesse d'en exiger un. Ceux qui
+chaque refus de la frontière, un par un, et relance la suite. Les formes qu'il
+sait saboter sont énumérées dans sa docstring, et leur nombre n'est pas recopié
+ici : un `if ... raise` dont la condition devient fausse ; un `return False` qui
+devient `return True` — les prédicats sont les refus les plus graves du dépôt et
+la première version les ignorait — ; **une moitié** d'un garde composé, remplacée
+par l'élément neutre de son opérateur, pour savoir si les deux moitiés d'un
+`if a or b` sont prouvées ou une seule ; **une moitié d'un booléen rendu**, parce
+que les précédentes ne voient que ce qui refuse ; et **une moitié d'un booléen
+rendu dans un dictionnaire**, parce que ce dépôt construit là ses verdicts les
+plus lus. `global_control.py` n'avait aucun mutant : il ne lève rien, il rend un
+verdict que tout le reste lit — et `requires_human` réunit cinq raisons d'exiger
+un humain par des `or`, dont une seule non prouvée suffit à ce qu'une catégorie
+entière cesse d'en exiger un. Trois de ces cinq n'étaient pas mesurées le
+14 septembre 2026 alors que l'outil les annonçait comme telles : il visait une
+ligne, et cette ligne portait trois `BoolOp` imbriqués. Une étiquette de cet outil
+n'est une mesure que depuis qu'elle porte le texte de l'opérande. Ceux qui
 survivent sont retirables sans qu'un test rougisse — la première passe en a nommé
 beaucoup, et le compte n'est pas écrit ici : l'outil le donne — mais pas en dix
 minutes, et cette phrase-là a coûté une heure. Le prix suit le nombre de
@@ -630,7 +636,7 @@ fournisseur, opération et charge substitués étaient testés à l'aller, aucun
 retour — alors que la réconciliation atteint le même fournisseur et peut faire
 passer une exécution à COMPLETED.
 
-**Et il y a deux formes de refus, pas une.** L'outil ne connaissait que
+**Et un refus ne prend pas qu'une seule forme.** L'outil ne connaissait que
 `if ... raise`. Or les refus les plus graves n'en sont pas : `verify`,
 `verify_issuance`, `matches`, `authorised`, `same_origin` rendent `False`. Un
 prédicat qui cesse de refuser ne lève rien et ne trace rien — c'est la forme
@@ -762,18 +768,17 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 ## Pistes d'audit encore ouvertes
 
 1. **Des refus de la frontière n'ont toujours pas de témoin**, et c'est en
-   partie normal : `tools/gardes_sans_test.py` les liste -- les quatre formes, le
-   `raise`, le `return False`, la moitié d'un garde composé et la moitié d'un
-   booléen rendu -- et sa docstring
-   trie les survivants en **quatre** familles. Seule la première est un trou :
-   écris le témoin. La deuxième et la quatrième sont des assurances — un contrôle
-   antérieur les couvre, ou rien ne produit leur entrée — et leur écrire un test
-   demanderait de désactiver `verify()`, donc de tester un chemin qui n'existe
-   pas ; on écrit alors la raison à côté du code, pas un test. La troisième, la
-   **moitié morte**, ne se teste ni ne se documente : elle se retire, parce
-   qu'aucune entrée ne peut la distinguer de sa voisine. Sa forme la plus commune
-   est désormais impossible — `tests/test_moitie_morte.py` la refuse dans tout le
-   dépôt. Relance l'outil après avoir touché à la frontière, pas avant.
+   partie normal : `tools/gardes_sans_test.py` les liste, et sa docstring trie les
+   survivants en familles — leur nombre est écrit là-bas et nulle part ici, parce
+   qu'il a déjà vieilli deux fois dans ce fichier. Une seule famille est un trou :
+   écris le témoin. Les assurances — un contrôle antérieur les couvre, ou rien ne
+   produit leur entrée — ne se testent pas : leur écrire un test demanderait de
+   désactiver `verify()`, donc de tester un chemin qui n'existe pas ; on écrit
+   alors la raison à côté du code. La **moitié morte** ne se teste ni ne se
+   documente : elle se retire, parce qu'aucune entrée ne peut la distinguer de sa
+   voisine. Sa forme la plus commune est désormais impossible —
+   `tests/test_moitie_morte.py` la refuse dans tout le dépôt. Relance l'outil
+   après avoir touché à la frontière, pas avant.
 2. ~~**« La suite passe en ordre aléatoire » est mesuré, pas garanti.**~~ Réglé
    le 13 septembre 2026, et la cause était plus bête que la piste : `pytest-randomly`
    n'était pas dans les dépendances `dev`, donc le CI ne l'installait pas et

@@ -565,3 +565,35 @@ def test_aucun_document_n_ecrit_le_nombre_de_tests() -> None:
         + "\n  ".join(fautifs)
         + "\nDis que la suite passe, pas combien elle compte."
     )
+
+
+#: Un nombre de formes de sabotage recopie dans un document. « Quatre formes »,
+#: « les quatre formes ». Le chiffre vit dans `tools/gardes_sans_test.py`.
+NOMBRE_DE_FORMES = re.compile(
+    r"\b(deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+formes\b", re.IGNORECASE)
+
+
+def test_aucun_document_ne_recopie_le_nombre_de_formes_de_l_outil() -> None:
+    """Deux fois faux dans le meme fichier, donc le chiffre n'a plus le droit d'y etre.
+
+    `PROMPT_NOUVELLE_CONVERSATION.md` annoncait « quatre formes » a deux endroits
+    apres qu'une cinquieme eut ete ajoutee -- celle qui a trouve l'angle mort sur
+    les verdicts en dictionnaire. Un chiffre recopie dans un document vieillit au
+    commit suivant et personne ne le relit ; celui-la est `len(FORMES)`, dans
+    l'outil, et un lecteur qui a besoin du compte lance l'outil.
+
+    Le meme piege a deja coute le nombre de tests, le nombre de familles de
+    triage, et une heure de vrai travail a partir d'une phrase fausse. Troisieme
+    fois : ca devient un garde.
+    """
+    fautifs = []
+    for chemin in _documents_markdown():
+        for numero, ligne in enumerate(chemin.read_text(encoding="utf-8").splitlines(), 1):
+            trouve = NOMBRE_DE_FORMES.search(ligne)
+            if trouve and "nombre de formes" not in ligne.lower():
+                fautifs.append(f"{chemin.relative_to(ROOT)}:{numero} — {trouve.group(0)}")
+    assert not fautifs, (
+        "ces documents recopient le nombre de formes de `tools/gardes_sans_test.py` :\n  "
+        + "\n  ".join(fautifs)
+        + "\nRenvoie a sa docstring ; elle, au moins, est a cote du code."
+    )
