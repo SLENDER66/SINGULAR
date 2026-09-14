@@ -10,7 +10,7 @@ from .approval_binding import ApprovalBindingStore
 from .approval_integrity import ApprovalIntegrityStore
 from .audit import AuditTrail
 from .autopilot import ApprovalRequest, ApprovalStatus, Autonomy, DelegationContract
-from .durable import MISSION_TRANSITIONS, AuditChainOutOfDate, DurableStore, MissionStatus
+from .durable import AuditChainOutOfDate, DurableStore, MissionStatus
 from .v32_governed_core import GovernedAction, GovernedMission, GovernorDecision
 
 
@@ -187,11 +187,18 @@ class DurableMissionRuntime:
         return MissionState(mission_id, self.store.get_mission_status(mission_id), len(self.store.pending_approvals(mission_id)))
 
     def _set_status(self, mission_id: str, target: MissionStatus) -> None:
-        current = self.store.get_mission_status(mission_id)
-        if current == target:
-            return
-        if target not in MISSION_TRANSITIONS[current]:
-            raise ValueError(f"Transition de mission interdite : {current.value} -> {target.value}")
+        """Le store decide, ce runtime demande.
+
+        Il y avait ici une copie exacte du controle de `_transition_mission_status`
+        -- meme table de transitions, meme message -- posee avant l'appel au store.
+        Aucun test ne pouvait dire laquelle des deux refusait, et la passe de
+        mutation l'a dit a leur place : neutralisee, la copie ne faisait rougir
+        personne.
+
+        La copie etait aussi la moins sure des deux. Elle lisait le statut sur une
+        connexion, decidait, puis ecrivait sur une autre : entre les deux, l'etat
+        pouvait changer. Le controle du store est dans la transaction qui ecrit.
+        """
         self.store.set_mission_status(mission_id, target)
 
     def _blocked(self, action, mission_id: str | None, reasons: tuple[str, ...]) -> GovernedAction:
