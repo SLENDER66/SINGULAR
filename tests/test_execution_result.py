@@ -2,7 +2,12 @@ import pytest
 
 from singular.autopilot import Autonomy, GovernorDecision
 from singular.decision_engine import DecisionRecommendation, DecisionStatus
-from singular.execution_result import ExecutionIntent, ExecutionResultBridge, ExecutionStatus
+from singular.execution_result import (
+    ExecutionIntent,
+    ExecutionResult,
+    ExecutionResultBridge,
+    ExecutionStatus,
+)
 
 
 def recommendation(status: DecisionStatus = DecisionStatus.PROPOSED) -> DecisionRecommendation:
@@ -186,3 +191,74 @@ def test_authorize_refuse_un_mode_qui_n_autorise_pas_l_execution(mode) -> None:
 
     with pytest.raises(PermissionError, match="Governor did not authorize execution"):
         bridge.authorize(intention, GovernorDecision("a1", mode, ("raison",), "APR-12345678"))
+
+
+# --- l'observation elle-meme : un resultat qui se contredit n'est pas une mesure --
+#
+# `ExecutionResult` est ce que le grand livre des resultats, l'apprentissage
+# economique et la calibration lisent ensuite. Un enregistrement qui dit SUCCEEDED
+# avec `success=False`, ou FAILED sans erreur, n'est pas une mesure imprecise :
+# c'est deux affirmations contradictoires dans la meme ligne, et le lecteur suivant
+# en croira une au hasard.
+
+
+def _resultat(**remplacements):
+    valeurs = {"decision_id": "d1", "action_id": "a1", "idempotency_key": "k1",
+               "status": ExecutionStatus.SUCCEEDED, "success": True}
+    valeurs.update(remplacements)
+    return ExecutionResult(**valeurs)
+
+
+def test_le_trajet_nominal_du_resultat_se_construit() -> None:
+    """Sans ca, les refus suivants passeraient en ne gardant rien."""
+    assert _resultat().status is ExecutionStatus.SUCCEEDED
+
+
+@pytest.mark.parametrize("champ", ["decision_id", "action_id"])
+@pytest.mark.parametrize("vide", ["", "   "])
+def test_un_resultat_nomme_la_decision_et_l_action(champ, vide) -> None:
+    """Les deux moities du meme garde, jouees separement.
+
+    Un resultat sans decision ne peut pas etre rapproche de ce qui l'a autorise ;
+    un resultat sans action ne peut pas etre rapproche de ce qui a ete fait. Les
+    deux sont la trace, pas des etiquettes.
+    """
+    with pytest.raises(ValueError, match="decision_id and action_id are required"):
+        _resultat(**{champ: vide})
+
+
+@pytest.mark.parametrize("vide", ["", "   "])
+def test_un_resultat_porte_sa_cle_d_idempotence(vide) -> None:
+    with pytest.raises(ValueError, match="idempotency_key is required"):
+        _resultat(idempotency_key=vide)
+
+
+def test_un_succes_qui_dit_ne_pas_avoir_reussi_est_refuse() -> None:
+    with pytest.raises(ValueError, match="SUCCEEDED requires success=True"):
+        _resultat(status=ExecutionStatus.SUCCEEDED, success=False)
+
+
+@pytest.mark.parametrize("statut", [ExecutionStatus.FAILED, ExecutionStatus.REJECTED])
+def test_un_echec_qui_dit_avoir_reussi_est_refuse(statut) -> None:
+    with pytest.raises(ValueError, match="FAILED/REJECTED require success=False"):
+        _resultat(status=statut, success=True, error="quelque chose")
+
+
+def test_un_echec_sans_erreur_est_refuse() -> None:
+    """Un echec dont personne ne dit la cause ne se corrige pas et ne s'apprend pas."""
+    with pytest.raises(ValueError, match="FAILED requires an error"):
+        _resultat(status=ExecutionStatus.FAILED, success=False)
+
+
+def test_les_metadonnees_sont_ordonnees_ou_refusees() -> None:
+    """L'ordre n'est pas une politesse : l'empreinte d'un resultat en depend.
+
+    `ExecutionResultBridge.record` refuse une cle d'idempotence reutilisee pour un
+    resultat different, en comparant des empreintes. Deux enregistrements portant
+    les memes couples dans deux ordres auraient deux empreintes : la meme execution
+    passerait pour deux, ou pour une contradiction.
+    """
+    with pytest.raises(ValueError, match="metadata must be deterministically sorted"):
+        _resultat(metadata=(("b", "2"), ("a", "1")))
+
+    assert _resultat(metadata=(("a", "1"), ("b", "2"))).metadata == (("a", "1"), ("b", "2"))
