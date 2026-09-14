@@ -42,6 +42,27 @@ class DelegationContract:
     escalation_conditions: tuple[str, ...] = ()
     success_criteria: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        """Un contrat sans identite n'autorise rien, et le store l'acceptait.
+
+        Mesure avant correction : `save_mission(DelegationContract("", "", ""))`
+        ecrivait une mission d'identifiant vide, a l'etat CREATED, sans qu'aucune
+        couche ne bronche. Or `mission_id` est la cle de tout ce qui est durable
+        ici -- l'etat de mission, les approbations, les cles d'idempotence des
+        executions. Deux missions differentes qui portent toutes deux `""` se
+        heurtent ensuite a « L'identite d'une mission existante est immuable »,
+        qui ressemble a une falsification alors que c'est une identite manquante.
+
+        Ces trois champs etaient bien verifies -- mais trois couches plus loin,
+        dans `ValidatedTrajectoryDecision._validate`, donc seulement pour une
+        mission qui va jusqu'a une decision executable. `ActionRequest`, juste en
+        dessous dans ce fichier, se verifie elle-meme depuis toujours.
+        """
+        for nom, valeur in (("mission_id", self.mission_id), ("objective", self.objective),
+                            ("expected_result", self.expected_result)):
+            if not valeur.strip():
+                raise ValueError(f"DelegationContract {nom} cannot be empty")
+
 
 @dataclass
 class ActionRequest:
