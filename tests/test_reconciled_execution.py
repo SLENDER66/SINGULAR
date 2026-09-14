@@ -252,6 +252,25 @@ def test_la_finalisation_exige_une_mission_encore_en_cours(tmp_path):
     assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED"
 
 
+# Le `rowcount != 1` qui suit la mise a jour est une assurance ici, et il ne l'est
+# pas dans `durable.py` : la difference est une ligne de SQL. `finalize` ouvre son
+# bloc par `BEGIN IMMEDIATE`, donc la transaction d'ecriture est prise **avant** la
+# premiere lecture et aucun autre ecrivain ne peut s'interposer.
+# `resolve_execution_recovery` et `confirm_execution_recovery_from_effect` ne le
+# font pas : `sqlite3` n'ouvre alors une transaction qu'au premier ecrit, la fenetre
+# entre lecture et ecriture est reelle, et leurs compare-and-swap ont chacun leur
+# temoin de course -- deux ouvriers sur la meme recuperation. Trois methodes qui
+# font le meme trajet, deux disciplines ; c'est ecrit ici pour que la prochaine
+# passe ne conclue pas de l'une a l'autre.
+#
+# Faut-il aligner les deux autres sur `BEGIN IMMEDIATE` ? Non, et c'est une decision
+# prise, pas un oubli. Les deux formes sont sures : l'une refuse le second ouvrier,
+# l'autre le fait attendre puis lui donne un refus plus precis. Mais les
+# compare-and-swap de `durable.py` sont **prouves** -- deux temoins de course les
+# atteignent -- alors que sous `BEGIN IMMEDIATE` ils deviendraient inatteignables,
+# donc des assurances de plus. Un garde prouve vaut mieux qu'un garde plus elegant
+# que rien n'essaie, et c'est la regle que toute cette passe applique.
+#
 # Les trois refus qui comparent le fournisseur, l'operation et la cle d'execution de
 # la preuve sont des assurances, pas des trous : la cle sous laquelle la preuve est
 # cherchee **est** derivee de ces trois valeurs, donc une ligne trouvee les porte
