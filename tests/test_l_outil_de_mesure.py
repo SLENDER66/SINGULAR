@@ -30,6 +30,10 @@ from tools.gardes_sans_test import (
     RendLeRefusVrai,
     RendUneMoitieFausse,
     _la_sous_suite_passe,
+    moities_d_un_fichier,
+    moities_rendues_d_un_fichier,
+    refus_booleens_d_un_fichier,
+    refus_d_un_fichier,
     _un_groupe,
     copie_a_mesurer,
     fichiers_a_copier,
@@ -116,7 +120,7 @@ def test_une_sous_suite_qui_ne_collecte_pas_est_un_echec():
     assert _la_sous_suite_passe(("tests/test_ce_fichier_n_existe_pas.py",)) is False
 
 
-# --- les trois formes de sabotage ---------------------------------------------
+# --- les quatre formes de sabotage ---------------------------------------------
 
 SOURCE = """
 def refuse(a, b):
@@ -130,6 +134,9 @@ def accepte() -> bool:
     if False:
         return False
     return False
+
+def verdict(a, b, c) -> bool:
+    return a or b or c
 """
 
 
@@ -157,6 +164,51 @@ def test_une_moitie_prend_l_element_neutre_de_son_operateur():
     assert "if a or False:" in _mute(RendUneMoitieFausse((3, 1)))
     assert "if True and b:" in _mute(RendUneMoitieFausse((5, 0)))
     assert "if a and True:" in _mute(RendUneMoitieFausse((5, 1)))
+
+
+def test_une_moitie_rendue_prend_aussi_l_element_neutre():
+    """La quatrieme forme : un predicat qui **rend** un booleen compose.
+
+    Les trois premieres ne voient que ce qui refuse -- un `raise`, un `return
+    False`. Celle-ci voit ce qui decide, et c'est la seule qui trouve quoi que ce
+    soit dans `global_control.py`, ou `requires_human` reunit cinq raisons d'exiger
+    un humain par des `or`.
+    """
+    assert "return False or b or c" in _mute(RendUneMoitieFausse((15, 0)))
+    assert "return a or False or c" in _mute(RendUneMoitieFausse((15, 1)))
+    assert "return a or b or False" in _mute(RendUneMoitieFausse((15, 2)))
+
+
+def test_la_quatrieme_forme_ne_ramasse_que_les_predicats_declares():
+    """Le meme critere que la forme 2 : `-> bool` declare un predicat.
+
+    Sans lui, tout `return a or b` du depot deviendrait un mutant -- y compris ceux
+    qui rendent autre chose qu'un booleen, ou muter ne dirait plus la meme chose.
+    """
+    trouves = moities_rendues_d_un_fichier(ast.parse(SOURCE))
+    assert [clef for clef, _ in trouves] == [(15, 0), (15, 1), (15, 2)]
+    assert all("verdict" in quoi for _, quoi in trouves)
+
+    sans_annotation = ast.parse("def v(a, b):\n    return a or b\n")
+    assert moities_rendues_d_un_fichier(sans_annotation) == []
+
+
+def test_la_porte_globale_est_desormais_visible():
+    """Le defaut qui a motive la quatrieme forme, verifie sur le vrai fichier.
+
+    `global_control.py` ne leve aucun refus : les trois premieres formes n'y
+    trouvaient rien, donc l'instrument disait « rien a signaler » sur le module qui
+    decide si une action peut etre preparee et si un humain est requis.
+    """
+    source = (RACINE / "singular" / "global_control.py").read_text(encoding="utf-8")
+    arbre = ast.parse(source)
+    assert refus_d_un_fichier(arbre) == []
+    assert refus_booleens_d_un_fichier(arbre) == []
+    assert moities_d_un_fichier(arbre) == []
+
+    rendus = moities_rendues_d_un_fichier(arbre)
+    predicats = {quoi.rsplit("(", 1)[1].rstrip(")") for _, quoi in rendus}
+    assert predicats == {"can_prepare", "requires_human"}
 
 
 def test_une_suite_entiere_deja_rouge_arrete_l_outil(monkeypatch: pytest.MonkeyPatch):

@@ -588,12 +588,16 @@ que des littéraux entiers ; personne n'écrit `"abandonnée"` tout seul, on éc
 `f"  {id}  abandonnée - {lesson}"`. Il ne tenait rien.
 
 **Un refus sans témoin n'est pas un refus.** `tools/gardes_sans_test.py` sabote
-chaque refus de la frontière, un par un, et relance la suite. **Trois formes**, et
-la troisième est la plus fine : un `if ... raise` dont la condition devient fausse,
-un `return False` qui devient `return True` — les prédicats sont les refus les plus
-graves du dépôt et la première version les ignorait —, et **une moitié** d'un garde
-composé, remplacée par l'élément neutre de son opérateur, pour savoir si les deux
-moitiés d'un `if a or b` sont prouvées ou une seule. Ceux qui
+chaque refus de la frontière, un par un, et relance la suite. **Quatre formes** :
+un `if ... raise` dont la condition devient fausse ; un `return False` qui devient
+`return True` — les prédicats sont les refus les plus graves du dépôt et la première
+version les ignorait — ; **une moitié** d'un garde composé, remplacée par l'élément
+neutre de son opérateur, pour savoir si les deux moitiés d'un `if a or b` sont
+prouvées ou une seule ; et **une moitié d'un booléen rendu**, parce que les trois
+premières ne voient que ce qui refuse. `global_control.py` n'avait aucun mutant :
+il ne lève rien, il rend un verdict que tout le reste lit — et
+`requires_human` réunit cinq raisons d'exiger un humain par des `or`, dont une
+seule non prouvée suffit à ce qu'une catégorie entière cesse d'en exiger un. Ceux qui
 survivent sont retirables sans qu'un test rougisse — la première passe en a nommé
 beaucoup, et le compte n'est pas écrit ici : l'outil le donne en dix minutes. Le
 travail n'est pas de tous les tester, c'est de les **trier** en quatre familles,
@@ -711,8 +715,9 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 ## Pistes d'audit encore ouvertes
 
 1. **Des refus de la frontière n'ont toujours pas de témoin**, et c'est en
-   partie normal : `tools/gardes_sans_test.py` les liste -- les trois formes, le
-   `raise`, le `return False` et la moitié d'un garde composé -- et sa docstring
+   partie normal : `tools/gardes_sans_test.py` les liste -- les quatre formes, le
+   `raise`, le `return False`, la moitié d'un garde composé et la moitié d'un
+   booléen rendu -- et sa docstring
    trie les survivants en **quatre** familles. Seule la première est un trou :
    écris le témoin. La deuxième et la quatrième sont des assurances — un contrôle
    antérieur les couvre, ou rien ne produit leur entrée — et leur écrire un test

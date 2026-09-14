@@ -5,7 +5,7 @@ il neutralise chaque refus des modules vises, un par un, relance une sous-suite
 ciblee, et nomme ceux qui survivent. Un survivant est un refus qu'aucun test
 n'atteint.
 
-**Trois formes, parce qu'il y en a trois.**
+**Quatre formes, parce qu'il y en a quatre.**
 
 1. Un `if ... raise` : sa condition devient fausse.
 2. Un `return False` dans une fonction qui rend un booleen : il devient
@@ -18,6 +18,15 @@ n'atteint.
    a la fois par son element neutre -- `False` dans un `or`, `True` dans un `and`
    -- et l'autre continue de garder. C'est la forme la plus fine : elle nomme la
    moitie de condition que personne n'essaie.
+4. **Une moitie d'un booleen rendu.** Les trois premieres ne savent voir que ce
+   qui refuse. Elles ne trouvaient donc rien dans les modules qui **decident** :
+   `global_control.py` n'avait pas un seul mutant, et c'est mesure, pas suppose.
+   Ces modules ne levent rien, ils rendent un verdict que les autres lisent -- et
+   un verdict faux est plus grave qu'un refus manquant.
+   `GlobalDecisionReport.requires_human` est l'exemple : cinq raisons reliees par
+   des `or`, cinq facons differentes d'exiger un humain. Si une seule n'est prouvee
+   par aucun test, toute une categorie peut cesser d'en exiger un sans que rien ne
+   rougisse.
 
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
@@ -146,6 +155,14 @@ CIBLES_FRONTIERE = (
     "singular/validated_pipeline.py",
     "singular/execution_result.py",
     "singular/reconciled_execution.py",
+    # La porte globale. Elle ne refuse rien -- elle rend un verdict et deux
+    # proprietes, `can_prepare` et `requires_human`, que tout le reste lit. Les
+    # trois premieres formes n'y trouvaient aucun mutant ; la quatrieme en trouve
+    # sept, un par raison d'autoriser ou d'exiger un humain.
+    "singular/global_control.py",
+    # Le gouverneur : la couche d'autorisation elle-meme, que `_validate`
+    # reconstruit et croit. Elle n'avait jamais vu un mutant.
+    "singular/autopilot.py",
 )
 
 #: La sous-suite qui couvre ces modules. Ciblee exprès : la suite entiere est
@@ -184,6 +201,9 @@ SOUS_SUITE_FRONTIERE = (
     # Et ce qui couvre le producteur et les deux modules de resultat.
     "tests/test_global_verdict_human_review.py", "tests/test_validated_trajectory_decision.py",
     "tests/test_execution_result.py", "tests/test_reconciled_execution.py",
+    # La porte globale et le gouverneur.
+    "tests/test_global_control.py", "tests/test_autopilot.py", "tests/test_v33_governance.py",
+    "tests/test_authority.py", "tests/test_commander_capacity.py",
 )
 
 #: Le moteur deterministe : ce qu'il lance chaque matin, sans jeton ni reseau.
@@ -343,11 +363,52 @@ def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
     return trouves
 
 
+def moities_rendues_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
+    """Chaque moitie d'un booleen **rendu** par un predicat, par (ligne, rang).
+
+    Les trois premieres formes ne savent voir que ce qui refuse : un `raise`, un
+    `return False`. Elles ne trouvent donc rien dans les modules qui **decident** --
+    `global_control.py`, `security.py`, `v32_governed_core.py` n'ont pas un seul
+    garde mutable, et c'est mesure, pas suppose. Ces modules ne refusent pas : ils
+    rendent un verdict que les autres lisent, et un verdict faux est plus grave
+    qu'un refus manquant.
+
+    `GlobalDecisionReport.requires_human` en est l'exemple exact : cinq raisons
+    reliees par des `or`, chacune une facon differente d'exiger un humain. Si une
+    seule n'est prouvee par aucun test, toute une categorie peut cesser d'exiger un
+    humain sans que rien ne rougisse.
+
+    Le critere est le meme que pour la forme 2, et pour la meme raison : une
+    fonction annotee `-> bool` declare etre un predicat. Une propriete compte, c'est
+    une fonction annotee comme les autres.
+    """
+    par_ligne: dict[int, list[ast.BoolOp]] = {}
+    noms: dict[int, str] = {}
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.FunctionDef):
+            continue
+        if not (isinstance(noeud.returns, ast.Name) and noeud.returns.id == "bool"):
+            continue
+        for interne in ast.walk(noeud):
+            if isinstance(interne, ast.Return) and isinstance(interne.value, ast.BoolOp):
+                par_ligne.setdefault(interne.value.lineno, []).append(interne.value)
+                noms[interne.value.lineno] = noeud.name
+    trouves = []
+    for ligne, rendus in sorted(par_ligne.items()):
+        if len(rendus) != 1:
+            continue
+        operateur = "and" if isinstance(rendus[0].op, ast.And) else "or"
+        for index in range(len(rendus[0].values)):
+            trouves.append(((ligne, index), f"moitie {index + 1} du {operateur} rendu ({noms[ligne]})"))
+    return trouves
+
+
 #: Chaque forme de refus : ce qui la trouve, ce qui la neutralise.
 FORMES = (
     (refus_d_un_fichier, RendLaConditionFausse),
     (refus_booleens_d_un_fichier, RendLeRefusVrai),
     (moities_d_un_fichier, RendUneMoitieFausse),
+    (moities_rendues_d_un_fichier, RendUneMoitieFausse),
 )
 
 
