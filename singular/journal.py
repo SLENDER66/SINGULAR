@@ -1175,8 +1175,13 @@ class DecisionJournal:
             "mean_brier": round(sum(brier) / len(brier), 4) if brier else None,
             "mean_probability": round(mean_probability, 2) if mean_probability is not None else None,
             "hit_rate": round(hit_rate, 2) if hit_rate is not None else None,
-            "overconfidence": round(mean_probability - hit_rate, 2)
-            if mean_probability is not None and hit_rate is not None else None,
+            # Une seule condition, et c'est celle qui decide. `mean_probability` et
+            # `hit_rate` valent None exactement ensemble -- tous deux
+            # `... if resolved else None` -- donc les tester l'un et l'autre
+            # laissait croire que deux cas etaient couverts quand un seul l'est.
+            # `gardes_sans_test.py` a nomme les deux moities le meme jour ou il a
+            # appris a regarder dans les dictionnaires rendus.
+            "overconfidence": round(mean_probability - hit_rate, 2) if resolved else None,
             "by_tier": by_tier,
             "chain_intact": self.verify(),
         }

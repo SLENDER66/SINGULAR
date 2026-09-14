@@ -779,3 +779,28 @@ def test_la_panne_se_lit_quand_meme_sur_le_pc(tmp_path, capsys):
     assert refus.value.code == 500
     assert "panne fabriquee" not in corps["message"], "le detail part sur le telephone"
     assert "panne fabriquee" in capsys.readouterr().out, "et il ne reste nulle part"
+
+
+def test_la_lecon_traverse_l_api_et_son_absence_devient_une_chaine_vide(journal):
+    """Ce qu'il a écrit lui-même doit arriver jusqu'à l'app, et rien d'autre.
+
+    `tools/gardes_sans_test.py` a nommé les deux moitiés de `entry.lesson or ""`
+    le jour où il a su regarder dans les dictionnaires rendus : ni le passage de
+    la leçon ni la valeur de repli n'avaient de témoin. La leçon est la seule
+    phrase du journal qui vienne de lui — « la leçon est la sienne, ou rien » —
+    et une carte qui l'avalerait effacerait ce qu'il a compris sans rien dire.
+
+    Le repli compte autant : l'app attend une chaîne. `None` ou `False` s'y
+    afficheraient tels quels.
+    """
+    from singular.sage.server import _entry_as_dict
+
+    ecrite = journal.add(title="Postuler", action="candidature", predicted="un entretien",
+                         probability=0.4, tier=Tier.REVENUS, cost_hours=3, horizon_days=14)
+    journal.resolve(ecrite.entry_id, happened=False, lesson="j'ai visé trop haut")
+    muette = journal.add(title="Loyer", action="virement", predicted="bail signé",
+                         probability=0.9, tier=Tier.STABILITE, cost_hours=1, horizon_days=30)
+
+    par_id = {entry.entry_id: _entry_as_dict(entry) for entry in journal.entries()}
+    assert par_id[ecrite.entry_id]["lesson"] == "j'ai visé trop haut"
+    assert par_id[muette.entry_id]["lesson"] == ""

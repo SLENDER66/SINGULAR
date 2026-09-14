@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.37.0 — Ce que la cinquieme forme et la frontiere ont trouve
+
+Trois audits de mutation, et cette fois ils mesurent ce qu'ils annoncent.
+
+**La frontiere d'execution**, priorite 1 du mandat. Trois refus atteignables sans
+temoin, chacun verifie par l'inverse -- garde neutralise, le test echoue.
+
+- **La derive de gouvernance n'etait testee qu'a l'aller.** `execute_validated`
+  et `execute_effect_validated` avaient leur temoin ; `reconcile_effect_validated`
+  porte le meme garde, a la meme place, et personne ne l'essayait. C'est le plus
+  dangereux des trois a laisser nu : la reconciliation ne demande pas au monde
+  d'agir, elle **conclut** ce qui a peut-etre deja agi. Une autorisation perimee
+  qui franchirait ce garde graverait comme acquis un effet que plus personne
+  n'autorise.
+- **Un contrat retrograde tombe avant la comparaison de gouverneur.** Le test
+  voisin altere l'autonomie vers EXECUTE_AUTHORIZED et tombe sur « governance no
+  longer matches ». Vers PREPARE, on ne va pas si loin : `_authorize` recalcule
+  avant, et `_validate_governance` refuse des qu'il voit le mode. Deux gardes sur
+  le meme chemin, un seul etait joue.
+- **Deux gardes de la porte d'autonomie.** `Autonomy` compte sept modes et seuls
+  deux sont rejetes avant le garde final ; `can_execute` vient de la politique,
+  pas du mode. `Governor.evaluate` n'emet jamais OBSERVE ni ANALYZE, mais
+  `_from_cached` reconstruit mode, `can_prepare` et `can_execute` depuis la base,
+  separement. Ce sont les « anciennes donnees persistees » de la section 7.
+
+**Le moteur des matins**, avec la cinquieme forme.
+
+- **Une moitie morte retiree** : `overconfidence` testait `mean_probability` et
+  `hit_rate` alors que les deux valent None exactement ensemble. Une seule
+  condition decide maintenant, et c'est celle qui decidait deja.
+- **La lecon traverse l'API, et son absence devient une chaine vide.** Ni l'un
+  ni l'autre n'avait de temoin. C'est la seule phrase du journal qui vienne de
+  lui ; une carte qui l'avalerait effacerait ce qu'il a compris sans rien dire.
+
 ## 3.36.0 — « Corrige » voulait dire deux choses a la fois
 
 Trouve en attaquant ma propre garantie plutot qu'en la relisant, comme la regle

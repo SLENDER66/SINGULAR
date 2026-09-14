@@ -845,3 +845,29 @@ def test_un_contrat_retrograde_a_prepare_tombe_avant_la_comparaison_de_gouverneu
 
     with pytest.raises(PermissionError, match="préparée mais non autorisée"):
         moteur.execute_validated(decision, authorized_handler)
+
+
+def test_un_contrat_altere_refuse_aussi_la_reconciliation(tmp_path):
+    """Teste a l'aller, jamais au retour -- et c'est le retour qui conclut l'effet.
+
+    Les deux tests voisins jouent la derive de gouvernance sur
+    `execute_validated` et `execute_effect_validated`. `reconcile_effect_validated`
+    porte le meme garde, a la meme place, et personne ne l'essayait. L'audit de
+    mutation l'a nomme.
+
+    Ce chemin-la est le plus dangereux des trois a laisser sans temoin : la
+    reconciliation ne demande pas au monde d'agir, elle **conclut** ce qui a
+    peut-etre deja agi -- elle fait passer une execution a COMPLETED. Une
+    autorisation perimee qui franchirait ce garde ne declencherait rien de
+    nouveau ; elle graverait comme acquis un effet que plus personne n'autorise.
+    """
+    decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+    _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                               autonomy=Autonomy.EXECUTE_AUTHORIZED.value)
+
+    with pytest.raises(PermissionError, match="governance no longer matches"):
+        moteur.reconcile_effect_validated(
+            decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+            operation="apply", payload=payload,
+        )
