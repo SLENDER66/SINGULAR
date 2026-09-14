@@ -154,8 +154,13 @@ class DurableStore:
                 # nothing naming the migration as the cause. Nobody can
                 # reconstruct which action those effects belonged to, so this
                 # says so here instead.
+                # `SELECT COUNT(*)` rend toujours exactement une ligne, meme sur
+                # une table vide : le compte vaut zero, la ligne existe. Le
+                # `existing is not None` qui vivait ici ne pouvait donc jamais
+                # decider. Meme garde de migration que celui d'
+                # `improvement_registry.py`, recopie, et la meme moitie morte avec.
                 existing = conn.execute("SELECT COUNT(*) AS total FROM external_effects").fetchone()
-                if existing is not None and int(existing["total"]) > 0:
+                if int(existing["total"]) > 0:
                     raise RuntimeError(
                         "external_effects holds rows written before action_fingerprint existed; "
                         "migrate them explicitly before opening this database"

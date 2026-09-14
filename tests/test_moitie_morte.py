@@ -18,6 +18,14 @@ son operande valoir `None`**, des lors que l'autre cote n'est jamais `None`.
 `X is None or X != Y` vaut donc exactement `X != Y`, et `X is not None and
 X == Y` vaut exactement `X == Y`.
 
+**Une quatrieme, et le garde etait trop etroit.** `durable.py` gardait
+`existing is not None and int(existing["total"]) > 0` derriere un
+`SELECT COUNT(*)`. Meme famille, meme fait SQL que le point 2 -- un `COUNT` rend
+toujours exactement une ligne -- mais la forme n'est pas une comparaison, donc le
+detecteur ci-dessous ne la voyait pas. Un garde qui ne couvre qu'une des formes du
+defaut qu'il est cense rendre impossible laisse simplement passer les autres : il y
+a donc **deux** detecteurs ici, et le second connait la source au lieu du voisin.
+
 Troisieme passage, donc on arrete de corriger : ce fichier echoue si le motif
 reapparait, n'importe ou dans le depot. Au moment ou il a ete ecrit, il a
 retire les trois derniers sites :
@@ -25,6 +33,7 @@ retire les trois derniers sites :
     singular/execution.py:464             actual is None or actual != expected
     singular/learning_review_queue.py:79  persisted is None or persisted != outcome
     singular/mission_runtime.py:161       legacy is None or legacy != native[...]
+    singular/durable.py:158               existing is not None (apres un COUNT)
 
 Si une comparaison doit vraiment traiter `None` a part -- parce que l'autre
 operande peut l'etre aussi -- elle s'ecrit en deux instructions, avec le refus
@@ -140,3 +149,114 @@ def test_le_detecteur_attrape_aussi_la_forme_en_and():
 )
 def test_le_detecteur_ne_crie_pas_sur_un_garde_dont_les_deux_moities_portent(source):
     assert moities_mortes(source) == []
+
+
+# --- la seconde forme : la source, pas le voisin -------------------------------
+#
+# `SELECT COUNT(...)` rend toujours exactement une ligne, meme quand la table est
+# vide -- le compte vaut zero, la ligne existe. Un `fetchone()` sur un COUNT ne
+# rend donc jamais `None`, et tout `is None` / `is not None` sur cette valeur est
+# une moitie qui ne decide rien. Trouve deux fois, dans deux modules qui portent le
+# meme garde de migration recopie : `improvement_registry.py` puis `durable.py`.
+
+
+def _est_un_compte(noeud: ast.AST) -> bool:
+    """Vrai si le noeud est `conn.execute("SELECT COUNT(...)...").fetchone()`.
+
+    On ne lit que les requetes ecrites en clair. Une requete construite ailleurs
+    est hors de portee d'une lecture statique, et un detecteur qui devinerait
+    crierait au loup.
+    """
+    if not (isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Attribute)
+            and noeud.func.attr == "fetchone"):
+        return False
+    execute = noeud.func.value
+    if not (isinstance(execute, ast.Call) and isinstance(execute.func, ast.Attribute)
+            and execute.func.attr == "execute" and execute.args):
+        return False
+    requete = execute.args[0]
+    return (isinstance(requete, ast.Constant) and isinstance(requete.value, str)
+            and requete.value.strip().upper().startswith("SELECT COUNT("))
+
+
+def _sans_les_portees_imbriquees(portee: ast.AST):
+    """Les noeuds de cette portee, sans descendre dans les fonctions du dedans.
+
+    Sans ca, deux fonctions voisines du meme module partagent leurs noms : un `r`
+    qui vient d'un `COUNT` ici ferait accuser un `r` qui vient d'un `SELECT`
+    ordinaire la-bas. La premiere version de ce detecteur le faisait, et c'est un
+    de ses propres tests qui l'a dit.
+    """
+    for enfant in ast.iter_child_nodes(portee):
+        if isinstance(enfant, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        yield enfant
+        yield from ast.walk(enfant)
+
+
+def comptes_testes_contre_none(source: str) -> list[tuple[int, str]]:
+    """Les `is None` / `is not None` poses sur le resultat d'un `COUNT`.
+
+    La portee est la fonction : un meme nom peut porter autre chose ailleurs, et
+    lier le nom a sa fonction evite de confondre deux variables homonymes.
+    """
+    trouves: list[tuple[int, str]] = []
+    arbre = ast.parse(source)
+    portees = [n for n in ast.walk(arbre)
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module))]
+    for portee in portees:
+        propres = list(_sans_les_portees_imbriquees(portee))
+        comptes = set()
+        for noeud in propres:
+            if isinstance(noeud, ast.Assign) and _est_un_compte(noeud.value):
+                comptes.update(cible.id for cible in noeud.targets if isinstance(cible, ast.Name))
+        if not comptes:
+            continue
+        for noeud in propres:
+            if (isinstance(noeud, ast.Compare) and len(noeud.ops) == 1
+                    and isinstance(noeud.ops[0], (ast.Is, ast.IsNot))
+                    and isinstance(noeud.left, ast.Name) and noeud.left.id in comptes
+                    and _est_none(noeud.comparators[0])):
+                trouves.append((noeud.lineno, noeud.left.id))
+    return trouves
+
+
+@pytest.mark.parametrize("dossier", DOSSIERS)
+def test_aucun_compte_sql_n_est_teste_contre_none(dossier):
+    coupables = []
+    for chemin in sorted((RACINE / dossier).rglob("*.py")):
+        lignes = chemin.read_text(encoding="utf-8").splitlines()
+        for ligne, nom in comptes_testes_contre_none("\n".join(lignes)):
+            coupables.append(f"{chemin.relative_to(RACINE)}:{ligne} ({nom})  {lignes[ligne - 1].strip()}")
+    assert not coupables, (
+        "`SELECT COUNT(...)` rend toujours une ligne, meme sur une table vide : "
+        "ce test de `None` ne peut jamais etre vrai. Garde la comparaison sur le "
+        "compte lui-meme.\n" + "\n".join(coupables)
+    )
+
+
+COMPTE_SABOTE = (
+    'def f(conn):\n'
+    '    existing = conn.execute("SELECT COUNT(*) AS total FROM t").fetchone()\n'
+    '    if existing is not None and int(existing["total"]) > 0:\n'
+    '        raise RuntimeError("x")'
+)
+
+
+def test_le_second_detecteur_attrape_ce_qui_vient_d_etre_retire():
+    assert comptes_testes_contre_none(COMPTE_SABOTE) == [(3, "existing")]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Un `SELECT` ordinaire peut tres bien ne rendre aucune ligne.
+        'def f(conn):\n    r = conn.execute("SELECT id FROM t WHERE k=?", (1,)).fetchone()\n    if r is None:\n        raise RuntimeError("x")',
+        # Le compte est bien lu, mais rien ne le teste contre `None`.
+        'def f(conn):\n    r = conn.execute("SELECT COUNT(*) AS t FROM t").fetchone()\n    if int(r["t"]) > 0:\n        raise RuntimeError("x")',
+        # Homonyme dans une autre fonction : la portee tient.
+        'def f(conn):\n    r = conn.execute("SELECT COUNT(*) AS t FROM t").fetchone()\n\ndef g(conn):\n    r = conn.execute("SELECT id FROM t").fetchone()\n    if r is None:\n        raise RuntimeError("x")',
+    ],
+)
+def test_le_second_detecteur_ne_crie_pas_sur_une_lecture_ordinaire(source):
+    assert comptes_testes_contre_none(source) == []
