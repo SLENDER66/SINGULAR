@@ -3,9 +3,10 @@ import sqlite3
 from singular.autopilot import ActionRequest, Autonomy
 from singular.coherence import GlobalCoherenceGuard
 from singular.consistency import CrossDomainConsistencyChecker
-from singular.global_control import GlobalDecisionGate
+from singular.global_control import GlobalDecisionGate, GlobalDecisionReport
 from singular.human_optimization import DomainState, HumanOptimizationEngine, Intervention
 from singular.models import Risk
+from singular.security import ActionPolicy, ActionTier
 from singular.state import CapacitySnapshot
 from singular.trajectory import TrajectoryProfile
 from singular.values import CoreValue, ValueAssessment, ValuesEngine, Vision
@@ -139,6 +140,61 @@ def test_un_blocage_suffit_a_interdire_la_preparation():
     assert rapport.blockers, "le cas doit produire un blocage"
     assert rapport.policy_tier != "BLACK", "et un rang qui n'est pas BLACK, sinon l'autre moitie suffirait"
     assert rapport.can_prepare is False
+
+
+def test_un_rang_black_interdit_la_preparation_meme_sans_blocage():
+    """La moitie `policy_tier != "BLACK"` de `can_prepare`, que le test ci-dessus
+    ecarte comme une assurance -- et qui porte des qu'on cesse de passer par la porte.
+
+    Le raisonnement ci-dessus est exact tant que le rapport vient de
+    `GlobalDecisionGate.evaluate` : la politique met alors `can_prepare=False` avec
+    un motif, et la porte en fait un blocage. Mais `GlobalDecisionReport` est un
+    dataclass public que n'importe quel appelant peut construire, et c'est
+    exactement la menace de la section 8 du mandat -- personne ne doit obtenir une
+    execution en fabriquant un rapport plausible. Un rapport fabrique avec un rang
+    BLACK et aucun blocage est la forme la plus simple de cette fabrication.
+
+    Une assurance qui n'a de temoin nulle part peut disparaitre sans que rien ne
+    rougisse. Celle-ci en a un maintenant.
+    """
+    rapport = GlobalDecisionReport(
+        objective="grow", action_id="ACT-1", decision="BLOCK",
+        blockers=(), warnings=(), capacity_recommendation=None,
+        policy_tier="BLACK", policy_requires_human=True,
+        governor_mode=Autonomy.BLOCK, red_team_findings=(), coherence=None,
+    )
+
+    assert rapport.blockers == (), "sans blocage, sinon l'autre moitie suffirait"
+    assert rapport.can_prepare is False
+
+
+def test_aucun_rang_black_de_la_politique_ne_permet_la_preparation():
+    """Le couplage sur lequel repose le triage de `test_un_blocage_suffit...`.
+
+    Ce triage dit qu'un rang BLACK vient toujours avec `can_prepare=False`, donc
+    avec un blocage POLICY dans la porte. C'etait une phrase dans une docstring, et
+    une phrase ne rougit pas : il suffit qu'une branche future rende un BLACK
+    preparable pour que la phrase devienne fausse en silence, et l'assurance,
+    portante.
+
+    Les trois chemins BLACK de `ActionPolicy` sont joues ici. Chacun doit refuser la
+    preparation **et** nommer un motif -- sans motif, `blockers.extend` n'ajouterait
+    rien et la porte laisserait passer.
+    """
+    inconnue = action(capability="capacite_qui_n_existe_pas")
+    incompatible = action(name="wire_money", capability="draft_document")
+    sensible = action(sensitive=True)
+
+    black = []
+    for cas in (inconnue, incompatible, sensible):
+        decision = ActionPolicy.evaluate(cas)
+        if decision.tier is ActionTier.BLACK:
+            black.append((cas.name, decision))
+
+    assert len(black) == 3, f"les trois chemins BLACK doivent etre joues, obtenu {black}"
+    for nom, decision in black:
+        assert decision.can_prepare is False, f"{nom} : un BLACK preparable casse le triage"
+        assert decision.reasons, f"{nom} : sans motif, la porte n'ecrirait aucun blocage"
 
 
 def test_la_politique_seule_suffit_a_exiger_un_humain():
