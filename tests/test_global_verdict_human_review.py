@@ -202,3 +202,32 @@ def test_une_porte_ne_peut_pas_changer_l_optimisation_humaine():
             capacity_used=rapport.human_optimization.capacity_used + 1.0)})
     with pytest.raises(PermissionError, match="human optimization does not match the freshly optimized"):
         _build_with(porte)
+
+
+def test_une_porte_ne_peut_pas_effacer_la_revue_humaine_de_la_trajectoire():
+    """La revue humaine survit a la reecriture du titre, et rien ne l'essayait.
+
+    Une trajectoire qui demande une revue humaine n'arrive jamais jusqu'ici avec une
+    porte honnete : le rapport dirait REVIEW et le refus precedent l'arreterait. Il
+    faut donc une porte qui reecrive son verdict -- ce qui est exactement le cas que
+    la section 9 du mandat demande de tenir -- pour atteindre ce refus-ci.
+
+    Il tient. La porte ment sur le titre, garde honnetement la trajectoire (sinon la
+    comparaison du dessus l'arrete), et le pipeline lit `human_review` sur
+    l'evaluation qu'il vient de calculer lui-meme. L'entree n'a rien de tordu : une
+    capacite dont la confiance est basse, ce que le moteur de trajectoire traduit en
+    « a regarder par un humain ».
+    """
+    from singular.state import CapacitySnapshot
+
+    from tests.test_validated_pipeline import _build_avec
+
+    incertaine = CapacitySnapshot(available=0.9, load=0.1, confidence=0.2)
+
+    # La porte honnete refuse deja cette entree, un cran plus haut : c'est ce qui
+    # montre que le refus teste ici n'est pas le meme que celui du dessus.
+    with pytest.raises(PermissionError, match="refused execution: REVIEW"):
+        _build_avec(capacity=incertaine)
+
+    with pytest.raises(PermissionError, match="Trajectory requires human review"):
+        _build_avec(capacity=incertaine, gate=_SpoofGate(decision="PROCEED"))

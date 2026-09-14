@@ -450,3 +450,23 @@ def test_le_pipeline_refuse_un_portefeuille_vide(budget):
     """
     with pytest.raises(PermissionError, match="No executable trajectory portfolio"):
         _build_avec(capacity_budget=budget)
+
+
+def test_le_pipeline_refuse_une_liaison_qui_ne_designe_pas_l_action():
+    """La liaison action -> intervention doit parler de l'action autorisee.
+
+    C'est elle qui justifie l'action par une intervention du portefeuille : le
+    refus suivant verifie que l'intervention nommee a bien ete retenue. Si la
+    liaison designe une autre action, la decision porte une justification qui ne
+    concerne pas ce qu'elle autorise -- et le controle suivant, lui, la lirait
+    quand meme et la trouverait valide.
+    """
+    _, action, _, intervention, _, _ = _inputs()
+
+    with pytest.raises(ValueError, match="exactly one intervention mapping"):
+        _build_avec(action_to_intervention=(("une-autre-action", intervention.id),))
+    with pytest.raises(ValueError, match="exactly one intervention mapping"):
+        _build_avec(action_to_intervention=())
+    with pytest.raises(ValueError, match="exactly one intervention mapping"):
+        _build_avec(action_to_intervention=((action.id, intervention.id),
+                                            (action.id, "career")))
