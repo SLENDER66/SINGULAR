@@ -157,7 +157,14 @@ def chance_d_un_ecart_moindre(probabilities: list[float], hits: int,
 
     Déterministe, sans réseau, sans modèle, comme sa voisine.
     """
-    if not probabilities or borne <= 0:
+    # `borne <= 0` ne suffisait pas, et le trou penchait du mauvais côté : avec
+    # `inf`, toutes les probabilités se ramenaient aux bornes et la fonction
+    # rendait **zéro**, c'est-à-dire « écart démontré petit, avec certitude ».
+    # Une entrée dégénérée donnait le verdict le plus permissif possible. La
+    # règle du dépôt tranche dans l'autre sens : en cas d'ambiguïté, on refuse.
+    # `not (0 < borne < 1)` attrape aussi `nan`, dont toutes les comparaisons
+    # sont fausses.
+    if not probabilities or not 0 < borne < 1:
         return 1.0
     surestime = [min(1.0, max(0.0, p - borne)) for p in probabilities]
     sousestime = [min(1.0, max(0.0, p + borne)) for p in probabilities]

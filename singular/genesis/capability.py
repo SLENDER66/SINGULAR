@@ -89,7 +89,23 @@ class Capacite:
     provenance: str = ""
     version: int = 1
     preuves: tuple[Preuve, ...] = ()
-    reutilisations: int = 0
+    #: Le nombre de fois qu'elle a été **remise** à un appelant, pas le nombre de
+    #: fois qu'elle a servi. Le solveur essaie les lecteurs inscrits jusqu'à ce
+    #: qu'un réponde, donc ce compteur grandit avec la taille du registre et pas
+    #: avec l'utilité de la capacité. Il s'appelait `reutilisations` et le
+    #: rapport affichait « employée 2× » pour une capacité qui n'avait rien
+    #: répondu : un chiffre juste qui se lisait faux.
+    remises: int = 0
+
+    @property
+    def reutilisations(self) -> int:
+        """Les fois où elle a servi **et tenu**, d'après les preuves enregistrées.
+
+        Dérivé, jamais incrémenté : un compteur qu'on incrémente à la main finit
+        par compter autre chose que ce que son nom dit, et c'est exactement ce
+        qui est arrivé à `remises`.
+        """
+        return sum(1 for preuve in self.preuves if preuve.reussi)
 
     @property
     def echecs(self) -> int:
@@ -205,7 +221,7 @@ class Registre:
             if artifact_fingerprint(procedure_attendue) != capacite.empreinte:
                 raise SubstitutionRefusee(
                     f"« {nom} » désigne un autre artefact que celui attendu")
-        capacite = replace(capacite, reutilisations=capacite.reutilisations + 1)
+        capacite = replace(capacite, remises=capacite.remises + 1)
         self._capacites[nom] = capacite
         return capacite
 
@@ -231,6 +247,7 @@ class Registre:
             "version": capacite.version,
             "empreinte": capacite.empreinte,
             "provenance": capacite.provenance,
+            "remises": capacite.remises,
             "reutilisations": capacite.reutilisations,
             "instances_reussies": len(capacite.instances_reussies),
             "domaines_reussis": len(capacite.domaines_reussis),

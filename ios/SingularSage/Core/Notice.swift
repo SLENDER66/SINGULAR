@@ -357,7 +357,12 @@ enum NoticeEngine {
     /// des deux qui est rendu.
     static func chanceDUnEcartMoindre(_ probabilities: [Double], hits: Int,
                                       borne: Double) -> Double {
-        guard !probabilities.isEmpty, borne > 0 else { return 1.0 }
+        // `borne > 0` ne suffisait pas : avec `.infinity`, toutes les
+        // probabilités se ramenaient aux bornes et la fonction rendait zéro,
+        // c'est-à-dire « écart démontré petit, avec certitude ». Une entrée
+        // dégénérée donnait le verdict le plus permissif. `borne < 1` ferme ça,
+        // et écarte aussi `nan`, dont toutes les comparaisons sont fausses.
+        guard !probabilities.isEmpty, borne > 0, borne < 1 else { return 1.0 }
         let surestime = probabilities.map { min(1.0, max(0.0, $0 - borne)) }
         let sousestime = probabilities.map { min(1.0, max(0.0, $0 + borne)) }
         let haut = distribution(surestime).enumerated()

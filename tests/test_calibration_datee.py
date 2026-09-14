@@ -351,3 +351,18 @@ def test_un_journal_court_n_envoie_pas_de_calibration_recente(tmp_path):
     journal = _journal(tmp_path, _surconfiance(4))
     contexte = contexte_pour_analyse(build_notice(journal, now=NOW + timedelta(days=60)).as_dict())
     assert "calibration_recente" not in contexte
+
+
+def test_une_borne_degeneree_ne_demontre_jamais_rien() -> None:
+    """Le trou penchait du mauvais côté, et c'est ce qui en faisait un défaut.
+
+    `borne <= 0` gardait le zéro et le négatif. Avec l'infini, toutes les
+    probabilités se ramenaient aux bornes et la fonction rendait **zéro** —
+    c'est-à-dire « écart démontré petit, avec certitude ». Une entrée dégénérée
+    donnait le verdict le plus permissif possible, alors que la règle du dépôt
+    dit de refuser quand il y a ambiguïté.
+    """
+    for borne in (float("nan"), float("inf"), float("-inf"), 0.0, -0.1, 1.0, 1.5):
+        assert chance_d_un_ecart_moindre([0.6] * 20, 12, borne) == 1.0, borne
+    assert chance_d_un_ecart_moindre([0.6] * 20, 12, CALIBRATION_GAP) < 1.0, (
+        "la borne réelle doit continuer de calculer quelque chose")

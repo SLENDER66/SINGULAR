@@ -139,8 +139,8 @@ def afficher(rapport: dict) -> None:
     for ligne in rapport["registre"].rapport():
         print(f"  {ligne['nom']}  {ligne['niveau']} — {ligne['sens']}")
         print(f"    artefact {ligne['empreinte'][:16]}…  version {ligne['version']}  "
-              f"issue de {ligne['provenance']}  employée {ligne['reutilisations']}×  "
-              f"échecs {ligne['echecs']}")
+              f"issue de {ligne['provenance']}  remise {ligne['remises']}×  "
+              f"a tenu {ligne['reutilisations']}×  échecs {ligne['echecs']}")
 
     composition = rapport["composition"]["comparaison"]
     print("\n=== la composition — ZETA, qu'aucune capacité ne règle seule ===\n")

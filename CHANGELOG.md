@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.33.0 — Deux defauts de ce que je viens d'ecrire
+
+Relecture adversariale de mon propre code, comme la regle 22 du mandat le
+demande. Les deux trouvailles sont dans ce qui a ete ajoute aujourd'hui.
+
+- **`chance_d_un_ecart_moindre` penchait du mauvais cote sur une entree
+  degeneree.** Le garde etait `borne <= 0` ; avec `inf`, toutes les probabilites
+  se ramenaient aux bornes et la fonction rendait **zero** — c'est-a-dire
+  « ecart demontre petit, avec certitude ». Le verdict le plus permissif
+  possible, produit par l'entree la plus absurde, dans la fonction dont tout le
+  role est de refuser de conclure trop vite. C'est maintenant
+  `not 0 < borne < 1`, qui ferme l'infini et attrape `nan` au passage. Le port
+  iOS suit.
+- **Genesis affichait « employée 2× » pour une capacité qui n'avait rien
+  répondu.** Le solveur essaie les lecteurs inscrits jusqu'a ce qu'un reponde,
+  donc le compteur grandissait avec la taille du registre et pas avec l'utilite
+  de la capacite. Un chiffre juste qui se lisait faux. Les deux existent
+  desormais separement : `remises` compte les passages de main, `reutilisations`
+  est **derive des preuves** et ne compte que ce qui a tenu — donc il n'y a nulle
+  part ou ecrire un chiffre flatteur.
+
 ## 3.32.0 — AZAZEL Genesis : la plus petite chose capable de dire non
 
 `singular/genesis/` et `docs/AZAZEL_GENESIS.md`. Cinq modules, aucun qui exécute,

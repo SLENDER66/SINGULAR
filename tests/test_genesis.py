@@ -559,3 +559,30 @@ def test_le_banc_sans_ligne_de_base_donnee_part_du_registre_vide(sources) -> Non
     """Le défaut ne bouge pas : c'est le bon départ pour une première acquisition."""
     comparaison = banc(zeta(sources), solveur, _registre_deux_capacites(sources))
     assert comparaison.base.capacites_reutilisees == ()
+
+
+def test_le_compteur_de_reutilisation_ne_compte_que_ce_qui_a_tenu(sources) -> None:
+    """« Employée 2× » se lisait comme deux succès pour zéro réponse.
+
+    Le solveur essaie les lecteurs inscrits jusqu'à ce qu'un réponde : le
+    compteur de remises grandit donc avec la taille du registre, pas avec
+    l'utilité de la capacité. Les deux chiffres existent maintenant séparément,
+    et celui qui porte le nom « réutilisations » est dérivé des preuves.
+    """
+    registre = _registre_deux_capacites(sources)
+    executer(zeta(sources), lambda m, t: resoudre(m, t, registre))
+    egal = registre.chercher(LECTEUR_EGAL)
+    assert egal.remises >= 1, "elle a bien été remise"
+    assert egal.reutilisations == 0, "aucune preuve enregistrée : elle n'a tenu nulle part"
+
+    registre.prouver(LECTEUR_EGAL, Preuve(instance="pytest", domaine="config"))
+    registre.prouver(LECTEUR_EGAL, Preuve(instance="autre", domaine="config", reussi=False))
+    assert registre.chercher(LECTEUR_EGAL).reutilisations == 1, (
+        "un échec ne compte pas comme une réutilisation")
+
+
+def test_le_compteur_de_reutilisation_ne_se_pose_pas_a_la_main(sources) -> None:
+    """Dérivé, donc il n'y a nulle part où écrire un chiffre flatteur."""
+    capacite = _registre_deux_capacites(sources).chercher(LECTEUR_APPRIS)
+    with pytest.raises((AttributeError, TypeError)):
+        capacite.reutilisations = 99
