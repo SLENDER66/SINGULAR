@@ -137,6 +137,15 @@ CIBLES_FRONTIERE = (
     # le reste depend, et il n'avait jamais vu un mutant non plus.
     "singular/durable.py",
     "singular/mission_runtime.py",
+    # Le producteur. `validated_pipeline.py` est le seul chemin par lequel une
+    # `ValidatedTrajectoryDecision` existe : tout ce que la frontiere accepte sort
+    # d'ici. Il n'etait mesure par rien, et sa porte d'entree n'etait verifiee
+    # qu'en marchant droit. Les deux autres portent le resultat d'une execution et
+    # la reconciliation d'un effet ; `execution_boundary_audit.py` compte deja
+    # `reconciled_execution.py` parmi les fichiers de frontiere.
+    "singular/validated_pipeline.py",
+    "singular/execution_result.py",
+    "singular/reconciled_execution.py",
 )
 
 #: La sous-suite qui couvre ces modules. Ciblee exprès : la suite entiere est
@@ -172,6 +181,9 @@ SOUS_SUITE_FRONTIERE = (
     "tests/test_effect_recovery_integrity.py", "tests/test_recovery_completed_effect_routing.py",
     "tests/test_store_owns_its_transitions.py", "tests/test_governance_route_provenance.py",
     "tests/test_approval_immutability.py", "tests/test_ecriture_atomique.py",
+    # Et ce qui couvre le producteur et les deux modules de resultat.
+    "tests/test_global_verdict_human_review.py", "tests/test_validated_trajectory_decision.py",
+    "tests/test_execution_result.py", "tests/test_reconciled_execution.py",
 )
 
 #: Le moteur deterministe : ce qu'il lance chaque matin, sans jeton ni reseau.
