@@ -33,7 +33,7 @@ SECTIONS = {
     # c'est une regle sur la facon dont l'outil lui parle, et elle doit etre
     # lisible la ou il colle le bloc -- y compris hors du depot, ou `CLAUDE.md`
     # n'existe pas.
-    "26. LE REGISTRE : AZAZEL": "27. OBJECTIF FINAL",
+    "26. LE REGISTRE": "27. OBJECTIF FINAL",
 }
 
 
