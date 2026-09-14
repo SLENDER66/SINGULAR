@@ -265,6 +265,95 @@ def test_une_recuperation_exige_une_mission_encore_en_cours(tmp_path: Path):
     assert store.get_execution("cle-annul")["status"] == "RECOVERY_REQUIRED"
 
 
+class _ResoutPendantNotreLecture:
+    """Un second ouvrier resout la recuperation avant notre ecriture.
+
+    Il n'espionne pas pour tricher : il reproduit la seule fenetre que ce code
+    laisse ouverte. `resolve_execution_recovery` lit le statut de l'execution, lit
+    celui de la mission, decide, puis ecrit. Le module `sqlite3` n'ouvre une
+    transaction qu'au premier ecrit -- une lecture n'en ouvre aucune --, donc
+    jusqu'a la mise a jour la ligne n'est tenue par rien. Cet intrus ecrit **sur sa
+    propre connexion** et valide : c'est une vraie course, pas une simulation qui
+    partagerait notre transaction.
+
+    Il frappe apres la lecture de la mission, et c'est mesure : plus tot, il fait
+    aussi passer la mission a FAILED, et c'est le controle de mission qui refuse --
+    un refus plus haut dans la meme methode, donc le compare-and-swap n'est jamais
+    atteint. La derniere fenetre est celle-la.
+    """
+
+    def __init__(self, conn, chemin, execution_key: str) -> None:
+        self._conn = conn
+        self._chemin = chemin
+        self._execution = execution_key
+        self._deja = False
+
+    def execute(self, sql, params=()):
+        curseur = self._conn.execute(sql, params)
+        if not self._deja and sql.lstrip().startswith("SELECT status FROM mission_states"):
+            self._deja = True
+            DurableStore(self._chemin).resolve_execution_recovery(
+                self._execution, "FAIL", reason="tranche par l'autre ouvrier")
+        return curseur
+
+
+def test_une_recuperation_resolue_par_un_autre_ne_se_rejoue_pas(tmp_path: Path):
+    """Le compare-and-swap de la resolution, que rien n'essayait.
+
+    Deux ouvriers peuvent constater la meme execution en RECOVERY_REQUIRED : c'est
+    le cas normal apres un redemarrage, et c'est exactement ce que la machine de
+    recuperation est censee survivre. Le second doit refuser, pas ecrire un second
+    verdict sur une execution deja resolue -- et surtout pas faire passer la mission
+    a CANCELLED alors que l'autre vient de la declarer FAILED.
+
+    Le refus est atteignable, contrairement aux relectures du meme fichier : la
+    lecture du statut n'ouvre aucune transaction, donc la ligne change vraiment
+    entre la lecture et l'ecriture. C'est le `WHERE status='RECOVERY_REQUIRED'` de
+    la mise a jour qui le rattrape, et `rowcount != 1` qui le dit.
+
+    La contre-verification, parce qu'un test qui ne prouve que sa propre mise en
+    scene ne vaut rien : le garde retire, ce test rougit quand meme -- mais sur
+    « Etat courant inattendu : FAILED », leve une ligne plus bas par la transition
+    de mission. Aujourd'hui les deux refusent, parce qu'aucune transition ne sort
+    une execution de RECOVERY_REQUIRED sans deplacer sa mission. Ce garde-ci est
+    celui qui refuse **avant** de toucher la mission, et qui nomme ce qui s'est
+    reellement passe ; l'autre nomme un etat, ce qui envoie chercher au mauvais
+    endroit. Le jour ou une transition les separerait, il serait le seul.
+    """
+    import contextlib
+
+    from singular.autopilot import DelegationContract
+
+    chemin = tmp_path / "singular.db"
+    store = DurableStore(chemin)
+    store.save_mission(DelegationContract("MIS-COURSE", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-COURSE", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-course", "MIS-COURSE", "ACT-COURSE")
+    store.mark_execution_recovery_required("cle-course")
+
+    vraie = store._connect
+
+    @contextlib.contextmanager
+    def connexion_espionnee():
+        with vraie() as conn:
+            yield _ResoutPendantNotreLecture(conn, chemin, "cle-course")
+
+    store._connect = connexion_espionnee
+    try:
+        with pytest.raises(RuntimeError, match="n'a pas été persistée"):
+            store.resolve_execution_recovery("cle-course", "CANCEL", reason="notre verdict")
+    finally:
+        store._connect = vraie
+
+    # Le verdict de l'autre tient, le notre n'existe nulle part, et la mission
+    # porte l'etat que l'autre a ecrit -- pas CANCELLED.
+    execution = DurableStore(chemin).get_execution("cle-course")
+    assert execution["status"] == "FAILED"
+    assert execution["error"] == "tranche par l'autre ouvrier"
+    assert DurableStore(chemin).get_mission_status("MIS-COURSE") is MissionStatus.FAILED
+
+
 @pytest.mark.parametrize("statut", ["SUCCESS", "RUNNING", "RECOVERY_REQUIRED", "completed", ""])
 def test_un_resultat_d_execution_n_a_que_deux_mots(tmp_path: Path, statut):
     """`finish_execution_and_mission` est « the only way an execution reaches a
