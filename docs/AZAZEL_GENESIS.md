@@ -98,7 +98,10 @@ au cœur du fichier et documentés là-bas.
 **`missions.py`** — ALPHA lit deux formats et synthétise ; BETA affronte une
 source tronquée et une source absente, et ne comble aucun trou ; GAMMA détecte
 un format que rien ne sait lire, construit un lecteur, l'éprouve sur un contrôle
-mis de côté, et ne l'inscrit que s'il tient.
+mis de côté, et ne l'inscrit que s'il tient. Puis deux missions qui éprouvent la
+capacité acquise ailleurs que là où elle est née : DELTA sur
+`.github/workflows/ci.yml`, le workflow réel du dépôt, et EPSILON sur
+`pyproject.toml`, qu'elle **ne sait pas lire**.
 
 ---
 
@@ -117,11 +120,28 @@ Sur la mission de contrôle — une instance jamais vue du format appris :
 Verdict : `AMELIORATION`, capacité employée `lecteur:cle_valeur`, naissance
 constatée.
 
-**Ce que ça ne dit pas.** Une capacité, un domaine, deux instances. Le niveau de
-preuve de cette capacité est E1 à la fin de l'expérience, et l'échelle refuse de
-le monter davantage : elle dit exactement ce qui a été montré. L'hypothèse tient
-sur ce cas ; le compounding n'est pas démontré, et la directive interdit de
-confondre les deux.
+### L'échelle, et sa chute
+
+Monter jusqu'à E5 dans un script ne prouve rien : quand on a les instances sous
+la main, une échelle se gravit. Ce qu'elle vaut se lit à ce qu'elle refuse.
+L'expérience se termine donc sur un échec réel, et il faut voir le niveau
+retomber.
+
+| emploi | ce que c'est | tenu ? | niveau après |
+|---|---|---|---|
+| `ci` | `.github/workflows/ci.yml`, deuxième domaine | oui | E3 |
+| `abimee` | un relevé arraché — lignes sans paire, commentaires, blanc | oui | **E5** |
+| `pyproject` | `cle = "valeur"` : ce lecteur ne sait pas | **non** | **E2** |
+
+Le lecteur avait été appris sur un relevé écrit à la main. Il répond sur le
+workflow du CI sans avoir rien réappris : c'est ce qui sépare « généralisation »
+du mot « généralisation ». Et il échoue pour de bon sur du TOML, ce qui ramène
+le niveau au plafond d'après échec.
+
+**Ce que ça ne dit pas.** Une capacité, deux domaines, cinq instances, et une
+capacité qui ne comprend pas YAML — elle lit les paires `clé: valeur` qu'elle
+trouve, à plat. L'hypothèse tient sur ce cas ; le compounding n'est pas
+démontré, et la directive interdit de confondre les deux.
 
 ---
 
@@ -166,9 +186,13 @@ s'incrémente et les preuves repartent à zéro.
 * **Le registre est en mémoire.** Rien ne survit à un redémarrage. Le jour où
   Genesis devra persister, ce sera `DurableCapabilityStore` qui portera ça — pas
   une deuxième table inventée à côté.
-* **Un seul domaine.** E5 demande deux domaines distincts ; l'expérience n'en
-  fournit qu'un. Le barreau existe et n'est pas atteint : c'est un fait affiché,
-  pas une case cochée.
+* **Deux domaines, et ils sont proches.** Un relevé écrit à la main et un
+  workflow YAML partagent la forme `clé: valeur` ; ce sont deux domaines au sens
+  de l'échelle, pas deux mondes. E5 est atteint, et il ne veut dire que les
+  critères de la table ci-dessus.
+* **La capacité n'est pas un analyseur YAML.** Elle lit des paires à plat :
+  l'imbrication est perdue, une entrée de liste garde son tiret. C'est assez
+  pour la question posée, et c'est écrit pour qu'on ne lui prête pas mieux.
 * **Le solveur est déterministe.** Aucun modèle n'intervient. C'est ce qui rend
   l'expérience rejouable et gratuite ; c'est aussi ce qui limite la difficulté
   des missions à ce qu'un programme sans intelligence peut faire.
@@ -185,12 +209,16 @@ s'incrémente et les preuves repartent à zéro.
 Dans l'ordre où elle se justifie techniquement, sans que rien ici ne soit
 promis :
 
-1. **Un deuxième domaine**, pour que E5 soit atteignable et que
-   « généralisation » cesse d'être un mot. C'est la seule addition qui change ce
-   que le banc peut démontrer.
+1. **Un domaine réellement éloigné** — pas une deuxième variante de
+   `clé: valeur`. Tant que les deux domaines se ressemblent, E5 mesure la forme
+   du texte et pas la portée de la capacité.
 2. **Un deuxième registre expérimenté**, pour comparer deux versions de Genesis
    entre elles — « AZAZEL doit battre AZAZEL » — plutôt que Genesis contre rien.
 3. **La persistance**, seulement quand une expérience durera plus d'un processus.
+
+Le premier point de cette liste disait « un deuxième domaine » ; il est fait, et
+ce qu'il a appris est qu'un deuxième domaine trop proche déplace la question
+plutôt qu'il ne la règle.
 
 Ce qui n'est pas justifié aujourd'hui : le routage de modèles, le World State
 universel, la doctrine de calcul. Aucun ne teste une hypothèse que nous ayons.

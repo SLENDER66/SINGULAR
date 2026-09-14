@@ -19,9 +19,10 @@ sys.path.insert(0, str(RACINE))
 
 from singular.genesis import Registre, Trajectoire, executer  # noqa: E402
 from singular.genesis.bench import constater_naissance  # noqa: E402
-from singular.genesis.missions import (GAMMA_APPRENTISSAGE, GAMMA_CONTROLE,  # noqa: E402
-                                       LECTEUR_APPRIS, alpha, apprendre_de_gamma, beta,
-                                       gamma, prouver_emploi, resoudre, sources_du_depot)
+from singular.genesis.missions import (GAMMA_ABIMEE, GAMMA_APPRENTISSAGE,  # noqa: E402
+                                       GAMMA_CONTROLE, LECTEUR_APPRIS, alpha,
+                                       apprendre_de_gamma, beta, delta, epsilon, gamma,
+                                       prouver_emploi, resoudre, sources_du_depot)
 
 
 def _solveur(mission, trajectoire, registre):
@@ -61,9 +62,35 @@ def experience(racine: Path) -> dict:
     naissance = constater_naissance(
         gamma(GAMMA_CONTROLE, nom="CONTROLE", attendu="téléphone"),
         _solveur, registre, instance="soir", apprises_sur={"matin"})
+    prouver_emploi(registre, instance="soir", domaine="releve", abimee=False,
+                   reussi=naissance.comparaison.experimente.verifie)
 
+    echelle = _gravir(registre, sources)
     return {"resultats": resultats, "acquisition": acquisition, "acquise": acquise,
-            "naissance": naissance, "registre": registre}
+            "naissance": naissance, "registre": registre, "echelle": echelle}
+
+
+def _gravir(registre: Registre, sources: dict) -> list[tuple[str, str, bool, str]]:
+    """Les barreaux, puis la chute -- et c'est la chute qui apprend quelque chose.
+
+    Monter jusqu'à E5 dans un script ne prouve rien : quand on a les instances
+    sous la main, une échelle se gravit. Ce qu'elle vaut se lit à ce qu'elle
+    refuse. Le dernier emploi est donc un échec réel, sur un vrai fichier que ce
+    lecteur ne sait pas lire, et il faut voir le niveau retomber.
+    """
+    barreaux: list[tuple[str, str, bool, str]] = []
+    emplois = (
+        ("ci", "config", False, delta(sources), "le workflow réel du dépôt"),
+        ("abimee", "releve", True, gamma(GAMMA_ABIMEE), "un relevé arraché"),
+        ("pyproject", "config", False, epsilon(sources), "un format qu'il ne tient pas"),
+    )
+    for instance, domaine, abimee, mission, quoi in emplois:
+        resultat = executer(mission, lambda m, t: resoudre(m, t, registre))
+        prouver_emploi(registre, instance=instance, domaine=domaine, abimee=abimee,
+                       reussi=resultat.verifie)
+        barreaux.append((instance, registre.chercher(LECTEUR_APPRIS).niveau,
+                         resultat.verifie, quoi))
+    return barreaux
 
 
 def afficher(rapport: dict) -> None:
@@ -75,6 +102,13 @@ def afficher(rapport: dict) -> None:
     for pas in rapport["acquisition"].pas:
         detail = f"  ({pas.detail})" if pas.detail else ""
         print(f"  {pas.genre.value:<14} {pas.quoi}{detail}")
+
+    print("\n=== l'échelle de preuve, et sa chute ===\n")
+    for instance, niveau, reussi, quoi in rapport["echelle"]:
+        verdict = "tenu " if reussi else "RATÉ "
+        print(f"  {instance:<12} {verdict} {quoi:<34} → {niveau}")
+    print("  Un seul échec ramène à E2 : « vérifiée » et « robuste » sont des"
+          "\n  affirmations de fiabilité, pas des compteurs de succès.")
 
     print("\n=== le registre ===\n")
     for ligne in rapport["registre"].rapport():
@@ -91,7 +125,7 @@ def afficher(rapport: dict) -> None:
           f"{naissance.comparaison.pourquoi}")
     print(f"  capacités employées : {', '.join(naissance.capacites) or 'aucune'}")
     print(f"\n  NAISSANCE CONSTATÉE : {'oui' if naissance.ne else 'non'} — {naissance.pourquoi}")
-    print("\n  Ce que ça ne dit pas : une capacité, un domaine, deux instances. "
+    print("\n  Ce que ça ne dit pas : une capacité, deux domaines, cinq instances."
           "\n  L'hypothèse tient sur ce cas ; elle n'est pas démontrée en général.\n")
 
 

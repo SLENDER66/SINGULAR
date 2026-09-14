@@ -36,10 +36,19 @@ souvenir.
   preuve par l'acte : les trois missions tournent avec les sockets retirées, avec
   un témoin qui vérifie que le garde attraperait vraiment une connexion. Le
   paquet est supprimable sans rien casser, et un test le tient.
+- **Un deuxième domaine, et c'est un vrai fichier.** Le lecteur appris sur un
+  relevé écrit à la main répond sur `.github/workflows/ci.yml` sans avoir rien
+  réappris — DELTA. Il échoue pour de bon sur `pyproject.toml`, qui écrit
+  `cle = "valeur"` — EPSILON. L'expérience gravit donc l'échelle jusqu'à E5 puis
+  **retombe à E2** sur cet échec réel, et c'est la descente qui montre que
+  l'échelle mesure quelque chose : monter, quand on a les instances sous la main,
+  n'importe quelle échelle le fait.
 - **Le résultat est positif sur un cas, et le document le dit comme ça.** Une
-  capacité, un domaine, deux instances, niveau E1 à la fin. Le compounding n'est
-  pas démontré, et les limites sont dans `docs/AZAZEL_GENESIS.md` avec la
-  prochaine action justifiée : un deuxième domaine, pour que E5 soit atteignable.
+  capacité, deux domaines proches, cinq instances, et un lecteur qui ne comprend
+  pas YAML — il lit des paires à plat. Le compounding n'est pas démontré. La
+  prochaine action justifiée est dans `docs/AZAZEL_GENESIS.md` : un domaine
+  réellement éloigné, parce qu'un deuxième domaine trop proche déplace la
+  question plutôt qu'il ne la règle.
 
 ## 3.31.0 — Ton écart a une date
 

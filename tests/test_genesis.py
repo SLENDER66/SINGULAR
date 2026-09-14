@@ -29,8 +29,10 @@ from singular.genesis import (Etape, Mission, Preuve, Registre, SubstitutionRefu
 from singular.genesis.bench import AMELIORATION, AUCUNE, REFUTE
 from singular.genesis.capability import PLAFOND_APRES_ECHEC
 from singular.genesis.lecteurs import FormatRefuse
-from singular.genesis.missions import (GAMMA_APPRENTISSAGE, GAMMA_CONTROLE, LECTEUR_APPRIS,
+from singular.genesis.missions import (GAMMA_ABIMEE, GAMMA_APPRENTISSAGE, GAMMA_CONTROLE,
+                                       LECTEUR_APPRIS,
                                        alpha, apprendre_de_gamma, beta, construire_lecteur,
+                                       delta, epsilon,
                                        construire_lecteur_memorisant, gamma, prouver_emploi,
                                        resoudre, sources_du_depot)
 
@@ -434,5 +436,63 @@ def test_l_experience_entiere_se_lance_et_rend_son_verdict() -> None:
     assert [resultat.verifie for resultat in rapport["resultats"]] == [True, True, False, True], (
         "ALPHA et BETA passent, GAMMA échoue sans capacité puis réussit avec")
     assert rapport["naissance"].ne
-    assert rapport["registre"].chercher(LECTEUR_APPRIS).niveau == "E1", (
-        "une instance vérifiée, donc E1 : le niveau ne doit pas monter tout seul")
+    capacite = rapport["registre"].chercher(LECTEUR_APPRIS)
+    assert capacite.echecs == 1, "l'expérience doit finir sur un échec réel, pas sur un triomphe"
+    assert capacite.niveau == PLAFOND_APRES_ECHEC, (
+        "l'échelle est montée jusqu'à E5 puis redescendue : c'est la descente qui "
+        "prouve qu'elle mesure quelque chose")
+
+
+# --- le deuxième domaine, et ce que la capacité ne sait pas faire -------------
+
+def test_la_capacite_apprise_generalise_a_un_vrai_fichier(sources) -> None:
+    """Appris sur un relevé écrit à la main, employé sur le workflow du CI.
+
+    C'est ce qui sépare « généralisation » du mot « généralisation ». Le fichier
+    est réel, il n'a rien à voir avec ce qui a servi à apprendre, et rien n'a été
+    réappris entre les deux.
+    """
+    registre = _registre_apres_gamma()
+    resultat = executer(delta(sources), lambda m, t: resoudre(m, t, registre))
+    assert resultat.verifie
+    assert resultat.reponse["ci.name"] == ["CI"]
+    assert resultat.capacites_reutilisees == (LECTEUR_APPRIS,)
+
+
+def test_la_capacite_tient_sur_une_instance_abimee() -> None:
+    """Des lignes qui ne sont pas des paires, un commentaire, du blanc.
+
+    E4 sépare « ça marche » de « ça tient », et le barreau n'a de sens que si
+    l'instance abîmée l'est pour de vrai.
+    """
+    registre = _registre_apres_gamma()
+    resultat = executer(gamma(GAMMA_ABIMEE), lambda m, t: resoudre(m, t, registre))
+    assert resultat.verifie
+
+
+def test_la_capacite_echoue_pour_de_vrai_sur_un_format_qu_elle_ne_tient_pas(sources) -> None:
+    """`pyproject.toml` écrit `cle = "valeur"` : le lecteur appris refuse.
+
+    Un échec réel, sur un fichier réel. Sans lui, la chute du niveau de preuve
+    serait une mise en scène.
+    """
+    registre = _registre_apres_gamma()
+    resultat = executer(epsilon(sources), lambda m, t: resoudre(m, t, registre))
+    assert not resultat.verifie
+
+
+def test_l_experience_gravit_l_echelle_puis_la_redescend() -> None:
+    """Monter jusqu'à E5 dans un script ne prouve rien ; retomber, si.
+
+    Quand on a les instances sous la main, une échelle se gravit. Ce qu'elle
+    vaut se lit à ce qu'elle refuse, et c'est ce que ce test tient : les deux
+    emplois réussis montent, l'échec réel ramène au plafond.
+    """
+    from tools.genesis_experiment import experience
+
+    echelle = experience(RACINE)["echelle"]
+    assert [(instance, niveau, reussi) for instance, niveau, reussi, _ in echelle] == [
+        ("ci", "E3", True),
+        ("abimee", "E5", True),
+        ("pyproject", "E2", False),
+    ]

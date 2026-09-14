@@ -206,6 +206,7 @@ def sources_du_depot(racine: str | Path) -> dict[str, str]:
     return {
         "changelog": (racine / "CHANGELOG.md").read_text(encoding="utf-8"),
         "pyproject": (racine / "pyproject.toml").read_text(encoding="utf-8"),
+        "ci": (racine / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
     }
 
 
@@ -283,6 +284,20 @@ journal: absent
 verdicts: 7
 """
 
+#: La même chose, abîmée pour de vrai : des lignes qui ne sont pas des paires,
+#: un commentaire, du blanc. Une capacité qui tient là-dessus a montré autre
+#: chose qu'une capacité qui tient sur un texte propre, et c'est précisément ce
+#: que le barreau E4 sépare.
+GAMMA_ABIMEE = """
+    ### relevé arraché
+
+machine: mac
+ceci n'est pas une paire
+   
+journal
+verdicts: 3
+"""
+
 
 def gamma(texte: str, *, nom: str = "GAMMA", attendu: str = "mac") -> Mission:
     """Une mission qui demande un format qu'aucun lecteur inscrit ne tient."""
@@ -299,6 +314,54 @@ def gamma(texte: str, *, nom: str = "GAMMA", attendu: str = "mac") -> Mission:
     )
 
 
+def delta(sources: dict[str, str]) -> Mission:
+    """Le deuxième domaine, et c'est un vrai fichier du dépôt.
+
+    Le lecteur a été appris sur un relevé écrit à la main. On lui demande ici de
+    répondre sur `.github/workflows/ci.yml`, qui n'a rien à voir : c'est la
+    configuration qui fait tourner le CI. Sans cette mission, « généralisation »
+    resterait un mot, et E5 une case qu'on coche.
+
+    Ce qu'elle ne prétend pas : le lecteur ne comprend pas YAML. Il lit les
+    paires `clé: valeur` qu'il trouve, à plat -- l'imbrication est perdue et une
+    entrée de liste garde son tiret. C'est assez pour dire comment ce workflow
+    s'appelle ; ce n'est pas un analyseur YAML, et l'écrire ici évite qu'un
+    lecteur pressé le croie.
+    """
+    def verifier(reponse: Any, _sources: dict[str, str]) -> bool:
+        return isinstance(reponse, dict) and reponse.get("ci.name") == ["CI"]
+
+    return Mission(
+        nom="DELTA",
+        objectif="Comment s'appelle le workflow qui fait tourner le CI ?",
+        sources={"ci": sources["ci"]},
+        verifier=verifier,
+        attendu="le nom déclaré par le workflow",
+        parametres={"demande": (("ci", "name"),)},
+    )
+
+
+def epsilon(sources: dict[str, str]) -> Mission:
+    """Le format où la capacité ne tient pas, et il faut que ça se voie.
+
+    `pyproject.toml` écrit `cle = "valeur"` : aucune ligne `clé: valeur`, donc le
+    lecteur appris refuse. C'est un échec réel, sur un fichier réel, et il est
+    joué exprès -- un registre qui n'enregistrerait que les emplois réussis
+    produirait un niveau de preuve qui monte tout seul.
+    """
+    def verifier(reponse: Any, _sources: dict[str, str]) -> bool:
+        return isinstance(reponse, dict) and reponse.get("pyproject.version") is not None
+
+    return Mission(
+        nom="EPSILON",
+        objectif="Quelle version pyproject publie-t-il — lue par le lecteur appris ?",
+        sources={"pyproject": sources["pyproject"]},
+        verifier=verifier,
+        attendu="une version, que ce lecteur-là ne sait pas atteindre",
+        parametres={"demande": (("pyproject", "version"),)},
+    )
+
+
 def apprendre_de_gamma(registre: Registre, trajectoire: Trajectoire) -> bool:
     """Ce que GAMMA laisse derrière elle, une fois éprouvé."""
     return acquerir_lecteur(GAMMA_APPRENTISSAGE, ("journal", "présent"), trajectoire,
@@ -312,7 +375,7 @@ def prouver_emploi(registre: Registre, *, instance: str, domaine: str,
                      Preuve(instance=instance, domaine=domaine, abimee=abimee, reussi=reussi))
 
 
-__all__ = ["GAMMA_APPRENTISSAGE", "GAMMA_CONTROLE", "LECTEUR_APPRIS", "SEPARATEURS_ESSAYES",
-           "acquerir_lecteur", "alpha", "apprendre_de_gamma", "beta",
-           "construire_lecteur", "construire_lecteur_memorisant", "gamma",
-           "lire_source", "prouver_emploi", "resoudre", "sources_du_depot"]
+__all__ = ["GAMMA_ABIMEE", "GAMMA_APPRENTISSAGE", "GAMMA_CONTROLE", "LECTEUR_APPRIS",
+           "SEPARATEURS_ESSAYES", "acquerir_lecteur", "alpha", "apprendre_de_gamma", "beta",
+           "construire_lecteur", "construire_lecteur_memorisant", "delta", "epsilon",
+           "gamma", "lire_source", "prouver_emploi", "resoudre", "sources_du_depot"]
