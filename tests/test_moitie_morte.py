@@ -179,8 +179,14 @@ def _est_un_compte(noeud: ast.AST) -> bool:
             and requete.value.strip().upper().startswith("SELECT COUNT("))
 
 
+#: Ce qui ouvre une portee de noms : on ne descend pas dedans depuis la portee
+#: qui la contient, ou qu'elle soit -- au premier niveau du corps comme au fond
+#: d'un `if`.
+PORTEES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+
+
 def _sans_les_portees_imbriquees(portee: ast.AST):
-    """Les noeuds de cette portee, sans descendre dans les fonctions du dedans.
+    """Les noeuds de cette portee, sans descendre dans celles du dedans.
 
     Sans ca, deux fonctions voisines du meme module partagent leurs noms : un `r`
     qui vient d'un `COUNT` ici ferait accuser un `r` qui vient d'un `SELECT`
@@ -188,10 +194,10 @@ def _sans_les_portees_imbriquees(portee: ast.AST):
     de ses propres tests qui l'a dit.
     """
     for enfant in ast.iter_child_nodes(portee):
-        if isinstance(enfant, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        if isinstance(enfant, PORTEES):
             continue
         yield enfant
-        yield from ast.walk(enfant)
+        yield from _sans_les_portees_imbriquees(enfant)
 
 
 def comptes_testes_contre_none(source: str) -> list[tuple[int, str]]:
@@ -256,6 +262,12 @@ def test_le_second_detecteur_attrape_ce_qui_vient_d_etre_retire():
         'def f(conn):\n    r = conn.execute("SELECT COUNT(*) AS t FROM t").fetchone()\n    if int(r["t"]) > 0:\n        raise RuntimeError("x")',
         # Homonyme dans une autre fonction : la portee tient.
         'def f(conn):\n    r = conn.execute("SELECT COUNT(*) AS t FROM t").fetchone()\n\ndef g(conn):\n    r = conn.execute("SELECT id FROM t").fetchone()\n    if r is None:\n        raise RuntimeError("x")',
+        # Une fonction **imbriquee sous un `if`**, a cote d'un `COUNT` qui vit dans
+        # ce meme `if`. La premiere version du detecteur ne s'arretait qu'aux
+        # fonctions du premier niveau : elle voyait donc le `COUNT` du dehors et le
+        # `r is None` du dedans comme un seul `r`, et accusait. Mesure, pas
+        # supposition : sur cet exemple, l'ancienne portee voyait bien les deux.
+        'if True:\n    r = conn.execute("SELECT COUNT(*) AS t FROM t").fetchone()\n\n    def g(conn):\n        r = conn.execute("SELECT id FROM t").fetchone()\n        if r is None:\n            raise RuntimeError("x")',
     ],
 )
 def test_le_second_detecteur_ne_crie_pas_sur_une_lecture_ordinaire(source):
