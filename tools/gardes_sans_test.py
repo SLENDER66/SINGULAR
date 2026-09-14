@@ -130,6 +130,26 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    controle que l'action selectionnee porte la capacite validee. Une decision
    qui violerait l'un des trois est refusee a la porte.
 
+   **La branche ESCALATE de `_validate_governance` est dans ce cas, et elle vaut
+   pour cinq survivants d'un coup** -- `approval_id` vide, approbation non
+   APPROVED, aux deux endroits, et la liaison d'identite de `_validate_approval_
+   binding`. Ces refus peuvent bien se declencher, mais leur **succes** ne peut
+   jamais produire une execution : `ValidatedTrajectoryDecision._validate` exige
+   `governor.mode in {EXECUTE_REVERSIBLE, EXECUTE_AUTHORIZED}` -- « governor
+   decision must explicitly authorize execution », tenu par
+   `tests/test_global_verdict_human_review.py` -- donc aucune decision valide ne
+   scelle un gouverneur ESCALATE. Et les deux portes validees comparent
+   `governed.governor != decision.governor` juste apres avoir autorise. Si la
+   gouvernance du jour escalade, les modes different et l'execution est refusee
+   la, que la branche ait laisse passer ou non. Les neutraliser ne peut donc
+   changer aucun resultat.
+
+   Le controle voisin, lui, n'est pas une assurance : `_validate_approval_binding`
+   compare le magasin natif au magasin **legacy**, et une divergence entre les
+   deux ne serait vue par rien d'autre. Elle reste hors de portee tant que la
+   branche ESCALATE l'est ; c'est une raison d'en retirer un jour le chemin
+   legacy, pas d'ecrire un test qui desactiverait la porte pour y arriver.
+
    Meme chose pour `mode == Autonomy.BLOCK` : les trois facons de produire un
    BLOCK que le depot sait produire -- politique, red team, bus -- rendent toutes
    `can_prepare=False`, donc la moitie voisine refuse deja. `v32_governed_core`
