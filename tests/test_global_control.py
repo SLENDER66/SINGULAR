@@ -174,7 +174,35 @@ def test_la_politique_seule_suffit_a_exiger_un_humain():
 # moitie morte : retirer cet avertissement la rendrait portante du jour au
 # lendemain.
 #
-# Les trois autres raisons -- avertissement, gouverneur qui escalade, trajectoire a
-# revoir -- sont deja prouvees par les tests de ce fichier. Celle des avertissements
-# l'est par `test_global_gate_reviews_unknown_values_and_low_confidence_state` ;
-# verifie en la neutralisant.
+# Les deux autres raisons -- avertissement et gouverneur qui escalade -- sont deja
+# prouvees par les tests de ce fichier. Celle des avertissements l'est par
+# `test_global_gate_reviews_unknown_values_and_low_confidence_state` ; verifie en la
+# neutralisant.
+#
+# J'ai d'abord ecrit que la cinquieme l'etait aussi. C'etait faux, et la passe l'a
+# dit apres coup : `test_global_gate_propagates_global_trajectory_review` affirme
+# bien `human_review is True`, mais le meme cas porte l'avertissement
+# `TRAJECTORY:REVIEW`, donc la premiere raison repond avant la cinquieme. Neutralisee,
+# la suite entiere restait verte. Le temoin ci-dessous la prouve pour de bon.
+
+
+def test_une_trajectoire_a_revoir_suffit_seule_a_exiger_un_humain():
+    """La cinquieme raison, isolee -- et il faut la chercher pour l'isoler.
+
+    Une trajectoire a revoir s'accompagne presque toujours de l'avertissement
+    `TRAJECTORY:REVIEW`, qui repond a sa place. L'exception est la trajectoire
+    **bloquee** : la porte ecrit alors des blocages et aucun avertissement. Un
+    portefeuille vide y mene, et c'est un cas reel -- rien a faire n'est pas une
+    autorisation de ne rien faire.
+    """
+    profil, dimensions = _profil_et_dimensions()
+    rapport = GlobalDecisionGate().evaluate(
+        "grow", action(), trajectory_profile=profil, trajectory_dimensions=dimensions,
+        trajectory_portfolio=_portefeuille_vide(),
+    )
+
+    assert rapport.trajectory is not None and rapport.trajectory.human_review is True
+    assert rapport.warnings == (), "un avertissement suffirait deja, la raison ne serait plus isolee"
+    assert rapport.policy_requires_human is False
+    assert rapport.governor_mode is not Autonomy.ESCALATE
+    assert rapport.requires_human is True
