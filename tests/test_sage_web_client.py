@@ -426,3 +426,85 @@ def test_seules_les_adresses_web_deviennent_des_liens() -> None:
     assert "javascript:alert(1)" in reste, "un autre schéma reste du texte"
     assert "<script>vole()</script>" in reste, "une balise reste du texte"
     assert "ftp://ailleurs.fr/x" in reste
+
+
+#: Le bloc des vignettes : `figure` et `renderFigures`.
+def _bloc_vignettes() -> str:
+    code = CLIENT.read_text(encoding="utf-8")
+    debut = code.index("function figure(")
+    fin = code.index("function renderFaits(", debut)
+    return code[debut:fin]
+
+
+def _vignettes(report: dict, calibration: dict | None, progression: dict | None) -> list[dict]:
+    """Exécute vraiment `renderFigures`, avec un DOM de fortune.
+
+    Les autres tests de ce fichier lisent le source, faute de DOM. Pour cette
+    vignette-ci, le lire ne suffit plus : c'est la **troisième** fois qu'elle
+    survit à la correction de sa phrase, et deux de ces trois fois le source
+    contenait déjà un mot rassurant. On l'exécute donc, et on regarde ce qu'elle
+    pose.
+    """
+    harness = """
+    let posees = null;
+    const el = (tag, className, text) => ({
+      tag, className, text, children: [],
+      append(...noeuds) { this.children.push(...noeuds); },
+    });
+    const $ = (id) => ({ hidden: true });
+    const document = {};
+    """ + _bloc_vignettes() + """
+    const $$ = $;
+    """
+    # `$("figures").replaceChildren(...)` est le seul point de sortie : on
+    # l'intercepte plutôt que de simuler un arbre entier.
+    harness = harness.replace(
+        'const $ = (id) => ({ hidden: true });',
+        'const $ = (id) => (id === "figures"'
+        ' ? { replaceChildren(...n) { posees = n; } } : { hidden: true });')
+    scenario = (f"renderFigures({json.dumps(report)}, {json.dumps(calibration)},"
+                f" {json.dumps(progression)});\n"
+                "console.log(JSON.stringify((posees || []).map("
+                "(b) => ({valeur: b.children[0].text, label: b.children[1].text,"
+                " warn: b.className.includes('warn')}))));")
+    resultat = subprocess.run([NODE, "-e", harness + scenario], capture_output=True,
+                              text=True, timeout=20, check=False)
+    assert resultat.returncode == 0, resultat.stderr
+    return json.loads(resultat.stdout)
+
+
+RAPPORT = {"decisions": 12, "hours_total": 30, "hours_that_worked": 10,
+           "hours_unresolved": 4, "resolved": 120, "overdue": 0,
+           "hit_rate": 0.7, "mean_probability": 0.9}
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_la_vignette_bascule_sur_le_chiffre_recent_quand_c_est_corrige() -> None:
+    """Le rouge sur le total d'une vie pendant que la phrase dit « c'est corrigé ».
+
+    C'est le défaut que ce dépôt a payé cinq fois, et la sixième aurait été
+    celle-ci. Le moteur tranche (`calibration_progression`) ; la vignette lit
+    `corrige` et `recent`, elle ne compare aucun seuil.
+    """
+    corrige = _vignettes(
+        RAPPORT, {"gap": 0.2, "conclusive": True, "montrable": True},
+        {"corrige": True, "recent": {"gap": 0.02, "verdicts": 60},
+         "debut": {"gap": 0.38, "verdicts": 60}})
+    calibration = [boite for boite in corrige if "confiance" in boite["label"]]
+    assert len(calibration) == 1
+    assert calibration[0]["valeur"] == "+2%", "elle doit montrer l'écart récent"
+    assert "plus récentes tranchées" in calibration[0]["label"]
+    assert not calibration[0]["warn"], "un écart corrigé ne s'allume pas en alerte"
+
+
+@pytest.mark.skipif(NODE is None, reason="node absent")
+def test_la_vignette_garde_le_total_et_l_alerte_quand_rien_n_est_corrige() -> None:
+    """L'autre bord : sans correction démontrée, rien ne bouge."""
+    for progression in (None, {"corrige": False, "recent": {"gap": 0.18, "verdicts": 60},
+                               "debut": {"gap": 0.22, "verdicts": 60}}):
+        boites = _vignettes(RAPPORT, {"gap": 0.2, "conclusive": True, "montrable": True},
+                            progression)
+        calibration = [boite for boite in boites if "confiance" in boite["label"]][0]
+        assert calibration["valeur"] == "+20%", progression
+        assert calibration["warn"], "un écart démontré et non corrigé reste une alerte"
+        assert "plus récentes" not in calibration["label"]

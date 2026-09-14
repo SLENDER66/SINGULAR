@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.33.0 — Deux defauts de ce que je viens d'ecrire
+## 3.33.0 — Deux defauts de ce que je viens d'ecrire, et une vignette qui s'execute
 
 Relecture adversariale de mon propre code, comme la regle 22 du mandat le
 demande. Les deux trouvailles sont dans ce qui a ete ajoute aujourd'hui.
@@ -20,6 +20,13 @@ demande. Les deux trouvailles sont dans ce qui a ete ajoute aujourd'hui.
   desormais separement : `remises` compte les passages de main, `reutilisations`
   est **derive des preuves** et ne compte que ce qui a tenu — donc il n'y a nulle
   part ou ecrire un chiffre flatteur.
+- **La vignette de calibration est maintenant *executee* par les tests**, pas
+  lue. Les autres tests du client web lisent le source faute de DOM ; pour
+  celle-ci ca ne suffit plus, parce que c'est la troisieme fois qu'elle survit a
+  la correction de sa phrase et que deux fois sur trois le source contenait deja
+  un mot rassurant. `node` est la, donc `renderFigures` tourne pour de vrai avec
+  un DOM de fortune et on regarde ce qu'elle pose. Verifie par l'inverse : en
+  remettant le defaut dans `app.js`, le test echoue.
 
 ## 3.32.0 — AZAZEL Genesis : la plus petite chose capable de dire non
 
