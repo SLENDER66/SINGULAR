@@ -63,6 +63,21 @@ autant. Elargir ne ferait donc pas gagner de temps -- ca rendrait seulement la
 passe rapide plus lente. Ce qui rend l'outil juste est la confirmation, pas la
 largeur du sous-ensemble.
 
+**Le tri va plus vite avec ce principe, trouve le 14 septembre 2026 en triant
+une soixantaine de survivants de la frontiere.** `verify()` reconstruit tout ce
+que la decision porte en elle -- rapport, gouverneur, politique, contrat,
+capacite, cible du fournisseur. Donc tout refus de la frontiere qui **relit un
+champ de la decision** est une assurance : une decision qui le violerait aurait
+une autre empreinte et serait refusee a la porte. Les refus qui comptent sont
+ceux qui comparent la decision a l'**etat durable d'aujourd'hui** -- le contrat
+relu en base, la gouvernance recalculee, la capacite reinscrite -- parce que
+`verify()` ne peut rien savoir de ce qui a change depuis.
+
+Les trois vrais trous de ce jour-la sont tous de la seconde famille, et tous sur
+le chemin de la reconciliation : derive de gouvernance, contrat retrograde,
+interdiction arrivee apres coup. Les huit refus de `validated_execution.py`
+nommes le meme jour sont tous de la premiere.
+
 **Un survivant confirme est une question, pas un defaut.** Trois reponses
 possibles, et il faut choisir la bonne avant d'ecrire une ligne :
 
