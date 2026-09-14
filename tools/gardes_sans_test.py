@@ -99,11 +99,12 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
 Il ne tourne pas dans le CI : compte une dizaine de minutes par groupe. C'est un
 instrument d'audit, a relancer quand on touche a ce qu'il mesure.
 
-    python3 tools/gardes_sans_test.py              # les deux groupes
+    python3 tools/gardes_sans_test.py              # les trois groupes
     python3 tools/gardes_sans_test.py frontiere    # decision, autorisation, effet
     python3 tools/gardes_sans_test.py matins       # journal, saisie, Scout, Notice, Sage
+    python3 tools/gardes_sans_test.py genesis      # missions, capacites, banc differentiel
 
-**Deux groupes, parce que la priorite du depot est celle de la section 0 du
+**Trois groupes, parce que la priorite du depot est celle de la section 0 du
 mandat** : ce qui tourne sans jeton passe avant ce qui en consomme. Le moteur
 qu'il lance chaque matin s'en sort mieux que la frontiere -- c'est la partie la
 mieux testee du depot -- et il avait quand meme des refus sans temoin, dont deux
@@ -251,9 +252,28 @@ SOUS_SUITE_MATINS = (
     "tests/test_messages_recopies.py", "tests/test_windows_console.py",
 )
 
+#: L'experience Genesis. Elle ne tourne pas les matins et ne touche pas la
+#: frontiere, donc elle n'a sa place dans aucun des deux groupes -- et elle a
+#: quand meme besoin d'etre mesuree ici, plus qu'eux : tout ce qu'elle affirme
+#: repose sur ce qu'elle refuse. Un banc differentiel dont un refus n'a pas de
+#: temoin ne mesure plus que sa propre complaisance, et son chiffre positif ne
+#: vaut plus rien.
+CIBLES_GENESIS = (
+    "singular/genesis/bench.py",
+    "singular/genesis/capability.py",
+    "singular/genesis/mission.py",
+    "singular/genesis/missions.py",
+    "singular/genesis/lecteurs.py",
+)
+
+SOUS_SUITE_GENESIS = (
+    "tests/test_genesis.py", "tests/test_genesis_isolation.py",
+)
+
 GROUPES = {
     "frontiere": (CIBLES_FRONTIERE, SOUS_SUITE_FRONTIERE),
     "matins": (CIBLES_MATINS, SOUS_SUITE_MATINS),
+    "genesis": (CIBLES_GENESIS, SOUS_SUITE_GENESIS),
 }
 
 #: Les exceptions qui disent « refuse ». Une `KeyError` ou une `AttributeError`
@@ -554,7 +574,10 @@ def main(arguments: list[str] | None = None) -> int:
     demandes = arguments if arguments else list(GROUPES)
     inconnus = [nom for nom in demandes if nom not in GROUPES]
     if inconnus:
-        print(f"groupe inconnu : {', '.join(inconnus)}. Les deux : {', '.join(GROUPES)}.",
+        # « Les deux » etait ecrit en toutes lettres a cote d'une liste qui en
+        # contient trois. Le message se compte lui-meme maintenant.
+        print(f"groupe inconnu : {', '.join(inconnus)}. Les {len(GROUPES)} : "
+              f"{', '.join(GROUPES)}.",
               file=sys.stderr)
         return 2
     with copie_a_mesurer() as copie:
