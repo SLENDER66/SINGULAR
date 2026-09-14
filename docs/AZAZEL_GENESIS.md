@@ -44,13 +44,23 @@ l'essentiel de la chaîne, et le réécrire aurait été le contraire du travail
 | Frontière d'exécution, autorisation durable | `validated_execution`, `decision_attestation` | **GARDÉ**, et Genesis n'y touche pas |
 | Registre d'amélioration (candidat → évaluation → activation) | `improvement_registry` | **GARDÉ** |
 | Télémétrie économique | `economic_learning`, `economic_learning_ledger` | **GARDÉ** |
-| Trajectoire, mission, orchestration | `trajectory`, `mission_runtime`, `autopilot` | **GARDÉ** |
+| Trajectoire, mission, orchestration | `trajectory`, `mission_runtime`, `autopilot` | **GARDÉ, non employé** — voir ci-dessous |
 | Prédiction vs réalité | `outcome_ledger`, et le journal lui-même | **GARDÉ** |
 | Niveaux de preuve E0–E5 | rien | **AJOUTÉ** |
 | Compte de réutilisation d'une capacité | rien | **AJOUTÉ** — dérivé des preuves, pas incrémenté |
 | Banc différentiel baseline vs expérimenté | rien | **AJOUTÉ** |
 | Missions ALPHA / BETA / GAMMA | rien | **AJOUTÉ** |
 | World State universel, routage de modèles, calcul | rien | **REPORTÉ** — aucune hypothèse à tester aujourd'hui |
+
+**Pourquoi Genesis a sa propre `Trajectoire` alors que le dépôt en a une.** La
+directive interdit de dupliquer ce qui existe, et cette ligne du tableau mérite
+sa justification plutôt qu'un mot. `singular/trajectory.py` n'est pas une trace
+d'exécution : c'est l'optimisation multi-objectifs d'une décision — vision,
+poids, arbitrages. `mission_runtime.py`, lui, est bien une exécution de mission,
+mais **gouvernée** : il est relié à la frontière, et la section 5 interdit à
+Genesis de l'importer. Reprendre l'un aurait mélangé deux notions ; reprendre
+l'autre aurait donné à Genesis un chemin vers l'exécution. Ce qui est réellement
+partagé — l'identité d'artefact — l'est pour de bon.
 
 `JARVIS` n'apparaît dans aucun fichier suivi du dépôt. Seuls des noms de
 branches en gardent la trace. La migration demandée par la directive était donc
