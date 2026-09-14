@@ -93,3 +93,49 @@ def test_global_gate_fails_closed_on_durable_coherence_violation(tmp_path):
     report = gate.evaluate("objectif", action(), mission_id="M1")
     assert report.decision == "BLOCK"
     assert "COHERENCE:MISSION_COMPLETED_WITH_NONTERMINAL_EXECUTION" in report.blockers
+
+
+# --- les deux proprietes que tout le reste lit ----------------------------------
+#
+# `can_prepare` et `requires_human` sont les deux verdicts du rapport global. La
+# frontiere les croit : `ValidatedTrajectoryDecision._validate` refuse un rapport
+# qui exige un humain, et la politique doit permettre la preparation.
+#
+# Ce module ne leve aucun refus -- il rend des verdicts -- donc l'outil de mutation
+# n'y voyait rien avant sa quatrieme forme. Elle neutralise une raison a la fois, et
+# nomme celles que personne n'essaie.
+
+
+def _portefeuille_vide():
+    from singular.trajectory_optimization import TrajectoryPortfolio
+
+    return TrajectoryPortfolio((), 0.0, 0.0, 0.0, 0.0)
+
+
+def _profil_et_dimensions():
+    profil = TrajectoryProfile(Vision("Build durable freedom and ownership."),
+                               money=1, time=1, capability=2, energy=1, freedom=1,
+                               ownership=1, learning=2, resilience=1, transmission=1)
+    return profil, {nom: 0.8 for nom in profil.weights}
+
+
+def test_un_blocage_suffit_a_interdire_la_preparation():
+    """La moitie `not self.blockers` de `can_prepare`, que rien n'essayait.
+
+    L'autre moitie -- `policy_tier != "BLACK"` -- ne peut jamais decider seule : un
+    rang BLACK vient toujours avec `can_prepare=False` dans la politique, et la
+    porte ajoute alors un blocage POLICY. C'est une assurance, pas un trou ; celle
+    qui porte vraiment est celle-ci.
+
+    Le cas joue est un portefeuille de trajectoire vide : la porte bloque, le rang
+    reste GREEN. Sans ce garde, une action bloquee resterait preparable.
+    """
+    profil, dimensions = _profil_et_dimensions()
+    rapport = GlobalDecisionGate().evaluate(
+        "grow", action(), trajectory_profile=profil, trajectory_dimensions=dimensions,
+        trajectory_portfolio=_portefeuille_vide(),
+    )
+
+    assert rapport.blockers, "le cas doit produire un blocage"
+    assert rapport.policy_tier != "BLACK", "et un rang qui n'est pas BLACK, sinon l'autre moitie suffirait"
+    assert rapport.can_prepare is False
