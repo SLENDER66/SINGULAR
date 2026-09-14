@@ -596,7 +596,7 @@ composé, remplacée par l'élément neutre de son opérateur, pour savoir si le
 moitiés d'un `if a or b` sont prouvées ou une seule. Ceux qui
 survivent sont retirables sans qu'un test rougisse — la première passe en a nommé
 beaucoup, et le compte n'est pas écrit ici : l'outil le donne en dix minutes. Le
-travail n'est pas de tous les tester, c'est de les **trier** en trois familles,
+travail n'est pas de tous les tester, c'est de les **trier** en quatre familles,
 et la docstring de l'outil les nomme. La plus grave était la réconciliation :
 fournisseur, opération et charge substitués étaient testés à l'aller, aucun au
 retour — alors que la réconciliation atteint le même fournisseur et peut faire
@@ -712,11 +712,16 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 
 1. **Des refus de la frontière n'ont toujours pas de témoin**, et c'est en
    partie normal : `tools/gardes_sans_test.py` les liste -- les trois formes, le
-   `raise`, le `return False` et la moitié d'un garde composé -- sa docstring dit
-   les trois familles, et seule la première est un trou. Les deux autres sont des
-   assurances derrière un contrôle qui les précède — leur écrire un test
+   `raise`, le `return False` et la moitié d'un garde composé -- et sa docstring
+   trie les survivants en **quatre** familles. Seule la première est un trou :
+   écris le témoin. La deuxième et la quatrième sont des assurances — un contrôle
+   antérieur les couvre, ou rien ne produit leur entrée — et leur écrire un test
    demanderait de désactiver `verify()`, donc de tester un chemin qui n'existe
-   pas. Relance l'outil après avoir touché à la frontière, pas avant.
+   pas ; on écrit alors la raison à côté du code, pas un test. La troisième, la
+   **moitié morte**, ne se teste ni ne se documente : elle se retire, parce
+   qu'aucune entrée ne peut la distinguer de sa voisine. Sa forme la plus commune
+   est désormais impossible — `tests/test_moitie_morte.py` la refuse dans tout le
+   dépôt. Relance l'outil après avoir touché à la frontière, pas avant.
 2. ~~**« La suite passe en ordre aléatoire » est mesuré, pas garanti.**~~ Réglé
    le 13 septembre 2026, et la cause était plus bête que la piste : `pytest-randomly`
    n'était pas dans les dépendances `dev`, donc le CI ne l'installait pas et
