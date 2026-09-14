@@ -470,3 +470,50 @@ def test_le_pipeline_refuse_une_liaison_qui_ne_designe_pas_l_action():
     with pytest.raises(ValueError, match="exactly one intervention mapping"):
         _build_avec(action_to_intervention=((action.id, intervention.id),
                                             (action.id, "career")))
+
+
+@pytest.mark.parametrize("fourni", ["issued_at", "expires_at"])
+def test_le_pipeline_refuse_une_seule_borne_de_fenetre(fourni):
+    """Les deux bornes se donnent ensemble, ou pas du tout.
+
+    Une seule fournie, et l'autre serait calculee depuis l'horloge : la decision
+    porterait une fenetre dont une moitie vient de l'appelant et l'autre du hasard
+    du moment. Le refus est a la porte parce qu'apres, il n'y a plus moyen de
+    savoir laquelle des deux etait voulue.
+    """
+    from time import time
+
+    maintenant = time()
+    valeurs = {"issued_at": maintenant - 10, "expires_at": maintenant + 300}
+    with pytest.raises(ValueError, match="must be supplied together"):
+        _build_avec(**{fourni: valeurs[fourni]})
+
+
+def test_une_execution_par_gestionnaire_ne_porte_aucune_liaison_de_fournisseur():
+    """Les deux genres d'execution ne se melangent pas, meme a moitie.
+
+    Un « handler » s'execute dans ce processus ; un « external_effect » part chez un
+    fournisseur, sous une cle d'idempotence et une empreinte de charge. Une decision
+    qui serait l'un en portant les champs de l'autre laisserait le lecteur -- code ou
+    humain -- choisir lequel croire.
+    """
+    for champ, valeur in (("provider_name", "banque"), ("provider_target", "compte-1"),
+                          ("operation", "virement"), ("execution_payload", {"montant": 42})):
+        with pytest.raises(ValueError, match="handler execution cannot carry external-effect binding"):
+            _build_avec(**{champ: valeur})
+
+
+@pytest.mark.parametrize("manquant", ["provider_name", "provider_target", "operation"])
+def test_un_effet_externe_exige_sa_liaison_complete(manquant):
+    """Trois champs, et aucun ne se devine.
+
+    Le fournisseur, sa cible et l'operation forment ensemble l'identite de l'effet
+    qui partira dans le monde ; la decision les scelle dans son empreinte. Il en
+    manque un, et l'effet reconcilie plus tard ne pourrait pas etre reconnu comme
+    celui qui avait ete autorise.
+    """
+    liaison = {"provider_name": "banque", "provider_target": "compte-1", "operation": "virement",
+               "execution_payload": {"montant": 42}}
+    liaison[manquant] = None
+    with pytest.raises(ValueError, match="external-effect execution requires provider binding"):
+        _build_avec(execution_kind="external_effect", **liaison)
