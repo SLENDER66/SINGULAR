@@ -5,7 +5,7 @@ il neutralise chaque refus des modules vises, un par un, relance une sous-suite
 ciblee, et nomme ceux qui survivent. Un survivant est un refus qu'aucun test
 n'atteint.
 
-**Quatre formes, parce qu'il y en a quatre.**
+**Cinq formes, parce qu'il y en a cinq.**
 
 1. Un `if ... raise` : sa condition devient fausse.
 2. Un `return False` dans une fonction qui rend un booleen : il devient
@@ -27,6 +27,17 @@ n'atteint.
    des `or`, cinq facons differentes d'exiger un humain. Si une seule n'est prouvee
    par aucun test, toute une categorie peut cesser d'en exiger un sans que rien ne
    rougisse.
+5. **Une moitie d'un booleen rendu dans un dictionnaire.** La forme 4 ne voit un
+   verdict que s'il est rendu tout nu, par une fonction annotee `-> bool`. Or ce
+   depot construit ses verdicts les plus lus dans des dictionnaires :
+   `calibration_verdict` rend `{"conclusive": ..., "montrable": ...}`,
+   `calibration_progression` rend `{"corrige": ...}`, et la regle du depot est
+   precisement que les interfaces les **lisent** sans jamais les recalculer.
+   Ces booleens etaient donc entierement hors de portee de cet outil -- et
+   c'etait la regle de calibration, celle qui s'est deja corrigee six fois, qui
+   vivait dans l'angle mort. Le defaut que l'outil traque etait dans l'outil.
+   Trouve le 14 septembre 2026, en verifiant a la main une condition que l'outil
+   disait couverte et qu'il n'avait jamais touchee.
 
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
@@ -465,12 +476,58 @@ def moities_rendues_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], 
     return trouves
 
 
+def moities_d_un_verdict_en_dictionnaire(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
+    """Forme 5 : une moitie d'un booleen rendu **dans un dictionnaire**.
+
+    Les quatre premieres formes ne voient un verdict que s'il est rendu tout nu,
+    par une fonction annotee `-> bool`. Or ce depot construit ses verdicts les
+    plus lus dans des dictionnaires : `calibration_verdict` rend
+    `{"conclusive": ..., "montrable": ...}`, `calibration_progression` rend
+    `{"corrige": ...}`, et toutes les interfaces les lisent sans jamais les
+    recalculer -- c'est meme la regle du depot qu'elles ne les recalculent pas.
+
+    Ces booleens-la etaient donc **entierement hors de portee de cet outil**, et
+    c'est la regle de calibration, celle qui s'est deja corrigee six fois, qui
+    vivait dans l'angle mort. Le defaut que l'outil traque etait dans l'outil.
+
+    Meme prudence que la forme 3 sur la clef : une ligne portant plus d'un
+    `BoolOp` -- imbrication comprise -- rend l'etiquette ambigue, parce que le
+    transformateur visite les enfants avant leur parent et muterait donc autre
+    chose que ce que le rapport annonce. Ces lignes-la sont sautees plutot que
+    mal nommees.
+    """
+    par_ligne: dict[int, list[ast.BoolOp]] = {}
+    noms: dict[int, str] = {}
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.FunctionDef):
+            continue
+        for interne in ast.walk(noeud):
+            if not (isinstance(interne, ast.Return) and isinstance(interne.value, ast.Dict)):
+                continue
+            for clef, valeur in zip(interne.value.keys, interne.value.values, strict=False):
+                etiquette = clef.value if isinstance(clef, ast.Constant) else "?"
+                for descendant in ast.walk(valeur):
+                    if isinstance(descendant, ast.BoolOp):
+                        par_ligne.setdefault(descendant.lineno, []).append(descendant)
+                        noms[descendant.lineno] = f"{noeud.name}[{etiquette!r}]"
+    trouves = []
+    for ligne, rendus in sorted(par_ligne.items()):
+        if len(rendus) != 1:
+            continue
+        operateur = "and" if isinstance(rendus[0].op, ast.And) else "or"
+        for index in range(len(rendus[0].values)):
+            trouves.append(((ligne, index),
+                            f"moitie {index + 1} du {operateur} en dictionnaire ({noms[ligne]})"))
+    return trouves
+
+
 #: Chaque forme de refus : ce qui la trouve, ce qui la neutralise.
 FORMES = (
     (refus_d_un_fichier, RendLaConditionFausse),
     (refus_booleens_d_un_fichier, RendLeRefusVrai),
     (moities_d_un_fichier, RendUneMoitieFausse),
     (moities_rendues_d_un_fichier, RendUneMoitieFausse),
+    (moities_d_un_verdict_en_dictionnaire, RendUneMoitieFausse),
 )
 
 
