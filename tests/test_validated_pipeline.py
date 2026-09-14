@@ -431,3 +431,22 @@ def test_le_pipeline_refuse_deux_interventions_de_meme_identifiant():
     # supposition -- et prouvait donc l'autre garde, pas celui-ci.
     with pytest.raises(ValueError, match=r"^intervention ids must be unique$"):
         _build_avec(interventions=(intervention, jumelle))
+
+
+@pytest.mark.parametrize("budget", [0, 0.5])
+def test_le_pipeline_refuse_un_portefeuille_vide(budget):
+    """Rien a faire n'est pas une autorisation de ne rien faire.
+
+    L'intervention de ce trajet coute une unite de capacite. Sous ce cout, elle est
+    ecartee, le portefeuille sort vide, et il n'y a plus d'action selectionnee a
+    autoriser. Sans ce refus, la construction continuerait avec un portefeuille
+    sans candidat : la decision nommerait une action que l'optimisation n'a pas
+    retenue, et la liaison action -> intervention qui la justifie ne designerait
+    rien.
+
+    Le cas est atteignable sans rien truquer -- un budget de capacite plus petit que
+    ce que l'action demande -- et c'est le genre de journee ordinaire, pas une
+    attaque.
+    """
+    with pytest.raises(PermissionError, match="No executable trajectory portfolio"):
+        _build_avec(capacity_budget=budget)

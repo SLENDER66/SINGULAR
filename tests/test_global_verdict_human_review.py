@@ -154,3 +154,51 @@ def test_clearing_the_blockers_does_not_clear_what_produced_them():
             _SpoofGate(decision="PROCEED", governor_mode=Autonomy.EXECUTE_AUTHORIZED, blockers=()),
             action_overrides={"sensitive": True, "risk": 9, "reversibility": 1},
         )
+
+
+# --- ce que le pipeline reconstruit lui-meme ------------------------------------
+#
+# Section 9 du mandat : une decision favorable ne doit pas pouvoir etre falsifiee en
+# fournissant un rapport favorable. Le pipeline y repond en **recalculant**
+# l'evaluation de trajectoire et l'optimisation humaine, puis en comparant. Ces deux
+# comparaisons n'avaient aucun temoin -- les portes truquees de ce fichier
+# reecrivaient le verdict, jamais les pieces sur lesquelles il repose.
+#
+# La difference compte : une porte qui ment sur le **verdict** est arretee plus bas
+# par le gouverneur et la politique, reconstruits eux aussi. Une porte qui ment sur
+# les **pieces** passerait ces controles-la, puisqu'ils ne les regardent pas.
+
+
+class _PorteQuiDeforme:
+    """Une porte honnete dont on abime une piece du rapport, pas le verdict."""
+
+    def __init__(self, deformation):
+        self._deformation = deformation
+
+    def evaluate(self, *args, **kwargs):
+        honnete = GlobalDecisionGate().evaluate(*args, **kwargs)
+        return replace(honnete, **self._deformation(honnete))
+
+
+def test_une_porte_ne_peut_pas_changer_l_evaluation_de_trajectoire():
+    """Le rapport doit porter la trajectoire que le pipeline vient de calculer.
+
+    Sans ce controle, une porte annonce le score qu'elle veut : la decision
+    enregistrerait une trajectoire et le rapport qui l'autorise en decrirait une
+    autre, les deux se disant d'accord.
+    """
+    porte = _PorteQuiDeforme(
+        lambda rapport: {"trajectory": replace(rapport.trajectory,
+                                               score=rapport.trajectory.score + 1.0)})
+    with pytest.raises(PermissionError, match="trajectory does not match the freshly assessed"):
+        _build_with(porte)
+
+
+def test_une_porte_ne_peut_pas_changer_l_optimisation_humaine():
+    """Meme chose pour l'etat humain sur lequel tout le portefeuille est bati."""
+    porte = _PorteQuiDeforme(
+        lambda rapport: {"human_optimization": replace(
+            rapport.human_optimization,
+            capacity_used=rapport.human_optimization.capacity_used + 1.0)})
+    with pytest.raises(PermissionError, match="human optimization does not match the freshly optimized"):
+        _build_with(porte)
