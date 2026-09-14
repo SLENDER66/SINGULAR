@@ -21,6 +21,12 @@ venais de l'y remettre.
   pointe le chiffre recent — il s'est ameliore, il lui reste dix points, c'est de
   ceux-la qu'il corrige.
 - Le port iOS suit, et un garde exige la troisieme condition des deux cotes.
+- **L'audit des matins relance apres la correction du 3.34.0** : deux survivants
+  sur quarante-deux, et ce sont les deux assurances derriere `BEGIN IMMEDIATE`.
+  Le trou de `is_shared_memory_target` est ferme, et le triage des deux
+  assurances a ete attaque avant d'etre ecrit -- six `resolve()` concurrents et
+  une ecriture brute entre deux transactions tombent tous sur le controle
+  anterieur, jamais sur le `rowcount`.
 
 ## 3.35.0 — Les verificateurs de Genesis ne verifiaient qu'a moitie
 

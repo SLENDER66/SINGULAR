@@ -636,6 +636,11 @@ l'une ou l'autre moitié remplacée par `True`, et ce qu'elle décide est si un
 journal vit sur le disque ou en RAM. Un « zéro survivant » est donc daté : il
 vaut pour le code de ce jour-là, pas pour celui d'après.
 
+Relancé après correction : **deux survivants sur quarante-deux**, et ce sont les
+deux assurances. Le triage tient donc, et il a été attaqué avant d'être écrit —
+six `resolve()` concurrents et une écriture brute entre deux transactions
+tombent tous sur le contrôle antérieur, jamais sur le `rowcount`.
+
 L'outil a un troisième groupe depuis, `genesis`. Premier passage : treize
 survivants sur vingt-deux, dans du code écrit le jour même, dont la garantie
 fail-closed du juge — un vérificateur qui plante valait un succès. Zéro sur
