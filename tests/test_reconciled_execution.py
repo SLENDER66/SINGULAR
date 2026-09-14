@@ -91,3 +91,25 @@ def test_finalizer_rejects_payload_substitution(tmp_path):
         assert "payload" in str(exc)
     else:
         raise AssertionError("Payload substitution was accepted")
+
+
+def test_la_cle_de_preuve_est_celle_sous_laquelle_l_effet_a_ete_ecrit():
+    """La finalisation cherche la preuve la ou l'effet l'a ecrite, par construction.
+
+    Les deux derivations etaient deux copies de la meme ligne, dans deux modules.
+    Une copie qui change ne se plaint pas : la finalisation ne trouverait plus jamais
+    de preuve et refuserait chaque reconciliation avec « aucune preuve durable ne
+    correspond », ce qui envoie chercher du cote de la base plutot que du calcul.
+
+    Il n'y a plus qu'un domicile ; ce test dit que c'est bien lui que les deux
+    chemins interrogent, et qu'il separe vraiment deux triplets voisins.
+    """
+    from singular.effects import EffectRequest, cle_d_idempotence
+
+    requete = EffectRequest(execution_key="exec-1", provider="banque", operation="virement",
+                            payload={"montant": 42}, action_fingerprint="fp")
+    assert requete.provider_idempotency_key == cle_d_idempotence("exec-1", "banque", "virement")
+
+    # Le separateur `\x1f` ne peut pas apparaitre dans les champs, donc un
+    # decoupage different ne peut pas produire la meme cle.
+    assert cle_d_idempotence("exec", "1banque", "virement") != cle_d_idempotence("exec1", "banque", "virement")

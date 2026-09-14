@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .durable import DurableStore, MissionStatus
-from .effects import EffectStatus
+from .effects import EffectStatus, cle_d_idempotence
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,7 @@ class ReconciledExecutionFinalizer:
             if execution["status"] != "RECOVERY_REQUIRED":
                 raise ValueError("Seule une exécution RECOVERY_REQUIRED peut être finalisée par réconciliation.")
 
-            effect_key = self._effect_key(execution_key, provider, operation)
+            effect_key = cle_d_idempotence(execution_key, provider, operation)
             effect = conn.execute(
                 "SELECT execution_key,provider,operation,payload_fingerprint,action_fingerprint,status,result,error "
                 "FROM external_effects WHERE provider_idempotency_key=?",
@@ -108,12 +108,6 @@ class ReconciledExecutionFinalizer:
             result=result,
         )
 
-    @staticmethod
-    def _effect_key(execution_key: str, provider: str, operation: str) -> str:
-        import hashlib
-
-        material = "\x1f".join((execution_key, provider, operation))
-        return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 __all__ = ["ReconciledExecution", "ReconciledExecutionFinalizer"]

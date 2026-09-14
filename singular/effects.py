@@ -24,6 +24,24 @@ class EffectInProgress(RuntimeError):
     """Another worker currently owns the external-effect claim."""
 
 
+def cle_d_idempotence(execution_key: str, provider: str, operation: str) -> str:
+    """L'identite durable d'un effet externe : qui l'execute, chez qui, pour quoi.
+
+    C'est la cle sous laquelle la preuve d'un effet est ecrite, relue apres un
+    redemarrage, et reconnue par la reconciliation. Elle etait derivee a deux
+    endroits -- ici et dans `ReconciledExecutionFinalizer` -- avec deux copies de la
+    meme ligne. Deux copies d'une derivation ne divergent pas bruyamment : le jour ou
+    l'une des deux changerait, la finalisation ne trouverait plus jamais de preuve et
+    refuserait chaque reconciliation avec « aucune preuve durable ne correspond »,
+    ce qui envoie chercher du cote de la base plutot que du cote du calcul.
+
+    Le separateur `\x1f` ne peut pas apparaitre dans les trois champs, donc deux
+    triplets differents ne peuvent pas produire le meme materiau.
+    """
+    material = "\x1f".join((execution_key, provider, operation))
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class EffectRequest:
     execution_key: str
@@ -51,8 +69,7 @@ class EffectRequest:
 
     @property
     def provider_idempotency_key(self) -> str:
-        material = "\x1f".join((self.execution_key, self.provider, self.operation))
-        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+        return cle_d_idempotence(self.execution_key, self.provider, self.operation)
 
 
 @dataclass(frozen=True)
