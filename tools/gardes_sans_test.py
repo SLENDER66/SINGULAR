@@ -78,7 +78,7 @@ le chemin de la reconciliation : derive de gouvernance, contrat retrograde,
 interdiction arrivee apres coup. Les huit refus de `validated_execution.py`
 nommes le meme jour sont tous de la premiere.
 
-**Un survivant confirme est une question, pas un defaut.** Trois reponses
+**Un survivant confirme est une question, pas un defaut.** Cinq reponses
 possibles, et il faut choisir la bonne avant d'ecrire une ligne :
 
 1. *Le refus est atteignable et personne ne l'essaie.* C'est un trou. Ecris le
@@ -148,7 +148,24 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    dans tout le Python du depot. Cet outil ne devrait donc plus la rencontrer ;
    s'il la nomme, c'est que le garde a ete contourne, pas que le triage est a
    refaire.
-4. *Le refus ne peut pas se declencher parce que rien ne produit son entree.*
+4. *Deux refus qui se couvrent l'un l'autre.* Ni trou, ni assurance, ni moitie
+   morte : deux gardes sur le meme chemin dont **chacun suffit seul**. Cet outil
+   mute un refus a la fois, donc il ne peut par construction en tuer aucun des
+   deux, et il les nommera tous les deux a chaque passage.
+
+   Les deux refus de l'effet ambigu en sont l'exemple, et c'est mesure :
+   `effects.py` refuse de reexecuter un effet UNKNOWN au debut d'`execute`, puis
+   une seconde fois quand la revendication echoue et qu'on relit l'etat.
+   Neutraliser l'un ou l'autre laisse la suite verte ; neutraliser **les deux**
+   la fait echouer. La garantie que le README annonce -- « on resout en demandant
+   au fournisseur, jamais en reessayant » -- est donc bien tenue par un test ;
+   c'est la paire qui porte, pas chaque ligne.
+
+   Ne cherche pas a isoler l'un des deux : ici c'est impossible, la revendication
+   ne peut pas reussir sur un effet UNKNOWN. Verifie que la suite echoue quand
+   les deux tombent, ecris-le, et passe au suivant.
+
+5. *Le refus ne peut pas se declencher parce que rien ne produit son entree.*
    Les quatre refus lies a l'approbation humaine sont dans ce cas : une decision
    validee ne peut pas porter ESCALATE, donc aucune execution escaladee n'atteint
    la frontiere. C'est ce que le README annonce -- « human approval is currently
