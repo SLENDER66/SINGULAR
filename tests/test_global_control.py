@@ -1,6 +1,6 @@
 import sqlite3
 
-from singular.autopilot import ActionRequest
+from singular.autopilot import ActionRequest, Autonomy
 from singular.coherence import GlobalCoherenceGuard
 from singular.consistency import CrossDomainConsistencyChecker
 from singular.global_control import GlobalDecisionGate
@@ -139,3 +139,42 @@ def test_un_blocage_suffit_a_interdire_la_preparation():
     assert rapport.blockers, "le cas doit produire un blocage"
     assert rapport.policy_tier != "BLACK", "et un rang qui n'est pas BLACK, sinon l'autre moitie suffirait"
     assert rapport.can_prepare is False
+
+
+def test_la_politique_seule_suffit_a_exiger_un_humain():
+    """La moitie `policy_requires_human` de `requires_human`, que rien n'isolait.
+
+    Cinq raisons d'exiger un humain, reliees par des `or` : un avertissement, la
+    politique, un gouverneur qui escalade, une deliberation non resolue, une
+    trajectoire a revoir. Une raison qui n'est prouvee par aucun test peut
+    disparaitre sans que rien ne rougisse -- et c'est toute une categorie d'actions
+    qui cesserait d'exiger un humain.
+
+    Le piege est que les raisons se declenchent souvent ensemble : une action
+    sensible fait passer la politique a BLACK **et** escalader le gouverneur, donc un
+    test la-dessus ne prouve ni l'une ni l'autre. Il faut une action qui n'active
+    qu'une raison.
+
+    Celle-ci : un risque de 5 met la politique en ORANGE -- qui exige un humain --
+    pendant que le gouverneur n'escalade qu'a partir de 8. Aucun avertissement, pas
+    de trajectoire, pas de deliberation.
+    """
+    rapport = GlobalDecisionGate().evaluate("grow", action(risk=5))
+
+    assert rapport.policy_requires_human is True
+    assert rapport.warnings == (), "un avertissement suffirait deja, la raison ne serait plus isolee"
+    assert rapport.governor_mode is not Autonomy.ESCALATE
+    assert rapport.requires_human is True
+
+
+# La quatrieme raison -- une deliberation non resolue -- ne peut jamais decider
+# seule, et c'est mesure : quand `deliberation.unresolved` est vrai, la porte a
+# deja ajoute l'avertissement `COLLECTIVE:UNRESOLVED_DELIBERATION`, donc la
+# premiere raison a repondu avant. Assurance derriere un autre mecanisme, pas
+# moitie morte : retirer cet avertissement la rendrait portante du jour au
+# lendemain.
+#
+# Les trois autres raisons -- avertissement, gouverneur qui escalade, trajectoire a
+# revoir -- sont deja prouvees par les tests de ce fichier. Celle des avertissements
+# l'est par `test_global_gate_reviews_unknown_values_and_low_confidence_state` ;
+# verifie en la neutralisant.
