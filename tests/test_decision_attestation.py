@@ -258,3 +258,100 @@ def test_une_attestation_qui_expire_avant_d_etre_emise_est_refusee(tmp_path):
 
     with pytest.raises(ValueError, match="validity interval is invalid"):
         store.get(decision.decision_id)
+
+
+def test_une_attestation_ne_vaut_pas_pour_une_autre_decision_du_meme_identifiant(tmp_path):
+    """Le cote lecture de la liaison, que le cote ecriture laissait croire couvert.
+
+    `test_different_context_cannot_reuse_same_decision_id` tient l'ecriture :
+    `issue` refuse une seconde decision qui porterait le meme identifiant avec
+    une autre empreinte. Personne ne tenait la lecture -- `verify` --, et c'est
+    elle que la frontiere appelle avant d'executer.
+
+    `tools/gardes_sans_test.py` a nomme les deux premieres moities du `and` qui
+    la compose. Celle-ci est la liaison elle-meme : sans elle, une attestation
+    emise pour une decision validerait n'importe quelle autre decision portant
+    le meme identifiant. C'est precisement ce que l'attestation existe pour
+    empecher.
+
+    La seconde decision partage l'identifiant **et la fenetre de validite** de la
+    premiere : sans ca, ce sont les comparaisons de dates qui refuseraient, et
+    la liaison d'empreinte resterait sans temoin.
+    """
+    from tests.test_validated_trajectory_decision import recreate
+
+    attestee = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    store.issue(attestee)
+
+    autre = recreate(attestee, calibration={**dict(attestee.calibration), "sonde": 0.5})
+    assert autre.decision_id == attestee.decision_id
+    assert (autre.issued_at, autre.expires_at) == (attestee.issued_at, attestee.expires_at)
+    assert autre.context_fingerprint != attestee.context_fingerprint
+    assert autre.verify() is True, "elle doit etre valide en elle-meme, sinon on teste autre chose"
+
+    assert store.verify(autre) is False
+    assert store.verify(attestee) is True
+
+
+def test_une_attestation_sans_emetteur_est_refusee(tmp_path):
+    """Qui a emis compte, sinon la provenance de l'autorisation n'a pas de nom.
+
+    Les deux refus -- celui du magasin a l'emission et celui de l'emetteur a sa
+    construction -- n'avaient aucun temoin. Le second garde la porte d'entree :
+    un `ValidatedDecisionIssuer` sans nom emettrait des attestations anonymes.
+    """
+    from singular.decision_attestation import ValidatedDecisionIssuer
+
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+
+    with pytest.raises(ValueError, match="issuer is required"):
+        store.issue(decision, issuer="   ")
+
+    with pytest.raises(ValueError, match="issuer is required"):
+        ValidatedDecisionIssuer(store, issuer=" ")
+
+
+def test_un_statut_d_attestation_inconnu_est_refuse():
+    """Une ligne venue du disque ne dicte pas ce qu'un statut veut dire.
+
+    Le refus vit dans `__post_init__`, donc il garde aussi bien un objet
+    fabrique qu'une ligne relue d'une base ecrite par une autre version.
+    """
+    from singular.decision_attestation import DecisionAttestation
+
+    with pytest.raises(ValueError, match="status is invalid"):
+        DecisionAttestation("DEC-1", "empreinte", 0.0, 10.0, "PEUT-ETRE", "singular", "2026-01-01")
+
+
+def test_une_attestation_dont_la_fenetre_a_ete_elargie_ne_verifie_plus(tmp_path):
+    """Elargir n'est pas casser, et c'est pour ca que personne ne l'essayait.
+
+    Le test voisin ecrase `expires_at` par une valeur qui rend la fenetre nulle :
+    `__post_init__` la refuse avant meme qu'on compare quoi que ce soit. Deplacer
+    `issued_at` **en arriere** laisse une fenetre parfaitement valide -- plus
+    large, simplement -- donc la ligne se relit sans broncher et il ne reste que
+    la comparaison avec la decision pour s'y opposer.
+
+    C'est la moitie que `tools/gardes_sans_test.py` a nommee. Elle n'est pas
+    couverte par l'empreinte : l'attestation est une ligne persistee **a part**,
+    et ses dates peuvent bouger sans que la decision change d'un octet.
+    """
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    attestation = ValidatedDecisionIssuer(store, issuer="test-suite").issue(decision)
+    assert store.verify(decision) is True
+
+    with store._connect() as conn:
+        conn.execute("UPDATE decision_attestations SET issued_at=? WHERE decision_id=?",
+                     (attestation.issued_at - 3600.0, decision.decision_id))
+
+    relue = store.get(decision.decision_id)
+    assert relue.expires_at > relue.issued_at, "la fenetre reste valide : c'est le sujet"
+    assert store.verify(decision) is False
+    # `verify_issuance` porte la meme comparaison, et il sert au grand livre des
+    # resultats -- celui qui relie prediction et realite, donc qui nourrit la
+    # calibration. Il ignore l'expiration et la revocation expres ; il ne doit
+    # pas pour autant accepter une attestation dont les dates ont bouge.
+    assert store.verify_issuance(decision) is False
