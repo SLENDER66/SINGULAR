@@ -760,3 +760,63 @@ def test_une_revocation_en_memoire_seule_arrete_l_execution(tmp_path):
 
     # Ce qui isole la moitie testee : le durable, lui, dit encore oui.
     assert moteur.capability_store.verify(jeton, executable_jetable) is True
+
+
+def test_un_mode_d_autonomie_qui_n_execute_pas_est_refuse(tmp_path):
+    """La derniere porte sur le mode, et elle n'avait aucun temoin.
+
+    `_validate_governance` rejette BLOCK, puis PREPARE, puis verifie que le mode
+    est bien l'un des trois qui executent. `Autonomy` en compte **sept** :
+    OBSERVE et ANALYZE ne sont rejetes par aucun des gardes precedents, et
+    `can_execute` vient de la politique -- risque et reversibilite -- pas du
+    mode. Une action verte en mode OBSERVE passe donc les trois premiers gardes,
+    et seule cette ligne-ci l'arrete.
+
+    `Governor.evaluate` n'emet jamais ces deux modes aujourd'hui. Mais
+    `_from_cached` reconstruit le mode depuis la base -- `Autonomy(cached["mode"])`
+    -- donc une ligne de gouvernance persistee par une autre version, ou abimee,
+    arrive ici avec le mode qu'elle porte. C'est exactement la « stale policy »
+    et les « anciennes donnees persistees » que le mandat demande de chercher, et
+    ce garde est ce qui les refuse.
+    """
+    from singular.autopilot import ActionRequest, Autonomy, GovernorDecision
+    from singular.v32_governed_core import GovernedAction
+
+    engine = DurableExecutionEngine(DurableMissionRuntime(DurableStore(tmp_path / "d.db")))
+    action = ActionRequest("lire_fichier", "une action verte", 1, 9, 9, contract_id="MIS-MODE")
+
+    for mode in (Autonomy.OBSERVE, Autonomy.ANALYZE):
+        governed = GovernedAction(
+            action, "GREEN", GovernorDecision(action.id, mode, ()),
+            can_prepare=True, can_execute=True, requires_human=False,
+            reasons=("etat venu du disque",),
+        )
+        with pytest.raises(PermissionError, match="non exécutable"):
+            engine._validate_governance(governed, action, "MIS-MODE")
+
+
+def test_une_gouvernance_qui_prepare_sans_executer_est_refusee(tmp_path):
+    """Preparer n'est pas executer, et aucune politique ne les separe aujourd'hui.
+
+    Les sept `PolicyDecision` du depot rendent toutes `(False, False)` ou
+    `(True, True)` : `can_prepare` et `can_execute` sont donc toujours egaux, et
+    le garde precedent -- `not can_prepare` -- couvre celui-ci. C'est pour ca
+    qu'aucun test ne l'atteignait.
+
+    Il reste atteignable par le disque : `_from_cached` relit les deux champs
+    **separement**, donc une ligne ou ils ne s'accordent pas arrive ici telle
+    quelle. Le refus est ce qui empeche « prepare » de valoir « execute » apres
+    un redemarrage.
+    """
+    from singular.autopilot import ActionRequest, Autonomy, GovernorDecision
+    from singular.v32_governed_core import GovernedAction
+
+    engine = DurableExecutionEngine(DurableMissionRuntime(DurableStore(tmp_path / "d.db")))
+    action = ActionRequest("lire_fichier", "une action verte", 1, 9, 9, contract_id="MIS-PREP")
+    governed = GovernedAction(
+        action, "GREEN", GovernorDecision(action.id, Autonomy.EXECUTE_REVERSIBLE, ()),
+        can_prepare=True, can_execute=False, requires_human=False,
+        reasons=("etat venu du disque",),
+    )
+    with pytest.raises(PermissionError, match="non autorisée à l'exécution"):
+        engine._validate_governance(governed, action, "MIS-PREP")
