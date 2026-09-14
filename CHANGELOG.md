@@ -5,8 +5,10 @@
 - **Ce que la ligne de statut coûte, mesuré.** Lui faire lire le verdict du
   moteur au lieu d'en tenir une copie a un prix : le calcul exact de la rareté
   est quadratique en nombre de verdicts, et cette ligne s'imprime à **chaque**
-  ouverture de terminal. Mesuré : 7 ms à 100 verdicts, 58 ms à 500, 235 ms à
-  1000, 718 ms à 2000. Avant aujourd'hui elle ne payait rien de tout ça.
+  ouverture de terminal. Mesuré, puis arrondi à ce qui se reproduit — deux
+  passages écartent de 25 %, donc un chiffre précis mentirait : de l'ordre de
+  10 ms à 100 verdicts, 50 ms à 500, 200 ms à 1000, 700 ms à 2000. Avant
+  aujourd'hui elle ne payait rien de tout ça.
   À un verdict par jour, c'est dans trois ans et dans six ans. Une dette datée,
   donc, écrite dans `journal.py` et dans `USAGE.md` plutôt que corrigée tout de
   suite — un cache ou une approximation coûterait de la complexité maintenant

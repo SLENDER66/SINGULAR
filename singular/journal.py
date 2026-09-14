@@ -1009,11 +1009,14 @@ class DecisionJournal:
         **Ce que cette ligne coute, mesure plutot que suppose.** Lire le verdict
         du moteur au lieu d'en tenir une copie a un prix : `chance_du_hasard`
         construit la loi exacte du nombre de reussites, ce qui est quadratique
-        en nombre de verdicts. Sur la machine qui ecrit ceci, le 14 septembre
-        2026 : 7 ms a 100 verdicts, 58 ms a 500, 235 ms a 1000, 718 ms a 2000.
-        Avant que cette ligne lise le verdict, elle ne payait rien de tout ca.
+        en nombre de verdicts. Mesure le 14 septembre 2026, arrondie a ce qui
+        se reproduit d'une execution a l'autre -- deux passages sur la meme
+        machine ecartent de 25 %, donc les chiffres precis mentiraient : de
+        l'ordre de 10 ms a 100 verdicts, 50 ms a 500, 200 ms a 1000, 700 ms a
+        2000. Le cout ne depend pas du nombre de probabilites distinctes, c'est
+        verifie. Avant que cette ligne lise le verdict, elle ne payait rien.
 
-        A un verdict par jour, les 235 ms arrivent dans trois ans et les 718 ms
+        A un verdict par jour, les 200 ms arrivent dans trois ans et les 700 ms
         dans six. C'est donc une dette datee, pas un defaut d'aujourd'hui, et
         elle est ecrite ici plutot que corrigee maintenant : construire un cache
         ou une approximation pour un probleme qui se posera dans trois ans

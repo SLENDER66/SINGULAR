@@ -474,9 +474,10 @@ aussi : `calibration +2% (corrigee)`.
 
 **Ce que cette ligne coûte, et quand ça te gênera.** Lire le verdict du moteur a
 un prix : le calcul exact de la rareté est quadratique en nombre de verdicts.
-Mesuré le 14 septembre 2026 : 7 ms à 100 verdicts, 58 ms à 500, 235 ms à 1000,
-718 ms à 2000. À un verdict par jour, les 235 ms arrivent dans trois ans et les
-718 ms dans six. C'est une dette datée, écrite plutôt que corrigée tout de
+Mesuré le 14 septembre 2026, arrondi à ce qui se reproduit — deux passages sur
+la même machine écartent de 25 %, donc un chiffre précis mentirait : de l'ordre
+de 10 ms à 100 verdicts, 50 ms à 500, 200 ms à 1000, 700 ms à 2000. À un verdict
+par jour, les 200 ms arrivent dans trois ans et les 700 ms dans six. C'est une dette datée, écrite plutôt que corrigée tout de
 suite : si un jour ton terminal traîne à l'ouverture, c'est ça, et
 `singular/journal.py` dit à quoi ressemble la correction.
 
