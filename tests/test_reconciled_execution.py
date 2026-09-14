@@ -1,3 +1,5 @@
+import pytest
+
 from singular.autopilot import DelegationContract
 from singular.durable import DurableStore, MissionStatus
 from singular.effects import EffectRequest, EffectStatus, ExternalEffectCoordinator, ProviderResult
@@ -129,8 +131,6 @@ def test_la_cle_de_preuve_est_celle_sous_laquelle_l_effet_a_ete_ecrit():
 
 
 def test_le_finaliseur_refuse_une_execution_sans_cle(tmp_path):
-    import pytest
-
     store, _, _ = _setup(tmp_path)
     for vide in ("", "   "):
         with pytest.raises(ValueError, match="execution_key cannot be blank"):
@@ -145,8 +145,6 @@ def test_le_finaliseur_exige_les_trois_champs_de_la_preuve(tmp_path):
     disent *quel* effet est parti dans le monde. Il en manque une, et la preuve
     qu'on rapprocherait n'est plus celle qui a ete autorisee.
     """
-    import pytest
-
     store, _, _ = _setup(tmp_path)
     complet = {"provider": "provider", "operation": "send", "payload_fingerprint": "fp"}
     for champ in complet:
@@ -155,3 +153,109 @@ def test_le_finaliseur_exige_les_trois_champs_de_la_preuve(tmp_path):
             arguments[champ] = vide
             with pytest.raises(ValueError, match="provider, operation and payload_fingerprint are required"):
                 ReconciledExecutionFinalizer(store).finalize("EXEC-1", **arguments)
+
+
+def _preuve_completee(store, request, **colonnes):
+    """Un effet en preuve, ecrit par le coordinateur puis amene a COMPLETED.
+
+    On passe par `prepare` plutot que par un INSERT a la main : la ligne porte
+    alors la cle que le code derive vraiment, et non celle que le test croit.
+    `colonnes` permet d'abimer une colonne precise -- c'est la substitution qu'on
+    veut jouer, pas une base inventee.
+    """
+    ExternalEffectCoordinator(store).prepare(request)
+    with store._connect() as conn:
+        conn.execute(
+            "UPDATE external_effects SET status='COMPLETED',result=? WHERE provider_idempotency_key=?",
+            ('{"ok":true}', request.provider_idempotency_key),
+        )
+        for nom, valeur in colonnes.items():
+            conn.execute(
+                f"UPDATE external_effects SET {nom}=? WHERE provider_idempotency_key=?",
+                (valeur, request.provider_idempotency_key),
+            )
+
+
+def _finalise(store, request, **remplacements):
+    arguments = {"provider": request.provider, "operation": request.operation,
+                 "payload_fingerprint": request.payload_fingerprint,
+                 "action_fingerprint": request.action_fingerprint}
+    arguments.update(remplacements)
+    return ReconciledExecutionFinalizer(store).finalize("EXEC-1", **arguments)
+
+
+def test_le_trajet_nominal_de_la_finalisation_passe(tmp_path):
+    """Sans ca, les refus suivants passeraient en ne gardant rien."""
+    store, request, _ = _setup(tmp_path)
+    _preuve_completee(store, request)
+
+    assert _finalise(store, request).result == {"ok": True}
+    assert store.get_execution("EXEC-1")["status"] == "COMPLETED"
+
+
+@pytest.mark.parametrize("etat", ["RUNNING", "COMPLETED", "FAILED"])
+def test_seule_une_execution_en_quarantaine_se_finalise(tmp_path, etat):
+    """Finaliser ailleurs, c'est ecrire un verdict sur une execution qui a le sien.
+
+    Sur une execution qui tourne encore, ce serait voler son bail ; sur une
+    execution deja terminee, reecrire un resultat rendu. La quarantaine est le seul
+    etat ou « je ne sais pas si l'effet est parti » est vrai.
+    """
+    store, request, _ = _setup(tmp_path, execution_status=etat)
+    _preuve_completee(store, request)
+
+    with pytest.raises(ValueError, match="Seule une exécution RECOVERY_REQUIRED"):
+        _finalise(store, request)
+    assert store.get_execution("EXEC-1")["status"] == etat
+
+
+def test_le_finaliseur_refuse_une_preuve_liee_a_une_autre_action(tmp_path):
+    """La substitution d'action, jumelle de celle du payload deja gardee.
+
+    L'empreinte d'action n'entre pas dans la cle de preuve : la meme execution, le
+    meme fournisseur et la meme operation retrouvent donc la ligne meme si l'action
+    a change. C'est ce garde-la qui refuse -- sinon un effet parti pour une action
+    fermerait l'execution d'une autre.
+    """
+    store, request, _ = _setup(tmp_path)
+    _preuve_completee(store, request)
+
+    with pytest.raises(ValueError, match="ne correspond pas à l'action"):
+        _finalise(store, request, action_fingerprint="une-autre-empreinte")
+    assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED"
+
+
+@pytest.mark.parametrize("etat", ["INTENT", "UNKNOWN", "FAILED"])
+def test_une_preuve_non_terminale_ne_finalise_rien(tmp_path, etat):
+    """« Peut-etre parti » ne devient pas « parti » parce qu'on le finalise."""
+    store, request, _ = _setup(tmp_path)
+    _preuve_completee(store, request, status=etat)
+
+    with pytest.raises(ValueError, match="preuve externe non terminale"):
+        _finalise(store, request)
+    assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED"
+
+
+def test_la_finalisation_exige_une_mission_encore_en_cours(tmp_path):
+    """Le troisieme exemplaire du meme invariant, apres les deux de `durable.py`.
+
+    La gouvernance peut annuler la mission pendant qu'une execution attend sa
+    preuve. Finaliser alors ecrirait une execution COMPLETED sous une mission
+    annulee : un couple que le verificateur d'integrite considere impossible.
+    """
+    store, request, _ = _setup(tmp_path)
+    _preuve_completee(store, request)
+    store.set_mission_status("MIS-1", MissionStatus.CANCELLED)
+
+    with pytest.raises(ValueError, match="mission doit être RUNNING"):
+        _finalise(store, request)
+    assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED"
+
+
+# Les trois refus qui comparent le fournisseur, l'operation et la cle d'execution de
+# la preuve sont des assurances, pas des trous : la cle sous laquelle la preuve est
+# cherchee **est** derivee de ces trois valeurs, donc une ligne trouvee les porte
+# forcement. Les atteindre demanderait d'abimer la base a la main pour tester un
+# chemin que le code ne produit pas. L'empreinte de charge et celle de l'action, au
+# contraire, n'entrent pas dans la cle : ce sont les deux seules substitutions
+# reellement possibles, et elles ont chacune leur temoin ci-dessus.
