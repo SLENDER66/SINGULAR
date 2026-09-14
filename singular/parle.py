@@ -48,13 +48,15 @@ FICHIER_QUOTA = Path.home() / ".singular" / "parle_quota.json"
 #: Ses tarifs, qu'il ecrit lui-meme. Ce depot n'en connait aucun.
 FICHIER_TARIFS = Path.home() / ".singular" / "tarifs.json"
 
-#: Sonnet, pas Opus, et c'est la seule faculte ou le defaut change.
+#: Sonnet, pas Opus. Ce fut d'abord le defaut de la conversation seule, parce
+#: qu'une conversation c'est vingt appels dans la soiree, chacun portant tout ce
+#: qui precede, la ou `analyse` et `offres` sont des coups uniques -- une fois par
+#: jour, une fois par semaine. Sur un credit de cinq dollars, le choix du modele
+#: decidait si la conversation durait une semaine ou un apres-midi.
 #:
-#: `analyse` et `offres` sont des coups uniques : une fois par jour, une fois
-#: par semaine. Une conversation, c'est vingt appels dans la soiree, chacun
-#: portant tout ce qui precede. Sur un credit de cinq dollars, le choix du
-#: modele decide si la conversation dure une semaine ou un apres-midi -- et
-#: Opus coute plus cher que Sonnet.
+#: Depuis le 14 septembre 2026 les trois facultes ont le meme defaut, sur sa
+#: decision : il a regarde ce que couterait l'outil tous les jours et a tranche
+#: Sonnet partout.
 #:
 #: Ce n'est pas un rabais sur ce qu'il a demande : Sonnet 5 est un vrai
 #: modele Claude, le meme SDK, la meme cle. Et le retour se fait par une

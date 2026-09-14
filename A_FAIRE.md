@@ -455,7 +455,8 @@ ce qui a permis de passer du PC au Mac sans rien perdre.
 
    Soixante réponses par jour depuis le téléphone, aucune limite au clavier,
    et un refus net quand le crédit est épuisé. Le modèle est
-   `claude-sonnet-5`, choisi pour que 5 $ durent ; `SINGULAR_PARLE_MODELE`
+   `claude-sonnet-5`, choisi pour que 5 $ durent — et depuis le 14 septembre
+   2026 c'est aussi celui d'`analyse` et d'`offres` ; `SINGULAR_PARLE_MODELE`
    remet Opus.
 
    Le reste — le journal, le rapport, les verdicts — n'a jamais besoin de

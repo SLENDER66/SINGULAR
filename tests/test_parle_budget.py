@@ -313,6 +313,31 @@ def _tarifs(tmp_path, *, credit=5.0, modeles=("claude-sonnet-5",)):
     return Tarifs(chemin)
 
 
+def _facultes_qui_appellent_un_modele() -> list[str]:
+    """Les modules de `singular/` qui appellent vraiment un modele, par leur nom court.
+
+    Lu dans le source -- `messages.create` -- et non dans une liste tenue a la
+    main : c'est precisement une liste tenue a la main qui avait laisse `offres`
+    depenser sur un modele que le gabarit de tarifs ignorait.
+    """
+    racine = SOURCE.parent
+    noms = []
+    for chemin in sorted(racine.rglob("*.py")):
+        if "messages.create" in chemin.read_text(encoding="utf-8"):
+            noms.append(chemin.stem)
+    assert noms, "aucun appel de modele trouve : le motif cherche a du changer"
+    return noms
+
+
+def _corps_de(source: str, nom: str) -> str:
+    """Le texte d'une fonction, pour lire ce qu'elle nomme."""
+    arbre = ast.parse(source)
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.FunctionDef) and noeud.name == nom:
+            return ast.unparse(noeud)
+    raise AssertionError(f"{nom} n'existe plus dans {SOURCE.name}")
+
+
 def test_the_template_names_every_model_the_tool_can_bill(tmp_path) -> None:
     """Le gabarit ne nommait que le modele de la conversation.
 
@@ -327,7 +352,25 @@ def test_the_template_names_every_model_the_tool_can_bill(tmp_path) -> None:
     """
     gabarit = json.loads(modele_de_tarifs())
     assert set(gabarit["modeles"]) == set(modeles_qui_depensent())
-    assert len(gabarit["modeles"]) >= 2, "au moins la conversation et la recherche"
+    # Il y avait ici « au moins deux modeles », ce qui supposait que les facultes
+    # depensent sur des modeles differents. Le 14 septembre 2026 elles sont toutes
+    # passees sur Sonnet et l'assertion est tombee : elle gardait un accident de
+    # configuration, pas la regle.
+    #
+    # La regle est en dessous, et elle a ete mesuree avant d'etre ecrite. Comparer
+    # le gabarit aux modeles declares ne prouve rien -- le gabarit **est** genere
+    # depuis ces declarations, donc les deux cotes bougent ensemble. Comparer les
+    # ensembles de noms de modeles ne prouve rien non plus depuis que les trois
+    # partagent le meme. Ce qui se verifie vraiment, c'est que la liste ecrite a la
+    # main dans `modeles_qui_depensent` nomme **chaque module qui appelle un
+    # modele** -- c'est la seule chose qu'une quatrieme faculte ferait mentir.
+    corps = _corps_de(SOURCE.read_text(encoding="utf-8"), "modeles_qui_depensent")
+    for module in _facultes_qui_appellent_un_modele():
+        assert module in corps, (
+            f"`{module}` appelle un modele et `modeles_qui_depensent` ne le nomme pas : "
+            f"sa depense mettrait dans le compte un modele sans tarif, `cout_usd` "
+            f"rendrait `None`, et l'affichage en dollars disparaitrait pour de bon."
+        )
     for prix in gabarit["modeles"].values():
         assert set(prix) == set(Tarifs.POSTES)
         assert all(valeur == 0.0 for valeur in prix.values()), (

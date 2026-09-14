@@ -32,8 +32,12 @@ from .analyse import (
     traduit_les_pannes,
 )
 
-#: Comme pour l'analyse : le modèle est un arbitrage de celui qui paie.
-MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_OFFRES_MODELE", "claude-opus-5")
+#: Comme pour l'analyse : le modèle est un arbitrage de celui qui paie, et il a
+#: tranché Sonnet 5 le 14 septembre 2026. C'est la faculté la plus chère par
+#: appel -- 4000 jetons et des pages entières ramenées par la recherche -- donc
+#: c'est ici que le choix pèse le plus. `SINGULAR_OFFRES_MODELE=claude-opus-5`
+#: pour revenir en arrière.
+MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_OFFRES_MODELE", "claude-sonnet-5")
 
 #: Chercher sur le web coûte plus qu'analyser un journal : chaque recherche
 #: ramène des pages entières dans le contexte. Le plafond n'est pas de la

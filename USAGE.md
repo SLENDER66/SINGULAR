@@ -71,8 +71,9 @@ qui quitterait la machine — les observations et les chiffres de la Notice, pas
 l'historique de tes décisions — sans contacter personne. C'est la même chaîne
 que celle qui part ensuite, et un test l'impose.
 
-Le modèle par défaut est `claude-opus-5`. `SINGULAR_ANALYSE_MODELE=claude-sonnet-5`
-coûte environ deux fois moins ; c'est ton arbitrage, pas le mien.
+Le modèle par défaut est `claude-sonnet-5` depuis le 14 septembre 2026 — voir
+« Pourquoi Sonnet et pas Opus » plus bas. `SINGULAR_ANALYSE_MODELE=claude-opus-5`
+revient en arrière ; c'est ton arbitrage, pas le mien.
 `SINGULAR_ANALYSE_EFFORT` accepte `low`, `medium` (défaut), `high`.
 
 Ce qu'elle ne peut pas faire, et ce n'est pas une consigne mais une absence
@@ -226,14 +227,22 @@ secondes, pour qu'un processus tué ne condamne pas l'outil.
 
 #### Pourquoi Sonnet et pas Opus
 
-`parle` est la seule faculté dont le modèle par défaut est `claude-sonnet-5`.
-`analyse` et `offres` sont des coups uniques ; une conversation, c'est vingt
+Les trois facultés qui appellent un modèle — `parle`, `analyse`, `offres` —
+ont `claude-sonnet-5` par défaut.
+
+`parle` l'avait en premier, et pour une raison qui lui est propre : `analyse`
+et `offres` sont des coups uniques, alors qu'une conversation c'est vingt
 appels dans la soirée, chacun portant tout ce qui précède. Sur un crédit de
 cinq dollars, ce choix décide si la conversation dure une semaine ou un
 après-midi.
 
+Les deux autres ont suivi le 14 septembre 2026, sur ta décision, après avoir
+regardé ce que coûterait l'outil utilisé tous les jours. `offres` est la plus
+chère par appel : 4000 jetons et des pages entières ramenées par la recherche.
+
 Ce n'est pas un rabais : Sonnet 5 est un vrai modèle Claude, le même SDK, la
-même clé. Pour revenir à Opus : `SINGULAR_PARLE_MODELE=claude-opus-5`.
+même clé. Pour revenir à Opus, faculté par faculté :
+`SINGULAR_PARLE_MODELE`, `SINGULAR_ANALYSE_MODELE`, `SINGULAR_OFFRES_MODELE`.
 
 Et le fil lui-même est mis en cache jusqu'au dernier tour enregistré. Sans ça
 il est refacturé au plein tarif à chaque question, et le vingtième tour coûte

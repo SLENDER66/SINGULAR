@@ -33,11 +33,14 @@ import json
 import os
 from typing import Any
 
-#: Le modèle par défaut. Opus 5 est le plus capable ; c'est aussi le plus cher
-#: des deux qui conviennent ici. `claude-sonnet-5` coûte environ deux fois
-#: moins, et c'est un choix qui appartient à celui qui paie la facture -- d'où
-#: la variable d'environnement plutôt qu'une valeur en dur.
-MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_ANALYSE_MODELE", "claude-opus-5")
+#: Le modèle par défaut. Sonnet 5 depuis le 14 septembre 2026, sur sa décision :
+#: Opus 5 est le plus capable, et c'est aussi le plus cher des deux qui
+#: conviennent ici. Ce n'est pas un rabais sur ce qu'il a demandé -- Sonnet 5 est
+#: un vrai modèle Claude, le même SDK, la même clé -- c'est un arbitrage de celui
+#: qui paie la facture, et il l'a tranché en regardant ce que ça coûterait
+#: réellement de faire tourner l'outil tous les jours. Le retour se fait par une
+#: variable : `SINGULAR_ANALYSE_MODELE=claude-opus-5`.
+MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_ANALYSE_MODELE", "claude-sonnet-5")
 
 #: La réponse tient en quelques paragraphes : plafonner la sortie est ici une
 #: décision de coût assumée, pas une troncature accidentelle.

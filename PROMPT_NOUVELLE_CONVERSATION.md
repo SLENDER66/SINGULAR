@@ -775,10 +775,13 @@ vivent dans `~/.singular/tarifs.json`, que `python3 -m singular parle --tarifs`
 prépare — et tant qu'il est vide, la conversation compte des jetons et ne parle
 jamais d'argent.
 
-Modèles par défaut : `claude-opus-5` pour `analyse` et `offres`, qui sont des
-coups uniques ; **`claude-sonnet-5` pour `parle`**, parce qu'une conversation
-c'est vingt appels dans la soirée et que ce choix décide si 5 $ durent une
-semaine ou un après-midi. `SINGULAR_PARLE_MODELE` remet Opus.
+Modèle par défaut : **`claude-sonnet-5` pour les trois facultés**. `parle`
+l'avait en premier — une conversation c'est vingt appels dans la soirée, et ce
+choix décide si 5 $ durent une semaine ou un après-midi. `analyse` et `offres`
+ont suivi le 14 septembre 2026, sur sa décision, après qu'il a regardé ce que
+coûterait l'outil utilisé tous les jours. `SINGULAR_PARLE_MODELE`,
+`SINGULAR_ANALYSE_MODELE` et `SINGULAR_OFFRES_MODELE` remettent Opus, faculté
+par faculté.
 
 Deux gardes sur la conversation, qui ne comptent pas la même chose : soixante
 réponses par jour depuis le téléphone (large exprès — un garde-fou contre
