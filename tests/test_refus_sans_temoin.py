@@ -820,3 +820,28 @@ def test_une_gouvernance_qui_prepare_sans_executer_est_refusee(tmp_path):
     )
     with pytest.raises(PermissionError, match="non autorisée à l'exécution"):
         engine._validate_governance(governed, action, "MIS-PREP")
+
+
+
+def test_un_contrat_retrograde_a_prepare_tombe_avant_la_comparaison_de_gouverneur(tmp_path):
+    """Retrograde, pas seulement change : c'est un autre garde qui refuse.
+
+    Le test voisin altere l'autonomie vers EXECUTE_AUTHORIZED, ce qui fait
+    diverger le gouverneur et tombe sur « governance no longer matches ». Vers
+    PREPARE, on ne va pas si loin : `_authorize` recalcule la gouvernance
+    **avant** cette comparaison -- l'ordre des lignes de `execute_validated` le
+    montre -- et `_validate_governance` refuse des qu'il voit le mode PREPARE.
+
+    Les deux gardes vivent donc sur le meme chemin et seul le premier etait
+    joue. Celui-ci est celui qui dit « preparee mais non autorisee a
+    l'execution » : c'est la difference entre un contrat qui a change et un
+    contrat qui a **perdu** le droit d'executer, et c'est la seconde qui est la
+    « stale authorization » de la section 7 du mandat.
+    """
+    decision = _build_decision()
+    moteur = _moteur(decision, tmp_path)
+    _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                               autonomy=Autonomy.PREPARE.value)
+
+    with pytest.raises(PermissionError, match="préparée mais non autorisée"):
+        moteur.execute_validated(decision, authorized_handler)
