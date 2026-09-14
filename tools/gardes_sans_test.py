@@ -88,6 +88,21 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    L'atteindre demanderait de defaire le verrou, donc de tester un chemin qui
    n'existe pas.
 
+   La famille `action is None` de `singular/execution.py` -- aux trois portes,
+   plus les deux liaisons contrat et capacite qui la suivent -- est dans ce cas
+   aussi, et c'est ecrit ici pour qu'on ne refasse pas le triage. `verify()`
+   reconstruit chacune de ces proprietes avant que l'execution commence :
+   « global report and governor must target authorized actions », la boucle qui
+   exige que chaque action autorisee porte l'identifiant du contrat, et le
+   controle que l'action selectionnee porte la capacite validee. Une decision
+   qui violerait l'un des trois est refusee a la porte.
+
+   Meme chose pour `mode == Autonomy.BLOCK` : les trois facons de produire un
+   BLOCK que le depot sait produire -- politique, red team, bus -- rendent toutes
+   `can_prepare=False`, donc la moitie voisine refuse deja. `v32_governed_core`
+   a bien un chemin qui rendrait BLOCK avec `can_prepare=True`, mais rien ne le
+   nourrit ; la moitie est masquee, pas morte.
+
    Ce triage-la a ete **attaque avant d'etre ecrit**, parce qu'un raisonnement
    qui conclut « inatteignable » est exactement le genre de raisonnement qu'on
    aime trop. Six `resolve()` concurrents sur la meme entree : un passe, les cinq
