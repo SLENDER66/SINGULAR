@@ -94,9 +94,12 @@ class ValidatedTrajectoryPipeline:
             raise PermissionError("action capability does not match the validated execution target")
         action = replace(action, execution_capability=execution_target)
 
+        # L'unicite des identifiants d'intervention n'est pas verifiee ici : le
+        # moteur appele juste en dessous la verifie deja, avec exactement le meme
+        # message. La copie qui vivait la ne changeait donc rien -- retiree, aucun
+        # test ne rougissait, et c'est la passe de mutation qui l'a dit. La table
+        # reste construite ici parce que le portefeuille en a besoin.
         intervention_map = {item.id: item for item in interventions}
-        if len(intervention_map) != len(interventions):
-            raise ValueError("intervention ids must be unique")
 
         human = HumanOptimizationEngine.optimize(tuple(domain_states), tuple(interventions), human_interactions, capacity_budget=capacity_budget)
         portfolio = TrajectoryOptimizationEngine.optimize(

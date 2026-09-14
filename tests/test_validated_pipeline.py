@@ -402,3 +402,32 @@ def test_le_pipeline_refuse_un_budget_de_capacite_qui_n_en_est_pas_un(budget):
 def test_le_pipeline_refuse_un_portefeuille_sans_place(maximum):
     with pytest.raises(ValueError, match="max_portfolio_candidates must be positive"):
         _build_avec(max_portfolio_candidates=maximum)
+
+
+def test_le_pipeline_refuse_deux_interventions_de_meme_identifiant():
+    """Deux interventions de meme identifiant se fondent en une, silencieusement.
+
+    `{item.id: item for item in interventions}` garde la derniere. Le portefeuille
+    serait alors optimise sur moins d'interventions que la decision n'en
+    enregistre, et `_validate` -- qui reconstruit la table de la meme facon --
+    referait le meme repli sans rien voir.
+
+    Qui refuse : `HumanOptimizationEngine.optimize`, appele juste apres la table.
+    Le pipeline portait une copie du meme controle, avec le meme message ; retiree,
+    aucun test ne rougissait. Ce test-ci prouve donc que **la porte refuse**, et le
+    moteur est le seul domicile de la regle.
+    """
+    from singular.domain_learning import LearningDomain
+    from singular.human_optimization import Intervention
+
+    _, _, _, intervention, _, _ = _inputs()
+    jumelle = Intervention("career", LearningDomain.CAREER, 0.5, evidence=0.5,
+                           causal_confidence=0.5, capacity=1)
+    assert jumelle.id == intervention.id, "le doublon doit porter le meme identifiant"
+
+    # Le motif est ancre : `_validate` refuse le meme doublon avec « **validated**
+    # intervention ids must be unique », dont celui-ci est un sous-texte. Sans les
+    # ancres, ce test passait avec le garde du pipeline retire -- mesure, pas
+    # supposition -- et prouvait donc l'autre garde, pas celui-ci.
+    with pytest.raises(ValueError, match=r"^intervention ids must be unique$"):
+        _build_avec(interventions=(intervention, jumelle))

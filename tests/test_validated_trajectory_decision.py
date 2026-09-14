@@ -259,3 +259,42 @@ def test_forged_warning_is_refused_even_though_another_guard_catches_it_first():
     assert forged.requires_human is True
     with pytest.raises(ValueError):
         recreate(decision, global_report=forged)
+
+
+# --- les trois unicites que rien n'essayait -------------------------------------
+#
+# `_validate` refuse trois doublons : deux actions autorisees de meme identifiant,
+# deux etats de domaine sur le meme domaine, deux interventions de meme
+# identifiant. Aucun n'avait de temoin -- le mot « unique » n'apparaissait dans
+# aucun test du depot.
+#
+# Ce ne sont pas des politesses de schema. Chacune de ces trois listes est
+# reconstruite ailleurs sous forme de table indexee par identifiant -- par
+# `_validate` lui-meme, par l'optimisation humaine, par le portefeuille. Un doublon
+# s'y replie en une seule entree : la decision enregistre alors deux choses et le
+# calcul qui l'autorise n'en voit qu'une. C'est exactement l'ecart que l'empreinte
+# de contexte est censee rendre impossible.
+
+
+def test_une_decision_refuse_deux_actions_de_meme_identifiant():
+    decision = build()
+    doublon = decision.authorized_actions[0].to_action()
+
+    with pytest.raises(ValueError, match="authorized action ids must be unique"):
+        recreate(decision, actions=(doublon, doublon))
+
+
+def test_une_decision_refuse_deux_etats_du_meme_domaine():
+    decision = build()
+    etat = decision.domain_states[0]
+
+    with pytest.raises(ValueError, match="validated domain states must be unique"):
+        recreate(decision, domain_states=(etat, replace(etat, level=0.9)))
+
+
+def test_une_decision_refuse_deux_interventions_de_meme_identifiant():
+    decision = build()
+    intervention = decision.interventions[0]
+
+    with pytest.raises(ValueError, match="validated intervention ids must be unique"):
+        recreate(decision, interventions=(intervention, replace(intervention, capacity=2)))
