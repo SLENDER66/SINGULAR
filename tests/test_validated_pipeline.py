@@ -32,14 +32,13 @@ def _inputs():
 
 
 def _build_decision():
-    contract, action, state, intervention, profile, dimensions = _inputs()
-    return ValidatedTrajectoryPipeline.build(
-        objective=contract.objective, actions=(action,), action_to_intervention=((action.id, intervention.id),),
-        domain_states=(state,), interventions=(intervention,), trajectory_profile=profile,
-        trajectory_dimensions=dimensions, contract=contract,
-        execution_target=AUTHORIZED_HANDLER_CAPABILITY,
-        decision_id="DEC-PIPE", capacity_budget=2,
-    )
+    """Le trajet nominal. Les arguments vivent dans `_build_avec`, plus bas.
+
+    Ils etaient ecrits deux fois depuis que les temoins de la porte d'entree
+    existent -- et deux copies d'un jeu d'arguments finissent par ne plus decrire le
+    meme trajet, ce qui ferait mentir les deux moities du fichier l'une sur l'autre.
+    """
+    return _build_avec()
 
 
 def _attested_executor(decision, tmp_path):
