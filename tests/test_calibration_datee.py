@@ -427,3 +427,28 @@ def test_une_moitie_recente_sans_ecart_demontre_reste_un_ecart_corrige(tmp_path)
     progression = calibration_progression(journal.review(now=NOW + timedelta(days=300)))
     assert not progression["recent"]["conclusive"]
     assert progression["corrige"]
+
+
+def test_un_ecart_voyant_sur_trois_verdicts_n_est_pas_concluant(tmp_path):
+    """La moitié « ce n'est pas le hasard » de `conclusive`, qui n'avait pas de témoin.
+
+    `tools/gardes_sans_test.py`, une fois capable de muter les booléens rendus
+    dans un dictionnaire, a nommé les deux moitiés de `_periode['conclusive']`.
+    Celle-ci est un vrai trou : rien ne distinguait `hasard <= CALIBRATION_HASARD`
+    de `True`, donc rien ne vérifiait que la rareté compte.
+
+    Six paris à 75 %, dont deux gagnés dans chaque moitié : un écart de
+    vingt-cinq points, voyant — et que le pur hasard produit bien plus d'une
+    fois sur vingt. Aucune des deux moitiés du journal ne conclut là-dessus, et
+    c'est toute la discipline de ce fichier.
+    """
+    journal = _journal(tmp_path, [(0.75, index % 3 == 0) for index in range(6)])
+    progression = calibration_progression(journal.review(now=NOW + timedelta(days=60)))
+
+    for moitie in ("debut", "recent"):
+        assert abs(progression[moitie]["gap"]) >= CALIBRATION_GAP, (
+            f"{moitie} : l'écart doit être voyant, sinon le test ne prouve rien")
+        assert progression[moitie]["chance"] > CALIBRATION_HASARD, (
+            f"{moitie} : et il doit rester explicable par le hasard")
+        assert not progression[moitie]["conclusive"], (
+            f"{moitie} : un écart voyant mais explicable par le hasard ne conclut pas")

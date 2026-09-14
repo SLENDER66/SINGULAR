@@ -284,6 +284,11 @@ SOUS_SUITE_MATINS = (
     "tests/test_etat_en_francais.py", "tests/test_notice_vectors.py",
     "tests/test_une_seule_regle_par_phrase.py", "tests/test_commandes_de_sa_fenetre.py",
     "tests/test_messages_recopies.py", "tests/test_windows_console.py",
+    # La calibration datee. Sans elle, l'outil annoncait « sous-suite trop
+    # etroite » sur les conditions de `corrige` : elles etaient couvertes, mais
+    # par un fichier que la passe rapide ne lancait pas, donc chacune coutait une
+    # passe complete pour rien.
+    "tests/test_calibration_datee.py",
 )
 
 #: L'experience Genesis. Elle ne tourne pas les matins et ne touche pas la
