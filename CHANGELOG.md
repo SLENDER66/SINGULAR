@@ -25,6 +25,17 @@ dérégler. Le défaut était le même, une tranche de temps plus loin.
   paraître aussi juste en l'ayant. Il faut une quarantaine de verdicts récents
   pour que l'hypothèse tombe, contre quelques-uns pour établir un écart. Exact,
   déterministe, sans réseau ni modèle, comme sa voisine.
+- **La règle de calibration descend dans le moteur**, entière. `summary_line` --
+  la ligne que son profil shell imprime dans *chaque* terminal -- ne peut pas
+  importer le Sage et tenait donc sa propre version : celle d'avant le
+  9 septembre, « assez de verdicts, et quinze points d'écart ». Elle se taisait
+  sur dix points établis sur deux cents verdicts pendant que la Notice concluait,
+  et elle aurait affiché l'écart d'une vie pendant que le Sage disait qu'il était
+  corrigé. Sixième occurrence de ce défaut : la règle n'a plus qu'un domicile,
+  `montrable` y compris -- « y a-t-il lieu d'en parler ? » était encore une
+  question de la règle, recombinée par chacun de ceux qui l'affichent. Le test
+  qui gardait ça exigeait que la ligne *nomme* les bons seuils ; il exige
+  maintenant qu'elle n'en nomme **aucun**.
 - **La vignette suit la phrase.** C'était la troisième fois pour celle-ci : le
   rapport web et `review` affichaient le total d'une vie en rouge pendant que
   l'observation, juste en dessous, disait que c'était corrigé. Le moteur tranche,

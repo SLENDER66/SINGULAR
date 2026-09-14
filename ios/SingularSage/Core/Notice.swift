@@ -324,6 +324,11 @@ enum NoticeEngine {
         let gap: Double
         let chance: Double
         let conclusive: Bool
+        /// « Y a-t-il lieu d'en parler ? » est encore une question de la règle,
+        /// et elle vivait dans deux corps de fonction qui n'en donnaient pas la
+        /// même réponse. Démontré, on le dit quel que soit l'écart ; sinon,
+        /// seulement s'il saute aux yeux.
+        let montrable: Bool
     }
 
     static func calibrationVerdict(_ report: Report) -> CalibrationVerdict? {
@@ -331,9 +336,10 @@ enum NoticeEngine {
               report.resolved >= calibrationMinimum else { return nil }
         let hits = Int((hit * Double(report.resolved)).rounded())
         let hasard = chanceDuHasard(report.resolvedProbabilities, hits: hits)
+        let conclusive = hasard <= calibrationHasard && abs(gap) >= calibrationArrondi
         return CalibrationVerdict(
-            gap: gap, chance: hasard,
-            conclusive: hasard <= calibrationHasard && abs(gap) >= calibrationArrondi
+            gap: gap, chance: hasard, conclusive: conclusive,
+            montrable: conclusive || abs(gap) >= calibrationGap
         )
     }
 
@@ -424,7 +430,7 @@ enum NoticeEngine {
         guard let verdict = calibrationVerdict(report),
               let predicted = report.meanProbability,
               let happened = report.hitRate,
-              verdict.conclusive || abs(verdict.gap) >= calibrationGap else { return nil }
+              verdict.montrable else { return nil }
 
         let gap = verdict.gap
         let hasard = verdict.chance

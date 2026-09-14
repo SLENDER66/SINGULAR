@@ -464,10 +464,13 @@ SINGULAR · 3 à trancher · 42h sans verdict · calibration +35%
 Un journal qu'il faut penser à ouvrir est un journal qu'on arrête d'ouvrir.
 
 La calibration n'apparaît sur cette ligne qu'aux conditions décrites plus bas
-pour la Notice — assez de verdicts, et un écart voyant. Le seuil est le même
-parce qu'il n'est écrit qu'une fois, dans le moteur : la ligne avait longtemps le
-sien, et annonçait donc un écart après un seul verdict pendant que la Notice se
-taisait sur les mêmes données.
+pour la Notice, et c'est littéralement la même condition : la ligne lit le
+verdict du moteur au lieu de le refaire. Elle avait longtemps le sien, et
+annonçait donc un écart après un seul verdict pendant que la Notice se taisait
+sur les mêmes données ; puis, corrigée, elle a gardé la version d'avant le
+9 septembre — « assez de verdicts, et quinze points » — et se taisait sur dix
+points établis sur deux cents verdicts. Quand ton écart est corrigé, elle le dit
+aussi : `calibration +2% (corrigee)`.
 
 ## Les règles qui font que ça marche
 

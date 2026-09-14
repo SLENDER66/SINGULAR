@@ -280,3 +280,42 @@ def test_un_resultat_hors_de_zero_un_ne_gonfle_pas_le_compte():
     })
     assert progression["recent"]["gap"] == round(0.6 - 1.0, 2)
     assert 0.0 <= progression["recent"]["equivalence"] <= 1.0
+
+
+# --- la ligne de statut dit la même chose que le Sage -------------------------
+
+def test_la_ligne_de_statut_ne_contredit_pas_le_sage(tmp_path):
+    """Chaque terminal ouvert affiche cette ligne. Elle affichait l'écart d'une vie.
+
+    Sans ça, le Sage aurait dit « tu l'as déjà corrigé » pendant que le prompt
+    de chaque fenêtre répétait « calibration +20% ». Deux réponses à la même
+    question sur le même écran : c'est le défaut que ce dépôt a déjà payé cinq
+    fois, et la sixième aurait été la plus visible de toutes.
+    """
+    journal = _journal(tmp_path, _surconfiance(60) + _juste(60))
+    moment = NOW + timedelta(days=300)
+    ligne = journal.summary_line(now=moment)
+    item = _calibration_item(journal.review(now=moment))
+
+    assert "corrigee" in ligne, ligne
+    assert "déjà corrigé" in item.title
+    assert "+20%" not in ligne, "la ligne affiche encore le total d'une vie"
+
+
+def test_la_ligne_de_statut_montre_un_ecart_prouve_sous_le_seuil_voyant(tmp_path):
+    """Dix points établis sur deux cents verdicts : la Notice conclut, la ligne aussi.
+
+    Elle se taisait, parce qu'elle gardait la version d'avant le 9 septembre de
+    la règle — « assez de verdicts, et quinze points d'écart ».
+    """
+    journal = _journal(tmp_path, [(0.6, index % 10 < 5) for index in range(200)])
+    moment = NOW + timedelta(days=400)
+    assert journal.review(now=moment)["overconfidence"] == 0.10
+    assert "calibration" in journal.summary_line(now=moment)
+    assert _calibration_item(journal.review(now=moment)) is not None
+
+
+def test_la_ligne_de_statut_se_tait_sur_un_ecart_petit_et_incertain(tmp_path):
+    """Ce qui n'est ni démontré ni voyant ne s'affiche nulle part."""
+    journal = _journal(tmp_path, [(0.6, index % 10 < 6) for index in range(10)])
+    assert "calibration" not in journal.summary_line(now=NOW + timedelta(days=60))

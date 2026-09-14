@@ -19,9 +19,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-# `CALIBRATION_GAP` et `CALIBRATION_MINIMUM` vivent dans le moteur : la ligne de
-# statut du journal les lit aussi et ne peut pas importer le Sage. Ils sont
-# reexportes ci-dessous pour que la surface publique du Sage ne change pas.
+# Toute la regle de calibration vit dans le moteur : la ligne de statut du
+# journal la lit aussi et ne peut pas importer le Sage -- la dependance va dans
+# l'autre sens. Elle est reexportee ci-dessous pour que la surface publique du
+# Sage ne change pas. Le Sage garde ce qui est de son ressort : les phrases.
 #
 # Ce seuil d'ecart a longtemps decide des deux choses. Un ecart de dix points sur
 # deux cents verdicts, que le hasard seul produirait une fois sur deux cents, ne
@@ -31,31 +32,23 @@ from typing import Any
 # « des que c'est prouve ». Le seuil ne garde que son autre emploi, montrer un
 # ecart voyant en disant qu'il n'est pas encore etabli.
 from ..journal import (
+    CALIBRATION_ARRONDI,
     CALIBRATION_GAP,
+    CALIBRATION_HASARD,
     CALIBRATION_MINIMUM,
     DecisionJournal,
     Entry,
     Reversibility,
     Status,
     Tier,
+    calibration_progression,
+    calibration_verdict,
+    chance_d_un_ecart_moindre,
+    chance_du_hasard,
 )
 
 #: Au-delà, un retard n'est plus un oubli : c'est une décision qu'on évite.
 LATE_DAYS = 7
-
-#: Écart de calibration à partir duquel un constat non démontré vaut d'être
-#: montré. Ce n'est plus la condition pour conclure : la preuve l'est.
-#:
-#: Un demi-point : en deçà, la phrase dirait « tu te surestimes de +0% ».
-#: Plancher d'arrondi, pas plancher de jugement — la nuance est le sujet même
-#: du choix ci-dessous.
-CALIBRATION_ARRONDI = 0.005
-
-#: Au-delà de quelle rareté un écart cesse de s'expliquer par le hasard.
-#: Une fois sur vingt : le seuil est conventionnel, il est écrit ici plutôt que
-#: sous-entendu, et la phrase affichée donne la rareté réelle pour qu'on puisse
-#: en juger autrement.
-CALIBRATION_HASARD = 0.05
 
 #: Les deux premiers rangs de la constitution. Les négliger est le seul défaut
 #: que le Sage signale même quand tout le reste va bien.
@@ -217,85 +210,6 @@ def foundation_item(report: dict[str, Any]) -> NoticeItem | None:
     )
 
 
-def _distribution(probabilities: list[float]) -> list[float]:
-    """La loi du nombre de réussites, exacte, quand chaque pari a sa probabilité.
-
-    Chaque pari déplace une part `p` du poids vers « une réussite de plus ».
-    Deux questions s'en servent — « son écart vient-il du hasard ? » et « son
-    écart est-il devenu petit ? » — et elles la calculaient chacune de leur
-    côté avant que la seconde existe.
-    """
-    distribution = [1.0]
-    for p in probabilities:
-        suivante = [0.0] * (len(distribution) + 1)
-        for reussites, poids in enumerate(distribution):
-            suivante[reussites] += poids * (1.0 - p)
-            suivante[reussites + 1] += poids * p
-        distribution = suivante
-    return distribution
-
-
-def chance_du_hasard(probabilities: list[float], hits: int) -> float:
-    """La chance qu'un écart au moins aussi grand sorte de probabilités justes.
-
-    C'est la question du journal, posée exactement : si chacune de ses
-    prédictions valait ce qu'il a annoncé, à quelle fréquence obtiendrait-il un
-    résultat aussi éloigné de ce qu'il attendait ?
-
-    La distribution du nombre de réussites se construit en ajoutant les paris
-    un par un — chaque pari déplace une part `p` du poids vers « une réussite
-    de plus ». Exact, y compris quand les probabilités diffèrent entre elles :
-    une moyenne aurait été une approximation, et approximer la réponse à la
-    seule question pour laquelle cet outil existe serait une drôle d'économie.
-
-    Déterministe, sans réseau, sans modèle : de l'arithmétique sur des
-    flottants, dans le même ordre des deux côtés du portage.
-    """
-    if not probabilities:
-        return 1.0
-    distribution = _distribution(probabilities)
-    attendu = sum(probabilities)
-    ecart = abs(hits - attendu)
-    return sum(poids for reussites, poids in enumerate(distribution)
-               if abs(reussites - attendu) >= ecart - 1e-9)
-
-
-def chance_d_un_ecart_moindre(probabilities: list[float], hits: int,
-                              borne: float) -> float:
-    """La chance de paraître aussi juste **en étant** biaisé d'au moins `borne`.
-
-    `chance_du_hasard` répond à « son écart peut-il venir du hasard ? ». Elle ne
-    répond pas à la question inverse, et c'est celle-là qui décide s'il faut se
-    taire : « son écart est-il devenu petit ? ». Un écart non démontré n'est pas
-    un écart démontré nul — sur six verdicts, presque rien n'est démontrable, et
-    conclure « c'est corrigé » parce que la preuve manque serait exactement le
-    défaut que ce fichier reproche déjà à l'autre bord.
-
-    On renverse donc la charge. On suppose qu'il se surestime d'au moins
-    `borne` : chacune de ses prédictions à `p` n'arriverait qu'à `p - borne`.
-    Sous cette hypothèse, quelle chance de réussir au moins autant qu'il a
-    réussi ? Si elle est infime, l'hypothèse tombe. Le symétrique tombe de la
-    même façon pour la sous-estimation, et c'est le plus grand des deux qui est
-    rendu : il faut écarter les deux pour dire que l'écart est petit.
-
-    Limite assumée : une prédiction annoncée en dessous de `borne` ne peut pas
-    porter un biais de `borne` — `0,10 - 0,15` n'est pas une probabilité. Elle
-    entre alors à zéro, la valeur réalisable la plus proche, et l'hypothèse
-    testée est un peu plus faible qu'annoncé sur ces paris-là.
-
-    Déterministe, sans réseau, sans modèle, comme sa voisine.
-    """
-    if not probabilities or borne <= 0:
-        return 1.0
-    surestime = [min(1.0, max(0.0, p - borne)) for p in probabilities]
-    sousestime = [min(1.0, max(0.0, p + borne)) for p in probabilities]
-    haut = sum(poids for reussites, poids in enumerate(_distribution(surestime))
-               if reussites >= hits)
-    bas = sum(poids for reussites, poids in enumerate(_distribution(sousestime))
-              if reussites <= hits)
-    return max(haut, bas)
-
-
 def _une_fois_sur(chance: float) -> str:
     """« une fois sur 6 » — le chiffre qu'on lit, pas une probabilité à traduire.
 
@@ -307,90 +221,6 @@ def _une_fois_sur(chance: float) -> str:
         return "moins d'une fois sur un million"
     sur = max(2, round(1 / chance))
     return f"une fois sur {sur:,}".replace(",", "\u202f")
-
-
-def calibration_verdict(report: dict[str, Any]) -> dict[str, Any] | None:
-    """Ce que valent ses probabilités — calculé une fois, pour tous ceux qui l'affichent.
-
-    La phrase du rapport et la vignette dorée au-dessus disent la même chose ;
-    elles le disaient chacune à leur façon. La vignette gardait « écart ≥ 15 %
-    et 3 verdicts » et s'allumait donc en alerte pendant que la phrase, juste
-    en dessous, expliquait qu'il était trop tôt pour conclure. Deux réponses
-    contradictoires à la même question, sur le même écran.
-
-    Ce n'est pas la première fois : `test_sage_web_client.py` garde déjà une
-    vignette qui avait survécu à la correction de sa phrase. Troisième fois,
-    donc la règle n'a plus qu'un domicile et les interfaces lisent son verdict
-    au lieu de le refaire.
-    """
-    gap = report["overconfidence"]
-    if gap is None or report["resolved"] < CALIBRATION_MINIMUM:
-        return None
-    hasard = chance_du_hasard(report["resolved_probabilities"],
-                              round(report["hit_rate"] * report["resolved"]))
-    return {
-        "gap": gap,
-        "chance": hasard,
-        # « Conclusif » veut dire démontré, et rien d'autre. Il a voulu dire
-        # « démontré et d'au moins quinze points », ce qui rendait muet un écart
-        # de dix points établi sur deux cents verdicts.
-        "conclusive": hasard <= CALIBRATION_HASARD and abs(gap) >= CALIBRATION_ARRONDI,
-    }
-
-
-def _periode(probabilites: list[float], resultats: list[int]) -> dict[str, Any]:
-    """Ce que vaut sa confiance sur une tranche de son journal."""
-    verdicts = len(resultats)
-    # « Arrivé ou non », pas « combien » : un rapport d'une autre version, ou
-    # fabriqué à la main, ne doit pas pouvoir gonfler le compte des réussites
-    # au-dessus du nombre de verdicts et rendre une probabilité impossible.
-    hits = sum(1 for resultat in resultats if resultat)
-    gap = round(sum(probabilites) / verdicts - hits / verdicts, 2) or 0.0
-    hasard = chance_du_hasard(probabilites, hits)
-    return {
-        "verdicts": verdicts,
-        "gap": gap,
-        "chance": hasard,
-        "conclusive": hasard <= CALIBRATION_HASARD and abs(gap) >= CALIBRATION_ARRONDI,
-        "equivalence": chance_d_un_ecart_moindre(probabilites, hits, CALIBRATION_GAP),
-    }
-
-
-def calibration_progression(report: dict[str, Any]) -> dict[str, Any] | None:
-    """Son écart a une date, et le chiffre du jour ne la portait pas.
-
-    `calibration_verdict` mesure toute la vie du journal d'un seul bloc. Un
-    biais corrigé il y a deux mois y pèse donc autant qu'hier, et la Notice
-    continue de dire « baisse tes probabilités d'autant » à quelqu'un qui les a
-    déjà baissées. Corriger un jugement juste, c'est le dérégler : ce fichier le
-    dit déjà pour le petit échantillon, et le laissait faire pour le passé.
-
-    Le journal est coupé en deux moitiés, **dans l'ordre où les décisions ont
-    été prises** — c'est l'instant du jugement, pas celui du verdict. Chaque
-    moitié est mesurée seule. `corrige` n'est vrai que si la première moitié
-    montre un écart que le hasard n'explique pas *et* que la seconde démontre un
-    écart inférieur à `CALIBRATION_GAP`, au sens de `chance_d_un_ecart_moindre`.
-    Les deux, sinon rien : une moitié récente muette est une moitié sans preuve,
-    pas une preuve d'amélioration.
-
-    Limite assumée : une décision récente dont l'horizon court encore n'a pas de
-    verdict et n'entre nulle part. La moitié récente penche donc vers les
-    horizons courts, et une amélioration lue ici ne vaut d'abord que pour eux.
-
-    `None` tant qu'il n'y a pas deux moitiés dignes de ce nom.
-    """
-    probabilites = list(report.get("resolved_probabilities") or [])
-    resultats = list(report.get("resolved_outcomes") or [])
-    if len(probabilites) != len(resultats) or len(resultats) < 2 * CALIBRATION_MINIMUM:
-        return None
-    coupe = len(resultats) // 2
-    debut = _periode(probabilites[:coupe], resultats[:coupe])
-    recent = _periode(probabilites[coupe:], resultats[coupe:])
-    return {
-        "debut": debut,
-        "recent": recent,
-        "corrige": debut["conclusive"] and recent["equivalence"] <= CALIBRATION_HASARD,
-    }
 
 
 def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
@@ -422,7 +252,7 @@ def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
     """
     verdict = calibration_verdict(report)
     gap = report["overconfidence"]
-    if verdict is None or (not verdict["conclusive"] and abs(gap) < CALIBRATION_GAP):
+    if verdict is None or not verdict["montrable"]:
         return None
     predicted = report["mean_probability"]
     happened = report["hit_rate"]
@@ -820,7 +650,8 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None,
     )
 
 
-__all__ = ["CALIBRATION_ARRONDI", "CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
+__all__ = ["CALIBRATION_ARRONDI", "CALIBRATION_GAP", "CALIBRATION_HASARD", "CALIBRATION_MINIMUM",
+           "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
            "UNPRICED_WINDOW", "foundation_item",
            "Notice", "NoticeItem", "build_notice", "calibration_progression",
            "calibration_verdict", "chance_du_hasard", "chance_d_un_ecart_moindre",
