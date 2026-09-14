@@ -291,7 +291,10 @@ def test_une_attestation_ne_vaut_pas_pour_une_autre_decision_du_meme_identifiant
     assert autre.verify() is True, "elle doit etre valide en elle-meme, sinon on teste autre chose"
 
     assert store.verify(autre) is False
+    assert store.verify_issuance(autre) is False, (
+        "le grand livre des resultats lit la meme liaison, et il la lisait sans temoin")
     assert store.verify(attestee) is True
+    assert store.verify_issuance(attestee) is True
 
 
 def test_une_attestation_sans_emetteur_est_refusee(tmp_path):
@@ -354,4 +357,33 @@ def test_une_attestation_dont_la_fenetre_a_ete_elargie_ne_verifie_plus(tmp_path)
     # resultats -- celui qui relie prediction et realite, donc qui nourrit la
     # calibration. Il ignore l'expiration et la revocation expres ; il ne doit
     # pas pour autant accepter une attestation dont les dates ont bouge.
+    assert store.verify_issuance(decision) is False
+
+
+def test_une_attestation_prolongee_par_la_fin_ne_verifie_plus(tmp_path):
+    """Le bord symetrique, et il manquait aussi.
+
+    Reculer `issued_at` elargit la fenetre par le debut ; avancer `expires_at`
+    l'elargit par la fin, et c'est le bord qui **prolonge** une autorisation.
+    Les deux laissent une fenetre valide, donc `__post_init__` n'a rien a dire :
+    seule la comparaison avec la decision s'y oppose.
+
+    J'avais suppose cette moitie couverte par le test qui ecrase `expires_at`.
+    Elle ne l'etait pas : ce test-la rend la fenetre nulle, ce qui tombe bien
+    avant, sur un autre garde. Supposer qu'un champ est couvert parce qu'un test
+    le nomme est exactement l'erreur que l'audit de mutation existe pour rendre
+    visible.
+    """
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    attestation = ValidatedDecisionIssuer(store, issuer="test-suite").issue(decision)
+    assert store.verify(decision) is True
+
+    with store._connect() as conn:
+        conn.execute("UPDATE decision_attestations SET expires_at=? WHERE decision_id=?",
+                     (attestation.expires_at + 3600.0, decision.decision_id))
+
+    relue = store.get(decision.decision_id)
+    assert relue.expires_at > relue.issued_at, "la fenetre reste valide : c'est le sujet"
+    assert store.verify(decision) is False
     assert store.verify_issuance(decision) is False
