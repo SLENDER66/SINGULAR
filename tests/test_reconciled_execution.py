@@ -113,3 +113,45 @@ def test_la_cle_de_preuve_est_celle_sous_laquelle_l_effet_a_ete_ecrit():
     # Le separateur `\x1f` ne peut pas apparaitre dans les champs, donc un
     # decoupage different ne peut pas produire la meme cle.
     assert cle_d_idempotence("exec", "1banque", "virement") != cle_d_idempotence("exec1", "banque", "virement")
+
+
+# --- la porte d'entree du finaliseur --------------------------------------------
+#
+# `finalize` est la transition qui transforme un effet externe ambigu en succes
+# durable, sur preuve. Ses deux refus d'entree n'avaient aucun temoin : la
+# reconciliation etait toujours appelee avec des arguments bien formes.
+#
+# Ils ne sont pas decoratifs. La cle de preuve est derivee de ces trois champs --
+# `cle_d_idempotence(execution_key, provider, operation)` -- donc un champ vide
+# n'echoue pas bruyamment : il derive une **autre** cle, qui ne trouve rien, et le
+# refus qu'on lirait serait « aucune preuve durable ne correspond ». On irait
+# chercher du cote de la base au lieu de l'appel.
+
+
+def test_le_finaliseur_refuse_une_execution_sans_cle(tmp_path):
+    import pytest
+
+    store, _, _ = _setup(tmp_path)
+    for vide in ("", "   "):
+        with pytest.raises(ValueError, match="execution_key cannot be blank"):
+            ReconciledExecutionFinalizer(store).finalize(
+                vide, provider="provider", operation="send", payload_fingerprint="fp")
+
+
+def test_le_finaliseur_exige_les_trois_champs_de_la_preuve(tmp_path):
+    """Les trois moities du meme garde, jouees separement.
+
+    Fournisseur, operation et empreinte de charge : ce sont les trois choses qui
+    disent *quel* effet est parti dans le monde. Il en manque une, et la preuve
+    qu'on rapprocherait n'est plus celle qui a ete autorisee.
+    """
+    import pytest
+
+    store, _, _ = _setup(tmp_path)
+    complet = {"provider": "provider", "operation": "send", "payload_fingerprint": "fp"}
+    for champ in complet:
+        for vide in ("", "   "):
+            arguments = dict(complet)
+            arguments[champ] = vide
+            with pytest.raises(ValueError, match="provider, operation and payload_fingerprint are required"):
+                ReconciledExecutionFinalizer(store).finalize("EXEC-1", **arguments)

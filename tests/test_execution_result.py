@@ -262,3 +262,26 @@ def test_les_metadonnees_sont_ordonnees_ou_refusees() -> None:
         _resultat(metadata=(("b", "2"), ("a", "1")))
 
     assert _resultat(metadata=(("a", "1"), ("b", "2"))).metadata == (("a", "1"), ("b", "2"))
+
+
+def test_authorize_accepte_une_execution_autorisee_qui_porte_sa_reference() -> None:
+    """Le cas positif du garde d'approbation, qui manquait.
+
+    Le refus voisin -- EXECUTE_AUTHORIZED sans reference -- avait son temoin ; celui
+    qui dit que la reference **suffit** n'existait pas. Un garde dont seul le refus
+    est prouve peut devenir un refus permanent sans que rien ne rougisse, et une
+    autorisation humaine qui ne passe jamais est une porte murée.
+
+    La reference d'approbation traverse jusqu'a l'intention : c'est elle qui relie
+    l'execution au verdict humain qui l'a permise.
+    """
+    bridge = ExecutionResultBridge()
+    intention = bridge.prepare(recommendation(), idempotency_key="k1")
+
+    autorisee = bridge.authorize(
+        intention,
+        GovernorDecision("a1", Autonomy.EXECUTE_AUTHORIZED, ("classe approuvée",), "APR-12345678"),
+    )
+    assert autorisee.authorization_id == "APR-12345678"
+    assert autorisee.action_id == "a1"
+    assert autorisee.idempotency_key == "k1"
