@@ -21,7 +21,12 @@ claude/singular-mandate-setup-d51s9t
 
 Pull Request en cours :
 
-aucune. La PR #4 est fermée et son travail est intégré. `feat/validated-execution-boundary`
+**#6**, `claude/azazel-genesis-constitution-d8jndl` → la branche de travail.
+Elle porte la calibration datée et la descente de sa règle dans le moteur. Tant
+qu'elle n'est pas fusionnée, le hook de démarrage signale ce travail comme hors
+mandat — c'est exact, et c'est un clic, pas un problème à réparer.
+
+La PR #4 est fermée et son travail est intégré. `feat/validated-execution-boundary`
 est une branche morte : n'y retourne pas.
 
 Ne merge jamais dans main sans mon autorisation explicite.

@@ -471,6 +471,40 @@ def test_aucun_document_n_affirme_qu_on_ne_peut_pas_reunir_deux_journaux() -> No
     )
 
 
+#: Ce qui nomme une histoire qu'on tient et qu'on peut perdre. Sans elle, deux
+#: choses qui divergent sont juste deux choses qui divergent.
+HISTOIRE = re.compile(r"journal|journaux|candidature", re.IGNORECASE)
+
+#: Ce qui dit qu'elles se sont séparées.
+DIVERGENCE = re.compile(r"deux journaux|divergen", re.IGNORECASE)
+
+
+def _parle_de_journaux_divergents(brut: str) -> bool:
+    """Un paragraphe qui dit qu'une histoire tenue s'est séparée en deux."""
+    return any(HISTOIRE.search(paragraphe) and DIVERGENCE.search(paragraphe)
+               for paragraphe in re.split(r"\n\s*\n", brut))
+
+
+def test_le_garde_des_journaux_divergents_attrape_encore_ce_qu_il_vise() -> None:
+    """Le témoin, parce que ce garde a été rétréci.
+
+    Il regardait le document entier et réclamait `singular import` à tout texte
+    contenant le mot « divergent », y compris à une page sur les empreintes
+    d'artefact. Rétrécir un garde pour faire passer son propre document est le
+    genre de geste qui mérite d'être prouvé : celui-ci doit encore crier sur ce
+    qu'il visait, et se taire sur le reste.
+    """
+    vise = "Deux journaux qui divergent donnent deux calibrations fausses."
+    assert _parle_de_journaux_divergents(vise)
+
+    hors_sujet = "Deux empreintes écrites séparément finiraient par divergerment."
+    assert not _parle_de_journaux_divergents(hors_sujet)
+
+    # Séparés par un paragraphe, les deux mots ne parlent plus de la même chose.
+    eloignes = "Le journal du Mac.\n\nDeux empreintes qui divergent."
+    assert not _parle_de_journaux_divergents(eloignes)
+
+
 def test_un_document_qui_parle_de_deux_journaux_nomme_la_reprise() -> None:
     """La moitié qui compte : l'oubli silencieux, pas la phrase fausse.
 
@@ -485,8 +519,14 @@ def test_un_document_qui_parle_de_deux_journaux_nomme_la_reprise() -> None:
     """
     manquants = []
     for chemin in _documents_markdown():
-        texte = " ".join(chemin.read_text(encoding="utf-8").split())
-        if "deux journaux" not in texte.lower() and "divergent" not in texte.lower():
+        brut = chemin.read_text(encoding="utf-8")
+        texte = " ".join(brut.split())
+        # Paragraphe par paragraphe, et pas document entier : « divergent » est un
+        # mot ordinaire. `docs/AZAZEL_GENESIS.md` l'emploie pour deux empreintes
+        # d'artefact qui se sépareraient, ce qui n'a rien à voir avec un journal
+        # -- et le garde le réclamait quand même à `singular import`. Un garde qui
+        # crie sur ce qu'il ne vise pas finit désarmé par celui qu'il dérange.
+        if not _parle_de_journaux_divergents(brut):
             continue
         if "singular import" not in texte:
             manquants.append(str(chemin.relative_to(ROOT)))

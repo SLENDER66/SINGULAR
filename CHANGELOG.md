@@ -1,5 +1,46 @@
 # Changelog
 
+## 3.32.0 — AZAZEL Genesis : la plus petite chose capable de dire non
+
+`singular/genesis/` et `docs/AZAZEL_GENESIS.md`. Cinq modules, aucun qui exécute,
+aucun qui coûte un jeton. L'expérience se lance avec
+`python3 tools/genesis_experiment.py` et la suite la rejoue en entier à chaque
+commit — une expérience qui demanderait une clé d'API et cinq dollars de crédit
+finirait comme l'application web finie et jamais lancée dont le mandat garde le
+souvenir.
+
+- **Les trois missions, sur les fichiers réels du dépôt.** ALPHA lit `CHANGELOG.md`
+  et `pyproject.toml` dans deux formats et synthétise. BETA affronte une source
+  tronquée et une source absente, les diagnostique, récupère, et ne comble aucun
+  trou — le vérificateur refuse toute réponse qui inventerait ce qu'elle n'a pas
+  pu lire. GAMMA détecte un format que rien ne sait lire, construit un lecteur,
+  l'éprouve sur un contrôle mis de côté, et ne l'inscrit que s'il tient.
+- **Une échelle de preuve, E0 à E5**, recalculée depuis les preuves à chaque
+  lecture : il n'y a aucun champ où écrire un niveau, donc aucun moyen d'en poser
+  un sans l'avoir gagné. **Un seul échec plafonne à E2** — « observée » et
+  « répétée » sont des faits, « vérifiée » et « robuste » sont des affirmations
+  de fiabilité qu'un échec réfute.
+- **Réinscrire un autre artefact sous un nom déjà prouvé remet les preuves à
+  zéro.** Elles avaient été gagnées par l'ancien code. C'est ce qui empêche
+  « candidat X, évalué, approuvé » d'activer autre chose que X. L'empreinte vient
+  d'`artifact_fingerprint`, celle que la frontière d'exécution utilise déjà : une
+  deuxième empreinte écrite à côté aurait divergé de la première.
+- **Un banc différentiel qui sait refuser.** La même mission deux fois, un seul
+  changement entre les deux. Il dit `REFUTE` quand la version expérimentée rate
+  le vérificateur, quand un axe a empiré, et il refuse le mot « naissance » quand
+  la mission de contrôle retombe sur l'instance qui a servi à apprendre. Un cas
+  de capacité **qui a mémorisé** est fourni exprès et réfuté par le banc : sans
+  lui, le chiffre positif ne prouverait que la complaisance du banc.
+- **Genesis réfléchit, elle n'exécute pas.** Aucun import de ce qui peut agir,
+  une seule exception nommée et justifiée, aucun écrit sur le disque, et la
+  preuve par l'acte : les trois missions tournent avec les sockets retirées, avec
+  un témoin qui vérifie que le garde attraperait vraiment une connexion. Le
+  paquet est supprimable sans rien casser, et un test le tient.
+- **Le résultat est positif sur un cas, et le document le dit comme ça.** Une
+  capacité, un domaine, deux instances, niveau E1 à la fin. Le compounding n'est
+  pas démontré, et les limites sont dans `docs/AZAZEL_GENESIS.md` avec la
+  prochaine action justifiée : un deuxième domaine, pour que E5 soit atteignable.
+
 ## 3.31.0 — Ton écart a une date
 
 La calibration mesurait toute la vie du journal d'un seul bloc. Quelqu'un qui se
