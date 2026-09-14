@@ -1005,6 +1005,25 @@ class DecisionJournal:
         This is meant to be printed by your shell profile, so the number of
         decisions you have not faced is in front of you whether you want it or
         not.
+
+        **Ce que cette ligne coute, mesure plutot que suppose.** Lire le verdict
+        du moteur au lieu d'en tenir une copie a un prix : `chance_du_hasard`
+        construit la loi exacte du nombre de reussites, ce qui est quadratique
+        en nombre de verdicts. Sur la machine qui ecrit ceci, le 14 septembre
+        2026 : 7 ms a 100 verdicts, 58 ms a 500, 235 ms a 1000, 718 ms a 2000.
+        Avant que cette ligne lise le verdict, elle ne payait rien de tout ca.
+
+        A un verdict par jour, les 235 ms arrivent dans trois ans et les 718 ms
+        dans six. C'est donc une dette datee, pas un defaut d'aujourd'hui, et
+        elle est ecrite ici plutot que corrigee maintenant : construire un cache
+        ou une approximation pour un probleme qui se posera dans trois ans
+        couterait de la complexite tout de suite contre rien de mesurable.
+
+        Quand elle se posera, la correction n'est pas « remettre une regle ici »
+        -- ce defaut-la s'est paye six fois. C'est soit une borne de Hoeffding
+        qui tranche `conclusive` en temps lineaire quand elle suffit, en laissant
+        le calcul exact pour le reste, soit un cache du verdict pose sur
+        l'empreinte de tete du journal, qui change deja a chaque ecriture.
         """
         report = self.review(now=now)
         if not report["decisions"]:

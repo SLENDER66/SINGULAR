@@ -2,6 +2,18 @@
 
 ## 3.34.0 — Un test qui couvrait aucune des deux moitiés qu'il visait
 
+- **Ce que la ligne de statut coûte, mesuré.** Lui faire lire le verdict du
+  moteur au lieu d'en tenir une copie a un prix : le calcul exact de la rareté
+  est quadratique en nombre de verdicts, et cette ligne s'imprime à **chaque**
+  ouverture de terminal. Mesuré : 7 ms à 100 verdicts, 58 ms à 500, 235 ms à
+  1000, 718 ms à 2000. Avant aujourd'hui elle ne payait rien de tout ça.
+  À un verdict par jour, c'est dans trois ans et dans six ans. Une dette datée,
+  donc, écrite dans `journal.py` et dans `USAGE.md` plutôt que corrigée tout de
+  suite — un cache ou une approximation coûterait de la complexité maintenant
+  contre rien de mesurable. La correction, le jour venu, est nommée : une borne
+  de Hoeffding qui tranche en temps linéaire quand elle suffit, ou un cache posé
+  sur l'empreinte de tête du journal.
+
 `tools/gardes_sans_test.py` a tourné sur le moteur des matins : 42 refus mutés,
 quatre survivants. Deux sont des assurances derrière `BEGIN IMMEDIATE` — le
 triage est écrit dans l'outil pour que le prochain passage ne le refasse pas.

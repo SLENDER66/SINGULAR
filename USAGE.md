@@ -472,6 +472,14 @@ sur les mêmes données ; puis, corrigée, elle a gardé la version d'avant le
 points établis sur deux cents verdicts. Quand ton écart est corrigé, elle le dit
 aussi : `calibration +2% (corrigee)`.
 
+**Ce que cette ligne coûte, et quand ça te gênera.** Lire le verdict du moteur a
+un prix : le calcul exact de la rareté est quadratique en nombre de verdicts.
+Mesuré le 14 septembre 2026 : 7 ms à 100 verdicts, 58 ms à 500, 235 ms à 1000,
+718 ms à 2000. À un verdict par jour, les 235 ms arrivent dans trois ans et les
+718 ms dans six. C'est une dette datée, écrite plutôt que corrigée tout de
+suite : si un jour ton terminal traîne à l'ouverture, c'est ça, et
+`singular/journal.py` dit à quoi ressemble la correction.
+
 ## Les règles qui font que ça marche
 
 **La probabilité doit être entre 0.05 et 0.95.** La certitude est refusée :
