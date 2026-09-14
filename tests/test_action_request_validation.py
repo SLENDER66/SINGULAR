@@ -14,6 +14,24 @@ def test_action_request_rejects_non_finite_values(field):
             ActionRequest("bounded", "bounded action", **values)
 
 
+def test_la_plage_seule_refuse_deja_le_non_fini():
+    """Pourquoi `not isfinite(value)` reste, alors qu'il ne decide jamais seul.
+
+    La passe de mutation le denonce comme une moitie qui survit : neutralisee, la
+    suite entiere reste verte. C'est exact et c'est arithmetique -- toute comparaison
+    avec NaN est fausse, et `inf <= 10` l'est aussi, donc `not 0 <= value <= 10`
+    refuse deja les trois valeurs non finies.
+
+    Elle reste quand meme, et ce n'est pas un oubli. La section 7 du mandat demande
+    de chercher activement NaN et l'infini : un garde qui les nomme dit ce qu'il
+    refuse, la ou une plage seule le fait par un effet de bord de la norme IEEE que
+    le prochain lecteur devra redecouvrir. Ce test-ci pin l'equivalence pour que
+    personne n'ait a la redemontrer -- ni ne l'inverse en croyant simplifier.
+    """
+    for valeur in (math.nan, math.inf, -math.inf):
+        assert not (0 <= valeur <= 10), f"{valeur!r} passerait la plage seule"
+
+
 def test_action_request_rejects_out_of_range_values():
     with pytest.raises(ValueError, match="between 0 and 10"):
         ActionRequest("bounded", "bounded action", 11, 1, 9)
