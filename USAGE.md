@@ -597,6 +597,14 @@ chaque moitié est mesurée seule. Ce que tu lis change alors :
   cas-là tu lis le reproche ordinaire, qui pointe les dix points — tu t'es
   amélioré, il t'en reste dix, corrige de ceux-là.
 
+  **Et donc « c'est corrigé » se fait rare à mesure que ton journal grossit.**
+  Ce n'est pas une panne. Sur huit cents verdicts récents, même deux points
+  d'écart finissent par se démontrer, et une phrase qui dirait « il n'y a plus
+  rien » serait fausse : il y a deux points, c'est prouvé, et tu lis « +2 % :
+  corrige d'après lui ». Plus tu accumules de données, plus le Sage a le droit
+  d'être précis, et moins il a le droit de te dire grossièrement que tout va
+  bien. C'est l'inverse d'un défaut.
+
 **Démontrer qu'un écart est devenu petit demande beaucoup plus de verdicts que
 démontrer qu'il existe** — de l'ordre de quarante dans la moitié récente, donc
 quatre-vingts en tout. C'est voulu. Un écart qu'on n'arrive plus à démontrer

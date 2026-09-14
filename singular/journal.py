@@ -234,6 +234,13 @@ def calibration_progression(report: dict[str, Any]) -> dict[str, Any] | None:
         # de +10 %, c'est prouve » et « c'est corrige, ne corrige pas » -- ce qui
         # est exactement le defaut que cette section entiere existe pour fermer.
         # Corrige veut donc dire : la moitie recente ne demontre plus rien.
+        #
+        # Consequence a ne pas prendre pour une panne : ce verdict se fait rare a
+        # mesure que le journal grossit, parce que sur huit cents verdicts meme
+        # deux points finissent par se demontrer. C'est voulu. Plus il y a de
+        # donnees, plus le Sage a le droit d'etre precis, et moins il a le droit
+        # de dire grossierement que tout va bien. Une session qui « reparerait »
+        # ca en retirant la troisieme condition remettrait la contradiction.
         "corrige": (debut["conclusive"]
                     and recent["equivalence"] <= CALIBRATION_HASARD
                     and not recent["conclusive"]),
