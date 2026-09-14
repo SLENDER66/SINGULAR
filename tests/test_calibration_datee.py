@@ -25,7 +25,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from singular.journal import DecisionJournal, Tier
+from singular.journal import (
+    CALIBRATION_ARRONDI,
+    DecisionJournal,
+    Tier,
+    _periode,
+    calibration_verdict,
+    chance_du_hasard,
+)
 from singular.sage import build_notice
 from singular.sage.notice import (
     CALIBRATION_GAP,
@@ -452,3 +459,89 @@ def test_un_ecart_voyant_sur_trois_verdicts_n_est_pas_concluant(tmp_path):
             f"{moitie} : et il doit rester explicable par le hasard")
         assert not progression[moitie]["conclusive"], (
             f"{moitie} : un écart voyant mais explicable par le hasard ne conclut pas")
+
+
+# --- l'écart que l'affichage réduit à zéro ------------------------------------
+
+#: Un écart réel, démontré, et que l'arrondi à deux décimales ramène à 0,00.
+#: Trouvé par recherche : c'est le plus petit journal de ce genre à parier
+#: toujours au même taux. 1050 verdicts annoncés à 99,5 %, 1040 arrivés. L'écart
+#: brut est de 0,0045 -- au-dessous du demi-centième -- et le hasard ne
+#: l'explique pas (0,047 <= 0,05).
+ECART_INVISIBLE = (1050, 0.995, 1040)
+
+
+def _ecart_invisible():
+    """Les deux formes de la même tranche : (probabilités, résultats) et rapport."""
+    verdicts, probabilite, arrives = ECART_INVISIBLE
+    probabilites = [probabilite] * verdicts
+    resultats = [1] * arrives + [0] * (verdicts - arrives)
+    rapport = {
+        "overconfidence": round(sum(probabilites) / verdicts - arrives / verdicts, 2) or 0.0,
+        "resolved": verdicts,
+        "hit_rate": arrives / verdicts,
+        "resolved_probabilities": probabilites,
+    }
+    return probabilites, resultats, rapport
+
+
+def test_le_cas_isole_bien_la_moitie_de_l_arrondi():
+    """Sans ça, les deux tests suivants passeraient en ne prouvant rien.
+
+    Ils ne valent que si l'autre moitié du `and` dit oui : il faut un écart que le
+    hasard n'explique pas. Sinon `conclusive` serait faux pour la mauvaise raison.
+    """
+    probabilites, _, rapport = _ecart_invisible()
+    verdicts, _, arrives = ECART_INVISIBLE
+
+    brut = sum(probabilites) / verdicts - arrives / verdicts
+    assert 0 < abs(brut) < CALIBRATION_ARRONDI, "l'écart doit être réel et sous le seuil d'arrondi"
+    assert rapport["overconfidence"] == 0.0, "et l'affichage doit le ramener à zéro"
+    assert chance_du_hasard(probabilites, arrives) <= CALIBRATION_HASARD, (
+        "l'autre moitié doit dire oui, sinon le cas n'isole pas celle de l'arrondi")
+
+
+def test_un_ecart_arrondi_a_zero_n_est_pas_declare_demontre():
+    """« Tu te surestimes de +0,00 » est une phrase fausse, et rien ne l'interdisait.
+
+    `conclusive` réunit deux conditions par un `and` : le hasard n'explique pas
+    l'écart, **et** l'écart ne disparaît pas à l'affichage. La seconde n'avait
+    aucun témoin -- neutralisée, la suite entière restait verte. L'outil de
+    mutation l'avait bien nommée, mais sous une étiquette qui désignait l'autre
+    moitié ; corrigé le 14 septembre 2026, la mesure a nommé la bonne.
+
+    Ce que ça produirait : la Notice reproche l'écart et dit de corriger d'autant.
+    Sur ce journal-là, elle reprocherait un écart de zéro point et demanderait une
+    correction de zéro. Ce dépôt tient qu'une phrase fausse est un bug.
+
+    Le cas ne passe pas par le vrai journal, contrairement au reste de ce fichier,
+    et c'est mesuré : l'écrire décision par décision coûte 3,5 s, et
+    `tools/gardes_sans_test.py` relance cette sous-suite **une fois par mutant** --
+    soit une heure de plus par passage. Ce que la chaîne journal → rapport →
+    verdict garantit est déjà prouvé par les tests ci-dessus ; ce qui manquait ici
+    est l'arithmétique, et elle n'a qu'un domicile.
+    """
+    _, _, rapport = _ecart_invisible()
+    verdict = calibration_verdict(rapport)
+
+    assert verdict is not None
+    assert verdict["gap"] == 0.0
+    assert verdict["chance"] <= CALIBRATION_HASARD, "le hasard ne l'explique pas"
+    assert verdict["conclusive"] is False, "un écart invisible à l'affichage ne se démontre pas"
+    assert verdict["montrable"] is False, "et il n'y a pas lieu d'en parler"
+
+
+def test_une_tranche_a_l_ecart_arrondi_a_zero_ne_conclut_pas_non_plus():
+    """Le même `and`, à son second domicile : chaque moitié de la progression.
+
+    `_periode` porte la règle pour la tranche ancienne et la tranche récente. Sans
+    ce garde, « tu l'as déjà corrigé » pourrait se déclencher sur une première
+    moitié dont l'écart affiché est zéro -- corrigé un écart qui n'a jamais été
+    visible.
+    """
+    probabilites, resultats, _ = _ecart_invisible()
+    tranche = _periode(probabilites, resultats)
+
+    assert tranche["gap"] == 0.0
+    assert tranche["chance"] <= CALIBRATION_HASARD
+    assert tranche["conclusive"] is False
