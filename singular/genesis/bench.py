@@ -123,14 +123,19 @@ def comparer(mission: Mission, base: Resultat, experimente: Resultat, *,
 
 
 def banc(mission: Mission, solveur: Solveur, registre: Registre, *,
-         instance: str = "") -> Comparaison:
+         instance: str = "", base_registre: Registre | None = None) -> Comparaison:
     """La même mission deux fois : sans rien, puis avec ce qui a été appris.
 
     Le même solveur des deux côtés, et c'est délibéré. Comparer deux solveurs
     différents mesurerait l'écart entre deux programmes ; on veut l'écart que
     fait le registre, donc une seule chose change entre les deux passages.
+
+    `base_registre` sert à mesurer autre chose que « avec ou sans expérience » :
+    une capacité contre deux, pour savoir si elles se composent. Sans lui, la
+    ligne de base est le registre vide, qui est le bon départ pour une première
+    acquisition et le mauvais pour une deuxième.
     """
-    vide = Registre()
+    vide = base_registre if base_registre is not None else Registre()
     base = executer(mission, lambda m, t: solveur(m, t, vide))
     experimente = executer(mission, lambda m, t: solveur(m, t, registre))
     return comparer(mission, base, experimente, instance=instance)

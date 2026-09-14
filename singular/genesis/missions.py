@@ -40,6 +40,11 @@ from .mission import Etape, Mission, Trajectoire
 #: serait inscrite sans jamais être retrouvée.
 LECTEUR_APPRIS = "lecteur:cle_valeur"
 
+#: Le deuxième, acquis par le même cycle sur un autre format réel. Deux noms
+#: distincts, sinon la seconde acquisition écraserait la première et il n'y
+#: aurait jamais qu'une capacité à composer.
+LECTEUR_EGAL = "lecteur:egal"
+
 
 # --- ce que GAMMA doit apprendre à lire ---------------------------------------
 
@@ -85,41 +90,73 @@ def construire_lecteur_memorisant(texte_appris: str,
 
 # --- le solveur ---------------------------------------------------------------
 
-def _lire_avec_capacite(texte: str, trajectoire: Trajectoire,
+#: Ce qui fait d'une capacité un lecteur, aux yeux du solveur.
+PREFIXE_LECTEUR = "lecteur:"
+
+
+def _lire_avec_capacite(texte: str, champ: str, trajectoire: Trajectoire,
                         registre: Registre) -> dict[str, list[str]] | None:
-    """Le chemin court : une capacité inscrite, employée en un pas."""
-    if LECTEUR_APPRIS not in registre:
-        return None
-    capacite = registre.employer(LECTEUR_APPRIS)
-    trajectoire.note(Etape.CAPACITE, LECTEUR_APPRIS, detail=capacite.niveau)
-    try:
-        return capacite.procedure(texte)
-    except FormatRefuse as refus:
-        trajectoire.note(Etape.ECHEC, LECTEUR_APPRIS, detail=str(refus))
-        return None
+    """Le chemin court : les lecteurs inscrits, essayés jusqu'à ce qu'un réponde.
+
+    Il en essaie plusieurs, et c'est ce qui rend la composition mesurable : deux
+    capacités acquises séparément peuvent répondre à une mission qu'aucune ne
+    règle seule. Rien ne garantit que ce soit gagnant -- essayer deux lecteurs
+    coûte plus que d'en essayer un -- et c'est justement ce que le banc mesure
+    plutôt que de le supposer.
+
+    `champ` compte autant que le texte. Un lecteur qui « réussit » en rendant
+    autre chose que ce qu'on cherche bloquait la suite : le lecteur `': '`
+    trouve une paire dans `pyproject.toml` sans y trouver la version, et le
+    solveur s'arrêtait là, satisfait. Une lecture qui ne contient pas le champ
+    demandé n'est pas une lecture réussie.
+    """
+    for nom in registre.noms():
+        if not nom.startswith(PREFIXE_LECTEUR):
+            continue
+        capacite = registre.employer(nom)
+        try:
+            lu = capacite.procedure(texte)
+        except FormatRefuse as refus:
+            trajectoire.note(Etape.ECHEC, nom, detail=str(refus))
+            continue
+        if champ not in lu:
+            trajectoire.note(Etape.ECHEC, nom, detail=f"« {champ} » absent de ce qu'il lit")
+            continue
+        # `CAPACITE` n'est posé que quand la capacité **répond**, et pas quand
+        # elle est essayée. La distinction a été apprise en se trompant : le
+        # solveur sait maintenant se rabattre, donc une mission peut réussir
+        # pendant que la capacité échoue. Compter l'essai comme un emploi aurait
+        # attribué à l'expérience un succès que le tâtonnement avait obtenu.
+        trajectoire.note(Etape.CAPACITE, nom, detail=capacite.niveau)
+        return lu
+    return None
 
 
-def _lire_en_tatonnant(texte: str, trajectoire: Trajectoire) -> dict[str, list[str]] | None:
-    """Le chemin long : essayer les lecteurs connus jusqu'à ce qu'un tienne."""
+def _lire_en_tatonnant(texte: str, champ: str,
+                       trajectoire: Trajectoire) -> dict[str, list[str]] | None:
+    """Le chemin long : essayer les lecteurs connus jusqu'à ce qu'un réponde."""
     for nom, lecteur in TOUS:
         try:
             lu = lecteur(texte)
         except FormatRefuse as refus:
             trajectoire.note(Etape.ECHEC, nom, detail=str(refus))
             continue
+        if champ not in lu:
+            trajectoire.note(Etape.ECHEC, nom, detail=f"« {champ} » absent de ce qu'il lit")
+            continue
         trajectoire.note(Etape.LECTURE, nom)
         return lu
     return None
 
 
-def lire_source(texte: str, trajectoire: Trajectoire,
+def lire_source(texte: str, champ: str, trajectoire: Trajectoire,
                 registre: Registre) -> dict[str, list[str]] | None:
     """Lire un texte, par le chemin le plus court dont on dispose."""
-    lu = _lire_avec_capacite(texte, trajectoire, registre)
+    lu = _lire_avec_capacite(texte, champ, trajectoire, registre)
     if lu is not None:
         return lu
     avant = trajectoire.combien(Etape.ECHEC)
-    lu = _lire_en_tatonnant(texte, trajectoire)
+    lu = _lire_en_tatonnant(texte, champ, trajectoire)
     if lu is not None and trajectoire.combien(Etape.ECHEC) > avant:
         trajectoire.note(Etape.RECUPERATION, "un autre lecteur a tenu", cout=0.0)
     return lu
@@ -141,12 +178,9 @@ def resoudre(mission: Mission, trajectoire: Trajectoire, registre: Registre) -> 
             trajectoire.note(Etape.ECHEC, source, detail="source absente")
             trajectoire.note(Etape.RECUPERATION, f"on se passe de {source}", cout=0.0)
             continue
-        lu = lire_source(texte, trajectoire, registre)
+        lu = lire_source(texte, champ, trajectoire, registre)
         if lu is None:
-            trajectoire.note(Etape.ECHEC, source, detail="aucun lecteur ne tient")
-            continue
-        if champ not in lu:
-            trajectoire.note(Etape.ECHEC, f"{source}.{champ}", detail="champ absent")
+            trajectoire.note(Etape.ECHEC, source, detail="aucun lecteur ne répond")
             continue
         reponse[f"{source}.{champ}"] = lu[champ]
     return reponse
@@ -158,7 +192,8 @@ SEPARATEURS_ESSAYES = (": ", "=", "\t")
 
 
 def acquerir_lecteur(echantillon: str, controle: tuple[str, str], trajectoire: Trajectoire,
-                     registre: Registre, *, provenance: str) -> bool:
+                     registre: Registre, *, provenance: str,
+                     nom: str = LECTEUR_APPRIS) -> bool:
     """Le cycle de la directive, en entier et dans l'ordre, sans rien sauter.
 
     DÉTECTER LE MANQUE → CHERCHER DANS LE REGISTRE → RÉUTILISER SI POSSIBLE →
@@ -169,8 +204,8 @@ def acquerir_lecteur(echantillon: str, controle: tuple[str, str], trajectoire: T
     et c'est le seul moyen d'éviter qu'une capacité entre au registre sur la
     foi de celui qui l'a écrite.
     """
-    if registre.chercher(LECTEUR_APPRIS) is not None:
-        trajectoire.note(Etape.CAPACITE, LECTEUR_APPRIS, cout=0.0, detail="déjà inscrite")
+    if registre.chercher(nom) is not None:
+        trajectoire.note(Etape.CAPACITE, nom, cout=0.0, detail="déjà inscrite")
         return True
 
     trajectoire.note(Etape.ECHEC, "lecture", detail="aucun lecteur connu pour ce format")
@@ -187,7 +222,7 @@ def acquerir_lecteur(echantillon: str, controle: tuple[str, str], trajectoire: T
             trajectoire.note(Etape.ECHEC, f"bac à sable {separateur!r}",
                              detail="le contrôle ne ressort pas")
             continue
-        registre.inscrire(LECTEUR_APPRIS, "lire un format clé/valeur", candidat,
+        registre.inscrire(nom, "lire un format clé/valeur", candidat,
                           provenance=provenance)
         trajectoire.note(Etape.RECUPERATION, "capacité construite et inscrite", cout=0.0)
         return True
@@ -207,6 +242,7 @@ def sources_du_depot(racine: str | Path) -> dict[str, str]:
         "changelog": (racine / "CHANGELOG.md").read_text(encoding="utf-8"),
         "pyproject": (racine / "pyproject.toml").read_text(encoding="utf-8"),
         "ci": (racine / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+        "pytest": (racine / "pytest.ini").read_text(encoding="utf-8"),
     }
 
 
@@ -362,6 +398,45 @@ def epsilon(sources: dict[str, str]) -> Mission:
     )
 
 
+def zeta(sources: dict[str, str]) -> Mission:
+    """La mission qu'aucune capacité ne règle seule, sur deux fichiers réels.
+
+    `.github/workflows/ci.yml` n'est lisible que par le lecteur `': '`.
+    `pytest.ini` n'est lisible par **rien** de ce que le dépôt savait faire
+    avant Genesis, ni par le premier lecteur appris : il faut le second, en
+    `'='`. Demander les deux d'un coup est donc la seule façon honnête de
+    mesurer si deux capacités acquises séparément se composent.
+
+    Rien ne garantit que ce soit gagnant : essayer deux lecteurs coûte plus que
+    d'en essayer un. C'est ce que le banc mesure au lieu de le supposer.
+    """
+    def verifier(reponse: Any, _sources: dict[str, str]) -> bool:
+        return (isinstance(reponse, dict)
+                and reponse.get("ci.name") == ["CI"]
+                and reponse.get("pytest.testpaths") == ["tests"])
+
+    return Mission(
+        nom="ZETA",
+        objectif="Comment s'appelle le workflow, et où pytest cherche-t-il ses tests ?",
+        sources={"ci": sources["ci"], "pytest": sources["pytest"]},
+        verifier=verifier,
+        attendu="deux valeurs, dans deux formats qu'aucun lecteur seul ne couvre",
+        parametres={"demande": (("ci", "name"), ("pytest", "testpaths"))},
+    )
+
+
+def apprendre_le_egal(sources: dict[str, str], registre: Registre,
+                      trajectoire: Trajectoire) -> bool:
+    """Le même cycle, une deuxième fois, sur `pytest.ini`.
+
+    Le contrôle mis de côté est `pythonpath = .`. Le séparateur `': '` est
+    essayé d'abord et refusé : c'est le bac à sable qui tranche, pas une liste
+    écrite d'avance.
+    """
+    return acquerir_lecteur(sources["pytest"], ("pythonpath", "."), trajectoire,
+                            registre, provenance="GAMMA-bis", nom=LECTEUR_EGAL)
+
+
 def apprendre_de_gamma(registre: Registre, trajectoire: Trajectoire) -> bool:
     """Ce que GAMMA laisse derrière elle, une fois éprouvé."""
     return acquerir_lecteur(GAMMA_APPRENTISSAGE, ("journal", "présent"), trajectoire,
@@ -378,4 +453,5 @@ def prouver_emploi(registre: Registre, *, instance: str, domaine: str,
 __all__ = ["GAMMA_ABIMEE", "GAMMA_APPRENTISSAGE", "GAMMA_CONTROLE", "LECTEUR_APPRIS",
            "SEPARATEURS_ESSAYES", "acquerir_lecteur", "alpha", "apprendre_de_gamma", "beta",
            "construire_lecteur", "construire_lecteur_memorisant", "delta", "epsilon",
-           "gamma", "lire_source", "prouver_emploi", "resoudre", "sources_du_depot"]
+           "LECTEUR_EGAL", "PREFIXE_LECTEUR", "apprendre_le_egal", "gamma", "lire_source",
+           "prouver_emploi", "resoudre", "sources_du_depot", "zeta"]

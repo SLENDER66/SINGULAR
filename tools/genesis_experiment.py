@@ -18,11 +18,12 @@ RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE))
 
 from singular.genesis import Registre, Trajectoire, executer  # noqa: E402
-from singular.genesis.bench import constater_naissance  # noqa: E402
+from singular.genesis.bench import banc, constater_naissance  # noqa: E402
 from singular.genesis.missions import (GAMMA_ABIMEE, GAMMA_APPRENTISSAGE,  # noqa: E402
                                        GAMMA_CONTROLE, LECTEUR_APPRIS, alpha,
-                                       apprendre_de_gamma, beta, delta, epsilon, gamma,
-                                       prouver_emploi, resoudre, sources_du_depot)
+                                       apprendre_de_gamma, apprendre_le_egal, beta, delta,
+                                       epsilon, gamma, prouver_emploi, resoudre,
+                                       sources_du_depot, zeta)
 
 
 def _solveur(mission, trajectoire, registre):
@@ -66,8 +67,26 @@ def experience(racine: Path) -> dict:
                    reussi=naissance.comparaison.experimente.verifie)
 
     echelle = _gravir(registre, sources)
+    composition = _composer(registre, sources)
     return {"resultats": resultats, "acquisition": acquisition, "acquise": acquise,
-            "naissance": naissance, "registre": registre, "echelle": echelle}
+            "naissance": naissance, "registre": registre, "echelle": echelle,
+            "composition": composition}
+
+
+def _composer(registre: Registre, sources: dict) -> dict:
+    """Deux capacités se composent-elles ? Mesuré, jamais supposé.
+
+    ZETA demande une valeur à `.github/workflows/ci.yml` et une autre à
+    `pytest.ini`. Le premier n'est lisible que par le lecteur `': '` ; le second
+    par **rien** de ce que le dépôt savait faire, ni par ce premier lecteur. Une
+    capacité seule ne suffit donc pas, et la ligne de base du banc est ici un
+    registre à une capacité, pas un registre vide.
+    """
+    une = Registre()
+    apprendre_de_gamma(une, Trajectoire("rappel"))
+    apprendre_le_egal(sources, registre, Trajectoire("GAMMA-bis"))
+    comparaison = banc(zeta(sources), _solveur, registre, base_registre=une)
+    return {"comparaison": comparaison, "registre": registre}
 
 
 def _gravir(registre: Registre, sources: dict) -> list[tuple[str, str, bool, str]]:
@@ -86,10 +105,16 @@ def _gravir(registre: Registre, sources: dict) -> list[tuple[str, str, bool, str
     )
     for instance, domaine, abimee, mission, quoi in emplois:
         resultat = executer(mission, lambda m, t: resoudre(m, t, registre))
+        # Ce qu'on enregistre est ce que **la capacité** a fait, pas ce que la
+        # mission a obtenu. Le solveur sait se rabattre : EPSILON réussit par le
+        # tâtonnement alors que le lecteur appris n'a rien su en tirer, et
+        # créditer la capacité de ce succès-là ferait monter un niveau de preuve
+        # sur le travail d'un autre.
+        repondu = LECTEUR_APPRIS in resultat.capacites_reutilisees
         prouver_emploi(registre, instance=instance, domaine=domaine, abimee=abimee,
-                       reussi=resultat.verifie)
+                       reussi=repondu)
         barreaux.append((instance, registre.chercher(LECTEUR_APPRIS).niveau,
-                         resultat.verifie, quoi))
+                         repondu, quoi))
     return barreaux
 
 
@@ -116,6 +141,15 @@ def afficher(rapport: dict) -> None:
         print(f"    artefact {ligne['empreinte'][:16]}…  version {ligne['version']}  "
               f"issue de {ligne['provenance']}  employée {ligne['reutilisations']}×  "
               f"échecs {ligne['echecs']}")
+
+    composition = rapport["composition"]["comparaison"]
+    print("\n=== la composition — ZETA, qu'aucune capacité ne règle seule ===\n")
+    print("  ci.yml n'est lisible que par le lecteur ': ' ; pytest.ini par aucun")
+    print("  lecteur du dépôt, ni par celui-là. Ligne de base : une capacité.\n")
+    for ecart in composition.ecarts:
+        print(f"  {ecart.axe:<24} {ecart.avant:>6} → {ecart.apres:<6} ({ecart.delta:+})")
+    print(f"\n  verdict : {composition.verdict} — {composition.pourquoi}")
+    print(f"  capacités employées : {', '.join(composition.capacites_reutilisees) or 'aucune'}")
 
     naissance = rapport["naissance"]
     print("\n=== le test de naissance — mission de contrôle, instance jamais vue ===\n")

@@ -30,9 +30,9 @@ from singular.genesis.bench import AMELIORATION, AUCUNE, REFUTE
 from singular.genesis.capability import PLAFOND_APRES_ECHEC
 from singular.genesis.lecteurs import FormatRefuse
 from singular.genesis.missions import (GAMMA_ABIMEE, GAMMA_APPRENTISSAGE, GAMMA_CONTROLE,
-                                       LECTEUR_APPRIS,
+                                       LECTEUR_APPRIS, LECTEUR_EGAL,
                                        alpha, apprendre_de_gamma, beta, construire_lecteur,
-                                       delta, epsilon,
+                                       apprendre_le_egal, delta, epsilon, zeta,
                                        construire_lecteur_memorisant, gamma, prouver_emploi,
                                        resoudre, sources_du_depot)
 
@@ -471,14 +471,19 @@ def test_la_capacite_tient_sur_une_instance_abimee() -> None:
 
 
 def test_la_capacite_echoue_pour_de_vrai_sur_un_format_qu_elle_ne_tient_pas(sources) -> None:
-    """`pyproject.toml` écrit `cle = "valeur"` : le lecteur appris refuse.
+    """`pyproject.toml` écrit `cle = "valeur"` : le lecteur appris n'en tire rien.
 
-    Un échec réel, sur un fichier réel. Sans lui, la chute du niveau de preuve
-    serait une mise en scène.
+    La mission, elle, **réussit** — par le tâtonnement, qui a un lecteur TOML.
+    Les deux faits sont vrais en même temps et c'est le sujet de ce test : ce
+    qu'on enregistre au registre est ce que la capacité a fait, pas ce que la
+    mission a obtenu. Créditer la capacité d'un succès que le tâtonnement a
+    décroché ferait monter un niveau de preuve sur le travail d'un autre.
     """
     registre = _registre_apres_gamma()
     resultat = executer(epsilon(sources), lambda m, t: resoudre(m, t, registre))
-    assert not resultat.verifie
+    assert resultat.verifie, "le solveur sait se rabattre, et c'est ce qu'il doit faire"
+    assert LECTEUR_APPRIS not in resultat.capacites_reutilisees, (
+        "la capacité n'a pas répondu : elle ne doit pas figurer parmi celles employées")
 
 
 def test_l_experience_gravit_l_echelle_puis_la_redescend() -> None:
@@ -496,3 +501,61 @@ def test_l_experience_gravit_l_echelle_puis_la_redescend() -> None:
         ("abimee", "E5", True),
         ("pyproject", "E2", False),
     ]
+
+
+# --- la composition : deux capacités valent-elles mieux qu'une ? --------------
+
+def _registre_deux_capacites(sources) -> Registre:
+    registre = _registre_apres_gamma()
+    assert apprendre_le_egal(sources, registre, Trajectoire("GAMMA-bis"))
+    return registre
+
+
+def test_le_second_cycle_produit_une_autre_capacite(sources) -> None:
+    """Deux acquisitions, deux artefacts, deux noms — sinon rien à composer.
+
+    Le séparateur est trouvé par le bac à sable, pas par une liste écrite
+    d'avance : `': '` est essayé le premier sur `pytest.ini` et refusé.
+    """
+    registre = _registre_deux_capacites(sources)
+    assert LECTEUR_APPRIS in registre and LECTEUR_EGAL in registre
+    assert registre.chercher(LECTEUR_APPRIS).empreinte != registre.chercher(LECTEUR_EGAL).empreinte
+    assert registre.chercher(LECTEUR_EGAL).provenance == "GAMMA-bis"
+
+
+def test_zeta_est_hors_de_portee_de_tout_ce_qui_existait(sources) -> None:
+    """Sans quoi la composition serait une mise en scène.
+
+    `pytest.ini` n'est lisible par aucun des quatre lecteurs du dépôt. Si ZETA
+    était soluble par le tâtonnement, mesurer deux capacités contre une ne
+    mesurerait rien.
+    """
+    assert not executer(zeta(sources), lambda m, t: resoudre(m, t, Registre())).verifie
+
+
+def test_une_seule_capacite_ne_suffit_pas_a_zeta(sources) -> None:
+    """La ligne de base de la composition est une capacité, pas zéro."""
+    resultat = executer(zeta(sources), lambda m, t: resoudre(m, t, _registre_apres_gamma()))
+    assert not resultat.verifie
+    assert resultat.capacites_reutilisees == (LECTEUR_APPRIS,), (
+        "la première capacité répond sur ci.yml, et ne peut rien pour pytest.ini")
+
+
+def test_deux_capacites_composent_et_le_banc_le_mesure(sources) -> None:
+    """Le compounding, mesuré contre une capacité — jamais contre rien.
+
+    C'est l'hypothèse stratégique de la directive, et elle n'est pas
+    automatique : essayer deux lecteurs coûte plus que d'en essayer un. Ici le
+    surcoût est payé, mais c'est un fait mesuré sur ces fichiers-là, pas une
+    règle.
+    """
+    comparaison = banc(zeta(sources), solveur, _registre_deux_capacites(sources),
+                       base_registre=_registre_apres_gamma())
+    assert comparaison.verdict == AMELIORATION
+    assert comparaison.capacites_reutilisees == (LECTEUR_APPRIS, LECTEUR_EGAL)
+
+
+def test_le_banc_sans_ligne_de_base_donnee_part_du_registre_vide(sources) -> None:
+    """Le défaut ne bouge pas : c'est le bon départ pour une première acquisition."""
+    comparaison = banc(zeta(sources), solveur, _registre_deux_capacites(sources))
+    assert comparaison.base.capacites_reutilisees == ()

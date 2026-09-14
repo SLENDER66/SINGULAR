@@ -1,8 +1,8 @@
 # AZAZEL Genesis — ce qui a été construit, et ce que ça prouve
 
-**Statut : une cellule qui tourne, et un résultat positif sur un cas.** Pas une
-architecture d'entreprise, pas une démonstration de compounding. La différence
-est le sujet de ce document.
+**Statut : une cellule qui tourne, et des résultats positifs sur des cas
+nommés.** Pas une architecture d'entreprise, pas une démonstration générale. La
+différence est le sujet de ce document.
 
 Lancer l'expérience :
 
@@ -138,10 +138,38 @@ workflow du CI sans avoir rien réappris : c'est ce qui sépare « généralisat
 du mot « généralisation ». Et il échoue pour de bon sur du TOML, ce qui ramène
 le niveau au plafond d'après échec.
 
-**Ce que ça ne dit pas.** Une capacité, deux domaines, cinq instances, et une
-capacité qui ne comprend pas YAML — elle lit les paires `clé: valeur` qu'elle
-trouve, à plat. L'hypothèse tient sur ce cas ; le compounding n'est pas
-démontré, et la directive interdit de confondre les deux.
+### La composition : deux capacités valent-elles mieux qu'une ?
+
+C'est l'hypothèse stratégique de la directive — `CAPACITÉ A + CAPACITÉ B →
+CAPACITÉ COMPOSITE` — et elle dit de ne jamais la supposer automatique.
+
+Un second cycle d'acquisition tourne sur `pytest.ini`, qui n'est lisible par
+**aucun** des quatre lecteurs du dépôt ni par le premier lecteur appris. Le bac
+à sable essaie `': '`, le refuse, retient `'='`. Deux artefacts distincts, deux
+noms distincts.
+
+ZETA demande alors une valeur à `.github/workflows/ci.yml` et une autre à
+`pytest.ini`. La ligne de base du banc est ici **une capacité**, pas zéro : mesurer
+deux contre rien aurait mesuré l'acquisition, pas la composition.
+
+| registre | vérifiée | coût | erreurs |
+|---|---|---|---|
+| rien | non | 10 | 10 |
+| une capacité | **non** | 7 | 6 |
+| les deux | **oui** | 3 | 1 |
+
+Verdict `AMELIORATION`, les deux capacités employées. Le surcoût d'essayer deux
+lecteurs au lieu d'un est payé — mais c'est un fait mesuré sur ces fichiers-là,
+pas une règle : sur un registre plus fourni, chaque lecture essaierait davantage
+de lecteurs avant de tomber sur le bon.
+
+Et ce qui est composé reste modeste : le composite est la **sélection** parmi
+les lecteurs appris, pas une capacité nouvelle qu'aucun des deux ne portait.
+
+**Ce que ça ne dit pas.** Deux capacités, deux domaines proches, cinq instances,
+et un lecteur qui ne comprend pas YAML — il lit les paires `clé: valeur` qu'il
+trouve, à plat. L'hypothèse tient sur ces cas ; elle n'est pas démontrée en
+général, et la directive interdit de confondre les deux.
 
 ---
 
@@ -198,6 +226,9 @@ s'incrémente et les preuves repartent à zéro.
   des missions à ce qu'un programme sans intelligence peut faire.
 * **Le coût est un compte de pas**, pas des euros ni des jetons. Il mesure ce
   que l'expérience fait varier ; il ne se compare à aucun prix réel.
+* **Le coût de la composition grandit avec le registre.** Chaque lecture essaie
+  les lecteurs appris jusqu'à ce qu'un réponde. À deux, c'est gagnant ; à vingt,
+  la question se reposera, et rien ici ne la traite.
 * **`SEPARATEURS_ESSAYES` est une liste courte.** Un format clé/valeur avec un
   séparateur absent de la liste ne serait pas appris, et GAMMA échouerait — ce
   qui serait un vrai résultat négatif, pas un plantage.
@@ -212,9 +243,12 @@ promis :
 1. **Un domaine réellement éloigné** — pas une deuxième variante de
    `clé: valeur`. Tant que les deux domaines se ressemblent, E5 mesure la forme
    du texte et pas la portée de la capacité.
-2. **Un deuxième registre expérimenté**, pour comparer deux versions de Genesis
+2. **Un composite qui fasse plus que choisir** — deux capacités dont la
+   combinaison produit ce qu'aucune ne porte. Celui d'ici sélectionne ; c'est un
+   compounding réel mais faible.
+3. **Un deuxième registre expérimenté**, pour comparer deux versions de Genesis
    entre elles — « AZAZEL doit battre AZAZEL » — plutôt que Genesis contre rien.
-3. **La persistance**, seulement quand une expérience durera plus d'un processus.
+4. **La persistance**, seulement quand une expérience durera plus d'un processus.
 
 Le premier point de cette liste disait « un deuxième domaine » ; il est fait, et
 ce qu'il a appris est qu'un deuxième domaine trop proche déplace la question

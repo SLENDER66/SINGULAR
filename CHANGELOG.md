@@ -43,6 +43,20 @@ souvenir.
   **retombe à E2** sur cet échec réel, et c'est la descente qui montre que
   l'échelle mesure quelque chose : monter, quand on a les instances sous la main,
   n'importe quelle échelle le fait.
+- **La composition, mesurée contre une capacité et pas contre rien.** Un second
+  cycle d'acquisition tourne sur `pytest.ini`, qu'aucun lecteur du depot ne sait
+  lire et que le premier lecteur appris ne sait pas lire non plus. ZETA demande
+  une valeur au workflow et une autre a `pytest.ini` : rien n'y arrive, une
+  capacité n'y arrive pas non plus, les deux y arrivent. C'est l'hypothèse
+  stratégique de la directive, et elle est mesurée au lieu d'être supposée. Ce
+  qui est composé reste modeste : le composite **sélectionne** parmi les lecteurs
+  appris, il ne produit rien qu'aucun des deux ne portait.
+- **Un solveur qui se rabat, et une capacité qu'on ne crédite plus du travail
+  d'un autre.** Un lecteur qui « réussissait » en rendant autre chose que le
+  champ demandé bloquait la suite. Il rend la main maintenant, et `CAPACITE`
+  n'est posé dans la trajectoire que quand la capacité **répond** : sans ça, une
+  mission sauvée par le tâtonnement aurait fait monter le niveau de preuve de la
+  capacité qui avait échoué.
 - **Le résultat est positif sur un cas, et le document le dit comme ça.** Une
   capacité, deux domaines proches, cinq instances, et un lecteur qui ne comprend
   pas YAML — il lit des paires à plat. Le compounding n'est pas démontré. La
