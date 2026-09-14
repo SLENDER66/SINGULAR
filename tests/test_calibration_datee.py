@@ -319,3 +319,35 @@ def test_la_ligne_de_statut_se_tait_sur_un_ecart_petit_et_incertain(tmp_path):
     """Ce qui n'est ni démontré ni voyant ne s'affiche nulle part."""
     journal = _journal(tmp_path, [(0.6, index % 10 < 6) for index in range(10)])
     assert "calibration" not in journal.summary_line(now=NOW + timedelta(days=60))
+
+
+# --- ce que reçoit la faculté qui coûte des jetons ----------------------------
+
+def test_le_contexte_envoye_au_modele_porte_l_ecart_recent(tmp_path):
+    """`analyse` envoyait le chiffre d'une vie, seul.
+
+    Un modèle qui lit « overconfidence: 0.2 » conseille de baisser les
+    probabilités, même quand l'observation juste au-dessus, dans le même texte,
+    dit que c'est corrigé. Deux réponses à la même question : c'est le défaut
+    des interfaces, transporté dans la seule faculté qui coûte de l'argent.
+
+    `--blanc` affiche ce texte sans appeler personne : ce qui s'ajoute ici se
+    relit avant de partir.
+    """
+    from singular.analyse import contexte_pour_analyse
+
+    journal = _journal(tmp_path, _surconfiance(60) + _juste(60))
+    contexte = contexte_pour_analyse(build_notice(journal, now=NOW + timedelta(days=300)).as_dict())
+
+    assert "calibration_recente" in contexte
+    assert '"ecart_corrige": true' in contexte
+    assert "déjà corrigé" in contexte, "l'observation aussi doit partir"
+
+
+def test_un_journal_court_n_envoie_pas_de_calibration_recente(tmp_path):
+    """Rien à couper, rien à envoyer : pas de clé vide ni de `null` à interpréter."""
+    from singular.analyse import contexte_pour_analyse
+
+    journal = _journal(tmp_path, _surconfiance(4))
+    contexte = contexte_pour_analyse(build_notice(journal, now=NOW + timedelta(days=60)).as_dict())
+    assert "calibration_recente" not in contexte

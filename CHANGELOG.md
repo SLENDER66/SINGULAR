@@ -40,6 +40,11 @@ dérégler. Le défaut était le même, une tranche de temps plus loin.
   rapport web et `review` affichaient le total d'une vie en rouge pendant que
   l'observation, juste en dessous, disait que c'était corrigé. Le moteur tranche,
   les interfaces lisent `progression`.
+- **`analyse` envoyait le chiffre d'une vie, seul.** Un modèle qui lit
+  « overconfidence: 0.2 » conseille de baisser les probabilités, même quand
+  l'observation juste au-dessus, dans le même texte, dit que c'est corrigé. Le
+  même défaut que celui des vignettes, transporté dans la seule faculté qui
+  coûte de l'argent. L'écart récent part avec, et `--blanc` le montre.
 - **Le port iOS suit**, et un vecteur de soixante entrées épingle la bascule :
   sans lui, la règle vivrait dans deux moteurs et ne serait éprouvée que dans un.
   Le Swift est écrit, pas compilé — aucun compilateur n'est installable ici, et
