@@ -76,6 +76,14 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    se rouvrirait par un autre chemin -- ce que son propre commentaire annonce.
    L'atteindre demanderait de defaire le verrou, donc de tester un chemin qui
    n'existe pas.
+
+   Ce triage-la a ete **attaque avant d'etre ecrit**, parce qu'un raisonnement
+   qui conclut « inatteignable » est exactement le genre de raisonnement qu'on
+   aime trop. Six `resolve()` concurrents sur la meme entree : un passe, les cinq
+   autres tombent sur le `status != OPEN` d'avant. Une ecriture brute par une
+   autre connexion entre deux transactions : le `resolve()` suivant tombe encore
+   sur ce meme controle. Les deux chemins atteignent le garde anterieur, jamais
+   le `rowcount`.
 3. *La moitie est morte.* Ni trou ni assurance : aucune entree ne peut la
    distinguer de sa voisine, donc elle ne decide jamais. `store is None` a cote de
    `not hasattr(store, "path")` -- `hasattr(None, "path")` est faux de toute
