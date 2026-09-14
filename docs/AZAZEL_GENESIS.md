@@ -239,8 +239,11 @@ conditions ont perdu un terme. Chaque refus que Genesis porte a maintenant un
 témoin, et c'est le seul argument sérieux en faveur du chiffre positif de la
 section 4 — sans ça, le banc mesurait sa propre complaisance.
 
-L'outil coûte une dizaine de minutes par groupe et ne tourne pas dans le CI.
-C'est un instrument d'audit : il se relance quand on touche à ce qu'il mesure.
+L'outil ne tourne pas dans le CI. Son prix est dominé par le nombre de
+survivants, chacun étant revérifié contre la suite entière : cinq minutes pour
+`genesis` sans survivant, treize avec treize. Le groupe `frontiere`, lui, dépasse
+l'heure. C'est un instrument d'audit : il se relance quand on touche à ce qu'il
+mesure, et sa docstring dit comment le lancer sans perdre son résultat.
 
 ## 7. Kill / rollback
 

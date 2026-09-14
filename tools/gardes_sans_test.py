@@ -104,8 +104,23 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    la frontiere. C'est ce que le README annonce -- « human approval is currently
    not an authorization channel » -- et cet outil le mesure au lieu de le croire.
 
-Il ne tourne pas dans le CI : compte une dizaine de minutes par groupe. C'est un
-instrument d'audit, a relancer quand on touche a ce qu'il mesure.
+Il ne tourne pas dans le CI, et **« une dizaine de minutes par groupe » etait
+faux**. Ce que ca coute vraiment, mesure le 14 septembre 2026 : le prix est
+domine par le nombre de survivants, parce que chacun est reverifie contre la
+suite entiere -- une passe complete chacun. `genesis` : cinq minutes sans
+survivant, treize avec treize. `matins` : dix a quinze. `frontiere` : **plus
+d'une heure, sans avoir fini** -- c'est le groupe le plus gros, et il est celui
+qu'on veut le plus.
+
+Deux consequences operatoires, payees une heure pour les apprendre :
+
+* ne l'enferme pas dans un `timeout` court. Une heure ne suffit pas pour
+  `frontiere` ;
+* ne le passe pas dans un tube qui tamponne, `| tail` en tete. S'il est coupe,
+  tu ne recois rien du tout -- pas meme les survivants deja nommes. Ecris dans un
+  fichier et lis-le au fur et a mesure.
+
+C'est un instrument d'audit, a relancer quand on touche a ce qu'il mesure.
 
     python3 tools/gardes_sans_test.py              # les trois groupes
     python3 tools/gardes_sans_test.py frontiere    # decision, autorisation, effet

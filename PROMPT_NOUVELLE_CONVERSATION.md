@@ -609,7 +609,12 @@ il ne lève rien, il rend un verdict que tout le reste lit — et
 `requires_human` réunit cinq raisons d'exiger un humain par des `or`, dont une
 seule non prouvée suffit à ce qu'une catégorie entière cesse d'en exiger un. Ceux qui
 survivent sont retirables sans qu'un test rougisse — la première passe en a nommé
-beaucoup, et le compte n'est pas écrit ici : l'outil le donne en dix minutes. Le
+beaucoup, et le compte n'est pas écrit ici : l'outil le donne — mais pas en dix
+minutes, et cette phrase-là a coûté une heure. Le prix suit le nombre de
+survivants, chacun étant revérifié contre la suite entière ; `frontiere` dépasse
+l'heure. Ne l'enferme pas dans un `timeout` court, et ne le passe pas dans un
+`| tail` : coupé, un tube qui tamponne ne rend rien, pas même les survivants
+déjà nommés. Le
 travail n'est pas de tous les tester, c'est de les **trier** en quatre familles,
 et la docstring de l'outil les nomme. La plus grave était la réconciliation :
 fournisseur, opération et charge substitués étaient testés à l'aller, aucun au
