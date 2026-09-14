@@ -228,3 +228,95 @@ def test_executor_rejects_payload_substitution_before_runtime_access(tmp_path):
 
 def test_payload_fingerprint_is_stable_for_equivalent_mapping_order():
     assert payload_fingerprint({"b": 2, "a": 1}) == payload_fingerprint({"a": 1, "b": 2})
+
+
+# --- la porte d'entree du seul producteur de decisions validees -----------------
+#
+# La passe de mutation sur `validated_pipeline.py` nomme d'abord ses cinq premiers
+# refus, tous non prouves : aucun test n'appelait `build` avec un argument
+# malforme. C'est la porte d'entree du seul objet que la frontiere accepte, et elle
+# n'etait verifiee qu'en marchant droit.
+#
+# Les cinq sont atteignables par l'API publique -- `decision_id` vaut meme `""` par
+# defaut, donc oublier de le passer suffit. Ce ne sont pas des assurances : sans
+# eux, un appelant construit une decision dont l'objectif est vide, dont
+# l'identifiant n'existe pas, ou qui autorise plusieurs actions la ou tout le reste
+# du systeme en suppose une seule.
+
+
+def _build_avec(**remplacements):
+    """Le trajet nominal, avec un argument remplace. Rien d'autre ne change."""
+    contract, action, state, intervention, profile, dimensions = _inputs()
+    arguments = {
+        "objective": contract.objective, "actions": (action,),
+        "action_to_intervention": ((action.id, intervention.id),),
+        "domain_states": (state,), "interventions": (intervention,),
+        "trajectory_profile": profile, "trajectory_dimensions": dimensions,
+        "contract": contract, "execution_target": AUTHORIZED_HANDLER_CAPABILITY,
+        "decision_id": "DEC-PIPE", "capacity_budget": 2,
+    }
+    arguments.update(remplacements)
+    return ValidatedTrajectoryPipeline.build(**arguments)
+
+
+def test_le_trajet_nominal_de_ce_fichier_construit_bien(tmp_path):
+    """Sans ca, les six tests suivants passeraient en ne prouvant rien."""
+    assert _build_avec().verify() is True
+
+
+@pytest.mark.parametrize("objectif", ["", "   "])
+def test_le_pipeline_refuse_un_objectif_vide(objectif):
+    with pytest.raises(ValueError, match="objective cannot be empty"):
+        _build_avec(objective=objectif)
+
+
+def test_le_pipeline_refuse_zero_ou_plusieurs_actions():
+    """« Exactement une » n'est pas une preference : tout le reste en depend.
+
+    `_validate` designe l'action autorisee par `global_report.action_id`, la
+    politique et le gouverneur sont calcules sur `actions[0]`, et la capacite
+    d'execution est posee sur cette action-la. Deux actions, et les cinq autres
+    etages parleraient de la premiere en ayant l'air d'en autoriser deux.
+    """
+    contract, action, state, intervention, profile, dimensions = _inputs()
+    seconde = ActionRequest("autre", "Une seconde action", 4, 1, 9, contract_id=contract.mission_id)
+
+    with pytest.raises(ValueError, match="exactly one action"):
+        _build_avec(actions=())
+    with pytest.raises(ValueError, match="exactly one action"):
+        _build_avec(actions=(action, seconde),
+                    action_to_intervention=((action.id, intervention.id), (seconde.id, intervention.id)))
+
+
+@pytest.mark.parametrize("identifiant", ["", "   "])
+def test_le_pipeline_refuse_une_decision_sans_identifiant(identifiant):
+    """Et c'est la valeur par defaut : `decision_id: str = ""`.
+
+    L'identifiant est ce qui lie la decision a son attestation durable et a sa cle
+    d'execution. Une decision anonyme se ferait passer pour une autre.
+    """
+    with pytest.raises(ValueError, match="decision_id is required"):
+        _build_avec(decision_id=identifiant)
+
+
+def test_le_pipeline_refuse_un_objectif_qui_n_est_pas_celui_du_contrat():
+    """Le contrat est l'autorisation ; l'objectif dit pour quoi elle vaut.
+
+    Les deux doivent nommer la meme chose, sinon la decision serait autorisee par un
+    contrat qui parle d'autre chose. `_validate` le reverifie plus tard contre le
+    rapport global ; ici c'est refuse a la porte, avec le bon message.
+    """
+    with pytest.raises(ValueError, match="must match the execution contract"):
+        _build_avec(objective="Un autre objectif")
+
+
+@pytest.mark.parametrize("genre", ["", "effect", "handler ", "EXTERNAL_EFFECT", "autre"])
+def test_le_pipeline_refuse_un_genre_d_execution_inconnu(genre):
+    """Deux genres, et rien d'autre : la frontiere ne sait executer que ces deux-la.
+
+    Un troisieme mot passerait ici, puis les deux branches du bas -- liaison de
+    fournisseur exigee ou interdite -- le traiteraient comme s'il etait « handler »,
+    ce qui est exactement la mauvaise reponse par defaut.
+    """
+    with pytest.raises(ValueError, match="execution_kind must be handler or external_effect"):
+        _build_avec(execution_kind=genre)
