@@ -427,7 +427,12 @@ enum NoticeEngine {
         let recent = periode(Array(probabilites[coupe...]), Array(resultats[coupe...]))
         return CalibrationProgression(
             debut: debut, recent: recent,
+            // Trois conditions. « L'ecart recent est demontre inferieur a quinze
+            // points » ne veut pas dire « il n'y a plus d'ecart » : sur quatre
+            // cents verdicts, un ecart de dix points passe l'equivalence *et* se
+            // demontre, et le Sage aurait tenu les deux phrases a la fois.
             corrige: debut.conclusive && recent.equivalence <= calibrationHasard
+                && !recent.conclusive
         )
     }
 

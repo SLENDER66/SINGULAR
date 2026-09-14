@@ -226,7 +226,17 @@ def calibration_progression(report: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "debut": debut,
         "recent": recent,
-        "corrige": debut["conclusive"] and recent["equivalence"] <= CALIBRATION_HASARD,
+        # Trois conditions, et la troisieme a ete trouvee en attaquant les deux
+        # premieres. « L'ecart recent est demontre inferieur a quinze points » ne
+        # veut pas dire « il n'y a plus d'ecart » : sur quatre cents verdicts, un
+        # ecart de dix points passe l'equivalence *et* se demontre. Le Sage
+        # aurait alors tenu les deux phrases a la fois -- « ton ecart recent est
+        # de +10 %, c'est prouve » et « c'est corrige, ne corrige pas » -- ce qui
+        # est exactement le defaut que cette section entiere existe pour fermer.
+        # Corrige veut donc dire : la moitie recente ne demontre plus rien.
+        "corrige": (debut["conclusive"]
+                    and recent["equivalence"] <= CALIBRATION_HASARD
+                    and not recent["conclusive"]),
     }
 
 

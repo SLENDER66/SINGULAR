@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.36.0 — « Corrige » voulait dire deux choses a la fois
+
+Trouve en attaquant ma propre garantie plutot qu'en la relisant, comme la regle
+22 du mandat le demande.
+
+`corrige` exigeait deux choses : un ecart demontre dans la premiere moitie, et un
+ecart demontre **sous** quinze points dans la seconde. Ca ne veut pas dire « il
+n'y a plus d'ecart ». Sur quatre cents verdicts recents, un ecart de dix points
+passe le test d'equivalence *et* se demontre par `chance_du_hasard`.
+
+Le Sage aurait donc tenu deux phrases contradictoires sur le meme ecran — « ton
+ecart recent est de +10 %, c'est prouve » et « c'est corrige, ne corrige pas ».
+C'est exactement le defaut que toute cette section existe pour fermer, et je
+venais de l'y remettre.
+
+- **Une troisieme condition** : la moitie recente ne doit plus rien demontrer
+  elle-meme. « Corrige » veut dire qu'il ne reste rien a montrer, pas qu'il reste
+  peu. Dans le cas a dix points, on lit desormais le reproche ordinaire, qui
+  pointe le chiffre recent — il s'est ameliore, il lui reste dix points, c'est de
+  ceux-la qu'il corrige.
+- Le port iOS suit, et un garde exige la troisieme condition des deux cotes.
+
 ## 3.35.0 — Les verificateurs de Genesis ne verifiaient qu'a moitie
 
 L'audit de mutation, lance sur Genesis pour la premiere fois : **treize refus

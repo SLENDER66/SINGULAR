@@ -386,4 +386,7 @@ def test_le_port_ios_applique_la_meme_condition():
     # Même déplacement que côté Python : « y a-t-il lieu d'en parler ? » est
     # tranché dans le verdict, pas recombiné par chacun de ceux qui l'affichent.
     assert "montrable: conclusive || abs(gap) >= calibrationGap" in swift
+    # La troisieme condition de `corrige` : sans elle, le port dirait « c'est
+    # corrige » sur une moitie recente qui demontre encore un ecart.
+    assert "&& !recent.conclusive" in swift
     assert "verdict.montrable else { return nil }" in swift

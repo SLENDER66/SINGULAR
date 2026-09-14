@@ -584,10 +584,18 @@ chaque moitié est mesurée seule. Ce que tu lis change alors :
   qu'on te dit de corriger, pas le chiffre du haut. « Tes trente plus récentes
   **tranchées** » : une décision plus fraîche qui attend encore son verdict n'y
   est pas, et le mot est là pour que tu ne comptes pas les mauvaises ;
-- quand la première moitié montrait un écart démontré et que la seconde démontre
-  qu'il est passé sous les quinze points, le reproche disparaît : « tu l'as déjà
-  corrigé ». La vignette du rapport bascule sur le chiffre récent et s'éteint,
-  au lieu de rougir sur un total qui traîne ton passé.
+- quand la première moitié montrait un écart démontré, que la seconde démontre
+  qu'il est passé sous les quinze points, **et** que cette seconde moitié ne
+  démontre plus rien elle-même, le reproche disparaît : « ton écart de confiance
+  est déjà corrigé ». La vignette du rapport bascule sur le chiffre récent et
+  s'éteint, au lieu de rougir sur un total qui traîne ton passé.
+
+  La troisième condition n'est pas une précaution de style. Sur quatre cents
+  verdicts récents, un écart de dix points passe le test des quinze points *et*
+  se démontre : sans elle, le Sage aurait dit « ton écart récent est de +10 %,
+  c'est prouvé » et « c'est corrigé, ne corrige pas » sur le même écran. Dans ce
+  cas-là tu lis le reproche ordinaire, qui pointe les dix points — tu t'es
+  amélioré, il t'en reste dix, corrige de ceux-là.
 
 **Démontrer qu'un écart est devenu petit demande beaucoup plus de verdicts que
 démontrer qu'il existe** — de l'ordre de quarante dans la moitié récente, donc

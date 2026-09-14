@@ -389,3 +389,41 @@ def test_le_serveur_sert_la_progression_a_l_app(tmp_path):
     assert charge["progression"] is not None
     assert charge["progression"]["corrige"] is True
     assert charge["progression"]["recent"]["verdicts"] == 60
+
+
+def test_un_ecart_recent_encore_demontre_n_est_pas_un_ecart_corrige(tmp_path):
+    """Trouvé en attaquant mes deux premières conditions, pas en les relisant.
+
+    « L'écart récent est démontré inférieur à quinze points » ne veut pas dire
+    « il n'y a plus d'écart ». Sur quatre cents verdicts, un écart de dix points
+    passe le test d'équivalence **et** se démontre par `chance_du_hasard`. Le
+    Sage aurait alors tenu deux phrases contradictoires sur le même écran — « ton
+    écart récent est de +10 %, c'est prouvé » et « c'est corrigé, ne corrige
+    pas » — ce qui est exactement le défaut que ce fichier existe pour fermer.
+
+    Ce que le lecteur doit lire dans ce cas est le reproche ordinaire, qui pointe
+    le chiffre récent : il s'est amélioré, il lui reste dix points, et c'est de
+    ces dix points-là qu'il doit corriger.
+    """
+    journal = _journal(tmp_path, _surconfiance(400) + [(0.7, index % 10 < 6) for index in range(400)])
+    progression = calibration_progression(journal.review(now=NOW + timedelta(days=900)))
+
+    assert progression["debut"]["conclusive"], "la première moitié montrait bien un écart"
+    assert progression["recent"]["equivalence"] <= CALIBRATION_HASARD, (
+        "l'écart récent est bien démontré sous les quinze points")
+    assert progression["recent"]["conclusive"], "et il est pourtant lui-même démontré"
+    assert not progression["corrige"], (
+        "une moitié récente qui démontre encore un écart n'est pas un écart corrigé")
+
+    item = _calibration_item(journal.review(now=NOW + timedelta(days=900)))
+    assert "déjà corrigé" not in item.title
+    assert "plus récentes tranchées" in item.detail, (
+        "le reproche doit pointer le chiffre récent, qui est celui à corriger")
+
+
+def test_une_moitie_recente_sans_ecart_demontre_reste_un_ecart_corrige(tmp_path):
+    """L'autre bord : la troisième condition ne doit pas tout éteindre."""
+    journal = _journal(tmp_path, _surconfiance(60) + _juste(60))
+    progression = calibration_progression(journal.review(now=NOW + timedelta(days=300)))
+    assert not progression["recent"]["conclusive"]
+    assert progression["corrige"]
