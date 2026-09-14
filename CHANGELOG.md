@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.34.0 — Un test qui couvrait aucune des deux moitiés qu'il visait
+
+`tools/gardes_sans_test.py` a tourné sur le moteur des matins : 42 refus mutés,
+quatre survivants. Deux sont des assurances derrière `BEGIN IMMEDIATE` — le
+triage est écrit dans l'outil pour que le prochain passage ne le refasse pas.
+Les deux autres étaient un vrai trou, et sous la forme la plus sournoise : un
+test existait.
+
+- **`is_shared_memory_target` n'était couverte par aucune de ses deux moitiés.**
+  Les trois cas du test voisin passaient à l'identique avec `raw.startswith("file:")`
+  ou `"mode=memory" in raw` remplacée par `True`. Ce qu'elle décide n'est pas
+  cosmétique : une base prise pour une base en mémoire vit en RAM et s'ancre pour
+  la durée du processus, donc le journal s'ouvrirait, s'écrirait et se relirait
+  normalement — et **rien n'atteindrait le disque**. La perte silencieuse, sur le
+  seul fichier irremplaçable du dépôt. Deux cas manquaient : un `file:` qui n'est
+  pas en mémoire, et un chemin de disque qui contient les mots. Vérifié par
+  l'inverse : chaque moitié remplacée par `True` fait maintenant échouer le test.
+- **Le serveur sert bien la progression à l'app.** `Notice.as_dict()` la porte et
+  `renderFigures` sait la lire ; entre les deux, `/api/notice` n'était garanti
+  par rien. Une liste blanche ajoutée un jour aurait rendu la bascule muette sans
+  faire rougir quoi que ce soit.
+
 ## 3.33.0 — Deux defauts de ce que je viens d'ecrire, et une vignette qui s'execute
 
 Relecture adversariale de mon propre code, comme la regle 22 du mandat le

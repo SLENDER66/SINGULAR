@@ -51,12 +51,31 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    d'operation et de charge etait testee a l'aller et pas au retour, alors que la
    reconciliation atteint le meme fournisseur et peut faire passer une execution
    a COMPLETED.
+
+   `is_shared_memory_target` l'etait aussi, et sous la forme la plus sournoise :
+   un test existait et couvrait **aucune** des deux moities. Ses trois cas
+   passaient a l'identique avec l'une ou l'autre remplacee par `True`. Ce que la
+   condition decide n'est pourtant pas cosmetique -- une base prise pour une base
+   en memoire vit en RAM et s'ancre pour la duree du processus, donc le journal
+   s'ecrirait et se relirait normalement sans que rien n'atteigne le disque.
+   Corrige le 14 septembre 2026 : un `file:` qui n'est pas en memoire, et un
+   chemin de disque qui contient les mots.
 2. *Le refus ne peut pas se declencher parce qu'un controle anterieur le couvre.*
    La plupart des refus de `validated_execution.py` sont dans ce cas : une
    decision qui les violerait a une empreinte differente, donc `verify()` la
    refuse avant. Ce sont des assurances, pas des trous. Leur ecrire un test
    demanderait de desactiver `verify()`, donc de tester un chemin qui n'existe
    pas -- ce que la regle 18 du depot appelle un test suspect.
+
+   Les deux `if ecrit.rowcount != 1` du journal -- dans `resolve()` et
+   `abandon()` -- sont dans ce cas, et c'est ecrit ici pour que le prochain
+   passage ne refasse pas le triage. `BEGIN IMMEDIATE` prend le verrou d'ecriture
+   avant le SELECT, donc aucune autre connexion ne peut changer la ligne entre
+   le SELECT et l'UPDATE, et le `AND status=OPEN` de l'UPDATE vise exactement la
+   ligne qu'on vient de lire ouverte. Le refus est la pour le jour ou la course
+   se rouvrirait par un autre chemin -- ce que son propre commentaire annonce.
+   L'atteindre demanderait de defaire le verrou, donc de tester un chemin qui
+   n'existe pas.
 3. *La moitie est morte.* Ni trou ni assurance : aucune entree ne peut la
    distinguer de sa voisine, donc elle ne decide jamais. `store is None` a cote de
    `not hasattr(store, "path")` -- `hasattr(None, "path")` est faux de toute

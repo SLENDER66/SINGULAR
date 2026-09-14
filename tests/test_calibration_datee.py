@@ -366,3 +366,22 @@ def test_une_borne_degeneree_ne_demontre_jamais_rien() -> None:
         assert chance_d_un_ecart_moindre([0.6] * 20, 12, borne) == 1.0, borne
     assert chance_d_un_ecart_moindre([0.6] * 20, 12, CALIBRATION_GAP) < 1.0, (
         "la borne réelle doit continuer de calculer quelque chose")
+
+
+def test_le_serveur_sert_la_progression_a_l_app(tmp_path):
+    """Le dernier maillon : sans lui, la vignette du téléphone ne basculerait jamais.
+
+    `Notice.as_dict()` porte la progression et `renderFigures` sait la lire. Entre
+    les deux il y a `/api/notice`, et rien ne garantissait que la clé traverse :
+    une liste blanche ajoutée au serveur un jour aurait rendu la bascule muette
+    sans faire rougir quoi que ce soit. C'est le mode d'échec que ce dépôt
+    connaît le mieux.
+    """
+    from singular.sage.server import SageApp
+
+    journal = _journal(tmp_path, _surconfiance(60) + _juste(60))
+    charge = SageApp(journal, token="un-jeton-de-test-suffisamment-long").notice()
+
+    assert charge["progression"] is not None
+    assert charge["progression"]["corrige"] is True
+    assert charge["progression"]["recent"]["verdicts"] == 60

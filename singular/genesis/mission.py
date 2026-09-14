@@ -39,7 +39,10 @@ class Etape(str, Enum):
     #: Ce qu'il a fait de cet échec. Sans ce genre-là, « il a récupéré » ne se
     #: mesure pas : on ne verrait qu'un échec suivi d'une réussite.
     RECUPERATION = "RECUPERATION"
-    #: Une capacité du registre a servi. C'est ce que compte la réutilisation.
+    #: Une capacité du registre a **répondu**. Posé quand elle rend ce qu'on lui
+    #: demandait, pas quand on la lui demande : le solveur essaie les capacités
+    #: inscrites jusqu'à ce qu'une réponde, et compter les essais attribuerait à
+    #: l'expérience ce que le tâtonnement a obtenu.
     CAPACITE = "CAPACITE"
     #: Le solveur a construit ce qui lui manquait.
     CONSTRUCTION = "CONSTRUCTION"

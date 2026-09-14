@@ -47,7 +47,7 @@ l'essentiel de la chaîne, et le réécrire aurait été le contraire du travail
 | Trajectoire, mission, orchestration | `trajectory`, `mission_runtime`, `autopilot` | **GARDÉ** |
 | Prédiction vs réalité | `outcome_ledger`, et le journal lui-même | **GARDÉ** |
 | Niveaux de preuve E0–E5 | rien | **AJOUTÉ** |
-| Compte de réutilisation d'une capacité | rien | **AJOUTÉ** |
+| Compte de réutilisation d'une capacité | rien | **AJOUTÉ** — dérivé des preuves, pas incrémenté |
 | Banc différentiel baseline vs expérimenté | rien | **AJOUTÉ** |
 | Missions ALPHA / BETA / GAMMA | rien | **AJOUTÉ** |
 | World State universel, routage de modèles, calcul | rien | **REPORTÉ** — aucune hypothèse à tester aujourd'hui |
