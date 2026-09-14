@@ -320,3 +320,86 @@ def test_le_pipeline_refuse_un_genre_d_execution_inconnu(genre):
     """
     with pytest.raises(ValueError, match="execution_kind must be handler or external_effect"):
         _build_avec(execution_kind=genre)
+
+
+# --- la fenetre de validite, et les nombres qui n'en sont pas -------------------
+#
+# La suite des memes refus non prouves : tout ce qui borde la duree de vie d'une
+# decision. La section 7 du mandat nomme NaN et l'infini parmi les choses a chercher
+# activement, et ce sont justement les valeurs que ces gardes attrapent -- une
+# decision dont la fin de validite vaut `inf` n'expire jamais.
+#
+# `_validate` reverifie la fenetre a la construction de l'objet, mais sans `now` :
+# il refuse un intervalle incoherent, pas un intervalle **passe** ou **futur**. Les
+# deux refus qui comparent a l'horloge n'existent qu'ici.
+
+
+@pytest.mark.parametrize("duree", [0, -1, -0.001, float("nan"), float("inf"), float("-inf")])
+def test_le_pipeline_refuse_une_duree_de_vie_qui_n_en_est_pas_une(duree):
+    with pytest.raises(ValueError, match="decision_ttl_seconds must be finite and positive"):
+        _build_avec(decision_ttl_seconds=duree)
+
+
+def test_le_pipeline_refuse_une_fenetre_de_validite_incoherente():
+    """Fin avant debut, fin egale au debut, et les deux bornes non finies.
+
+    Une fenetre vide autoriserait une decision que rien ne peut executer ; une borne
+    infinie autoriserait une decision qui n'expire jamais, ce qui est la meme chose
+    qu'une autorisation permanente.
+    """
+    from time import time
+
+    maintenant = time()
+    for debut, fin in ((maintenant, maintenant - 1), (maintenant, maintenant),
+                       (float("nan"), maintenant + 300), (maintenant, float("nan")),
+                       (float("-inf"), maintenant + 300), (maintenant, float("inf"))):
+        with pytest.raises(ValueError, match="decision validity interval is invalid"):
+            _build_avec(issued_at=debut, expires_at=fin)
+
+
+def test_le_pipeline_refuse_une_decision_emise_dans_le_futur():
+    """Antidater vers l'avant, c'est se donner une autorisation qui n'a pas commence.
+
+    Le cas n'est pas theorique : une horloge qui avance, ou un appelant qui calcule
+    sa fenetre a partir d'une date de planification. Ce refus compare a l'horloge,
+    donc `_validate` -- qui verifie la coherence de l'intervalle sans regarder
+    l'heure -- ne le rattrape pas.
+    """
+    from time import time
+
+    demain = time() + 86400
+    with pytest.raises(ValueError, match="issued_at cannot be in the future"):
+        _build_avec(issued_at=demain, expires_at=demain + 300)
+
+
+def test_le_pipeline_refuse_une_decision_deja_expiree():
+    """L'autre bord de la meme fenetre : une decision morte avant d'etre construite.
+
+    `ValidatedTrajectoryDecision.__post_init__` refuserait aussi, puisqu'il valide
+    avec l'heure courante -- mais deux etages plus loin et avec un autre message. Ce
+    refus-ci est celui qui dit a l'appelant que sa fenetre est le probleme.
+    """
+    from time import time
+
+    hier = time() - 86400
+    with pytest.raises(ValueError, match="expires_at must be in the future"):
+        _build_avec(issued_at=hier, expires_at=hier + 300)
+
+
+@pytest.mark.parametrize("budget", [None, -1, float("nan"), float("inf"), float("-inf")])
+def test_le_pipeline_refuse_un_budget_de_capacite_qui_n_en_est_pas_un(budget):
+    """`capacity_budget` vaut `None` par defaut : l'oublier tombe ici.
+
+    Il borne l'optimisation humaine et le portefeuille, et `_validate` les
+    reconstruit avec cette meme valeur. Un budget infini ferait entrer toutes les
+    interventions dans le portefeuille ; un budget NaN rendrait chaque comparaison
+    fausse sans rien lever.
+    """
+    with pytest.raises(ValueError, match="capacity_budget is required"):
+        _build_avec(capacity_budget=budget)
+
+
+@pytest.mark.parametrize("maximum", [0, -1])
+def test_le_pipeline_refuse_un_portefeuille_sans_place(maximum):
+    with pytest.raises(ValueError, match="max_portfolio_candidates must be positive"):
+        _build_avec(max_portfolio_candidates=maximum)
