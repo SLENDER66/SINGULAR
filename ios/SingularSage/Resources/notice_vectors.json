@@ -1587,7 +1587,7 @@
           },
           {
             "severity": "INFO",
-            "title": "Tu l'as déjà corrigé",
+            "title": "Ton écart de confiance est déjà corrigé",
             "detail": "Tu annonces 90% en moyenne ; il en arrive 70%. Mais cet écart est celui de tes 30 premières décisions : sur les 30 suivantes, il est démontré inférieur à 15%. Le chiffre du haut traîne ton passé. Ne corrige pas ce que tu as déjà corrigé."
           }
         ]

@@ -457,7 +457,8 @@ enum NoticeEngine {
         if let progression, progression.corrige {
             return NoticeItem(
                 severity: .info,
-                title: "Tu l'as déjà corrigé",
+                // Le titre devient l'en-tête du rapport : il doit tenir seul.
+                title: "Ton écart de confiance est déjà corrigé",
                 detail: constat + " Mais cet écart est celui de tes "
                     + "\(progression.debut.verdicts) premières décisions : sur les "
                     + "\(progression.recent.verdicts) suivantes, il est démontré inférieur à "

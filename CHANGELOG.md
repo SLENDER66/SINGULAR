@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.35.0 — Les verificateurs de Genesis ne verifiaient qu'a moitie
+
+L'audit de mutation, lance sur Genesis pour la premiere fois : **treize refus
+survivants sur vingt-deux**, tous dans le code ecrit aujourd'hui. Tout ce que le
+banc affirme repose sur ce que ces verificateurs refusent, donc treize refus sans
+temoin rendaient le mot « verifiee » plus faible qu'il n'en avait l'air.
+
+- **Le juge qui leve acceptait, et rien ne le disait.** Remplacer le
+  `return False` de `Mission.juger` par `return True` faisait passer toute la
+  suite : un verificateur qui plante valait un succes. C'est la garantie
+  fail-closed du fichier, elle etait ecrite dans la docstring et nulle part
+  ailleurs. Elle a maintenant son test.
+- **Aucun verificateur n'avait jamais vu une reponse juste partout sauf a un
+  endroit.** Chacun exige maintenant chaque morceau, et c'est verifie morceau par
+  morceau — y compris les deux `not in` de BETA, qui sont son coeur : ils
+  refusent une reponse qui comblerait ce qu'elle n'a pas pu lire.
+- **La discipline de type n'a plus qu'un domicile.** Les six verificateurs
+  portaient chacun un `isinstance(reponse, dict)` qu'aucune entree ne peut
+  distinguer de son absence : un `.get` sur autre chose leve, et `juger`
+  rattrape. Ils promettaient un controle deja fait ailleurs et seraient revenus
+  dans chaque rapport d'audit. Retires, et ce que leur retrait suppose est teste.
+
+Chaque correction est verifiee par l'inverse : le mutant remis en place fait
+echouer la suite, et le retirer la fait repasser.
+
 ## 3.34.0 — Un test qui couvrait aucune des deux moitiés qu'il visait
 
 - **Ce que la ligne de statut coûte, mesuré.** Lui faire lire le verdict du

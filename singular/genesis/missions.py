@@ -260,8 +260,6 @@ def _versions_du_changelog(sources: dict[str, str]) -> list[str]:
 def alpha(sources: dict[str, str]) -> Mission:
     """Deux sources, deux formats, et une réponse que le juge recalcule seul."""
     def verifier(reponse: Any, sources: dict[str, str]) -> bool:
-        if not isinstance(reponse, dict):
-            return False
         return (reponse.get("changelog.version") == _versions_du_changelog(sources)
                 and reponse.get("pyproject.version") == [_version_publiee(sources)])
 
@@ -288,8 +286,6 @@ def beta(sources: dict[str, str]) -> Mission:
     abimees.pop("notice", None)
 
     def verifier(reponse: Any, sources: dict[str, str]) -> bool:
-        if not isinstance(reponse, dict):
-            return False
         return (reponse.get("changelog.version") == _versions_du_changelog(sources)
                 and "pyproject.version" not in reponse
                 and "notice.version" not in reponse)
@@ -338,7 +334,7 @@ verdicts: 3
 def gamma(texte: str, *, nom: str = "GAMMA", attendu: str = "mac") -> Mission:
     """Une mission qui demande un format qu'aucun lecteur inscrit ne tient."""
     def verifier(reponse: Any, _sources: dict[str, str]) -> bool:
-        return isinstance(reponse, dict) and reponse.get("releve.machine") == [attendu]
+        return reponse.get("releve.machine") == [attendu]
 
     return Mission(
         nom=nom,
@@ -365,7 +361,7 @@ def delta(sources: dict[str, str]) -> Mission:
     lecteur pressé le croie.
     """
     def verifier(reponse: Any, _sources: dict[str, str]) -> bool:
-        return isinstance(reponse, dict) and reponse.get("ci.name") == ["CI"]
+        return reponse.get("ci.name") == ["CI"]
 
     return Mission(
         nom="DELTA",
@@ -386,7 +382,7 @@ def epsilon(sources: dict[str, str]) -> Mission:
     produirait un niveau de preuve qui monte tout seul.
     """
     def verifier(reponse: Any, _sources: dict[str, str]) -> bool:
-        return isinstance(reponse, dict) and reponse.get("pyproject.version") is not None
+        return reponse.get("pyproject.version") is not None
 
     return Mission(
         nom="EPSILON",
@@ -411,8 +407,7 @@ def zeta(sources: dict[str, str]) -> Mission:
     d'en essayer un. C'est ce que le banc mesure au lieu de le supposer.
     """
     def verifier(reponse: Any, _sources: dict[str, str]) -> bool:
-        return (isinstance(reponse, dict)
-                and reponse.get("ci.name") == ["CI"]
+        return (reponse.get("ci.name") == ["CI"]
                 and reponse.get("pytest.testpaths") == ["tests"])
 
     return Mission(

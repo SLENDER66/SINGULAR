@@ -586,3 +586,92 @@ def test_le_compteur_de_reutilisation_ne_se_pose_pas_a_la_main(sources) -> None:
     capacite = _registre_deux_capacites(sources).chercher(LECTEUR_APPRIS)
     with pytest.raises((AttributeError, TypeError)):
         capacite.reutilisations = 99
+
+
+# --- les vérificateurs vérifient-ils vraiment ? -------------------------------
+#
+# `tools/gardes_sans_test.py` a mute les refus de Genesis : treize survivants sur
+# vingt-deux, tous ici. Les verificateurs acceptaient une reponse juste partout
+# sauf a un endroit, parce qu'aucun test ne leur en avait jamais donne une. Un
+# verificateur qui ne verifie qu'a moitie rend le mot « verifiee » plus faible
+# qu'il n'en a l'air -- et tout ce que le banc affirme repose dessus.
+
+def test_le_juge_qui_leve_refuse_au_lieu_d_accepter(sources) -> None:
+    """La garantie fail-closed du juge, et elle n'avait aucun témoin.
+
+    C'est la mutation la plus grave que l'audit ait trouvée dans Genesis :
+    remplacer le `return False` de `Mission.juger` par `return True` faisait
+    passer toute la suite. Autrement dit, un vérificateur qui plante valait un
+    succès et rien ne l'aurait dit.
+    """
+    def verificateur_qui_plante(_reponse, _sources):
+        raise RuntimeError("le juge lui-même a un bug")
+
+    mission = Mission("JUGE", "peu importe", {"a": "x"}, verificateur_qui_plante)
+    assert mission.juger("n'importe quoi") is False
+    assert not executer(mission, lambda m, t: "une réponse").verifie
+
+
+def test_une_reponse_qui_n_est_pas_un_dictionnaire_est_refusee(sources) -> None:
+    """La discipline de type vit dans `juger`, donc elle se teste là.
+
+    Les vérificateurs portaient chacun leur `isinstance`, qu'aucune entrée ne
+    pouvait distinguer de son absence : un `.get` sur autre chose qu'un
+    dictionnaire lève, et `juger` rattrape. Ils sont retirés ; ce test tient ce
+    que leur retrait suppose.
+    """
+    for reponse in (None, "une chaîne", 42, ["une", "liste"]):
+        assert alpha(sources).juger(reponse) is False, reponse
+        assert gamma(GAMMA_APPRENTISSAGE).juger(reponse) is False, reponse
+
+
+def test_alpha_exige_ses_deux_morceaux(sources) -> None:
+    """Juste sur le changelog et faux sur pyproject : refusé, et l'inverse aussi."""
+    mission = alpha(sources)
+    bonne = executer(mission, lambda m, t: resoudre(m, t, Registre())).reponse
+    assert mission.juger(bonne)
+
+    for champ in ("changelog.version", "pyproject.version"):
+        boiteuse = dict(bonne) | {champ: ["999.0.0"]}
+        assert not mission.juger(boiteuse), f"{champ} n'était pas réellement exigé"
+        assert not mission.juger({c: v for c, v in bonne.items() if c != champ}), champ
+
+
+def test_beta_exige_ses_trois_morceaux(sources) -> None:
+    """Et surtout les deux qui interdisent d'inventer.
+
+    Les deux `not in` sont le cœur de BETA : ils refusent une réponse qui
+    comblerait ce qu'elle n'a pas pu lire. Aucun test ne leur avait jamais donné
+    une réponse qui comble.
+    """
+    mission = beta(sources)
+    bonne = executer(mission, lambda m, t: resoudre(m, t, Registre())).reponse
+    assert mission.juger(bonne)
+
+    assert not mission.juger(dict(bonne) | {"changelog.version": ["999.0.0"]})
+    assert not mission.juger(dict(bonne) | {"pyproject.version": ["3.0.0"]}), (
+        "une version inventée pour la source tronquée doit être refusée")
+    assert not mission.juger(dict(bonne) | {"notice.version": ["3.0.0"]}), (
+        "une version inventée pour la source absente doit être refusée")
+
+
+@pytest.mark.parametrize("mission_faite, champ, faux", [
+    (lambda s: gamma(GAMMA_APPRENTISSAGE), "releve.machine", ["téléphone"]),
+    (lambda s: delta(s), "ci.name", ["autre chose"]),
+    (lambda s: epsilon(s), "pyproject.version", None),
+])
+def test_chaque_mission_exige_vraiment_sa_valeur(sources, mission_faite, champ, faux) -> None:
+    """Un dictionnaire ne suffit pas : il faut la bonne valeur dedans."""
+    mission = mission_faite(sources)
+    assert not mission.juger({champ: faux})
+    assert not mission.juger({}), "une réponse vide n'est pas une réponse juste"
+
+
+def test_zeta_exige_les_deux_sources(sources) -> None:
+    """La composition n'est démontrée que si les deux valeurs sont exigées."""
+    mission = zeta(sources)
+    bonne = {"ci.name": ["CI"], "pytest.testpaths": ["tests"]}
+    assert mission.juger(bonne)
+    assert not mission.juger({"ci.name": ["CI"]})
+    assert not mission.juger({"pytest.testpaths": ["tests"]})
+    assert not mission.juger(dict(bonne) | {"ci.name": ["autre"]})

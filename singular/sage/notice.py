@@ -274,9 +274,13 @@ def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
     if progression is not None and progression["corrige"]:
         recent = progression["recent"]
         debut = progression["debut"]
+        # Le titre devient l'en-tête du rapport -- « Notice. <titre>. » -- donc
+        # il doit tenir seul. « Tu l'as déjà corrigé » donnait « Notice. Tu l'as
+        # déjà corrigé. » : un pronom sans antécédent, en première ligne de
+        # l'écran du matin. Les autres titres nomment tous leur sujet.
         return NoticeItem(
             "INFO",
-            "Tu l'as déjà corrigé",
+            "Ton écart de confiance est déjà corrigé",
             f"{constat} Mais cet écart est celui de tes {debut['verdicts']} premières "
             f"décisions : sur les {recent['verdicts']} suivantes, il est démontré "
             f"inférieur à {CALIBRATION_GAP:.0%}. Le chiffre du haut traîne ton passé. "

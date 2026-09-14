@@ -148,6 +148,15 @@ class Mission:
         Une exception dans le vérificateur ne doit jamais devenir une réussite :
         un solveur qui rendrait un objet inattendu ferait planter le juge, et
         `except` large ici est ce qui empêche ce plantage de valoir un succès.
+
+        **C'est donc ici qu'est la discipline de type, et nulle part ailleurs.**
+        Les vérificateurs des missions commençaient tous par un
+        `isinstance(reponse, dict)`. `tools/gardes_sans_test.py` les a nommés :
+        aucune entrée ne peut distinguer ces gardes de leur absence, puisqu'un
+        `.get` sur autre chose qu'un dictionnaire lève et que cette ligne-ci
+        rattrape. Ils promettaient un contrôle que celui-ci faisait déjà, et
+        seraient revenus dans chaque rapport d'audit. Un vérificateur peut donc
+        supposer ce qu'il veut : ce qui ne tient pas est un refus.
         """
         try:
             return bool(self.verifier(reponse, dict(self.sources)))

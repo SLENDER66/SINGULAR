@@ -188,6 +188,8 @@ def test_le_conseil_disparait_quand_l_ecart_est_corrige(tmp_path):
     assert item.severity == "INFO"
     assert "Baisse tes probabilités" not in item.detail
     assert "déjà corrigé" in item.title
+    assert item.title.startswith("Ton écart"), (
+        "le titre devient l'en-tête « Notice. <titre>. » : il doit tenir seul")
 
 
 def test_le_chiffre_recent_accompagne_le_reproche(tmp_path):
@@ -299,6 +301,8 @@ def test_la_ligne_de_statut_ne_contredit_pas_le_sage(tmp_path):
 
     assert "corrigee" in ligne, ligne
     assert "déjà corrigé" in item.title
+    assert item.title.startswith("Ton écart"), (
+        "le titre devient l'en-tête « Notice. <titre>. » : il doit tenir seul")
     assert "+20%" not in ligne, "la ligne affiche encore le total d'une vie"
 
 
