@@ -117,6 +117,38 @@ def test_une_approbation_ne_vaut_plus_pour_une_mission_qui_n_attend_plus(tmp_pat
     assert store.get_approval(approval_id).status is ApprovalStatus.PENDING
 
 
+def test_un_refus_ne_vaut_plus_pour_une_mission_qui_a_repris(tmp_path):
+    """Le jumeau du garde precedent, dans `reject`, et rien ne l'essayait.
+
+    Refuser est le geste prudent, donc on pourrait croire qu'il n'a pas besoin
+    d'etre garde. Il en a besoin, et pour une raison qui se mesure : `reject` ecrit
+    le verdict **puis** met la mission a BLOCKED. Si la mission a repris entre-temps,
+    RUNNING -> BLOCKED est une transition interdite -- le store la refuse -- et la
+    base garde alors une approbation REFUSEE sous une mission qui continue de
+    tourner. Une autorisation humaine rejetee qui ne bloque rien est pire que pas
+    d'autorisation du tout : elle dit qu'un humain a tranche, et rien ne suit.
+
+    Le garde refuse avant d'ecrire quoi que ce soit, donc l'approbation reste
+    PENDING et la mission son etat. Verifie en sabotant : le garde retire, le test
+    rougit sur « Transition de mission interdite », l'approbation deja passee a
+    REFUSEE.
+
+    La moitie `mission_id is not None` reste ici la meme assurance que dans
+    `approve`, pour la meme raison : une approbation sans mission ne peut pas
+    exister avec ses empreintes natives.
+    """
+    from singular.durable import MissionStatus
+
+    runtime, store, approval_id = _runtime_en_attente(tmp_path)
+    store.set_mission_status("MIS-VERDICT", MissionStatus.PLANNED)
+    store.set_mission_status("MIS-VERDICT", MissionStatus.RUNNING)
+
+    with pytest.raises(ValueError, match="plus valide pour l'état actuel"):
+        runtime.reject(approval_id)
+    assert store.get_approval(approval_id).status is ApprovalStatus.PENDING
+    assert store.get_mission_status("MIS-VERDICT") is MissionStatus.RUNNING
+
+
 @pytest.mark.parametrize("sabotage", ["effacee", "changee"])
 def test_une_liaison_d_approbation_incoherente_refuse_la_validation(tmp_path, sabotage):
     """Les deux magasins de liaison doivent dire la meme chose, et rien ne l'essayait.
