@@ -65,3 +65,69 @@ def test_le_magasin_ne_peut_plus_ecrire_une_mission_sans_identite(tmp_path):
         store.save_mission(DelegationContract("", "objectif", "résultat",
                                               autonomy=Autonomy.EXECUTE_AUTHORIZED))
     assert store.load_mission("") is None
+
+
+# --- les quatre champs de texte, que rien n'essayait -----------------------------
+#
+# Ce fichier ne verifiait que les trois nombres. Les quatre champs de texte d'une
+# action n'avaient aucun temoin, et ce ne sont pas des etiquettes : l'identifiant
+# relie l'action a son autorisation et a son resultat, le contrat dit quelle
+# delegation la couvre, la capacite nommee est lue par la politique, et le jeton
+# d'execution designe le code autorise a la faire.
+
+
+@pytest.mark.parametrize("champ", ["id", "name", "description"])
+@pytest.mark.parametrize("vide", ["", "   ", "\t"])
+def test_action_request_exige_identifiant_nom_et_description(champ, vide):
+    """Les trois moities du meme garde, jouees separement.
+
+    Une action sans identifiant ne peut etre rapprochee ni de l'autorisation qui la
+    couvre ni du resultat qu'elle produit -- et le gouverneur, la politique et le
+    rapport global la nomment tous par cet identifiant.
+    """
+    valeurs = {"name": "bounded", "description": "bounded action", "impact": 1.0,
+               "risk": 1.0, "reversibility": 9.0}
+    if champ == "id":
+        valeurs["id"] = vide
+    else:
+        valeurs[champ] = vide
+    with pytest.raises(ValueError, match="id, name and description cannot be empty"):
+        ActionRequest(**valeurs)
+
+
+@pytest.mark.parametrize("vide", ["", "   "])
+def test_action_request_refuse_un_contrat_blanc(vide):
+    """`None` dit « aucun contrat » ; une chaine blanche ne dit rien du tout.
+
+    Le gouverneur compare `action.contract_id` au contrat de mission et laisse
+    passer `None` -- « pas de contrat precis ». Une chaine blanche ne serait ni l'un
+    ni l'autre : elle ne correspondrait a aucune mission tout en pretendant en
+    nommer une.
+    """
+    with pytest.raises(ValueError, match="contract_id cannot be blank"):
+        ActionRequest("bounded", "bounded action", 1, 1, 9, contract_id=vide)
+
+
+@pytest.mark.parametrize("vide", ["", "   "])
+def test_action_request_refuse_une_capacite_blanche(vide):
+    """La capacite **nommee**, celle que la politique resout dans son registre."""
+    with pytest.raises(ValueError, match="capability cannot be blank"):
+        ActionRequest("bounded", "bounded action", 1, 1, 9, capability=vide)
+
+
+@pytest.mark.parametrize("vide", ["", "   "])
+def test_action_request_refuse_un_jeton_d_execution_blanc(vide):
+    with pytest.raises(ValueError, match="execution_capability cannot be blank"):
+        ActionRequest("bounded", "bounded action", 1, 1, 9, execution_capability=vide)
+
+
+@pytest.mark.parametrize("jeton", ["handler", "exec_1", "CAP_x", " cap_x"])
+def test_action_request_exige_un_jeton_opaque(jeton):
+    """Le jeton d'execution n'est pas un nom : c'est une cle de registre.
+
+    Le prefixe `cap_` est ce qui distingue « quel code » de « est-ce permis ». La
+    frontiere refuse deja une decision dont la cible n'a pas ce prefixe ; ici c'est
+    refuse a la source, sur l'action elle-meme.
+    """
+    with pytest.raises(ValueError, match="must be an opaque cap_ token"):
+        ActionRequest("bounded", "bounded action", 1, 1, 9, execution_capability=jeton)
