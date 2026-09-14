@@ -207,7 +207,42 @@ L0 : elle observe et rend un rapport.
 
 ---
 
-## 6. Kill / rollback
+## 6. Ce que l'audit adversarial a trouvé
+
+`tools/gardes_sans_test.py` neutralise chaque refus, un par un, et nomme ceux
+qu'aucun test ne rattrape. Genesis n'était dans aucun de ses deux groupes — il ne
+tourne ni les matins ni à la frontière — et c'est lui qui en avait le plus besoin :
+tout ce que ce document affirme repose sur ce que le banc refuse.
+
+Premier passage : **treize refus survivants sur vingt-deux**, tous dans le code
+écrit le jour même.
+
+| ce qui survivait | ce que ça voulait dire |
+|---|---|
+| `Mission.juger` : `except → return False` | **un vérificateur qui plante valait un succès**, et rien ne l'aurait dit |
+| les deux morceaux d'ALPHA, les trois de BETA, un de DELTA, d'EPSILON, de ZETA | aucun vérificateur n'avait jamais vu une réponse juste partout **sauf à un endroit** |
+| six `isinstance(reponse, dict)` | moitiés mortes : `juger` rattrape déjà, aucune entrée ne les distingue de leur absence |
+
+Les deux premières lignes sont des trous, et le premier est le pire que Genesis
+pouvait avoir : la garantie fail-closed du juge était écrite dans une docstring
+et nulle part ailleurs. La troisième est une moitié morte au sens de l'outil —
+elle promettait un contrôle fait ailleurs et serait revenue dans chaque rapport.
+La discipline de type n'a donc plus qu'un domicile, `juger`, et ce que son
+retrait suppose est testé.
+
+Chaque correction est vérifiée par l'inverse : le mutant remis en place fait
+échouer la suite, et le retirer la fait repasser.
+
+**Deuxième passage, après correction : zéro survivant sur treize mutés.** Treize
+et non vingt-deux, parce que les six moitiés mortes ont été retirées et que deux
+conditions ont perdu un terme. Chaque refus que Genesis porte a maintenant un
+témoin, et c'est le seul argument sérieux en faveur du chiffre positif de la
+section 4 — sans ça, le banc mesurait sa propre complaisance.
+
+L'outil coûte une dizaine de minutes par groupe et ne tourne pas dans le CI.
+C'est un instrument d'audit : il se relance quand on touche à ce qu'il mesure.
+
+## 7. Kill / rollback
 
 Le paquet entier est supprimable sans rien casser d'autre : rien dans
 `singular/` n'importe `singular.genesis`. C'est vérifiable en une commande
@@ -219,7 +254,7 @@ s'incrémente et les preuves repartent à zéro.
 
 ---
 
-## 7. Limites connues
+## 8. Limites connues
 
 * **Le registre est en mémoire.** Rien ne survit à un redémarrage. Le jour où
   Genesis devra persister, ce sera `DurableCapabilityStore` qui portera ça — pas
@@ -245,7 +280,7 @@ s'incrémente et les preuves repartent à zéro.
 
 ---
 
-## 8. La prochaine action justifiée
+## 9. La prochaine action justifiée
 
 Dans l'ordre où elle se justifie techniquement, sans que rien ici ne soit
 promis :

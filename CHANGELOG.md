@@ -23,7 +23,9 @@ temoin rendaient le mot « verifiee » plus faible qu'il n'en avait l'air.
   dans chaque rapport d'audit. Retires, et ce que leur retrait suppose est teste.
 
 Chaque correction est verifiee par l'inverse : le mutant remis en place fait
-echouer la suite, et le retirer la fait repasser.
+echouer la suite, et le retirer la fait repasser. **Et l'audit a ete relance :
+zero survivant sur treize mutes** -- treize et non vingt-deux, les six moities
+mortes ayant ete retirees. Chaque refus que Genesis porte a maintenant un temoin.
 
 ## 3.34.0 — Un test qui couvrait aucune des deux moitiés qu'il visait
 
