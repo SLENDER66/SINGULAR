@@ -535,7 +535,8 @@ n'est plus de la malchance » est une affirmation, et elle doit être vraie.
 Le Sage calcule donc, exactement, à quelle fréquence des probabilités **justes**
 produiraient un écart au moins aussi grand, et il te donne le nombre : « une
 fois sur 6 », « une fois sur 117 ». En dessous d'une fois sur vingt, il conclut
-et te conseille de baisser tes probabilités — **quel que soit l'écart**. Au-dessus,
+et te dit quoi corriger — **quel que soit l'écart** ; ce qu'il te dit de corriger
+dépend de la section suivante. Au-dessus,
 il ne conclut pas : il montre l'écart s'il saute aux yeux (quinze points ou plus)
 et te dit de le regarder sans le corriger, et il se tait s'il est à la fois petit
 et incertain.
@@ -554,6 +555,39 @@ paris à 75 %, n'en gagner qu'un arrive **une fois sur six** par pur hasard :
 l'outil conseillait de corriger un jugement que rien ne montrait faux. Corriger
 un jugement juste, c'est le dérégler — sur la seule question pour laquelle ce
 journal existe.
+
+### Ton écart a une date
+
+Le chiffre du haut couvre **toute la vie de ton journal**. Si tu te surestimais
+de trente points en juin et plus du tout en septembre, il affiche encore un gros
+écart, et il te conseillait de baisser des probabilités que tu avais déjà
+baissées. Corriger un jugement devenu juste, c'est le dérégler : c'est le même
+défaut qu'au-dessus, une tranche de temps plus loin.
+
+Dès six verdicts, le journal est donc coupé en deux moitiés, **dans l'ordre où
+les décisions ont été prises** — l'instant du jugement, pas celui du verdict — et
+chaque moitié est mesurée seule. Ce que tu lis change alors :
+
+- l'écart de ta moitié récente est donné avec le reproche, et c'est **lui**
+  qu'on te dit de corriger, pas le chiffre du haut. « Tes trente plus récentes
+  **tranchées** » : une décision plus fraîche qui attend encore son verdict n'y
+  est pas, et le mot est là pour que tu ne comptes pas les mauvaises ;
+- quand la première moitié montrait un écart démontré et que la seconde démontre
+  qu'il est passé sous les quinze points, le reproche disparaît : « tu l'as déjà
+  corrigé ». La vignette du rapport bascule sur le chiffre récent et s'éteint,
+  au lieu de rougir sur un total qui traîne ton passé.
+
+**Démontrer qu'un écart est devenu petit demande beaucoup plus de verdicts que
+démontrer qu'il existe** — de l'ordre de quarante dans la moitié récente, donc
+quatre-vingts en tout. C'est voulu. Un écart qu'on n'arrive plus à démontrer
+n'est pas un écart démontré nul : se taire faute de preuve et appeler ce silence
+« c'est corrigé » serait déclarer victoire sur du bruit. Le Sage suppose donc
+l'inverse — que tu es toujours biaisé — et ne lâche l'hypothèse que si tes
+résultats la rendent improbable.
+
+Une limite, dite plutôt que cachée : une décision récente dont l'horizon court
+encore n'a pas de verdict et n'entre nulle part. Ta moitié récente penche donc
+vers les horizons courts, et une amélioration lue ici vaut d'abord pour eux.
 
 Le calcul tient compte de **chaque** probabilité, pas de leur moyenne. Deux
 paris à 5 % et un à 95 %, tous perdus : la moyenne les ramènerait à 35 % et

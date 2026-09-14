@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.31.0 — Ton écart a une date
+
+La calibration mesurait toute la vie du journal d'un seul bloc. Quelqu'un qui se
+surestimait de trente points en juin et plus du tout en septembre lisait donc,
+chaque matin, « tu te surestimes de +15 % — baisse tes probabilités d'autant ».
+Suivre ce conseil aurait déréglé un jugement devenu juste, et `notice.py` écrit
+déjà, pour le petit échantillon, que corriger un jugement juste c'est le
+dérégler. Le défaut était le même, une tranche de temps plus loin.
+
+- **Le journal se coupe en deux moitiés** dès six verdicts, dans l'ordre où les
+  décisions ont été prises — l'instant du jugement, pas celui du verdict. Une
+  reprise (`import`) qui écrit d'anciennes décisions après des récentes range
+  donc le passé du bon côté ; un test le tient.
+- **Le reproche donne le chiffre récent** et dit de corriger d'après lui.
+  « Baisse tes probabilités d'autant » ne subsiste que tant qu'il n'y a qu'un
+  seul chiffre — `d'autant` doit vouloir dire quelque chose.
+- **« Tu l'as déjà corrigé »** remplace le reproche quand la première moitié
+  montrait un écart que le hasard n'explique pas *et* que la seconde démontre un
+  écart passé sous les quinze points. Les deux, sinon rien.
+- **On ne conclut pas depuis un silence.** Un écart qu'on n'arrive plus à
+  démontrer n'est pas un écart démontré nul. `chance_d_un_ecart_moindre()`
+  renverse donc la charge : elle suppose le biais et calcule la chance de
+  paraître aussi juste en l'ayant. Il faut une quarantaine de verdicts récents
+  pour que l'hypothèse tombe, contre quelques-uns pour établir un écart. Exact,
+  déterministe, sans réseau ni modèle, comme sa voisine.
+- **La vignette suit la phrase.** C'était la troisième fois pour celle-ci : le
+  rapport web et `review` affichaient le total d'une vie en rouge pendant que
+  l'observation, juste en dessous, disait que c'était corrigé. Le moteur tranche,
+  les interfaces lisent `progression`.
+- **Le port iOS suit**, et un vecteur de soixante entrées épingle la bascule :
+  sans lui, la règle vivrait dans deux moteurs et ne serait éprouvée que dans un.
+  Le Swift est écrit, pas compilé — aucun compilateur n'est installable ici, et
+  c'est la limite déjà déclarée pour tout le port.
+
 ## 3.30.0 — Deux chiffres justes qui se lisaient faux, et l'export décalé
 
 - **`review`** : « 16h encore sans verdict (5 ouvertes, 5 en retard) ». Les

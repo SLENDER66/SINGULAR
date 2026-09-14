@@ -910,6 +910,13 @@ class DecisionJournal:
             # un écart vient du hasard, et c'est cette question-là que le
             # journal existe pour trancher.
             "resolved_probabilities": [e.probability for e in resolved],
+            # Les mêmes verdicts, dans le même ordre, ramenés à « c'est arrivé
+            # ou non ». La moyenne ne dit pas *quand* il s'est trompé : un écart
+            # corrigé il y a deux mois pèse encore, à l'identique, dans le
+            # chiffre d'aujourd'hui. Répondre à « est-ce que je m'améliore ? »
+            # demande les résultats un par un, et l'ordre de ce journal est
+            # celui de `created_at` -- l'instant où le jugement a été porté.
+            "resolved_outcomes": [1 if e.status is Status.HAPPENED else 0 for e in resolved],
             "mean_brier": round(sum(brier) / len(brier), 4) if brier else None,
             "mean_probability": round(mean_probability, 2) if mean_probability is not None else None,
             "hit_rate": round(hit_rate, 2) if hit_rate is not None else None,

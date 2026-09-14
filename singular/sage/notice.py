@@ -104,6 +104,8 @@ class Notice:
     generated_at: str = ""
     #: `None` tant qu'il n'y a pas de quoi en parler. Voir `calibration_verdict`.
     calibration: dict[str, Any] | None = None
+    #: L'écart des deux moitiés du journal. Voir `calibration_progression`.
+    progression: dict[str, Any] | None = None
 
     @property
     def severity(self) -> str:
@@ -117,6 +119,7 @@ class Notice:
             "report": self.report,
             "generated_at": self.generated_at,
             "calibration": self.calibration,
+            "progression": self.progression,
         }
 
 
@@ -214,6 +217,24 @@ def foundation_item(report: dict[str, Any]) -> NoticeItem | None:
     )
 
 
+def _distribution(probabilities: list[float]) -> list[float]:
+    """La loi du nombre de réussites, exacte, quand chaque pari a sa probabilité.
+
+    Chaque pari déplace une part `p` du poids vers « une réussite de plus ».
+    Deux questions s'en servent — « son écart vient-il du hasard ? » et « son
+    écart est-il devenu petit ? » — et elles la calculaient chacune de leur
+    côté avant que la seconde existe.
+    """
+    distribution = [1.0]
+    for p in probabilities:
+        suivante = [0.0] * (len(distribution) + 1)
+        for reussites, poids in enumerate(distribution):
+            suivante[reussites] += poids * (1.0 - p)
+            suivante[reussites + 1] += poids * p
+        distribution = suivante
+    return distribution
+
+
 def chance_du_hasard(probabilities: list[float], hits: int) -> float:
     """La chance qu'un écart au moins aussi grand sorte de probabilités justes.
 
@@ -232,17 +253,47 @@ def chance_du_hasard(probabilities: list[float], hits: int) -> float:
     """
     if not probabilities:
         return 1.0
-    distribution = [1.0]
-    for p in probabilities:
-        suivante = [0.0] * (len(distribution) + 1)
-        for reussites, poids in enumerate(distribution):
-            suivante[reussites] += poids * (1.0 - p)
-            suivante[reussites + 1] += poids * p
-        distribution = suivante
+    distribution = _distribution(probabilities)
     attendu = sum(probabilities)
     ecart = abs(hits - attendu)
     return sum(poids for reussites, poids in enumerate(distribution)
                if abs(reussites - attendu) >= ecart - 1e-9)
+
+
+def chance_d_un_ecart_moindre(probabilities: list[float], hits: int,
+                              borne: float) -> float:
+    """La chance de paraître aussi juste **en étant** biaisé d'au moins `borne`.
+
+    `chance_du_hasard` répond à « son écart peut-il venir du hasard ? ». Elle ne
+    répond pas à la question inverse, et c'est celle-là qui décide s'il faut se
+    taire : « son écart est-il devenu petit ? ». Un écart non démontré n'est pas
+    un écart démontré nul — sur six verdicts, presque rien n'est démontrable, et
+    conclure « c'est corrigé » parce que la preuve manque serait exactement le
+    défaut que ce fichier reproche déjà à l'autre bord.
+
+    On renverse donc la charge. On suppose qu'il se surestime d'au moins
+    `borne` : chacune de ses prédictions à `p` n'arriverait qu'à `p - borne`.
+    Sous cette hypothèse, quelle chance de réussir au moins autant qu'il a
+    réussi ? Si elle est infime, l'hypothèse tombe. Le symétrique tombe de la
+    même façon pour la sous-estimation, et c'est le plus grand des deux qui est
+    rendu : il faut écarter les deux pour dire que l'écart est petit.
+
+    Limite assumée : une prédiction annoncée en dessous de `borne` ne peut pas
+    porter un biais de `borne` — `0,10 - 0,15` n'est pas une probabilité. Elle
+    entre alors à zéro, la valeur réalisable la plus proche, et l'hypothèse
+    testée est un peu plus faible qu'annoncé sur ces paris-là.
+
+    Déterministe, sans réseau, sans modèle, comme sa voisine.
+    """
+    if not probabilities or borne <= 0:
+        return 1.0
+    surestime = [min(1.0, max(0.0, p - borne)) for p in probabilities]
+    sousestime = [min(1.0, max(0.0, p + borne)) for p in probabilities]
+    haut = sum(poids for reussites, poids in enumerate(_distribution(surestime))
+               if reussites >= hits)
+    bas = sum(poids for reussites, poids in enumerate(_distribution(sousestime))
+              if reussites <= hits)
+    return max(haut, bas)
 
 
 def _une_fois_sur(chance: float) -> str:
@@ -284,6 +335,61 @@ def calibration_verdict(report: dict[str, Any]) -> dict[str, Any] | None:
         # « démontré et d'au moins quinze points », ce qui rendait muet un écart
         # de dix points établi sur deux cents verdicts.
         "conclusive": hasard <= CALIBRATION_HASARD and abs(gap) >= CALIBRATION_ARRONDI,
+    }
+
+
+def _periode(probabilites: list[float], resultats: list[int]) -> dict[str, Any]:
+    """Ce que vaut sa confiance sur une tranche de son journal."""
+    verdicts = len(resultats)
+    # « Arrivé ou non », pas « combien » : un rapport d'une autre version, ou
+    # fabriqué à la main, ne doit pas pouvoir gonfler le compte des réussites
+    # au-dessus du nombre de verdicts et rendre une probabilité impossible.
+    hits = sum(1 for resultat in resultats if resultat)
+    gap = round(sum(probabilites) / verdicts - hits / verdicts, 2) or 0.0
+    hasard = chance_du_hasard(probabilites, hits)
+    return {
+        "verdicts": verdicts,
+        "gap": gap,
+        "chance": hasard,
+        "conclusive": hasard <= CALIBRATION_HASARD and abs(gap) >= CALIBRATION_ARRONDI,
+        "equivalence": chance_d_un_ecart_moindre(probabilites, hits, CALIBRATION_GAP),
+    }
+
+
+def calibration_progression(report: dict[str, Any]) -> dict[str, Any] | None:
+    """Son écart a une date, et le chiffre du jour ne la portait pas.
+
+    `calibration_verdict` mesure toute la vie du journal d'un seul bloc. Un
+    biais corrigé il y a deux mois y pèse donc autant qu'hier, et la Notice
+    continue de dire « baisse tes probabilités d'autant » à quelqu'un qui les a
+    déjà baissées. Corriger un jugement juste, c'est le dérégler : ce fichier le
+    dit déjà pour le petit échantillon, et le laissait faire pour le passé.
+
+    Le journal est coupé en deux moitiés, **dans l'ordre où les décisions ont
+    été prises** — c'est l'instant du jugement, pas celui du verdict. Chaque
+    moitié est mesurée seule. `corrige` n'est vrai que si la première moitié
+    montre un écart que le hasard n'explique pas *et* que la seconde démontre un
+    écart inférieur à `CALIBRATION_GAP`, au sens de `chance_d_un_ecart_moindre`.
+    Les deux, sinon rien : une moitié récente muette est une moitié sans preuve,
+    pas une preuve d'amélioration.
+
+    Limite assumée : une décision récente dont l'horizon court encore n'a pas de
+    verdict et n'entre nulle part. La moitié récente penche donc vers les
+    horizons courts, et une amélioration lue ici ne vaut d'abord que pour eux.
+
+    `None` tant qu'il n'y a pas deux moitiés dignes de ce nom.
+    """
+    probabilites = list(report.get("resolved_probabilities") or [])
+    resultats = list(report.get("resolved_outcomes") or [])
+    if len(probabilites) != len(resultats) or len(resultats) < 2 * CALIBRATION_MINIMUM:
+        return None
+    coupe = len(resultats) // 2
+    debut = _periode(probabilites[:coupe], resultats[:coupe])
+    recent = _periode(probabilites[coupe:], resultats[coupe:])
+    return {
+        "debut": debut,
+        "recent": recent,
+        "corrige": debut["conclusive"] and recent["equivalence"] <= CALIBRATION_HASARD,
     }
 
 
@@ -334,20 +440,51 @@ def _calibration_item(report: dict[str, Any]) -> NoticeItem | None:
             "ce soit. Regarde-le sans le corriger.",
         )
 
+    progression = calibration_progression(report)
+    if progression is not None and progression["corrige"]:
+        recent = progression["recent"]
+        debut = progression["debut"]
+        return NoticeItem(
+            "INFO",
+            "Tu l'as déjà corrigé",
+            f"{constat} Mais cet écart est celui de tes {debut['verdicts']} premières "
+            f"décisions : sur les {recent['verdicts']} suivantes, il est démontré "
+            f"inférieur à {CALIBRATION_GAP:.0%}. Le chiffre du haut traîne ton passé. "
+            "Ne corrige pas ce que tu as déjà corrigé.",
+        )
+
+    # Le chiffre du haut couvre toute la vie du journal. Dire de combien
+    # corriger sans dire d'où sort le nombre, c'est laisser corriger d'après un
+    # comportement qui n'est peut-être plus le sien. La moitié récente est un
+    # fait, pas une conclusion : elle se donne, elle ne s'interprète pas.
+    # « Baisse tes probabilités d'autant » ne se dit que si `d'autant` veut dire
+    # quelque chose, c'est-à-dire tant qu'on n'a qu'un seul chiffre. Dès qu'il y
+    # a deux moitiés, elles peuvent se contredire, et prescrire le chiffre du
+    # haut reviendrait à faire corriger un comportement qui n'est plus le sien.
+    # La moitié récente est donnée comme un fait ; c'est elle qu'il regarde.
+    if progression is None:
+        surestime = "Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+        sousestime = "Tu réussis plus souvent que tu ne l'oses, tes paris sont trop petits."
+    else:
+        recent = progression["recent"]
+        depuis = (f" Sur tes {recent['verdicts']} plus récentes tranchées, l'écart est de "
+                  f"{recent['gap']:+.0%} :")
+        surestime = (f"{depuis.lstrip()} c'est ce chiffre-là qui dit où tu en es "
+                     "aujourd'hui, pas celui du haut. Corrige d'après lui.")
+        sousestime = surestime
+
     if gap > 0:
         return NoticeItem(
             "ATTENTION",
             f"Tu te surestimes de {gap:+.0%}",
             f"{constat} Sur {verdicts} verdicts, ce n'est plus de la malchance : le "
-            f"hasard seul produirait cet écart {_une_fois_sur(hasard)}. "
-            "Baisse tes probabilités d'autant, ou choisis des paris plus sûrs.",
+            f"hasard seul produirait cet écart {_une_fois_sur(hasard)}. {surestime}",
         )
     return NoticeItem(
         "INFO",
         f"Tu te sous-estimes de {gap:+.0%}",
         f"{constat} Sur {verdicts} verdicts, ce n'est plus de la malchance : le hasard "
-        f"seul produirait cet écart {_une_fois_sur(hasard)}. Tu réussis plus souvent "
-        "que tu ne l'oses, tes paris sont trop petits.",
+        f"seul produirait cet écart {_une_fois_sur(hasard)}. {sousestime}",
     )
 
 
@@ -679,10 +816,12 @@ def build_notice(journal: DecisionJournal, *, now: datetime | None = None,
         report=report,
         generated_at=moment.isoformat(),
         calibration=calibration_verdict(report),
+        progression=calibration_progression(report),
     )
 
 
 __all__ = ["CALIBRATION_ARRONDI", "CALIBRATION_GAP", "CALIBRATION_HASARD", "FOUNDATION", "LATE_DAYS", "UNPRICED_HOURS",
            "UNPRICED_WINDOW", "foundation_item",
-           "Notice", "NoticeItem", "build_notice", "calibration_verdict", "chance_du_hasard",
+           "Notice", "NoticeItem", "build_notice", "calibration_progression",
+           "calibration_verdict", "chance_du_hasard", "chance_d_un_ecart_moindre",
            "observations"]
