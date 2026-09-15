@@ -44,6 +44,7 @@ from ..saisie import (
     CHAMP_DECISION,
     CONFLIT_PAGE,
     introuvable,
+    nom_du_nombre,
     verifie_decision,
     verifie_texte,
 )
@@ -161,12 +162,19 @@ def _tier(raw: Any) -> Tier:
 
 
 def _number(payload: dict[str, Any], name: str, *, cast) -> Any:
+    """Un nombre obligatoire, refusé sous le nom que le formulaire affiche.
+
+    Il refusait avec la clef JSON -- « probability » est obligatoire -- un mot
+    qui n'est sur aucun écran. C'est le défaut que `singular.saisie` a corrigé
+    pour les trois textes, et qui était resté ici pour les trois nombres.
+    """
+    affiche = nom_du_nombre(name)
     if name not in payload:
-        raise SageError(HTTPStatus.BAD_REQUEST, f"« {name} » est obligatoire")
+        raise SageError(HTTPStatus.BAD_REQUEST, f"{affiche} : ce champ est obligatoire")
     try:
         return cast(payload[name])
     except (TypeError, ValueError):
-        raise SageError(HTTPStatus.BAD_REQUEST, f"« {name} » doit être un nombre") from None
+        raise SageError(HTTPStatus.BAD_REQUEST, f"{affiche} : un nombre est attendu") from None
 
 
 def _gain(payload: dict[str, Any]) -> float | None:

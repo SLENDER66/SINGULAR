@@ -113,6 +113,35 @@ CHAMP_DECISION = "La décision"
 CHAMP_ACTION = "Ce que tu vas faire"
 CHAMP_ATTENDU = "Ce que tu attends"
 
+#: Les trois nombres, pour la même raison et avec le même retard.
+#:
+#: Le commentaire ci-dessus a été écrit en corrigeant les textes, et il cite le
+#: défaut mot pour mot : « il refusait avec la clef JSON, « title » est
+#: obligatoire, un mot qu'il ne voit nulle part à l'écran ». Les trois nombres du
+#: même formulaire ont gardé ce défaut, trois lignes plus loin dans le même
+#: fichier de serveur — l'écran dit « Probabilité que ça arrive », le refus
+#: disait « probability ». Une règle appliquée à la moitié de ses cas.
+CHAMP_PROBABILITE = "La probabilité"
+CHAMP_HEURES = "Les heures que ça coûte"
+CHAMP_HORIZON = "Le délai de vérification"
+
+#: La clef JSON de chaque nombre, et son nom à l'écran. Le serveur lit ici au
+#: lieu d'écrire : une clef inconnue lève plutôt que de retomber en silence sur
+#: le mot anglais, sinon un quatrième nombre ajouté demain refuserait en anglais
+#: sans que rien ne le dise.
+CHAMPS_NOMBRES = {
+    "probability": CHAMP_PROBABILITE,
+    "cost_hours": CHAMP_HEURES,
+    "horizon_days": CHAMP_HORIZON,
+}
+
+
+def nom_du_nombre(clef: str) -> str:
+    """Le nom d'écran d'un champ numérique, ou une erreur franche."""
+    if clef not in CHAMPS_NOMBRES:
+        raise KeyError(f"aucun nom d'écran pour « {clef} » : ajoute-le à CHAMPS_NOMBRES")
+    return CHAMPS_NOMBRES[clef]
+
 
 def verifie_texte(nom: str, valeur: object) -> None:
     """Une ligne ecrite, pas une ligne vide.
@@ -212,6 +241,9 @@ def introuvable(entry_id: str) -> str:
     return f"{entry_id} n'est dans aucune ligne de ce journal (python3 -m singular list)."
 
 
-__all__ = ["CHAMP_ACTION", "CHAMP_ATTENDU", "CHAMP_DECISION","CONFLIT", "CONFLIT_CLAVIER", "CONFLIT_PAGE", "REPRISE_REFUSEE", "entier", "introuvable", "nombre",
+__all__ = ["CHAMP_ACTION", "CHAMP_ATTENDU", "CHAMP_DECISION", "CHAMP_HEURES",
+           "CHAMP_HORIZON", "CHAMP_PROBABILITE", "CHAMPS_NOMBRES",
+           "CONFLIT", "CONFLIT_CLAVIER", "CONFLIT_PAGE", "REPRISE_REFUSEE",
+           "entier", "introuvable", "nom_du_nombre", "nombre",
            "verifie_decision", "verifie_gain",
            "verifie_heures", "verifie_jours", "verifie_probabilite", "verifie_texte"]

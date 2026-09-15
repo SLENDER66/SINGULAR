@@ -611,15 +611,93 @@ def test_le_serveur_nomme_le_champ_comme_il_s_affiche(tmp_path):
             f"le refus nomme la clef JSON « {clef} » : ce mot n'est sur aucun ecran")
 
 
+#: Les trois nombres d'une decision : leur clef JSON et ce que le refus doit dire.
+NOMBRES_DU_FORMULAIRE = ("probability", "cost_hours", "horizon_days")
+
+
+@pytest.mark.parametrize("clef", NOMBRES_DU_FORMULAIRE)
+def test_le_serveur_refuse_un_nombre_absent_en_le_nommant(tmp_path, clef):
+    """Le garde n'avait aucun temoin, et il refusait sous un mot invisible.
+
+    `_number` leve quand la clef manque. Neutralise, `payload[clef]` leve un
+    `KeyError` nu : le formulaire recoit un 500 au lieu d'un refus qui dit quoi
+    corriger. Aucun test ne postait un corps sans l'un des trois nombres.
+
+    Et le refus nommait la clef JSON -- « probability » est obligatoire -- un mot
+    qui n'est sur aucun ecran : le formulaire dit « Probabilité que ça arrive ».
+    C'est exactement le defaut que `singular.saisie` a corrige pour les trois
+    textes, cite dans son propre commentaire, et reste pour les trois nombres.
+    """
+    from singular.sage.server import SageApp, SageError
+    from singular.saisie import CHAMPS_NOMBRES
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    complet = {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+               "tier": "REVENUS", "cost_hours": 2, "horizon_days": 14}
+    sans = {c: v for c, v in complet.items() if c != clef}
+
+    with pytest.raises(SageError) as refus:
+        app.add(sans)
+    assert refus.value.message.startswith(CHAMPS_NOMBRES[clef]), refus.value.message
+    assert clef not in refus.value.message, (
+        f"le refus nomme la clef JSON « {clef} » : ce mot n'est sur aucun ecran")
+
+
+@pytest.mark.parametrize("clef", NOMBRES_DU_FORMULAIRE)
+def test_le_serveur_refuse_un_nombre_illisible_en_le_nommant(tmp_path, clef):
+    """L'autre moitie du meme garde : present mais pas un nombre."""
+    from singular.sage.server import SageApp, SageError
+    from singular.saisie import CHAMPS_NOMBRES
+
+    app = SageApp(DecisionJournal(tmp_path / "journal.db"))
+    complet = {"title": "T", "action": "a", "predicted": "p", "probability": 0.6,
+               "tier": "REVENUS", "cost_hours": 2, "horizon_days": 14}
+
+    with pytest.raises(SageError) as refus:
+        app.add(complet | {clef: "pas un nombre"})
+    assert refus.value.message.startswith(CHAMPS_NOMBRES[clef]), refus.value.message
+    assert clef not in refus.value.message
+
+
+def test_aucun_nombre_du_serveur_ne_refuse_sans_nom_d_ecran():
+    """Un quatrieme nombre ajoute demain ne doit pas pouvoir refuser en anglais.
+
+    La liste ci-dessus est ecrite a la main ; celle-ci est lue dans le code. Si
+    `_number` est appele sur une clef qui n'a pas de nom d'ecran, `nom_du_nombre`
+    leve -- mais il leverait en production, devant l'utilisateur. Ce test le dit
+    avant, et il dit aussi quand la liste parametree ci-dessus a vieilli.
+    """
+    import ast
+
+    from singular.saisie import CHAMPS_NOMBRES
+
+    racine = pathlib.Path(__file__).resolve().parent.parent
+    arbre = ast.parse((racine / "singular/sage/server.py").read_text(encoding="utf-8"))
+    lues = {noeud.args[1].value for noeud in ast.walk(arbre)
+            if isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Name)
+            and noeud.func.id == "_number" and len(noeud.args) >= 2
+            and isinstance(noeud.args[1], ast.Constant)}
+
+    assert lues, "plus aucun appel a `_number` : ce test ne prouve plus rien"
+    orphelines = sorted(lues - set(CHAMPS_NOMBRES))
+    assert not orphelines, (
+        f"ces nombres refuseraient sous leur clef JSON : {orphelines}. "
+        "Ajoute-les a CHAMPS_NOMBRES dans `singular.saisie`.")
+    assert lues == set(NOMBRES_DU_FORMULAIRE), (
+        f"la liste parametree de ce fichier a vieilli : le serveur lit {sorted(lues)}")
+
+
 def test_les_noms_des_champs_n_ont_qu_un_domicile():
     """Trois chaines recopiees dans deux surfaces sont deux surfaces qui divergent."""
-    from singular.saisie import CHAMP_ACTION, CHAMP_ATTENDU, CHAMP_DECISION
+    from singular.saisie import (CHAMP_ACTION, CHAMP_ATTENDU, CHAMP_DECISION,
+                                 CHAMP_HEURES, CHAMP_HORIZON, CHAMP_PROBABILITE)
 
     racine = pathlib.Path(__file__).resolve().parent.parent
     domicile = (racine / "singular/saisie.py").read_text(encoding="utf-8")
     surfaces = [racine / "singular/__main__.py", racine / "singular/sage/server.py"]
 
-    for nom in (CHAMP_DECISION, CHAMP_ACTION, CHAMP_ATTENDU):
+    for nom in (CHAMP_DECISION, CHAMP_ACTION, CHAMP_ATTENDU,
+                CHAMP_PROBABILITE, CHAMP_HEURES, CHAMP_HORIZON):
         assert f'"{nom}"' in domicile, f"« {nom} » a quitté `singular.saisie`"
         for surface in surfaces:
             assert f'"{nom}"' not in surface.read_text(encoding="utf-8"), (
