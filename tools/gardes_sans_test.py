@@ -146,6 +146,15 @@ CIBLES_FRONTIERE = (
     # le reste depend, et il n'avait jamais vu un mutant non plus.
     "singular/durable.py",
     "singular/mission_runtime.py",
+    # Le canal d'approbation humaine. Le registre de realite l'a fait apparaitre
+    # au barreau TESTEE et pas INSTRUMENTEE : personne n'avait jamais pointe un
+    # mutant dessus. C'est pourtant lui qui decide qu'un humain a bien approuve
+    # *cette* identite -- action, capability, contrat -- et pas une autre, et
+    # c'est le controle qu'il faudra relier a la frontiere si le pipeline valide
+    # doit un jour accepter une decision escaladee. Savoir lesquels de ses refus
+    # ont un temoin passe avant d'y toucher.
+    "singular/approval_integrity.py",
+    "singular/approval_binding.py",
     # Le producteur. `validated_pipeline.py` est le seul chemin par lequel une
     # `ValidatedTrajectoryDecision` existe : tout ce que la frontiere accepte sort
     # d'ici. Il n'etait mesure par rien, et sa porte d'entree n'etait verifiee
@@ -175,6 +184,7 @@ SOUS_SUITE_FRONTIERE = (
     "tests/test_capability_declared_identity.py", "tests/test_capability_registry_lifecycle.py",
     "tests/test_capability_field_separation.py", "tests/test_decision_attestation.py",
     "tests/test_adversarial.py", "tests/test_v47_adversarial_core.py",
+    "tests/test_v41_approval_integrity.py", "tests/test_approval_durability.py",
     "tests/test_strict_execution_boundary_effects.py", "tests/test_effect_execution_boundary.py",
     "tests/test_execution_capability.py", "tests/test_effect_capability_time_of_use.py",
     "tests/test_effect_reconciliation_boundary.py", "tests/test_reconciliation_policy_drift.py",
