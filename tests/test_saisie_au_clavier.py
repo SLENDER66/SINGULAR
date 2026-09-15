@@ -105,10 +105,34 @@ JOURS = [0, 1, 14, 365, -1]
 GAINS = [None, 0.0, 1500.0, -100.0, -0.01, float("inf"), float("nan")]
 
 
+def _dans_la_borne(valeur: float) -> bool:
+    """La borne de saisie, lue dans la constante et non recopiee ici.
+
+    Elle est **volontairement plus etroite** que celle du journal : le journal
+    tient l'invariant mathematique de la chaine -- `0 < p < 1`, ce qu'un score de
+    Brier sait calculer -- et la saisie tient ce qu'une prevision honnete
+    annonce. Les deux regles ont deux raisons, donc deux domiciles.
+    """
+    from singular.saisie import PROBABILITE_MAX, PROBABILITE_MIN
+    return PROBABILITE_MIN <= valeur <= PROBABILITE_MAX
+
+
 @pytest.mark.parametrize("valeur", PROBABILITES)
 def test_the_question_and_the_journal_agree_on_a_probability(tmp_path, valeur):
-    assert _accepte_par_la_question(_verifie_probabilite, valeur) is \
-        _accepte_par_le_journal(tmp_path, probability=valeur)
+    """La question accepte ce que le journal accepte, moins la borne -- exactement.
+
+    L'egalite simple a tenu jusqu'a ce que la borne annoncee devienne la borne
+    appliquee. Le sens qui compte n'a pas bouge : **ce que la question laisse
+    passer, le journal doit l'accepter**, sinon elle ecrirait une decision que
+    l'ecriture rejette juste apres. L'autre sens cede a la borne, et la formule
+    le dit chiffre par chiffre plutot que de relacher le test en inegalite.
+    """
+    par_la_question = _accepte_par_la_question(_verifie_probabilite, valeur)
+    par_le_journal = _accepte_par_le_journal(tmp_path, probability=valeur)
+
+    if par_la_question:
+        assert par_le_journal, "la question laisse passer ce que le journal refuse"
+    assert par_la_question is (par_le_journal and _dans_la_borne(valeur))
 
 
 @pytest.mark.parametrize("valeur", HEURES)
@@ -147,6 +171,45 @@ def test_typing_percent_says_what_to_write_instead():
     with pytest.raises(ValueError) as refus:
         _verifie_probabilite(75)
     assert "pour 75 %, ecris 0.75" in sans_accents(str(refus.value))
+
+
+@pytest.mark.parametrize("valeur", [0.99, 0.96, 0.01, 0.04])
+def test_une_quasi_certitude_est_refusee_comme_le_curseur_la_refuse(valeur):
+    """La borne annoncée est désormais la borne appliquée.
+
+    Elle ne l'était qu'au curseur de la page web -- `min=5 max=95` -- pendant que
+    les deux refus du clavier la nommaient sans l'appliquer. `0.99` entrait donc
+    par le clavier et par l'API après s'être fait répondre, la fois d'avant,
+    qu'il fallait rester entre 0.05 et 0.95.
+
+    Tranché en questionnaire : c'est la borne qui devient vraie, pas la phrase
+    qui s'efface.
+    """
+    with pytest.raises(ValueError) as refus:
+        _verifie_probabilite(valeur)
+    assert "entre 0.05 et 0.95" in str(refus.value)
+
+
+@pytest.mark.parametrize("valeur", [0.05, 0.95, 0.5])
+def test_les_bornes_elles_memes_restent_acceptees(valeur):
+    """L'autre bord : le curseur atteint 5 et 95, donc le clavier les accepte."""
+    _verifie_probabilite(valeur)
+
+
+@pytest.mark.parametrize("valeur", [99, 2, 96])
+def test_le_conseil_en_pourcents_ne_propose_jamais_un_chiffre_refuse(valeur):
+    """« 99 » ne doit pas s'entendre répondre « écris 0.99 », que la borne refuse.
+
+    Le commentaire de `verifie_probabilite` reprochait déjà ça au cas « 100 » :
+    un refus qui conseille un chiffre refusé est pire que pas de conseil. Rendre
+    la borne vraie a fait renaître le même piège plus bas, à 0.95 -- d'où ce
+    test, qui le tient à la place du prochain lecteur.
+    """
+    with pytest.raises(ValueError) as refus:
+        _verifie_probabilite(valeur)
+    dit = str(refus.value)
+    assert "ecris" not in sans_accents(dit), f"« {valeur:g} » s'est vu conseiller : {dit}"
+    assert "sort des bornes" in dit
 
 
 def test_the_gain_question_reads_numbers_the_same_way(tmp_path, monkeypatch, capsys):
@@ -191,12 +254,16 @@ def test_the_phone_and_the_journal_agree_on_a_probability(tmp_path, valeur):
 
     Elle laissait le journal lever et renvoyait son message tel quel : de
     l'anglais de machine sur un ecran de six pouces. Elle verifie maintenant,
-    et ce qu'elle accepte doit rester exactement ce que le journal accepte --
-    sinon elle refuserait une decision valable, ou en laisserait passer une que
-    le journal rejette juste apres.
+    et ce qu'elle accepte doit rester ce que le journal accepte, moins la borne
+    de saisie -- sinon elle laisserait passer une decision que le journal rejette
+    juste apres, ou elle divergerait du clavier et du curseur.
     """
-    assert _accepte_par_le_telephone(tmp_path, probability=valeur) is \
-        _accepte_par_le_journal(tmp_path, probability=valeur)
+    par_le_telephone = _accepte_par_le_telephone(tmp_path, probability=valeur)
+    par_le_journal = _accepte_par_le_journal(tmp_path, probability=valeur)
+
+    if par_le_telephone:
+        assert par_le_journal, "le téléphone laisse passer ce que le journal refuse"
+    assert par_le_telephone is (par_le_journal and _dans_la_borne(valeur))
 
 
 @pytest.mark.parametrize("valeur", HEURES)

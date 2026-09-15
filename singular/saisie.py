@@ -53,25 +53,55 @@ def entier(brut: object) -> int:
     return int(nombre(brut))
 
 
+#: Les bornes de ce qu'une prevision a le droit d'annoncer, aux deux extremites.
+#:
+#: Le curseur de la page web les applique depuis toujours -- `min=5 max=95` --
+#: et les deux refus du clavier les **annonçaient** sans les appliquer : `0.99`
+#: entrait par le clavier et par l'API en se faisant repondre, la fois d'avant,
+#: « entre 0.05 et 0.95 ». Une borne vraie a une porte sur trois est une phrase
+#: fausse aux deux autres, et ce depot tient qu'une phrase fausse est un bug.
+#: Tranche en questionnaire : c'est la borne qui devient vraie, pas la phrase
+#: qui s'efface.
+PROBABILITE_MIN = 0.05
+PROBABILITE_MAX = 0.95
+
+
 def verifie_probabilite(valeur: float) -> None:
     """Entre 0.05 et 0.95, et pas en pourcents.
 
     Taper « 75 » en pensant pourcents passait les six questions suivantes du
     clavier, puis echouait a l'ecriture -- en anglais, et apres coup : tout ce
     qu'il venait de saisir etait perdu.
+
+    La borne du journal reste plus large -- `0 < p < 1`, l'invariant
+    mathematique de la chaine -- et ce n'est pas une divergence : celle-ci porte
+    ce qu'une prevision honnete annonce, celle-la ce qu'un score de Brier sait
+    calculer. Deux regles, deux raisons, deux domiciles.
     """
+    bornes = f"entre {PROBABILITE_MIN:g} et {PROBABILITE_MAX:g}"
     if not isfinite(valeur):
         raise ValueError("une probabilité, pas l'infini")
     # Strictement entre 1 et 100 : « 1 » veut dire la certitude, pas 1 %, et
     # « 100 » aussi. Les lire comme des pourcents faisait conseiller « pour
     # 100 %, ecris 1 » -- un conseil que la ligne suivante refuse.
+    #
+    # Le meme piege renait a la borne : « 99 » conseillerait « ecris 0.99 »,
+    # que la borne refuse deux lignes plus bas. Un refus qui conseille un
+    # chiffre refuse est pire que pas de conseil, donc le conseil n'est donne
+    # que si le chiffre converti passe.
     if 1 < valeur < 100:
-        raise ValueError(
-            f"entre 0.05 et 0.95, pas en pourcents -- pour {valeur:g} %, écris "
-            f"{valeur / 100:g}")
+        converti = valeur / 100
+        if PROBABILITE_MIN <= converti <= PROBABILITE_MAX:
+            raise ValueError(f"{bornes}, pas en pourcents -- pour {valeur:g} %,"
+                             f" écris {converti:g}")
+        raise ValueError(f"{bornes} : même lu en pourcents, {valeur:g} sort des bornes")
     if not 0 < valeur < 1:
-        raise ValueError("entre 0.05 et 0.95 : une certitude ne peut pas avoir tort, "
+        raise ValueError(f"{bornes} : une certitude ne peut pas avoir tort, "
                          "une impossibilité non plus")
+    if not PROBABILITE_MIN <= valeur <= PROBABILITE_MAX:
+        raise ValueError(f"{bornes} : si près d'un bord, une prévision n'apprend plus rien"
+                         " -- et un seul pari perdu à ce niveau écrase la moyenne de"
+                         " tous les autres")
 
 
 def verifie_heures(valeur: float) -> None:

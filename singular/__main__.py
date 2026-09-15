@@ -39,6 +39,8 @@ from .saisie import verifie_gain as _verifie_gain
 from .saisie import verifie_heures as _verifie_heures
 from .saisie import verifie_jours as _verifie_jours
 from .saisie import verifie_probabilite as _verifie_probabilite
+from .saisie import PROBABILITE_MAX as _PROBABILITE_MAX
+from .saisie import PROBABILITE_MIN as _PROBABILITE_MIN
 from .saisie import CHAMP_ACTION as _CHAMP_ACTION
 from .saisie import CHAMP_ATTENDU as _CHAMP_ATTENDU
 from .saisie import CHAMP_DECISION as _CHAMP_DECISION
@@ -323,7 +325,11 @@ def cmd_add(journal: DecisionJournal, args) -> int:
                       validate=lambda valeur: _verifie_texte(_CHAMP_ACTION, valeur))
         predicted = _ask("  Ce que tu attends comme résultat observable",
                          validate=lambda valeur: _verifie_texte(_CHAMP_ATTENDU, valeur))
-        probability = _ask("  Probabilité que ça arrive (0.05 à 0.95)", cast=_nombre,
+        # La borne vient de la constante : elle etait ecrite a la main ici, dans
+        # les deux refus et dans le curseur de la page, et une seule des quatre
+        # l'appliquait.
+        probability = _ask(f"  Probabilité que ça arrive ({_PROBABILITE_MIN:g} à"
+                           f" {_PROBABILITE_MAX:g})", cast=_nombre,
                            default=0.6, validate=_verifie_probabilite)
         tier = _tier_prompt()
         hours = _ask("  Heures que ça va te coûter", cast=_nombre, default=4,
