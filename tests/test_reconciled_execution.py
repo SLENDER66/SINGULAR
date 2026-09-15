@@ -278,3 +278,79 @@ def test_la_finalisation_exige_une_mission_encore_en_cours(tmp_path):
 # chemin que le code ne produit pas. L'empreinte de charge et celle de l'action, au
 # contraire, n'entrent pas dans la cle : ce sont les deux seules substitutions
 # reellement possibles, et elles ont chacune leur temoin ci-dessus.
+
+
+# --- ce que la finalisation refuse quand l'etat durable ne suit pas ------------
+
+def _preuve_complete(tmp_path):
+    """Une execution en quarantaine et sa preuve externe terminale, toutes deux vraies."""
+    store, request, coordinator = _setup(tmp_path, execution_status="RUNNING")
+    coordinator.execute(request, Provider())
+    store.mark_execution_recovery_required("EXEC-1")
+    coordinator.reconcile(request, Provider())
+    return store, request
+
+
+def test_finaliser_une_execution_inconnue_est_refuse(tmp_path):
+    """Fail-closed sur l'entree : une clef qu'aucune execution ne porte."""
+    store, request = _preuve_complete(tmp_path)
+
+    with pytest.raises(KeyError):
+        ReconciledExecutionFinalizer(store).finalize(
+            "EXEC-QUI-N-EXISTE-PAS",
+            provider=request.provider, operation=request.operation,
+            payload_fingerprint=request.payload_fingerprint,
+            action_fingerprint=request.action_fingerprint)
+
+    assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED", (
+        "et l'execution reelle n'a pas bouge")
+
+
+@pytest.mark.parametrize("champ", ["provider", "operation"])
+def test_une_preuve_dont_le_fournisseur_ou_l_operation_a_ete_reecrit_est_refusee(
+        tmp_path, champ):
+    """La preuve est trouvee par une clef qui **contient** le fournisseur et
+    l'operation ; la relire les compare quand meme.
+
+    Ça ressemble a une assurance -- une ligne trouvee sous cette clef porte
+    forcement ces valeurs. Elle ne l'est pas : la clef est une empreinte, la
+    ligne est une ligne, et rien n'empeche d'ecrire l'une sous l'autre. C'est le
+    modele de menace de ce depot, une base editee a cote du code, et ce refus est
+    la seule chose entre une preuve reetiquetee et une execution passee COMPLETED.
+
+    Les deux moities sont essayees separement : reecrire le fournisseur, puis
+    l'operation. Une seule des deux suffirait sinon a laisser l'autre sans temoin.
+    """
+    store, request = _preuve_complete(tmp_path)
+    with store._connect() as conn:
+        conn.execute(f"UPDATE external_effects SET {champ}='autre chose'")
+
+    with pytest.raises(ValueError, match="fournisseur ou à l'opération"):
+        ReconciledExecutionFinalizer(store).finalize(
+            "EXEC-1",
+            provider=request.provider, operation=request.operation,
+            payload_fingerprint=request.payload_fingerprint,
+            action_fingerprint=request.action_fingerprint)
+
+    assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED"
+
+
+def test_finaliser_une_execution_dont_la_mission_a_disparu_est_refuse(tmp_path):
+    """La mission doit exister, pas seulement etre RUNNING.
+
+    Le test voisin couvre le statut ; la moitie « la ligne n'est plus la »
+    n'avait rien. Sans elle, une execution serait fermee COMPLETED au nom d'une
+    mission absente.
+    """
+    store, request = _preuve_complete(tmp_path)
+    with store._connect() as conn:
+        conn.execute("DELETE FROM mission_states WHERE mission_id='MIS-1'")
+
+    with pytest.raises(ValueError, match="RUNNING"):
+        ReconciledExecutionFinalizer(store).finalize(
+            "EXEC-1",
+            provider=request.provider, operation=request.operation,
+            payload_fingerprint=request.payload_fingerprint,
+            action_fingerprint=request.action_fingerprint)
+
+    assert store.get_execution("EXEC-1")["status"] == "RECOVERY_REQUIRED"
