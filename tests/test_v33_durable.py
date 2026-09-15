@@ -402,3 +402,84 @@ def test_seule_une_execution_en_recuperation_se_confirme_par_preuve(tmp_path: Pa
     with pytest.raises(ValueError, match="Seule une exécution RECOVERY_REQUIRED"):
         store.confirm_execution_recovery_from_effect("cle-preuve2", "cle-fournisseur")
     assert store.get_execution("cle-preuve2")["status"] == etat
+
+
+# --- ce que le socle durable refuse quand l'identifiant n'existe pas -----------
+#
+# Quinze des dix-huit survivants de `durable.py` a la passe du 15 septembre 2026
+# sont la meme forme : `if row is None: raise KeyError(...)`. Ils etaient
+# invisibles a l'outil de mutation tant que sa liste de refus ne portait pas
+# `KeyError`, et aucun n'avait de temoin.
+#
+# L'invariant qu'ils portent ensemble vaut mieux qu'un test chacun : **une
+# methode du magasin qui prend un identifiant refuse quand il est inconnu**. Elle
+# ne rend jamais un resultat plausible, ni `None` qu'un appelant lirait comme
+# « rien a faire ». C'est le fail-closed de la couche qui tient les missions, les
+# approbations et les executions.
+
+#: Chaque methode publique qui prend un identifiant, et l'appel qui la nourrit
+#: d'un identifiant que rien n'a jamais ecrit.
+LECTURES_PAR_IDENTIFIANT = {
+    "get_mission_status": lambda s: s.get_mission_status("MIS-inconnue"),
+    "get_approval": lambda s: s.get_approval("APP-inconnue"),
+    "get_approval_mission": lambda s: s.get_approval_mission("APP-inconnue"),
+    "update_approval": lambda s: s.update_approval("APP-inconnue", ApprovalStatus.APPROVED),
+    "begin_execution_and_start_mission": lambda s: s.begin_execution_and_start_mission(
+        "cle", "MIS-inconnue", "ACT-1"),
+    "heartbeat_execution": lambda s: s.heartbeat_execution("cle-inconnue"),
+    "mark_execution_recovery_required": lambda s: s.mark_execution_recovery_required("cle-inconnue"),
+    "resolve_execution_recovery": lambda s: s.resolve_execution_recovery("cle-inconnue", "FAIL"),
+    "confirm_execution_recovery_from_effect": lambda s: s.confirm_execution_recovery_from_effect(
+        "cle-inconnue", "cle-fournisseur"),
+    "finish_execution_and_mission": lambda s: s.finish_execution_and_mission(
+        "cle-inconnue", "COMPLETED"),
+}
+
+
+@pytest.mark.parametrize("methode", sorted(LECTURES_PAR_IDENTIFIANT))
+def test_un_identifiant_inconnu_est_refuse_et_rien_n_est_ecrit(tmp_path: Path, methode):
+    """Refuser, jamais rendre un resultat plausible.
+
+    `heartbeat_execution` leve un `RuntimeError` la ou les autres levent un
+    `KeyError` -- les deux refusent, et la difference est assumee : elle dit
+    « inexistante **ou non active** », ce qui n'est pas la meme question.
+    """
+    store = DurableStore(tmp_path / "singular.db")
+
+    with pytest.raises((KeyError, RuntimeError)):
+        LECTURES_PAR_IDENTIFIANT[methode](store)
+
+    with store._connect() as conn:
+        for table in ("missions", "approvals", "executions"):
+            compte = conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
+            assert compte == 0, f"{methode} a ecrit dans {table} pour un identifiant inconnu"
+
+
+def test_aucune_lecture_par_identifiant_n_echappe_a_ce_test():
+    """Une methode ajoutee demain sans son cas fait rougir la suite.
+
+    La liste ci-dessus est ecrite a la main ; celle-ci est lue dans le code. Le
+    critere est « la methode leve un `KeyError` sur son propre parametre », ce qui
+    est exactement la forme des quinze survivants.
+    """
+    import ast
+
+    racine = Path(__file__).resolve().parent.parent
+    arbre = ast.parse((racine / "singular/durable.py").read_text(encoding="utf-8"))
+
+    levent = set()
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.FunctionDef) or noeud.name.startswith("_"):
+            continue
+        parametres = {a.arg for a in noeud.args.args}
+        for interne in ast.walk(noeud):
+            if (isinstance(interne, ast.Raise) and isinstance(interne.exc, ast.Call)
+                    and getattr(interne.exc.func, "id", "") == "KeyError"
+                    and interne.exc.args
+                    and getattr(interne.exc.args[0], "id", "") in parametres):
+                levent.add(noeud.name)
+
+    assert levent, "plus aucun `raise KeyError(<parametre>)` : ce test ne prouve plus rien"
+    oubliees = sorted(levent - set(LECTURES_PAR_IDENTIFIANT))
+    assert not oubliees, (
+        f"ces methodes refusent un identifiant inconnu sans etre essayees : {oubliees}")
