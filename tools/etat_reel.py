@@ -100,10 +100,13 @@ CAPACITES = (
              limites="une seule base, un seul utilisateur, aucune synchronisation "
                      "entre deux machines : la reprise `import` réunit deux journaux "
                      "à la main, elle ne les tient pas à jour",
-             prochaine="rien. C'est la partie qui sert tous les matins et qui n'a "
-                       "pas de manque connu ; y toucher serait du travail pour du "
-                       "travail",
-             commandes=("add", "resolve", "abandon", "list", "due", "export", "import"),
+             prochaine="que la sauvegarde parte seule. Cette ligne disait « aucun "
+                       "manque connu » alors que le seul actif irremplaçable d'ici "
+                       "n'avait aucun chemin de retour -- `export` écrit un CSV que "
+                       "`import` refuse. Le chemin existe maintenant ; le lancer "
+                       "reste un geste à ne pas oublier",
+             commandes=("add", "resolve", "abandon", "list", "due", "export",
+                        "import", "sauvegarde"),
              note="un seul module : la chaîne est ce qui rend une entrée non "
                   "réécrivable, pas une couche séparée"),
     Capacite("Notice", ("singular/sage/notice.py",),
@@ -133,10 +136,13 @@ CAPACITES = (
                        "existe et il est réel ; ce qui manque est quelqu'un en face, "
                        "et ça demande une autorisation, pas du code"),
     Capacite("socle durable", ("singular/durable.py", "singular/mission_runtime.py"),
-             limites="SQLite sur une machine : pas de réplication, pas de "
-                     "sauvegarde automatique, et une base perdue est perdue",
-             prochaine="une sauvegarde que la machine fait seule. C'est la seule "
-                       "dette de ce module qui puisse coûter des mois de journal"),
+             limites="SQLite sur une machine, pas de réplication. La sauvegarde "
+                     "existe depuis le 15 septembre 2026 et sa restauration est "
+                     "rejouée par un test, mais elle est manuelle : une base "
+                     "perdue est perdue si personne n'a lancé la commande",
+             prochaine="que la machine la lance seule. La moitié qui restait "
+                       "vraie de l'ancienne ligne : le geste existe, l'automatisme "
+                       "non, et c'est lui qui protège les jours où l'on oublie"),
     Capacite("effets externes",
              ("singular/effects.py", "singular/reconciled_execution.py"),
              limites="`HttpEffectProvider` est réel et sort vraiment du processus, "

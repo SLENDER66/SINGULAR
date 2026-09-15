@@ -169,7 +169,7 @@ def test_un_journal_vide_dit_ou_il_a_regarde(tmp_path, capsys) -> None:
 #: c'est la commande de chaque matin, celle que le rituel d'`USAGE.md` demande
 #: de taper tous les jours. Elle repondait « Rien a trancher » sur un chemin mal
 #: tape -- une phrase qui ressemble a une bonne nouvelle.
-RAPPORTENT_LE_JOURNAL = {"due", "list", "review"}
+RAPPORTENT_LE_JOURNAL = {"due", "list", "review", "sauvegarde"}
 
 #: Et pourquoi les autres n'ont rien a dire d'un journal vide.
 SANS_RAPPORT_A_FAIRE = {
