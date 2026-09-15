@@ -68,6 +68,22 @@ n'atteint.
    pour `global_control.py:45`, la premiere passe honnete de `frontiere` est ce
    qui tranchera, et rien d'autre ne doit etre affirme avant elle.
 
+**Ce que cet outil ne mesure pas, et il vaut mieux le savoir que le supposer.**
+`tools/` n'est dans aucun groupe, et l'y mettre ne servirait presque a rien :
+mesure du 15 septembre 2026, `tools/etat_reel.py` rend **deux** mutants pour
+quatre cent quatre-vingts lignes, `check_repo_state.py` deux, et cet outil-ci un
+seul. Ces fichiers ne refusent pas et ne rendent pas de verdict booleen : ils
+**derivent** un niveau, une liste, un rapport. Les cinq formes n'ont rien a y
+saboter.
+
+Ce qui manquerait pour les couvrir est une sixieme forme -- remplacer un
+operateur de comparaison, pour voir si un barreau d'echelle mal place fait
+rougir quelque chose. Elle n'est pas ecrite, et c'est un arbitrage : elle
+produirait des mutants dans **tout** le depot et allongerait chaque passage d'un
+facteur qu'aucun de ces groupes ne supporte -- `frontiere` depasse deja l'heure.
+Le jour ou un niveau faux coutera quelque chose, c'est la forme a ecrire ; en
+attendant, `tests/test_etat_reel.py` tient son echelle a la main et le dit.
+
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
 refus que cet outil a denonce comme non prouve l'etait, par
