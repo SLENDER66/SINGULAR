@@ -387,3 +387,47 @@ def test_une_attestation_prolongee_par_la_fin_ne_verifie_plus(tmp_path):
     assert relue.expires_at > relue.issued_at, "la fenetre reste valide : c'est le sujet"
     assert store.verify(decision) is False
     assert store.verify_issuance(decision) is False
+
+
+# --- ce que la revocation doit refuser ----------------------------------------
+
+@pytest.mark.parametrize("cas", ["jamais_emise", "deja_revoquee"])
+def test_revoquer_ce_qui_n_est_pas_revocable_leve(tmp_path, cas):
+    """`rowcount` est la **seule** façon de savoir si la révocation a eu lieu.
+
+    L'`UPDATE` vise `decision_id AND status='ISSUED'` et il n'y a aucun `SELECT`
+    avant lui : contrairement aux gardes de `rowcount` du journal, celui-ci n'est
+    pas une assurance derrière un verrou, c'est le contrôle lui-même. Zéro ligne
+    touchée veut dire « il n'y avait rien à révoquer », et l'appelant doit
+    l'apprendre — sinon il croit avoir révoqué et continue.
+
+    Deux façons d'avoir zéro ligne, et aucune n'était essayée : l'attestation
+    n'a jamais été émise, ou elle l'a déjà été et révoquée. Les tests voisins ne
+    révoquent que ce qui existe, une seule fois.
+    """
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+
+    if cas == "deja_revoquee":
+        store.issue(decision)
+        store.revoke(decision.decision_id)
+        assert store.verify(decision) is False, "le premier retrait doit avoir compté"
+
+    with pytest.raises(KeyError):
+        store.revoke(decision.decision_id)
+
+
+def test_revoquer_une_autre_decision_ne_touche_pas_la_bonne(tmp_path):
+    """Sans ça, le test ci-dessus passerait avec une révocation qui rate tout.
+
+    Ce qui est visé est « rien à révoquer », pas « la révocation ne marche
+    jamais ». Une attestation émise à côté doit rester valide.
+    """
+    gardee = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    store.issue(gardee)
+
+    with pytest.raises(KeyError):
+        store.revoke("DEC-QUI-N-EXISTE-PAS")
+
+    assert store.verify(gardee) is True, "la révocation ratée a touché une autre ligne"
