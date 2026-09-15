@@ -532,3 +532,39 @@ def test_l_etat_d_une_mission_inconnue_est_refuse(tmp_path: Path):
 
     with pytest.raises(KeyError):
         runtime.state("MIS-QUI-N-EXISTE-PAS")
+
+
+#: `approve` et `reject` portent le meme garde, et se separent toujours dans les
+#: tests. Ils vont par paire ici, comme les deux commandes du clavier.
+TRANCHENT_UNE_APPROBATION = ("approve", "reject")
+
+
+@pytest.mark.parametrize("verdict", TRANCHENT_UNE_APPROBATION)
+def test_une_approbation_sans_mission_se_tranche_quand_meme(tmp_path: Path, verdict):
+    """La moitie `mission_id is not None`, et elle decide dans le sens permissif.
+
+    Le garde dit : « si cette approbation appartient a une mission, cette mission
+    doit etre en attente ». La premiere moitie existe pour le cas ou elle
+    n'appartient a aucune -- et ce cas est reel : une action qui demande un humain
+    **sans contrat** escalade, le gouverneur frappe une approbation, et rien ne la
+    lie a une mission.
+
+    Sans cette moitie, `get_mission_status(None)` leverait et une approbation
+    parfaitement legitime deviendrait intranchable -- ni validable ni rejetable,
+    donc perdue. C'est une moitie qui protege contre un refus de trop, pas contre
+    un passage de trop : les deux comptent.
+    """
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+    action = ActionRequest("lire", "lire un dossier", 2, 1, 9, requires_human=True)
+
+    gouverne = runtime.route(action, None)
+    assert gouverne.governor.mode is Autonomy.ESCALATE
+    approbation = gouverne.governor.approval_id
+    assert approbation, "le cas n'existe que si une approbation est frappee"
+    assert runtime.store.get_approval_mission(approbation) is None, (
+        "et qu'elle n'appartient a aucune mission")
+
+    getattr(runtime, verdict)(approbation)
+
+    attendu = ApprovalStatus.APPROVED if verdict == "approve" else ApprovalStatus.REJECTED
+    assert runtime.store.get_approval(approbation).status is attendu
