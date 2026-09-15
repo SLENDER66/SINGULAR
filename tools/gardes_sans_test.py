@@ -167,6 +167,20 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    sert. Le controle prealable evite d'ouvrir une transaction pour rien ; il ne
    decide rien que la cle primaire ne decide deja.
 
+   **`durable.py`, les treize refus `KeyError`, tries une fois pour toutes.** Neuf
+   sont tues depuis le 15 septembre 2026 : huit par le temoin de famille -- une
+   methode qui prend un identifiant refuse quand il est inconnu -- et un par le
+   cas de l'execution dont la mission a disparu. Des quatre qui restent :
+
+   * `begin_execution_and_start_mission` et `_transition_mission_status` sont une
+     **paire qui se couvre**, quatrieme reponse du triage : neutraliser l'un
+     laisse l'autre refuser la meme mission inconnue, neutraliser les deux fait
+     rougir. Mesure, pas suppose ;
+   * `heartbeat_execution` et `finish_execution_and_mission` relisent une ligne
+     que la transaction courante vient d'ecrire ou de verrouiller. `None`
+     demanderait que l'ecriture s'evapore sous le verrou -- meme famille que les
+     `rowcount != 1` du journal.
+
    `effects.py` : `if row is None` apres une insertion « or ignore » suivie de la
    relecture de la meme clef, dans la meme transaction. Inseree ou deja la, la
    ligne est trouvee ; `None` demanderait que l'ecriture s'evapore sous le

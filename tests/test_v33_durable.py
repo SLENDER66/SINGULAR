@@ -483,3 +483,34 @@ def test_aucune_lecture_par_identifiant_n_echappe_a_ce_test():
     oubliees = sorted(levent - set(LECTURES_PAR_IDENTIFIANT))
     assert not oubliees, (
         f"ces methodes refusent un identifiant inconnu sans etre essayees : {oubliees}")
+
+
+def test_une_execution_dont_la_mission_a_disparu_est_refusee(tmp_path: Path):
+    """La seconde lecture de `confirm_execution_recovery_from_effect`.
+
+    L'execution existe, elle est bien RECOVERY_REQUIRED, et sa mission n'est plus
+    la. Sans ce refus, une execution serait confirmee COMPLETED par preuve
+    externe **au nom d'une mission qui n'existe pas** -- et la transition de
+    mission qui suit travaillerait dans le vide.
+
+    L'etat est monte en retirant la ligne de mission, comme les tests de
+    falsification du journal montent les leurs : c'est le modele de menace de ce
+    depot, une base qu'on a editee a cote du code.
+    """
+    from singular.autopilot import DelegationContract
+
+    store = DurableStore(tmp_path / "singular.db")
+    store.save_mission(DelegationContract("MIS-ORPHELINE", "objectif", "résultat",
+                                          autonomy=Autonomy.EXECUTE_REVERSIBLE))
+    store.set_mission_status("MIS-ORPHELINE", MissionStatus.PLANNED)
+    store.begin_execution_and_start_mission("cle-orpheline", "MIS-ORPHELINE", "ACT-1")
+    store.mark_execution_recovery_required("cle-orpheline")
+
+    with store._connect() as conn:
+        conn.execute("DELETE FROM mission_states WHERE mission_id=?", ("MIS-ORPHELINE",))
+
+    with pytest.raises(KeyError):
+        store.confirm_execution_recovery_from_effect("cle-orpheline", "cle-fournisseur")
+
+    assert store.get_execution("cle-orpheline")["status"] == "RECOVERY_REQUIRED", (
+        "l'execution reste en attente plutôt que de passer COMPLETED sans mission")
