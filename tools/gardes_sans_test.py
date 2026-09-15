@@ -64,9 +64,19 @@ n'atteint.
    precedentes designait bien ce qu'il neutralisait. Mais ces deux lignes-la sont
    les deux verdicts les plus lourds du depot -- « faut-il un humain » et « y
    a-t-il lieu de parler de la calibration » -- donc l'angle mort etait etroit et
-   place au plus mauvais endroit possible. `journal.py:280` a recu son temoin ;
-   pour `global_control.py:45`, la premiere passe honnete de `frontiere` est ce
-   qui tranchera, et rien d'autre ne doit etre affirme avant elle.
+   place au plus mauvais endroit possible.
+
+   **La passe honnete a tranche, le 15 septembre 2026.** Sur les cinq raisons
+   d'exiger un humain, les deux qui n'avaient **jamais** ete mutees --
+   `bool(self.warnings)` et `self.policy_requires_human` -- ont chacune un
+   temoin, et le commit « la politique seule suffit a exiger un humain » disait
+   donc vrai contre l'outil. Les raisons 3 et 5 sont tuees aussi. Seule la
+   quatrieme survit, la deliberation non resolue, et elle est triee de longue
+   date dans `tests/test_global_control.py` : quand `deliberation.unresolved` est
+   vrai, la porte a deja ajoute l'avertissement `COLLECTIVE:UNRESOLVED_DELIBERATION`,
+   donc la premiere raison repond avant. Assurance derriere un autre mecanisme,
+   pas moitie morte. `journal.py:280` et les deux moities de `can_prepare` ont
+   leur temoin depuis.
 
 **Ce que cet outil ne mesure pas, et il vaut mieux le savoir que le supposer.**
 `tools/` n'est dans aucun groupe, et l'y mettre ne servirait presque a rien :
