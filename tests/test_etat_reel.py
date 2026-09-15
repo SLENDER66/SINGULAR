@@ -432,3 +432,46 @@ def test_aucun_module_ne_peut_etre_fait_taire_en_douce() -> None:
         f"une capacite : {exemptions}. C'est une exemption invisible -- un module "
         "qu'on fait taire sans l'inscrire au registre. S'il merite d'etre couvert, "
         "il entre dans CAPACITES, avec ses limites et sa prochaine etape.")
+
+
+# --- ce que le cache de lecture ne doit jamais faire --------------------------
+
+def test_un_fichier_modifie_n_est_pas_relu_dans_sa_version_perimee(tmp_path) -> None:
+    """Le registre retient le parse, jamais la réponse -- et pas au-delà du fichier.
+
+    `_qui_importe` relisait et reparsait tout `singular/` pour chaque module
+    interrogé, et `modules_hors_registre` l'appelle une fois par module : le même
+    fichier était parsé autant de fois qu'il y a de modules. Mesuré avant la
+    correction : 5850 appels à `ast.parse` pour moins de cent fichiers, neuf
+    secondes pour `modules_hors_registre`, treize pour `rapport`, deux minutes
+    pour ce fichier de tests. L'audit de mutation relance la suite entière une
+    fois par survivant, donc ces deux minutes s'y multipliaient.
+
+    Le risque introduit est le seul qui compte pour un instrument de mesure :
+    répondre d'après un fichier périmé. La clé porte donc l'horodatage et la
+    taille, et ce test le vérifie plutôt que de le promettre -- un cache qui ne
+    tomberait pas ferait dire au registre ce que le fichier disait avant.
+    """
+    from tools.etat_reel import _imports, _signature
+
+    fichier = tmp_path / "temoin.py"
+    fichier.write_text("from singular.journal import DecisionJournal\n", encoding="utf-8")
+    avant = _imports(str(fichier), _signature(fichier))
+    assert avant == (("from", "singular.journal", 0, ("DecisionJournal",)),)
+
+    fichier.write_text("from singular.sage.notice import build_notice\nimport os\n",
+                       encoding="utf-8")
+    apres = _imports(str(fichier), _signature(fichier))
+
+    assert apres != avant, "le cache a répondu d'après la version périmée du fichier"
+    assert apres == (("from", "singular.sage.notice", 0, ("build_notice",)),
+                     ("import", "", 0, ("os",)))
+
+
+def test_un_fichier_illisible_ne_fait_pas_tomber_le_registre(tmp_path) -> None:
+    """Une source qui ne se parse pas n'a aucun import, et ne lève pas."""
+    from tools.etat_reel import _imports, _signature
+
+    casse = tmp_path / "casse.py"
+    casse.write_text("def (: pas du python\n", encoding="utf-8")
+    assert _imports(str(casse), _signature(casse)) == ()
