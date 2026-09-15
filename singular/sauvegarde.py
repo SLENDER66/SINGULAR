@@ -43,7 +43,9 @@ mois de décisions.
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -55,6 +57,31 @@ from .sqlite_support import SqliteLocation
 #: À côté du journal, jamais par-dessus : `A_FAIRE.md` dit depuis longtemps que
 #: le vrai risque n'est pas de perdre une histoire mais d'en écraser une.
 DOSSIER_PAR_DEFAUT = Path.home() / ".singular" / "sauvegardes"
+
+#: Ce qui part dans une sauvegarde, et comment chaque actif se copie.
+#:
+#: **Liste blanche, jamais liste noire.** Sauvegarder « tout sauf » ferait entrer
+#: tout seul, un jour, un fichier de secret qui n'existe pas encore : il suffirait
+#: qu'une faculté future écrive un identifiant dans `~/.singular/`. Un actif
+#: inconnu ne part donc pas, et c'est un choix fail-closed assumé -- au prix qu'un
+#: nouvel actif irremplaçable puisse être oublié.
+#:
+#: Ce prix est payé par `tests/test_sauvegarde.py`, qui lit le tableau des
+#: fichiers d'`A_FAIRE.md` et exige que tout ce qui y est marqué
+#: « irremplaçable » soit ici. Oublier devient un test rouge, pas une découverte
+#: le jour de la panne.
+ACTIFS = {
+    "journal.db": "sqlite",
+    "candidatures.json": "fichier",
+}
+
+#: Ce qu'une sauvegarde ne doit jamais emporter.
+#:
+#: `A_FAIRE.md` le dit déjà pour le jeton du Sage : « ne le copie pas ». Une
+#: sauvegarde finit sur une clé USB, un disque externe, un dossier synchronisé --
+#: un secret n'y a rien à faire, et une machine neuve mérite une clé neuve, qui se
+#: recrée seule au premier démarrage.
+JAMAIS_SAUVEGARDE = ("sage_token",)
 
 #: Les raisons de refus, et ce qu'elles veulent dire pour quelqu'un qui lit.
 #:
@@ -81,12 +108,18 @@ class SauvegardeRefusee(Exception):
 
 @dataclass(frozen=True)
 class Sauvegarde:
-    """Une sauvegarde dont la restauration a réellement été rejouée."""
+    """Une sauvegarde dont chaque actif a été relu et confronté à son original."""
 
-    chemin: Path
+    #: Le dossier daté qui contient tout.
+    dossier: Path
+    #: Le journal à l'intérieur : c'est lui qu'on redonne à `import`.
+    journal: Path
     decisions: int
     empreinte: str
     chaine_intacte: bool
+    #: Les actifs réellement copiés, et ceux qui n'existaient pas encore.
+    copies: tuple[str, ...]
+    absents: tuple[str, ...]
 
 
 def _empreinte_de_tete(journal: DecisionJournal) -> str:
@@ -128,55 +161,101 @@ def _copier(source: Path, vers: Path) -> None:
         origine.backup(cible)
 
 
+def _copier_fichier(source: Path, vers: Path) -> None:
+    """Un actif qui n'est pas une base : on copie les octets, puis on les relit."""
+    vers.write_bytes(source.read_bytes())
+
+
+def _empreinte(chemin: Path) -> str:
+    return hashlib.sha256(chemin.read_bytes()).hexdigest()
+
+
 def sauvegarder(chemin_journal: str | Path = DEFAULT_PATH, *,
                 dossier: str | Path | None = None,
                 maintenant: datetime | None = None) -> Sauvegarde:
-    """Copier le journal, rouvrir la copie, la confronter, puis seulement la nommer.
+    """Copier les actifs irremplaçables, les relire, puis seulement les nommer.
 
-    Rend la `Sauvegarde` vérifiée. Lève `SauvegardeRefusee` sans rien laisser
-    derrière elle si la copie ne reproduit pas la source.
+    Un dossier daté est écrit sous `dossier`. Chaque actif d'`ACTIFS` présent à
+    côté du journal y est copié et **confronté à son original** ; rien n'est
+    laissé si l'un d'eux ne l'est pas. Un actif absent n'est pas une erreur --
+    `candidatures.json` n'existe que si le prototype a servi.
+
+    Lève `SauvegardeRefusee` sans rien laisser derrière elle si une copie ne
+    reproduit pas sa source.
     """
     source = Path(chemin_journal)
     if not source.exists():
         raise SauvegardeRefusee("source_absente", f"aucun journal ici : {source}")
 
+    origine = source.parent
     destination = Path(dossier) if dossier is not None else DOSSIER_PAR_DEFAUT
     destination.mkdir(parents=True, exist_ok=True)
 
     horodatage = (maintenant or datetime.now()).strftime("%Y-%m-%d-%H%M%S")
-    finale = destination / f"journal-{horodatage}.db"
-    # Le nom provisoire porte l'identifiant du processus : deux sauvegardes
-    # lancées dans la même seconde ne peuvent pas écrire dans le même fichier
-    # temporaire, ce qui produirait deux copies mélangées et vérifiées vraies.
-    partielle = destination / f".journal-{horodatage}-{os.getpid()}.partielle"
+    finale = destination / horodatage
+    # Le nom provisoire porte le numero du processus : deux sauvegardes lancees
+    # dans la meme seconde ne peuvent pas ecrire dans le meme dossier temporaire,
+    # ce qui melangerait deux copies et les verifierait vraies toutes les deux.
+    partielle = destination / f".{horodatage}-{os.getpid()}.partielle"
 
-    attendu, chaine_source = _photographie(
-        DecisionJournal(source, lecture_seule=True))
+    attendu, chaine_source = _photographie(DecisionJournal(source, lecture_seule=True))
+    copies: list[str] = []
+    absents: list[str] = []
 
     try:
-        _copier(source, partielle)
+        partielle.mkdir(parents=True)
+        for nom, methode in ACTIFS.items():
+            # Le journal peut vivre ailleurs que dans le dossier par defaut --
+            # `--db` existe -- donc il se prend a son chemin, les autres a cote.
+            actif = source if nom == "journal.db" else origine / nom
+            if not actif.exists():
+                absents.append(nom)
+                continue
 
-        try:
-            copie = DecisionJournal(partielle, lecture_seule=True)
-            obtenu, chaine_copie = _photographie(copie)
-        except (sqlite3.DatabaseError, RuntimeError) as erreur:
-            raise SauvegardeRefusee(
-                "copie_illisible", f"{REFUS_DE_SAUVEGARDE['copie_illisible']} : {erreur}") from erreur
+            cible = partielle / nom
+            if methode == "sqlite":
+                _copier(actif, cible)
+                try:
+                    obtenu, chaine_copie = _photographie(
+                        DecisionJournal(cible, lecture_seule=True))
+                except (sqlite3.DatabaseError, RuntimeError) as erreur:
+                    raise SauvegardeRefusee(
+                        "copie_illisible",
+                        f"{REFUS_DE_SAUVEGARDE['copie_illisible']} : {erreur}") from erreur
+                if obtenu != attendu or chaine_copie != chaine_source:
+                    raise SauvegardeRefusee("copie_infidele",
+                                            REFUS_DE_SAUVEGARDE["copie_infidele"])
+            else:
+                _copier_fichier(actif, cible)
+                if not cible.exists() or _empreinte(cible) != _empreinte(actif):
+                    raise SauvegardeRefusee("copie_infidele",
+                                            REFUS_DE_SAUVEGARDE["copie_infidele"])
+            copies.append(nom)
 
-        if obtenu != attendu or chaine_copie != chaine_source:
-            raise SauvegardeRefusee("copie_infidele", REFUS_DE_SAUVEGARDE["copie_infidele"])
-
+        # La verification est finie : la fenetre pendant laquelle l'ancienne
+        # sauvegarde n'existe plus et la nouvelle pas encore est reduite a ces
+        # deux lignes, et elle ne s'ouvre que pour une sauvegarde de la meme
+        # seconde -- donc du meme contenu.
+        if finale.exists():
+            shutil.rmtree(finale)
         os.replace(partielle, finale)
     except BaseException:
-        # Une copie non vérifiée ne reste pas sur le disque : elle serait prise
-        # pour une sauvegarde le jour où l'on en aurait besoin.
-        partielle.unlink(missing_ok=True)
+        # Une copie non verifiee ne reste pas sur le disque : elle serait prise
+        # pour une sauvegarde le jour ou l'on en aurait besoin.
+        shutil.rmtree(partielle, ignore_errors=True)
         raise
 
-    return Sauvegarde(chemin=finale, decisions=len(attendu),
-                      empreinte=_empreinte_de_tete(
-                          DecisionJournal(finale, lecture_seule=True)),
-                      chaine_intacte=chaine_source)
+    return Sauvegarde(
+        dossier=finale,
+        journal=finale / "journal.db",
+        decisions=len(attendu),
+        empreinte=_empreinte_de_tete(
+            DecisionJournal(finale / "journal.db", lecture_seule=True)),
+        chaine_intacte=chaine_source,
+        copies=tuple(copies),
+        absents=tuple(absents),
+    )
 
 
-__all__ = ["DOSSIER_PAR_DEFAUT", "REFUS_DE_SAUVEGARDE", "Sauvegarde", "SauvegardeRefusee", "sauvegarder"]
+__all__ = ["ACTIFS", "DOSSIER_PAR_DEFAUT", "JAMAIS_SAUVEGARDE", "REFUS_DE_SAUVEGARDE",
+           "Sauvegarde", "SauvegardeRefusee", "sauvegarder"]

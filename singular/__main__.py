@@ -506,8 +506,16 @@ def cmd_sauvegarde(journal: DecisionJournal, args) -> int:
         print(_colour(f"  Journal visé : {journal.path}\n", DIM))
         return 1
 
-    print(f"\n  {_pluriel(faite.decisions, 'décision sauvegardée', 'décisions sauvegardées')}")
-    print(f"  {_colour(str(faite.chemin), BOLD)}")
+    print(f"\n  {_pluriel(faite.decisions, 'décision sauvegardée', 'décisions sauvegardées')}"
+          f", et {_pluriel(len(faite.copies), 'fichier', 'fichiers')} en tout")
+    print(f"  {_colour(str(faite.dossier), BOLD)}")
+    for nom in faite.copies:
+        print(_colour(f"    · {nom}", DIM))
+    if faite.absents:
+        # Absent n'est pas perdu : `candidatures.json` n'existe que si le
+        # prototype a servi. Le dire evite de chercher un fichier qui n'a
+        # jamais ete ecrit.
+        print(_colour(f"    (pas encore ici : {', '.join(faite.absents)})", DIM))
     if faite.chaine_intacte:
         print(_colour("  Copie relue et confrontée à l'original : identique, chaîne intacte.\n", DIM))
     else:
@@ -517,8 +525,9 @@ def cmd_sauvegarde(journal: DecisionJournal, args) -> int:
         print(_colour("  La copie est fidèle, mais la CHAÎNE DE L'ORIGINAL EST ROMPUE.", RED))
         print(_colour("  Cette copie est donc la photographie d'un journal abîmé. Garde-la :\n"
                       "  c'est la pièce à conviction, et elle vaut mieux que rien.\n", DIM))
-    print(_colour("  Pour restaurer : reprends-la dans un journal neuf avec\n"
-                  f"  python3 -m singular import {faite.chemin}\n", DIM))
+    print(_colour("\n  Pour restaurer le journal : reprends-le dans un journal neuf avec\n"
+                  f"  python3 -m singular import {faite.journal}\n"
+                  "  Les autres fichiers se remettent à leur place dans ~/.singular/.\n", DIM))
     return 0
 
 

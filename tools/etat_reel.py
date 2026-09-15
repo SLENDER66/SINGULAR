@@ -137,9 +137,10 @@ CAPACITES = (
                        "et ça demande une autorisation, pas du code"),
     Capacite("socle durable", ("singular/durable.py", "singular/mission_runtime.py"),
              limites="SQLite sur une machine, pas de réplication. La sauvegarde "
-                     "existe depuis le 15 septembre 2026 et sa restauration est "
-                     "rejouée par un test, mais elle est manuelle : une base "
-                     "perdue est perdue si personne n'a lancé la commande",
+                     "existe depuis le 15 septembre 2026, elle couvre les deux "
+                     "fichiers irremplaçables et sa restauration est rejouée par "
+                     "un test, mais elle est manuelle : une base perdue est "
+                     "perdue si personne n'a lancé la commande",
              prochaine="que la machine la lance seule. La moitié qui restait "
                        "vraie de l'ancienne ligne : le geste existe, l'automatisme "
                        "non, et c'est lui qui protège les jours où l'on oublie"),
