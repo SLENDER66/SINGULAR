@@ -436,6 +436,61 @@ neuf ressemble exactement à un journal qu'on n'a pas encore rempli. C'est pour
 des deux côtés, ce n'est pas perdu — `python3 -m singular import` reprend l'un
 dans l'autre, et la section ci-dessus dit ce que ça garde et ce que ça coûte.
 
+## Sauvegarder le journal
+
+```sh
+python3 -m singular sauvegarde
+```
+
+Un dossier daté part dans `~/.singular/sauvegardes/`. `--vers` écrit ailleurs —
+un disque externe, une clé, un dossier synchronisé.
+
+**Ce qui part, et ce qui ne part jamais.** Les deux fichiers que tu ne peux pas
+reconstituer : `journal.db` et `candidatures.json`. Pas `tarifs.json` ni
+`parle_quota.json`, qui se retapent ou repartent de zéro. Et **jamais**
+`sage_token` : une sauvegarde finit sur une clé USB, un secret n'y a rien à
+faire, et une machine neuve mérite une clé neuve — elle se recrée seule au
+premier démarrage du Sage.
+
+C'est une liste blanche, pas une liste d'exclusions : un fichier inconnu ne part
+pas. Sinon un futur fichier de secret entrerait tout seul dans tes sauvegardes.
+Le revers, c'est qu'un nouvel actif irremplaçable pourrait être oublié — un test
+lit le tableau ci-dessus et refuse cet oubli.
+
+**Ce que la commande fait de plus qu'une copie.** Elle rouvre la copie, la
+relit, et la confronte à l'original : mêmes décisions, mêmes empreintes, même
+ordre, même verdict de chaîne. Tant que ça n'a pas été vérifié, le fichier n'est
+pas nommé comme une sauvegarde, et s'il n'est pas fidèle il est effacé. Une
+sauvegarde qu'on n'a jamais restaurée n'est pas une sauvegarde, c'est un
+fichier — et on ne l'apprend que le jour où on en a besoin.
+
+**`export` n'est pas une sauvegarde.** Le CSV est fait pour être lu, pas relu
+par l'outil : `import` le refuse, et te le dit. La seule chose qui se restaure
+est le `.db` que cette commande écrit.
+
+**Pour restaurer :**
+
+```sh
+python3 -m singular import ~/.singular/sauvegardes/AAAA-MM-JJ-HHMMSS/journal.db
+```
+
+Reprends-le dans un journal neuf, jamais par-dessus celui qui tourne : `import`
+ajoute à la suite et resigne, il n'écrase rien. Les autres fichiers se remettent
+à leur place dans `~/.singular/`. La commande te réaffiche le chemin exact à la
+fin de chaque sauvegarde.
+
+**Si ton journal est abîmé, la commande copie quand même**, et elle te le dit en
+rouge. C'est voulu : le seul exemplaire d'un journal dont la chaîne est rompue
+est exactement ce qu'il faut mettre de côté avant d'y toucher. Refuser la copie
+détruirait la pièce à conviction en même temps que la donnée.
+
+**Si le journal est vide, elle ne sauvegarde rien** et te dit où elle a
+regardé. Un chemin mal tapé donnerait sinon « 0 décision sauvegardée », qui
+ressemble à une bonne nouvelle.
+
+**Ce qu'elle ne fait pas.** Elle ne se lance pas toute seule. Tant que tu ne la
+lances pas, une base perdue reste perdue.
+
 ## Le mettre devant tes yeux
 
 Ajoute à ton `~/.zshrc` — c'est le fichier que le Terminal lit à chaque

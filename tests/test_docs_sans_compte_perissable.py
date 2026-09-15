@@ -27,8 +27,15 @@ import sys
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DOCUMENTS = ["A_FAIRE.md", "CLAUDE.md", "PROMPT_NOUVELLE_CONVERSATION.md",
-             "PROMPT_RECONSTRUCTION.md", "proto/README.md"]
+#: Les deux textes du fondateur -- `DOCTRINE.md` et `SPECIFICATION.md` -- sont
+#: ici alors qu'ils sont recopies tels quels. Leur corps ne bougera pas ; leurs
+#: annexes, si, et ce sont elles qui annoncent des faits. Le commit qui a
+#: introduit la doctrine affirmait « aucun compte perissable dans ce fichier » :
+#: c'etait vrai, et rien ne l'imposait. Une promesse qu'aucun test ne tient
+#: survit jusqu'a la premiere annexe qui la rompt.
+DOCUMENTS = ["A_FAIRE.md", "CLAUDE.md", "DOCTRINE.md", "SPECIFICATION.md",
+             "PROMPT_NOUVELLE_CONVERSATION.md", "PROMPT_RECONSTRUCTION.md",
+             "proto/README.md"]
 
 MOTS = {
     "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "six": 6,

@@ -28,6 +28,7 @@ from .journal import (
     Status,
     Tier,
 )
+from .sauvegarde import REFUS_DE_SAUVEGARDE, SauvegardeRefusee, sauvegarder
 from .saisie import CONFLIT_CLAVIER as _CONFLIT
 from .saisie import REPRISE_REFUSEE as _REPRISE_REFUSEE
 from .saisie import entier as _entier
@@ -476,6 +477,60 @@ def cmd_export(journal: DecisionJournal, args) -> int:
     return 0
 
 
+def cmd_sauvegarde(journal: DecisionJournal, args) -> int:
+    """Copier le journal, et ne l'annoncer qu'apres avoir rejoue la restauration.
+
+    Le journal est le seul actif irremplacable d'ici. `export` ecrit un CSV que
+    `import` refuse : il n'existait donc aucun chemin de retour. Une sauvegarde
+    qu'on n'a pas restauree n'est pas une sauvegarde, c'est un fichier.
+    """
+    # Le journal est deja ouvert, donc deja **cree** : `source.exists()` ne peut
+    # plus distinguer « pas encore de journal » d'un chemin mal tape. Sauvegarder
+    # quand meme rendrait « 0 decision sauvegardee », qui ressemble a une bonne
+    # nouvelle -- exactement le piege que `due` a paye avant, et qu'il serait
+    # absurde de recreer dans la commande censee proteger le journal.
+    #
+    # Rien a sauvegarder n'est pas une erreur : c'est un ecran qui dit ou l'on a
+    # regarde, et c'est `_vide` qui sait l'ecrire.
+    if not journal.entries():
+        print(_vide(journal))
+        return 0
+
+    try:
+        faite = sauvegarder(journal.path, dossier=args.vers)
+    except SauvegardeRefusee as refus:
+        print(_colour(f"\n  {REFUS_DE_SAUVEGARDE[refus.reason]}", RED))
+        # Toujours le chemin, quel que soit le refus. C'est la lecon que `due` a
+        # payee : « rien a sauvegarder » sur un chemin mal tape ressemble a une
+        # bonne nouvelle, et rien ne la distingue d'un journal reellement neuf.
+        print(_colour(f"  Journal visé : {journal.path}\n", DIM))
+        return 1
+
+    print(f"\n  {_pluriel(faite.decisions, 'décision sauvegardée', 'décisions sauvegardées')}"
+          f", et {_pluriel(len(faite.copies), 'fichier', 'fichiers')} en tout")
+    print(f"  {_colour(str(faite.dossier), BOLD)}")
+    for nom in faite.copies:
+        print(_colour(f"    · {nom}", DIM))
+    if faite.absents:
+        # Absent n'est pas perdu : `candidatures.json` n'existe que si le
+        # prototype a servi. Le dire evite de chercher un fichier qui n'a
+        # jamais ete ecrit.
+        print(_colour(f"    (pas encore ici : {', '.join(faite.absents)})", DIM))
+    if faite.chaine_intacte:
+        print(_colour("  Copie relue et confrontée à l'original : identique, chaîne intacte.\n", DIM))
+    else:
+        # Le journal va mal et la copie le dit. On sauvegarde quand meme -- c'est
+        # exactement ce qu'il faut avoir en main avant d'y toucher -- mais on ne
+        # laisse personne lire « sauvegarde reussie » comme « tout va bien ».
+        print(_colour("  La copie est fidèle, mais la CHAÎNE DE L'ORIGINAL EST ROMPUE.", RED))
+        print(_colour("  Cette copie est donc la photographie d'un journal abîmé. Garde-la :\n"
+                      "  c'est la pièce à conviction, et elle vaut mieux que rien.\n", DIM))
+    print(_colour("\n  Pour restaurer le journal : reprends-le dans un journal neuf avec\n"
+                  f"  python3 -m singular import {faite.journal}\n"
+                  "  Les autres fichiers se remettent à leur place dans ~/.singular/.\n", DIM))
+    return 0
+
+
 def cmd_due(journal: DecisionJournal, args) -> int:
     pending = journal.due()
     if not pending:
@@ -744,6 +799,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     export = sub.add_parser("export", help="tout le journal en CSV sur la sortie standard")
     export.set_defaults(func=cmd_export)
+
+    garde = sub.add_parser("sauvegarde",
+                           help="copier le journal, restauration vérifiée avant de l'annoncer")
+    garde.add_argument("--vers", default=None,
+                       help="le dossier où écrire (par défaut ~/.singular/sauvegardes)")
+    garde.set_defaults(func=cmd_sauvegarde)
 
     due = sub.add_parser("due", help="décisions dont l'échéance est passée")
     due.set_defaults(func=cmd_due)
