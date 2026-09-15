@@ -233,3 +233,35 @@ def test_le_niveau_reste_derive_et_ne_peut_pas_etre_declare() -> None:
         intrus = [barreau for barreau in ECHELLE if barreau in declare]
         assert not intrus, (
             f"« {capacite.nom} » ecrit un barreau dans un champ declare : {intrus}")
+
+
+def test_la_preuve_du_vrai_serveur_est_derivee_et_non_declaree() -> None:
+    """La preuve qui a corrige une limite que j'avais ecrite a la main.
+
+    J'avais note que la frontiere n'avait jamais vu d'effet reel. C'etait faux :
+    `tests/test_http_effect_provider.py` parcourt la chaine entiere -- decision
+    validee, attestation, bail, coordinateur, fournisseur HTTP -- contre un vrai
+    serveur lie sur 127.0.0.1. Un `EffectProvider` de test rend un resultat sans
+    rien quitter ; un serveur lie oblige la requete a traverser la pile reseau, a
+    pouvoir expirer, et a laisser l'effet dans l'etat ambigu pour lequel tout le
+    protocole de recuperation existe.
+
+    La lecon tient en une phrase : le seul champ ou une erreur s'est glissee est
+    le seul qui etait ecrit a la main. Cette preuve-la est donc derivee.
+    """
+    mesures = cibles_de_l_instrument()
+    par_nom = {capacite.nom: niveau(capacite, mesures)[1] for capacite in CAPACITES}
+
+    frontiere = " ".join(par_nom["frontière d'exécution"])
+    assert "vrai serveur" in frontiere and "test_http_effect_provider" in frontiere
+
+    # Et la derivation ne la distribue pas a tout le monde. Ici encore, ma premiere
+    # attente etait fausse et la derivation avait raison : j'avais ecrit que le
+    # journal ne devait pas l'obtenir, alors que `tests/test_sage_server.py` lie un
+    # vrai serveur **et** lit le journal -- donc le journal est bien parcouru a
+    # travers une requete reelle. Ce qui ne l'obtient pas, ce sont les capacites
+    # qu'aucun test a serveur ne nomme.
+    for muette in ("Notice", "analyse en langage naturel", "recherche d'offres",
+                   "apprentissage", "capital et patrimoine"):
+        assert "vrai serveur" not in " ".join(par_nom[muette]), (
+            f"« {muette} » obtient une preuve de socket qu'elle ne merite pas")

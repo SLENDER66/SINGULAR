@@ -126,11 +126,12 @@ CAPACITES = (
               "singular/decision_attestation.py", "singular/execution_capability.py"),
              limites="l'approbation humaine n'est pas un canal d'autorisation : une "
                      "action escaladée est refusée à la porte, pas mise en attente. "
-                     "Aucun effet externe réel n'a jamais traversé cette frontière "
-                     "en usage, seulement des tests",
-             prochaine="un fournisseur réel, même minuscule, pour que la chaîne "
-                       "décision → effet → réconciliation soit parcourue une fois "
-                       "hors des tests"),
+                     "La chaîne est parcourue de bout en bout contre un vrai serveur "
+                     "local, jamais contre un tiers réel : aucune contrepartie n'a "
+                     "jamais reçu quoi que ce soit",
+             prochaine="une contrepartie qui n'est pas 127.0.0.1. Le fournisseur "
+                       "existe et il est réel ; ce qui manque est quelqu'un en face, "
+                       "et ça demande une autorisation, pas du code"),
     Capacite("socle durable", ("singular/durable.py", "singular/mission_runtime.py"),
              limites="SQLite sur une machine : pas de réplication, pas de "
                      "sauvegarde automatique, et une base perdue est perdue",
@@ -138,9 +139,11 @@ CAPACITES = (
                        "dette de ce module qui puisse coûter des mois de journal"),
     Capacite("effets externes",
              ("singular/effects.py", "singular/reconciled_execution.py"),
-             limites="aucun fournisseur réel n'est branché ; tout ce qui est "
-                     "démontré l'est contre des doubles de test",
-             prochaine="le même que la frontière : un fournisseur réel une fois"),
+             limites="`HttpEffectProvider` est réel et sort vraiment du processus, "
+                     "mais contre un serveur de test local ; le cas ambigu -- ni "
+                     "fait ni pas fait -- est donc joué, pas subi",
+             prochaine="la même que la frontière : une contrepartie réelle. Le code "
+                       "du fournisseur n'a rien qui manque de connu"),
     Capacite("apprentissage",
              ("singular/improvement_registry.py", "singular/outcome_ledger.py",
               "singular/learning_review_queue.py"),
@@ -247,6 +250,29 @@ def _tests_qui_nomment(module: str) -> list[str]:
     return trouves
 
 
+#: Ce qui fait qu'un test ne se contente pas de doubles : il ouvre un vrai port.
+#: `EffectProvider` de test rend un `ProviderResult` sans rien quitter ; un serveur
+#: lie sur 127.0.0.1 oblige la requete a traverser la pile reseau, a pouvoir
+#: expirer, et a laisser l'effet dans l'etat ambigu pour lequel tout le protocole
+#: de recuperation existe.
+SORTIE_DU_PROCESSUS = ("ThreadingHTTPServer", "HTTPServer(", "socketserver")
+
+
+def _tests_qui_sortent_du_processus(module: str) -> list[str]:
+    """Les tests qui nomment ce module **et** ouvrent un vrai serveur.
+
+    Derive, pas declare -- et c'est exactement ce qui a corrige une limite que
+    j'avais ecrite a la main : je notais qu'aucun effet reel n'avait traverse la
+    frontiere, alors qu'un test la parcourt de bout en bout contre un socket.
+    """
+    trouves = []
+    for chemin in _tests_qui_nomment(module):
+        texte = (RACINE / chemin).read_text(encoding="utf-8")
+        if any(motif in texte for motif in SORTIE_DU_PROCESSUS):
+            trouves.append(chemin)
+    return trouves
+
+
 def cibles_de_l_instrument() -> frozenset[str]:
     """Les modules que `gardes_sans_test.py` mute, quelle que soit sa liste du jour."""
     sys.path.insert(0, str(RACINE))
@@ -289,6 +315,11 @@ def niveau(capacite: Capacite, mesures: frozenset[str]) -> tuple[str, list[str]]
     if not tests:
         return "IMPLÉMENTÉE", preuves
     preuves.append(f"nommé par {len(tests)} fichier(s) de tests, dont {tests[0]}")
+
+    sorties = sorted({fichier for nom in presents
+                      for fichier in _tests_qui_sortent_du_processus(nom)})
+    if sorties:
+        preuves.append("parcouru contre un vrai serveur par " + ", ".join(sorties))
 
     mutes = [nom for nom in presents if nom in mesures]
     if not mutes:
