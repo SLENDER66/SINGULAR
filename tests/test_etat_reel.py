@@ -33,6 +33,18 @@ from tools.etat_reel import (
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
 
+def _fabriquee(nom: str, modules: tuple[str, ...], **reste) -> Capacite:
+    """Une capacite de test, dont seuls les fichiers comptent.
+
+    Les champs declares -- limites, prochaine etape -- sont exiges du vrai registre
+    par les tests du bas de ce fichier. Ici ils ne servent a rien : ce qu'on mesure
+    est la derivation du barreau, qui ne les regarde pas. Les remplir de texte reel
+    ferait croire le contraire.
+    """
+    return Capacite(nom, modules, limites="sans objet : capacite fabriquee pour un test",
+                    prochaine="sans objet : capacite fabriquee pour un test", **reste)
+
+
 @pytest.mark.parametrize("capacite", CAPACITES, ids=lambda c: c.nom)
 def test_chaque_module_declare_existe(capacite: Capacite) -> None:
     """Un chemin mort rendrait la capacite ABSENTE sans que personne le sache.
@@ -80,7 +92,7 @@ def test_le_registre_ne_promet_jamais_la_production() -> None:
 
 
 def test_une_capacite_sans_fichier_est_absente(tmp_path) -> None:
-    fantome = Capacite("fantôme", ("singular/ce_module_n_existe_pas.py",))
+    fantome = _fabriquee("fantôme", ("singular/ce_module_n_existe_pas.py",))
     atteint, preuves = niveau(fantome, frozenset())
     assert atteint == "ABSENTE"
     assert any("absents" in preuve for preuve in preuves)
@@ -93,7 +105,7 @@ def test_le_code_range_dans_attic_n_est_pas_une_capacite() -> None:
     pas partie du systeme. Le nommer HORS SYSTEME plutot qu'IMPLEMENTEE est la
     difference entre un inventaire et une vitrine.
     """
-    archive = Capacite("archive", ("attic/singular/wealth_engine.py",))
+    archive = _fabriquee("archive", ("attic/singular/wealth_engine.py",))
     atteint, preuves = niveau(archive, frozenset())
     assert atteint == "HORS SYSTÈME"
     assert any("attic/" in preuve for preuve in preuves)
@@ -106,7 +118,7 @@ def test_un_module_que_rien_n_atteint_reste_concu() -> None:
     qu'affirme : seule la table paresseuse du paquet le nomme, aucun module ne
     l'importe, aucune commande n'y mene.
     """
-    dormant = Capacite("modèle historique", ("singular/history_world_model.py",))
+    dormant = _fabriquee("modèle historique", ("singular/history_world_model.py",))
     atteint, _preuves = niveau(dormant, frozenset())
     assert atteint == "CONÇUE"
 
@@ -120,7 +132,7 @@ def test_un_module_atteignable_sans_test_ne_depasse_pas_implementee() -> None:
     quelqu'un lui ecrit un test -- et il faudra alors en trouver un autre, ou
     constater que le depot n'a plus de module orphelin.
     """
-    orphelin = Capacite("icône du Sage", ("singular/sage/icon.py",))
+    orphelin = _fabriquee("icône du Sage", ("singular/sage/icon.py",))
     atteint, preuves = niveau(orphelin, cibles_de_l_instrument())
     assert atteint == "IMPLÉMENTÉE", (
         f"{atteint} : soit un test nomme desormais ce module, soit la derivation "
@@ -135,7 +147,7 @@ def test_le_dernier_barreau_exige_l_instrument_et_pas_un_mot() -> None:
     ses cibles fait redescendre la capacite. C'est ce qui empeche le barreau de
     devenir un adjectif.
     """
-    journal = Capacite("journal", ("singular/journal.py",), ("add",))
+    journal = _fabriquee("journal", ("singular/journal.py",), commandes=("add",))
     assert niveau(journal, cibles_de_l_instrument())[0] == "INSTRUMENTÉE"
     assert niveau(journal, frozenset())[0] == "TESTÉE"
 
@@ -153,3 +165,71 @@ def test_l_echelle_discrimine_encore() -> None:
     assert len(atteints) >= 3, (
         "toutes les capacites tombent dans moins de trois barreaux : l'echelle ne "
         f"discrimine plus (atteints : {sorted(atteints)})")
+
+
+# --- les deux champs declares, et pourquoi ils ne peuvent pas flatter ------------
+#
+# La directive cumulative exige LIMITATIONS et NEXT STEP pour chaque capacite. Ni
+# l'un ni l'autre ne se derive d'un arbre syntaxique : ce sont des jugements. Ils
+# sont donc ecrits a la main -- et c'est tenable pour une raison precise : une
+# limite declaree ne peut pas flatter, elle dit ce qui manque. Un niveau declare,
+# lui, flatterait toujours ; c'est pourquoi le barreau reste derive.
+#
+# Ce qui peut arriver a un champ declare, en revanche, c'est de se vider : « aucune
+# limite connue », « RAS », une chaine blanche. Ces tests le refusent.
+
+#: Ce qu'on ecrit quand on n'a rien a dire, et qui vaut moins que rien : le lecteur
+#: croit qu'une limite a ete cherchee.
+MOTS_VIDES = ("aucune", "rien à signaler", "ras", "n/a", "aucun", "tbd", "à définir")
+
+
+@pytest.mark.parametrize("capacite", CAPACITES, ids=lambda c: c.nom)
+def test_chaque_capacite_declare_ses_limites(capacite: Capacite) -> None:
+    limites = capacite.limites.strip()
+    assert limites, f"« {capacite.nom} » ne declare aucune limite"
+    assert len(limites) > 30, (
+        f"« {capacite.nom} » : une limite d'un mot n'est pas une limite ({limites!r})")
+    assert limites.lower() not in MOTS_VIDES, (
+        f"« {capacite.nom} » remplit ses limites d'un mot vide : le lecteur croirait "
+        "qu'une limite a ete cherchee")
+
+
+@pytest.mark.parametrize("capacite", CAPACITES, ids=lambda c: c.nom)
+def test_chaque_capacite_declare_sa_prochaine_etape(capacite: Capacite) -> None:
+    """« Rien » est une reponse valable ici, mais elle doit etre argumentee.
+
+    La difference avec les limites : une capacite peut legitimement n'avoir aucune
+    prochaine etape -- le journal sert tous les matins et n'a pas de manque connu.
+    Ce qui est refuse est le « rien » nu, sans la raison. `CLAUDE.md` §0 interdit le
+    travail dont le seul effet est qu'il y ait du travail ; dire pourquoi on ne
+    touche a rien est precisement l'application de cette regle, et ca se lit.
+    """
+    prochaine = capacite.prochaine.strip()
+    assert prochaine, f"« {capacite.nom} » ne declare aucune prochaine etape"
+    assert len(prochaine) > 20, (
+        f"« {capacite.nom} » : « {prochaine} » ne dit pas assez pour etre suivi")
+    assert prochaine.lower() not in MOTS_VIDES
+
+
+def test_le_rapport_imprime_les_deux_champs() -> None:
+    """Declares mais pas imprimes, ils ne serviraient a personne."""
+    texte = "\n".join(rapport())
+    assert texte.count("limites :") == len(CAPACITES)
+    assert texte.count("prochaine :") == len(CAPACITES)
+
+
+def test_le_niveau_reste_derive_et_ne_peut_pas_etre_declare() -> None:
+    """Aucun champ de `Capacite` ne nomme un barreau : la promotion est impossible.
+
+    C'est l'invariant qui fait tenir tout le registre. La directive interdit de
+    faire progresser une capacite sans preuve ; la seule facon de le garantir est
+    qu'il n'existe aucun endroit ou ecrire un niveau.
+    """
+    champs = set(Capacite.__dataclass_fields__)
+    assert not champs & {"niveau", "statut", "status", "barreau"}, (
+        f"un champ permet de declarer un niveau : {champs}")
+    for capacite in CAPACITES:
+        declare = f"{capacite.limites} {capacite.prochaine} {capacite.note}".upper()
+        intrus = [barreau for barreau in ECHELLE if barreau in declare]
+        assert not intrus, (
+            f"« {capacite.nom} » ecrit un barreau dans un champ declare : {intrus}")

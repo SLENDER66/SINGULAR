@@ -67,10 +67,27 @@ class Capacite:
     `jetons` dit si la capacité dépense de l'argent. C'est une donnée de la
     doctrine autant que de la technique : la section 11 parle de patrimoine, et
     savoir ce qui coûte est la première ligne de ce sujet.
+
+    **`limites` et `prochaine` sont déclarées, pas dérivées, et c'est voulu.** La
+    directive cumulative exige LIMITATIONS et NEXT STEP pour chaque capacité. Ni
+    l'un ni l'autre ne se lit dans un arbre syntaxique : ce sont des jugements. Ils
+    sont donc écrits à la main -- et `tests/test_etat_reel.py` refuse une capacité
+    qui n'en porte pas, ou qui les remplit d'un mot vide comme « aucune ». Une
+    limite déclarée ne peut pas flatter : elle dit ce qui manque. C'est l'inverse
+    d'un niveau déclaré, qui flatterait toujours, et c'est pourquoi le barreau reste
+    dérivé.
+
+    La même raison écarte les statuts PARTIAL et SIMULATED de la directive comme
+    *niveaux* : « partiellement implémentée » est un jugement, et un jugement qui
+    fixe le barreau serait exactement la promotion sans preuve que la section 4
+    interdit. Ce qui est partiel se dit dans `limites`, où c'est vérifiable en
+    lisant, et le barreau reste ce que l'arbre démontre.
     """
 
     nom: str
     modules: tuple[str, ...]
+    limites: str
+    prochaine: str
     commandes: tuple[str, ...] = ()
     jetons: bool = False
     note: str = ""
@@ -80,30 +97,87 @@ class Capacite:
 
 CAPACITES = (
     Capacite("journal des décisions et chaîne d'intégrité", ("singular/journal.py",),
-             ("add", "resolve", "abandon", "list", "due", "export", "import"),
+             limites="une seule base, un seul utilisateur, aucune synchronisation "
+                     "entre deux machines : la reprise `import` réunit deux journaux "
+                     "à la main, elle ne les tient pas à jour",
+             prochaine="rien. C'est la partie qui sert tous les matins et qui n'a "
+                       "pas de manque connu ; y toucher serait du travail pour du "
+                       "travail",
+             commandes=("add", "resolve", "abandon", "list", "due", "export", "import"),
              note="un seul module : la chaîne est ce qui rend une entrée non "
                   "réécrivable, pas une couche séparée"),
-    Capacite("Notice", ("singular/sage/notice.py",), ("status", "review", "sage")),
-    Capacite("serveur du Sage", ("singular/sage/server.py",), ("sage",)),
+    Capacite("Notice", ("singular/sage/notice.py",),
+             limites="déterministe et sans jeton, donc elle ne dit que ce que ses "
+                     "règles savent formuler ; elle ne lit pas le monde, seulement "
+                     "le journal",
+             prochaine="rien de nommé. Les règles se corrigent quand une phrase se "
+                       "révèle fausse, pas par anticipation",
+             commandes=("status", "review", "sage")),
+    Capacite("serveur du Sage", ("singular/sage/server.py",),
+             limites="local, un utilisateur, pas de chiffrement en transit, pas "
+                     "d'authentification autre que la clé d'accès du fichier",
+             prochaine="rien tant qu'il tourne sur sa machine et son téléphone. "
+                       "L'exposer hors du réseau local demanderait d'abord une "
+                       "authentification réelle",
+             commandes=("sage",)),
     Capacite("frontière d'exécution",
              ("singular/validated_trajectory_decision.py", "singular/validated_pipeline.py",
               "singular/validated_execution.py", "singular/execution.py",
-              "singular/decision_attestation.py", "singular/execution_capability.py")),
-    Capacite("socle durable", ("singular/durable.py", "singular/mission_runtime.py")),
+              "singular/decision_attestation.py", "singular/execution_capability.py"),
+             limites="l'approbation humaine n'est pas un canal d'autorisation : une "
+                     "action escaladée est refusée à la porte, pas mise en attente. "
+                     "Aucun effet externe réel n'a jamais traversé cette frontière "
+                     "en usage, seulement des tests",
+             prochaine="un fournisseur réel, même minuscule, pour que la chaîne "
+                       "décision → effet → réconciliation soit parcourue une fois "
+                       "hors des tests"),
+    Capacite("socle durable", ("singular/durable.py", "singular/mission_runtime.py"),
+             limites="SQLite sur une machine : pas de réplication, pas de "
+                     "sauvegarde automatique, et une base perdue est perdue",
+             prochaine="une sauvegarde que la machine fait seule. C'est la seule "
+                       "dette de ce module qui puisse coûter des mois de journal"),
     Capacite("effets externes",
-             ("singular/effects.py", "singular/reconciled_execution.py")),
+             ("singular/effects.py", "singular/reconciled_execution.py"),
+             limites="aucun fournisseur réel n'est branché ; tout ce qui est "
+                     "démontré l'est contre des doubles de test",
+             prochaine="le même que la frontière : un fournisseur réel une fois"),
     Capacite("apprentissage",
              ("singular/improvement_registry.py", "singular/outcome_ledger.py",
-              "singular/learning_review_queue.py")),
-    Capacite("conversation", ("singular/parle.py",), ("parle",), jetons=True),
-    Capacite("analyse en langage naturel", ("singular/analyse.py",), ("analyse",), jetons=True),
-    Capacite("recherche d'offres", ("singular/offres.py",), ("offres",), jetons=True),
+              "singular/learning_review_queue.py"),
+             limites="rien ne s'active seul, et c'est un invariant de sécurité, pas "
+                     "un manque. Mais aucune amélioration n'a jamais été promue en "
+                     "usage réel : la boucle est gardée, pas parcourue",
+             prochaine="la parcourir une fois de bout en bout sur une vraie "
+                       "prédiction du journal, verdict compris"),
+    Capacite("conversation", ("singular/parle.py",),
+             limites="dépense des jetons, plafond de soixante réponses par jour "
+                     "depuis le téléphone et aucun plafond au clavier -- seulement "
+                     "un compteur",
+             prochaine="un plafond dur au clavier, si le compteur ne suffit plus",
+             commandes=("parle",), jetons=True),
+    Capacite("analyse en langage naturel", ("singular/analyse.py",),
+             limites="dépense des jetons, aucun plafond, et commente un rapport "
+                     "déjà calculé : elle ne décide rien",
+             prochaine="aucun plafond, comme la recherche d'offres : le compteur "
+                       "suffit tant qu'une analyse par jour reste la règle, et c'est "
+                       "à revoir dès que l'usage change",
+             commandes=("analyse",), jetons=True),
+    Capacite("recherche d'offres", ("singular/offres.py",),
+             limites="la plus chère par appel -- recherche web, quatre mille jetons "
+                     "-- et aucun plafond",
+             prochaine="un plafond, ou la couper si elle ne rend rien d'utile",
+             commandes=("offres",), jetons=True),
     Capacite("capital et patrimoine",
              ("attic/singular/patrimony_engine.py", "attic/singular/wealth_engine.py",
               "attic/singular/capital_allocation.py", "attic/singular/generational.py"),
+             limites="aucune source de données, aucun chemin d'exécution, aucune "
+                     "décision qui lise leur sortie : des fonctions de score sur des "
+                     "dataclasses écrites à la main",
+             prochaine="une seule source de données réelle -- un relevé, un revenu, "
+                       "une dépense -- avant toute autre ligne de code ici. Tant "
+                       "qu'elle n'existe pas, ces modules restent une archive",
              note="sections 10 et 11 de la doctrine"),
 )
-
 
 def _fichiers_presents(capacite: Capacite) -> tuple[list[str], list[str]]:
     """Ce qui existe, et ce qui manque. Les deux comptent."""
@@ -223,6 +297,19 @@ def niveau(capacite: Capacite, mesures: frozenset[str]) -> tuple[str, list[str]]
     return "INSTRUMENTÉE", preuves
 
 
+def _enveloppe(etiquette: str, texte: str, largeur: int = 76) -> list[str]:
+    """Une phrase repliee sous son etiquette, pour que le rapport reste lisible."""
+    import textwrap
+
+    marge = " " * 14
+    lignes = textwrap.wrap(texte, largeur - len(marge) - len(etiquette) - 4)
+    if not lignes:
+        return []
+    premiere = f"{marge}{etiquette} : {lignes[0]}"
+    suite = [f"{marge}{' ' * (len(etiquette) + 3)}{ligne}" for ligne in lignes[1:]]
+    return [premiere, *suite]
+
+
 def rapport() -> list[str]:
     mesures = cibles_de_l_instrument()
     lignes = ["état réel, dérivé de cet arbre — aucun niveau n'est écrit à la main", ""]
@@ -234,6 +321,8 @@ def rapport() -> list[str]:
             lignes.append(f"              · {preuve}")
         if capacite.note:
             lignes.append(f"              · {capacite.note}")
+        lignes += _enveloppe("limites", capacite.limites)
+        lignes += _enveloppe("prochaine", capacite.prochaine)
         lignes.append("")
     lignes += [
         "PRODUCTION-READY : INCONNU pour tout ce qui précède.",
