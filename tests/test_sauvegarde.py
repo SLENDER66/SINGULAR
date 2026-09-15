@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import pathlib
 import sqlite3
+from datetime import datetime
 
 import pytest
 
@@ -354,3 +355,67 @@ def test_la_liste_blanche_suit_ce_que_le_depot_declare_irremplacable() -> None:
     assert set(JAMAIS_SAUVEGARDE) >= interdits, (
         f"ces fichiers sont interdits de copie sans être dans JAMAIS_SAUVEGARDE : "
         f"{sorted(interdits - set(JAMAIS_SAUVEGARDE))}")
+
+
+# --- ce que le remplacement ne doit jamais coûter -----------------------------
+
+def _trois_decisions(tmp_path) -> pathlib.Path:
+    _journal(tmp_path / "journal.db", 3)
+    return tmp_path / "journal.db"
+
+
+def test_un_renommage_final_qui_echoue_ne_detruit_pas_la_sauvegarde_precedente(
+        tmp_path, monkeypatch) -> None:
+    """Le vrai risque n'est pas de perdre une histoire, c'est d'en écraser une.
+
+    Ce module cite cette phrase d'`A_FAIRE.md` pour justifier d'écrire *à côté*
+    du journal et jamais par-dessus. Le remplacement final la contredisait : il
+    supprimait l'ancienne sauvegarde du même horodatage, puis renommait la
+    nouvelle. Si ce renommage échoue -- disque plein, permission, système de
+    fichiers qui refuse -- le nettoyage efface la partielle alors que l'ancienne
+    vient d'être détruite, et le dossier reste **vide**.
+
+    Mesuré avant la correction : une sauvegarde vérifiée disparaissait pour
+    laisser la place à une sauvegarde qui n'arrive jamais. L'ancienne est
+    maintenant écartée sous un nom caché, et remise à sa place si quoi que ce
+    soit échoue.
+    """
+    from singular import sauvegarde as module
+
+    source = _trois_decisions(tmp_path)
+    dossier = tmp_path / "sauvegardes"
+    quand = datetime(2026, 9, 15, 12, 0, 0)
+    premiere = sauvegarder(source, dossier=dossier, maintenant=quand)
+    assert premiere.dossier.exists()
+    contenu = sorted(p.name for p in premiere.dossier.iterdir())
+
+    vrai_replace = module.os.replace
+
+    def renommage_final_casse(src, dst):
+        if ".partielle" in str(src):
+            raise OSError("le renommage final échoue")
+        return vrai_replace(src, dst)
+
+    monkeypatch.setattr(module.os, "replace", renommage_final_casse)
+    with pytest.raises(OSError):
+        sauvegarder(source, dossier=dossier, maintenant=quand)
+    monkeypatch.undo()
+
+    assert premiere.dossier.exists(), "la sauvegarde vérifiée a été effacée"
+    assert sorted(p.name for p in premiere.dossier.iterdir()) == contenu
+    assert sorted(p.name for p in dossier.iterdir()) == [premiere.dossier.name], (
+        "rien d'autre ne doit traîner : ni partielle, ni dossier écarté")
+
+
+def test_un_remplacement_reussi_ne_laisse_pas_l_ancienne_derriere(tmp_path) -> None:
+    """Sinon chaque sauvegarde du même horodatage doublerait la place occupée."""
+    source = _trois_decisions(tmp_path)
+    dossier = tmp_path / "sauvegardes"
+    quand = datetime(2026, 9, 15, 12, 0, 0)
+
+    sauvegarder(source, dossier=dossier, maintenant=quand)
+    seconde = sauvegarder(source, dossier=dossier, maintenant=quand)
+
+    assert seconde.dossier.exists()
+    assert sorted(p.name for p in dossier.iterdir()) == [seconde.dossier.name], (
+        "le dossier écarté doit être retiré une fois le remplacement fait")

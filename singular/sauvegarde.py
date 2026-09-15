@@ -201,6 +201,8 @@ def sauvegarder(chemin_journal: str | Path = DEFAULT_PATH, *,
     attendu, chaine_source = _photographie(DecisionJournal(source, lecture_seule=True))
     copies: list[str] = []
     absents: list[str] = []
+    #: L'ancienne sauvegarde du meme horodatage, ecartee le temps du remplacement.
+    remplacee: Path | None = None
 
     try:
         partielle.mkdir(parents=True)
@@ -232,18 +234,39 @@ def sauvegarder(chemin_journal: str | Path = DEFAULT_PATH, *,
                                             REFUS_DE_SAUVEGARDE["copie_infidele"])
             copies.append(nom)
 
-        # La verification est finie : la fenetre pendant laquelle l'ancienne
-        # sauvegarde n'existe plus et la nouvelle pas encore est reduite a ces
-        # deux lignes, et elle ne s'ouvre que pour une sauvegarde de la meme
-        # seconde -- donc du meme contenu.
+        # La verification est finie. L'ancienne sauvegarde du meme horodatage est
+        # **ecartee**, jamais supprimee avant que la nouvelle soit en place : a
+        # aucun instant il n'existe zero sauvegarde complete sous ce nom.
+        #
+        # Elle etait supprimee, et la fenetre etait plus large que ses deux
+        # lignes. Mesure : si `os.replace` echoue -- disque plein, permission,
+        # systeme de fichiers qui refuse -- le nettoyage ci-dessous efface la
+        # partielle alors que `finale` venait d'etre detruite, et le dossier
+        # reste **vide**. Une sauvegarde verifiee disparaissait pour laisser la
+        # place a une sauvegarde qui n'arrive jamais. C'est exactement ce que
+        # `A_FAIRE.md` nomme comme le vrai risque, cite plus haut dans ce
+        # fichier : pas perdre une histoire, en ecraser une.
         if finale.exists():
-            shutil.rmtree(finale)
+            remplacee = destination / f".{horodatage}-{os.getpid()}.remplacee"
+            shutil.rmtree(remplacee, ignore_errors=True)
+            os.replace(finale, remplacee)
         os.replace(partielle, finale)
     except BaseException:
         # Une copie non verifiee ne reste pas sur le disque : elle serait prise
         # pour une sauvegarde le jour ou l'on en aurait besoin.
         shutil.rmtree(partielle, ignore_errors=True)
+        # Et l'ancienne revient a sa place. Si le retour echoue lui aussi, le
+        # dossier ecarte reste sur le disque sous son nom cache : un nom etrange
+        # se rattrape, une sauvegarde effacee non.
+        if remplacee is not None and not finale.exists():
+            try:
+                os.replace(remplacee, finale)
+            except OSError:
+                pass
         raise
+    else:
+        if remplacee is not None:
+            shutil.rmtree(remplacee, ignore_errors=True)
 
     return Sauvegarde(
         dossier=finale,
