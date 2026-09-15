@@ -384,6 +384,10 @@ SOUS_SUITE_FRONTIERE = (
     # Et ce qui couvre le producteur et les deux modules de resultat.
     "tests/test_global_verdict_human_review.py", "tests/test_validated_trajectory_decision.py",
     "tests/test_execution_result.py", "tests/test_reconciled_execution.py",
+    # La preuve durable relue avant de confirmer une reconciliation. Sans ce
+    # fichier ici, son refus etait annonce « sous-suite trop etroite » a chaque
+    # passage et coutait une passe entiere de la suite pour rien.
+    "tests/test_preuve_durable_de_l_effet.py",
     # La porte globale et le gouverneur.
     "tests/test_global_control.py", "tests/test_autopilot.py", "tests/test_v33_governance.py",
     "tests/test_authority.py", "tests/test_commander_capacity.py",
