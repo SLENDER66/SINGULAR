@@ -262,6 +262,10 @@ pas :
 Cinq témoins écrits, chacun vérifié par l'inverse. Le sixième est documenté comme
 assurance plutôt que testé, parce qu'aucune entrée ne l'atteint.
 
+**Quatrième passage, après les témoins : un survivant sur vingt-cinq**, et c'est
+exactement celui-là. La mesure confirme donc les deux choses à la fois — que les
+cinq trous sont bouchés, et que le sixième n'en était pas un.
+
 Celui du mémorisant est le plus instructif, et c'est le pire qu'on pouvait avoir
 ici : le banc aurait crédité d'un apprentissage une capacité qui retient par cœur
 une réponse juste. C'est l'auto-illusion que Genesis existe pour rendre
