@@ -488,8 +488,17 @@ détruirait la pièce à conviction en même temps que la donnée.
 regardé. Un chemin mal tapé donnerait sinon « 0 décision sauvegardée », qui
 ressemble à une bonne nouvelle.
 
-**Ce qu'elle ne fait pas.** Elle ne se lance pas toute seule. Tant que tu ne la
-lances pas, une base perdue reste perdue.
+**Elle part aussi toute seule.** `sj due`, le matin, vérifie au passage quand
+remonte la dernière sauvegarde. Si elle a plus d'une semaine — ou s'il n'y en a
+aucune — il en refait une avant de te rendre la main, et te dit où. C'est le
+seul automatisme : tu peux toujours la lancer à la main quand tu veux.
+
+Deux choses qu'elle ne fait jamais : elle ne t'empêche pas de voir tes verdicts
+si elle échoue, et elle ne se tait pas quand elle échoue. Une sauvegarde qu'on
+croit faite et qui ne l'est pas est pire que pas de sauvegarde du tout.
+
+Un journal vide n'en déclenche pas : il n'y a rien à perdre, et ça masquerait un
+chemin mal tapé.
 
 ## Le mettre devant tes yeux
 

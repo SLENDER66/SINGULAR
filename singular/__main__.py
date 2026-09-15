@@ -28,7 +28,12 @@ from .journal import (
     Status,
     Tier,
 )
-from .sauvegarde import REFUS_DE_SAUVEGARDE, SauvegardeRefusee, sauvegarder
+from .sauvegarde import (
+    REFUS_DE_SAUVEGARDE,
+    SauvegardeRefusee,
+    sauvegarde_attendue,
+    sauvegarder,
+)
 from .saisie import CONFLIT_CLAVIER as _CONFLIT
 from .saisie import REPRISE_REFUSEE as _REPRISE_REFUSEE
 from .saisie import entier as _entier
@@ -477,6 +482,37 @@ def cmd_export(journal: DecisionJournal, args) -> int:
     return 0
 
 
+def _sauvegarde_hebdomadaire(journal: DecisionJournal) -> None:
+    """La sauvegarde que la machine lance seule, accrochee au geste de chaque matin.
+
+    Le registre de realite declarait la meme prochaine etape pour deux capacites :
+    « que la sauvegarde parte seule ». Le geste existait, l'automatisme non -- et
+    c'est l'automatisme qui protege les jours ou l'on oublie, c'est-a-dire ceux
+    qui comptent.
+
+    Accrochee a `due` plutot qu'a `review` : `due` se tape tous les matins, `review`
+    le dimanche. Un dimanche saute, et la sauvegarde attendrait une semaine de plus.
+    Le seuil reste hebdomadaire ; c'est l'occasion de le verifier qui est
+    quotidienne.
+
+    **Deux regles, et elles tirent en sens contraire.** Elle ne doit jamais
+    empecher `due` de faire son travail : un matin ou la sauvegarde echoue est un
+    matin ou il faut quand meme voir ses verdicts. Mais un echec ne se tait pas --
+    une sauvegarde qu'on croit faite et qui ne l'est pas est pire que pas de
+    sauvegarde du tout. Donc : jamais d'exception qui remonte, jamais de silence.
+    """
+    try:
+        if not sauvegarde_attendue(journal.path):
+            return
+        faite = sauvegarder(journal.path)
+    except (SauvegardeRefusee, OSError) as echec:
+        print(_colour(f"\n  La sauvegarde automatique a échoué : {echec}", RED))
+        print(_colour("  Ton journal n'est pas copié. `python3 -m singular sauvegarde`"
+                      " pour réessayer.\n", DIM))
+        return
+    print(_colour(f"\n  Sauvegarde de la semaine : {faite.dossier}\n", DIM))
+
+
 def cmd_sauvegarde(journal: DecisionJournal, args) -> int:
     """Copier le journal, et ne l'annoncer qu'apres avoir rejoue la restauration.
 
@@ -532,15 +568,26 @@ def cmd_sauvegarde(journal: DecisionJournal, args) -> int:
 
 
 def cmd_due(journal: DecisionJournal, args) -> int:
+    """Le geste de chaque matin -- et l'occasion de verifier la sauvegarde.
+
+    Le controle d'echeance est quotidien parce que ce geste l'est ; le seuil, lui,
+    reste hebdomadaire. Un journal vide n'y donne pas lieu : il n'y a rien a
+    perdre, et une sauvegarde vide masquerait un chemin mal tape.
+    """
     pending = journal.due()
+    # `due` est la commande de chaque matin : c'est elle qui doit dire ou elle a
+    # regarde. `list` et `review` le disaient deja ; elle non, et un chemin mal
+    # tape rendait « Rien a trancher », qui ressemble a une bonne nouvelle.
+    if not journal.entries():
+        print(_vide(journal))
+        return 0
+    code = _rapport_due(journal, pending)
+    _sauvegarde_hebdomadaire(journal)
+    return code
+
+
+def _rapport_due(journal: DecisionJournal, pending) -> int:
     if not pending:
-        # `due` est la commande de chaque matin : c'est elle qui doit dire ou
-        # elle a regarde. `list` et `review` le disaient deja ; elle non, et un
-        # chemin mal tape rendait « Rien a trancher », qui ressemble a une
-        # bonne nouvelle.
-        if not journal.entries():
-            print(_vide(journal))
-            return 0
         open_count = len(journal.entries(status=Status.OPEN))
         print(f"\n  Rien à trancher. {_pluriel(open_count, 'décision')}"
               " encore dans les temps.\n")

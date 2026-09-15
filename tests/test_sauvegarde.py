@@ -354,3 +354,107 @@ def test_la_liste_blanche_suit_ce_que_le_depot_declare_irremplacable() -> None:
     assert set(JAMAIS_SAUVEGARDE) >= interdits, (
         f"ces fichiers sont interdits de copie sans être dans JAMAIS_SAUVEGARDE : "
         f"{sorted(interdits - set(JAMAIS_SAUVEGARDE))}")
+
+
+# --- la sauvegarde que la machine lance seule --------------------------------
+
+def test_le_premier_matin_avec_des_decisions_declenche_la_sauvegarde(tmp_path, capsys) -> None:
+    """Le registre déclarait la même prochaine étape pour deux capacités.
+
+    « Que la sauvegarde parte seule. » Le geste existait, l'automatisme non — et
+    c'est l'automatisme qui protège les jours où l'on oublie, c'est-à-dire ceux
+    qui comptent.
+    """
+    from singular.__main__ import main
+
+    source = tmp_path / "journal.db"
+    _journal(source, 2)
+    capsys.readouterr()
+
+    assert main(["--db", str(source), "due"]) == 0
+    sortie = capsys.readouterr().out
+
+    sauvegardes = source.parent / "sauvegardes"
+    faites = [p for p in sauvegardes.iterdir() if p.is_dir()]
+    assert len(faites) == 1, "le premier matin n'a pas déclenché de sauvegarde"
+    assert "Sauvegarde de la semaine" in sortie
+    assert DecisionJournal(faites[0] / "journal.db", lecture_seule=True).verify() is True
+
+
+def test_elle_ne_repart_pas_le_lendemain(tmp_path) -> None:
+    """Hebdomadaire, pas quotidienne. `due` se tape tous les matins."""
+    from singular.__main__ import main
+
+    source = tmp_path / "journal.db"
+    _journal(source, 1)
+
+    main(["--db", str(source), "due"])
+    main(["--db", str(source), "due"])
+
+    faites = [p for p in (source.parent / "sauvegardes").iterdir() if p.is_dir()]
+    assert len(faites) == 1, "une sauvegarde par jour : le seuil ne tient plus"
+
+
+def test_un_journal_vide_ne_declenche_rien(tmp_path) -> None:
+    """Rien à perdre, et une sauvegarde vide masquerait un chemin mal tapé."""
+    from singular.__main__ import main
+    from singular.sauvegarde import sauvegarde_attendue
+
+    source = tmp_path / "journal.db"
+    DecisionJournal(source)
+
+    assert sauvegarde_attendue(source) is False
+    main(["--db", str(source), "due"])
+    assert not (source.parent / "sauvegardes").exists()
+
+
+def test_l_echeance_se_lit_sur_le_nom_et_pas_sur_le_disque(tmp_path) -> None:
+    """Copier ses sauvegardes sur une machine neuve ne doit pas les rajeunir.
+
+    L'horodatage du système repart à aujourd'hui après une copie ; l'outil
+    croirait alors venir de sauvegarder, et ne le referait pas. La date vit donc
+    dans le nom du dossier, qui voyage avec lui.
+    """
+    from datetime import datetime
+
+    from singular.sauvegarde import derniere_sauvegarde, sauvegarde_attendue
+
+    source = tmp_path / "journal.db"
+    _journal(source, 1)
+    dossier = source.parent / "sauvegardes"
+    vieille = dossier / "2026-01-01-000000"
+    vieille.mkdir(parents=True)
+
+    assert derniere_sauvegarde(dossier) == datetime(2026, 1, 1, 0, 0, 0)
+    assert sauvegarde_attendue(source, maintenant=datetime(2026, 1, 2)) is False
+    assert sauvegarde_attendue(source, maintenant=datetime(2026, 1, 9)) is True
+
+
+def test_un_echec_de_sauvegarde_ne_prive_pas_du_rapport_du_matin(tmp_path, capsys, monkeypatch) -> None:
+    """Deux règles qui tirent en sens contraire, et les deux tiennent.
+
+    Un matin où la sauvegarde échoue est un matin où il faut quand même voir ses
+    verdicts : l'échec ne remonte pas. Mais une sauvegarde qu'on croit faite et
+    qui ne l'est pas est pire que pas de sauvegarde du tout : il ne se tait pas
+    non plus.
+    """
+    import singular.__main__ as cli
+    from singular.__main__ import main
+
+    source = tmp_path / "journal.db"
+    _journal(source, 2)
+
+    def echoue(*_args, **_reste):
+        raise OSError("disque plein")
+
+    monkeypatch.setattr(cli, "sauvegarder", echoue)
+    capsys.readouterr()
+
+    code = main(["--db", str(source), "due"])
+    sortie = capsys.readouterr().out
+
+    assert code == 0, "un échec de sauvegarde a fait échouer le rapport du matin"
+    assert "Rien à trancher" in sortie or "attend" in sortie, (
+        "le rapport du matin a disparu à cause de la sauvegarde")
+    assert "échoué" in sortie, "l'échec est silencieux : on croira le journal copié"
+    assert "disque plein" in sortie

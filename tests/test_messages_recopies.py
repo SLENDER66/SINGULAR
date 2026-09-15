@@ -227,6 +227,12 @@ DEUX_MOTS_VRAIMENT = {
     "parle", "analyse", "demande", "corrige", "compte", "cherche", "efface",
     "bouge", "route", "des", "cote", "precise", "installe", "vise", "refuse",
     "sur", "entree", "cree", "note", "reste", "trouve", "pense", "ecarte",
+    # « la copie » et « copie » le participe : le nom et le verbe, comme
+    # « annonce » ou « demande » juste au-dessus. La sauvegarde parle des deux
+    # dans le meme ecran -- elle nomme la copie, et elle dit qu'un journal n'est
+    # pas copie -- et le second a rendu le premier fautif, y compris dans un
+    # fichier que personne n'avait touche.
+    "copie",
 }
 
 #: Les mots qui s'ecrivent dans ses fichiers et se relisent tels quels.

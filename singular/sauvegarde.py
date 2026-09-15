@@ -56,7 +56,8 @@ from .sqlite_support import SqliteLocation
 
 #: À côté du journal, jamais par-dessus : `A_FAIRE.md` dit depuis longtemps que
 #: le vrai risque n'est pas de perdre une histoire mais d'en écraser une.
-DOSSIER_PAR_DEFAUT = Path.home() / ".singular" / "sauvegardes"
+NOM_DU_DOSSIER = "sauvegardes"
+DOSSIER_PAR_DEFAUT = Path.home() / ".singular" / NOM_DU_DOSSIER
 
 #: Ce qui part dans une sauvegarde, et comment chaque actif se copie.
 #:
@@ -161,6 +162,61 @@ def _copier(source: Path, vers: Path) -> None:
         origine.backup(cible)
 
 
+#: Une semaine. Assez rare pour ne rien couter, assez frequent pour qu'une perte
+#: ne remonte jamais a plus de sept jours de decisions.
+INTERVALLE_JOURS = 7
+
+
+def derniere_sauvegarde(dossier: str | Path) -> datetime | None:
+    """La plus recente sauvegarde, lue sur le nom des dossiers datés.
+
+    La date se lit sur le nom plutot que sur l'horodatage du fichier : copier un
+    dossier de sauvegardes sur une machine neuve remet les dates du systeme a
+    aujourd'hui, et l'outil croirait alors venir de sauvegarder.
+    """
+    racine = Path(dossier)
+    if not racine.is_dir():
+        return None
+    dates = []
+    for enfant in racine.iterdir():
+        if not enfant.is_dir():
+            continue
+        try:
+            dates.append(datetime.strptime(enfant.name, "%Y-%m-%d-%H%M%S"))
+        except ValueError:
+            # Un dossier qui ne porte pas ce nom n'est pas une sauvegarde d'ici.
+            continue
+    return max(dates) if dates else None
+
+
+def sauvegarde_attendue(chemin_journal: str | Path, *,
+                        dossier: str | Path | None = None,
+                        intervalle_jours: int = INTERVALLE_JOURS,
+                        maintenant: datetime | None = None) -> bool:
+    """Vrai s'il est temps d'en refaire une. Ne sauvegarde rien lui-meme.
+
+    Jamais de sauvegarde pour un journal vide : le premier matin, il n'y a rien a
+    perdre, et une sauvegarde vide masquerait un chemin mal tape.
+    """
+    source = Path(chemin_journal)
+    if not source.exists():
+        return False
+    try:
+        if not DecisionJournal(source, lecture_seule=True).export_rows():
+            return False
+    except (sqlite3.DatabaseError, RuntimeError):
+        # Un fichier qui n'est pas un journal lisible : ce n'est pas a cette
+        # fonction de trancher ce qu'il faut en faire, mais surement pas de
+        # declarer une sauvegarde due sur lui.
+        return False
+    ou = Path(dossier) if dossier is not None else source.parent / NOM_DU_DOSSIER
+    precedente = derniere_sauvegarde(ou)
+    if precedente is None:
+        return True
+    ecart = (maintenant or datetime.now()) - precedente
+    return ecart.days >= intervalle_jours
+
+
 def _copier_fichier(source: Path, vers: Path) -> None:
     """Un actif qui n'est pas une base : on copie les octets, puis on les relit."""
     vers.write_bytes(source.read_bytes())
@@ -188,7 +244,11 @@ def sauvegarder(chemin_journal: str | Path = DEFAULT_PATH, *,
         raise SauvegardeRefusee("source_absente", f"aucun journal ici : {source}")
 
     origine = source.parent
-    destination = Path(dossier) if dossier is not None else DOSSIER_PAR_DEFAUT
+    # Le dossier suit le journal, il n'est pas fixe. Dans la vie reelle les deux
+    # coincident -- le journal vit dans `~/.singular/` -- mais `--db` existe, et
+    # une sauvegarde qui part toujours au meme endroit sauvegarderait un journal
+    # en en nommant un autre.
+    destination = Path(dossier) if dossier is not None else origine / NOM_DU_DOSSIER
     destination.mkdir(parents=True, exist_ok=True)
 
     horodatage = (maintenant or datetime.now()).strftime("%Y-%m-%d-%H%M%S")
@@ -257,5 +317,6 @@ def sauvegarder(chemin_journal: str | Path = DEFAULT_PATH, *,
     )
 
 
-__all__ = ["ACTIFS", "DOSSIER_PAR_DEFAUT", "JAMAIS_SAUVEGARDE", "REFUS_DE_SAUVEGARDE",
+__all__ = ["ACTIFS", "DOSSIER_PAR_DEFAUT", "INTERVALLE_JOURS", "JAMAIS_SAUVEGARDE",
+           "NOM_DU_DOSSIER", "REFUS_DE_SAUVEGARDE", "derniere_sauvegarde", "sauvegarde_attendue",
            "Sauvegarde", "SauvegardeRefusee", "sauvegarder"]

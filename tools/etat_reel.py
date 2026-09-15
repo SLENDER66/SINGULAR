@@ -100,11 +100,11 @@ CAPACITES = (
              limites="une seule base, un seul utilisateur, aucune synchronisation "
                      "entre deux machines : la reprise `import` réunit deux journaux "
                      "à la main, elle ne les tient pas à jour",
-             prochaine="que la sauvegarde parte seule. Cette ligne disait « aucun "
-                       "manque connu » alors que le seul actif irremplaçable d'ici "
-                       "n'avait aucun chemin de retour -- `export` écrit un CSV que "
-                       "`import` refuse. Le chemin existe maintenant ; le lancer "
-                       "reste un geste à ne pas oublier",
+             prochaine="rien de nommé. Cette ligne a dit « aucun manque connu » "
+                       "alors que le seul actif irremplaçable n'avait aucun chemin "
+                       "de retour, puis « que la sauvegarde parte seule » : elle "
+                       "part seule depuis le 15 septembre 2026, accrochée au `due` "
+                       "de chaque matin, seuil d'une semaine",
              commandes=("add", "resolve", "abandon", "list", "due", "export",
                         "import", "sauvegarde"),
              note="un seul module : la chaîne est ce qui rend une entrée non "
@@ -155,13 +155,12 @@ CAPACITES = (
                   "bougé depuis l'approbation fait refuser l'exécution"),
     Capacite("socle durable", ("singular/durable.py", "singular/mission_runtime.py"),
              limites="SQLite sur une machine, pas de réplication. La sauvegarde "
-                     "existe depuis le 15 septembre 2026, elle couvre les deux "
-                     "fichiers irremplaçables et sa restauration est rejouée par "
-                     "un test, mais elle est manuelle : une base perdue est "
-                     "perdue si personne n'a lancé la commande",
-             prochaine="que la machine la lance seule. La moitié qui restait "
-                       "vraie de l'ancienne ligne : le geste existe, l'automatisme "
-                       "non, et c'est lui qui protège les jours où l'on oublie"),
+                     "couvre les deux fichiers irremplaçables, sa restauration est "
+                     "rejouée par un test et elle part seule chaque semaine -- mais "
+                     "elle reste sur le même disque que ce qu'elle copie",
+             prochaine="une copie hors de cette machine. La sauvegarde part "
+                       "seule depuis le 15 septembre 2026, mais elle écrit à côté "
+                       "du journal : un disque perdu les emporte tous les deux"),
     Capacite("effets externes",
              ("singular/effects.py", "singular/reconciled_execution.py"),
              limites="`HttpEffectProvider` est réel et sort vraiment du processus, "
