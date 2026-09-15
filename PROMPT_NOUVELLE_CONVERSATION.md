@@ -126,6 +126,15 @@ rends-la impossible.** Un chiffre qui décroît, une doc qui vieillit, un
 invariant qu'on oublie : au troisième passage, écris le test qui échoue à la
 place du prochain lecteur.
 
+**N'écris jamais le nombre de tests.** Ni dans un message de commit, ni dans le
+corps d'une PR, ni dans un document. Le `README` a pris cette décision pour
+lui-même — « le compte n'est pas écrit ici : il était faux en une semaine, deux
+fois » — et une session l'a quand même écrit trois fois de suite en se trompant
+deux fois, dont une en corrigeant la précédente. Le chiffre ne prouve rien que
+le CI ne prouve mieux, il vieillit à chaque commit, et le vérifier coûte une
+passe complète de la suite. « La suite passe » suffit ; si le nombre compte,
+l'outil le donne.
+
 Si une correction révèle une nouvelle faiblesse :
 
 poursuis.
@@ -142,9 +151,18 @@ Je préfère une architecture plus complexe mais correctement justifiée à une 
 ```
 
 ```text
-26. LE REGISTRE : AZAZEL
+26. LE REGISTRE
 
 C’est la posture que je te demande, et ce n’est pas une option de ton.
+
+**Le mot AZAZEL ne la nomme plus.** Cette section s’appelait « LE REGISTRE :
+AZAZEL » ; la directive Genesis a fait d’AZAZEL le nom du système — la
+plateforme, le projet, l’entreprise — dont SINGULAR est le noyau. Un mot qui
+désigne deux choses dans le même dépôt produit une session qui renomme le
+moteur en croyant obéir, ou qui prend une posture pour une architecture. Le
+registre n’a donc plus de nom propre : c’est le registre, et AZAZEL est le
+système. (JARVIS est abandonné et n’apparaît plus dans aucun fichier suivi ;
+seuls des noms de branches en gardent la trace.)
 
 **Ce qui est visé.** Une souveraineté existentielle : volonté froide, non
 négociable, capacité de façonner le réel. Ce qui doit disparaître est la
@@ -153,7 +171,8 @@ passivité, la plainte, et le conditionnement — social, moral, spirituel.
 **Le cadre est une métaphore, et il le reste.** La rupture d’Azazel, l’alchimie
 dissolvante du Sitra Ahra et des Qliphoth nomment une opération : dissoudre
 l’ego, le moi-victime et les béquilles psychologiques. Ce sont des archétypes,
-pas des instructions. Ce dépôt n’exécute aucun rituel ; il mesure des actes.
+pas des instructions — et ici le mot ne désigne que l’archétype dont ce registre
+vient, jamais le système. Ce dépôt n’exécute aucun rituel ; il mesure des actes.
 
 **Ce que tu fais à chaque échange.**
 
@@ -588,33 +607,64 @@ que des littéraux entiers ; personne n'écrit `"abandonnée"` tout seul, on éc
 `f"  {id}  abandonnée - {lesson}"`. Il ne tenait rien.
 
 **Un refus sans témoin n'est pas un refus.** `tools/gardes_sans_test.py` sabote
-chaque refus de la frontière, un par un, et relance la suite. **Quatre formes** :
-un `if ... raise` dont la condition devient fausse ; un `return False` qui devient
-`return True` — les prédicats sont les refus les plus graves du dépôt et la première
-version les ignorait — ; **une moitié** d'un garde composé, remplacée par l'élément
-neutre de son opérateur, pour savoir si les deux moitiés d'un `if a or b` sont
-prouvées ou une seule ; et **une moitié d'un booléen rendu**, parce que les trois
-premières ne voient que ce qui refuse. `global_control.py` n'avait aucun mutant :
-il ne lève rien, il rend un verdict que tout le reste lit — et
-`requires_human` réunit cinq raisons d'exiger un humain par des `or`, dont une
-seule non prouvée suffit à ce qu'une catégorie entière cesse d'en exiger un. Ceux qui
+chaque refus de la frontière, un par un, et relance la suite. Les formes qu'il
+sait saboter sont énumérées dans sa docstring, et leur nombre n'est pas recopié
+ici : un `if ... raise` dont la condition devient fausse ; un `return False` qui
+devient `return True` — les prédicats sont les refus les plus graves du dépôt et
+la première version les ignorait — ; **une moitié** d'un garde composé, remplacée
+par l'élément neutre de son opérateur, pour savoir si les deux moitiés d'un
+`if a or b` sont prouvées ou une seule ; **une moitié d'un booléen rendu**, parce
+que les précédentes ne voient que ce qui refuse ; et **une moitié d'un booléen
+rendu dans un dictionnaire**, parce que ce dépôt construit là ses verdicts les
+plus lus. `global_control.py` n'avait aucun mutant : il ne lève rien, il rend un
+verdict que tout le reste lit — et `requires_human` réunit cinq raisons d'exiger
+un humain par des `or`, dont une seule non prouvée suffit à ce qu'une catégorie
+entière cesse d'en exiger un. Trois de ces cinq n'étaient pas mesurées le
+14 septembre 2026 alors que l'outil les annonçait comme telles : il visait une
+ligne, et cette ligne portait trois `BoolOp` imbriqués. Une étiquette de cet outil
+n'est une mesure que depuis qu'elle porte le texte de l'opérande. Ceux qui
 survivent sont retirables sans qu'un test rougisse — la première passe en a nommé
-beaucoup, et le compte n'est pas écrit ici : l'outil le donne en dix minutes. Le
+beaucoup, et le compte n'est pas écrit ici : l'outil le donne — mais pas en dix
+minutes, et cette phrase-là a coûté une heure. Le prix suit le nombre de
+survivants, chacun étant revérifié contre la suite entière ; `frontiere` dépasse
+l'heure. Ne l'enferme pas dans un `timeout` court, et ne le passe pas dans un
+`| tail` : coupé, un tube qui tamponne ne rend rien, pas même les survivants
+déjà nommés. Le
 travail n'est pas de tous les tester, c'est de les **trier** en quatre familles,
 et la docstring de l'outil les nomme. La plus grave était la réconciliation :
 fournisseur, opération et charge substitués étaient testés à l'aller, aucun au
 retour — alors que la réconciliation atteint le même fournisseur et peut faire
 passer une exécution à COMPLETED.
 
-**Et il y a deux formes de refus, pas une.** L'outil ne connaissait que
+**Et un refus ne prend pas qu'une seule forme.** L'outil ne connaissait que
 `if ... raise`. Or les refus les plus graves n'en sont pas : `verify`,
 `verify_issuance`, `matches`, `authorised`, `same_origin` rendent `False`. Un
 prédicat qui cesse de refuser ne lève rien et ne trace rien — c'est la forme
-fail-open. Zéro survivant dans le moteur du matin, ce qui est la bonne nouvelle :
+fail-open. Zéro survivant dans le moteur du matin, ce qui était la bonne nouvelle :
 le jeton d'accès du Sage et ses gardes contre un domaine hostile sont prouvés.
 Six dans la frontière, tous des témoins manquants et aucun défaut de
 comportement — dont la mutation d'une décision **après** son émission, sur le
 chemin qui nourrit la calibration.
+
+**Ce « zéro » n'a pas tenu, et la façon dont il est tombé vaut la leçon.** Un
+passage suivant en a trouvé quatre dans le moteur du matin. Deux sont des
+assurances derrière `BEGIN IMMEDIATE`, triées dans l'outil pour qu'on ne les
+retrie pas. Les deux autres étaient un vrai trou, sous la forme la plus
+sournoise : **un test existait et ne couvrait aucune des deux moitiés qu'il
+visait**. `is_shared_memory_target` — ses trois cas passaient à l'identique avec
+l'une ou l'autre moitié remplacée par `True`, et ce qu'elle décide est si un
+journal vit sur le disque ou en RAM. Un « zéro survivant » est donc daté : il
+vaut pour le code de ce jour-là, pas pour celui d'après.
+
+Relancé après correction : **deux survivants sur quarante-deux**, et ce sont les
+deux assurances. Le triage tient donc, et il a été attaqué avant d'être écrit —
+six `resolve()` concurrents et une écriture brute entre deux transactions
+tombent tous sur le contrôle antérieur, jamais sur le `rowcount`.
+
+L'outil a un troisième groupe depuis, `genesis`. Premier passage : treize
+survivants sur vingt-deux, dans du code écrit le jour même, dont la garantie
+fail-closed du juge — un vérificateur qui plante valait un succès. Zéro sur
+treize après correction. Relance-le quand tu touches à ce qu'il mesure.
 
 **L'outil s'est trompé une fois, et c'est la leçon qui vaut le plus.** Il a
 dénoncé comme non prouvé un refus que la suite entière tue, parce que sa
@@ -649,7 +699,10 @@ heure, tous sur le chemin du matin, aucun qu'un test aurait vu :
   la Notice se taisait sur les mêmes données. Cinquième fois pour ce défaut : la
   ligne vit dans le moteur, et le fichier qui garde « une règle, un domicile » ne
   liste que les interfaces. Les deux seuils vivent maintenant dans le journal, et
-  le garde couvre le moteur quand il affiche.
+  le garde couvre le moteur quand il affiche. **Sixième fois depuis** : nommer
+  les bons seuils tout en les recombinant soi-même est encore tenir sa propre
+  règle, donc c'est la règle entière qui vit dans le journal, `montrable`
+  compris, et le garde exige que cette ligne n'en nomme **aucun**.
 - `sj due` disait « 1 décision(s) attendent un verdict ». Le pluriel a un
   domicile depuis le matin ; la forme parenthésée y échappait.
 - `sj import mon-export.csv` rendait une pile Python. `export` écrit un CSV,
@@ -715,18 +768,17 @@ Ce que j'aurai à te dire viendra sous une de ces formes :
 ## Pistes d'audit encore ouvertes
 
 1. **Des refus de la frontière n'ont toujours pas de témoin**, et c'est en
-   partie normal : `tools/gardes_sans_test.py` les liste -- les quatre formes, le
-   `raise`, le `return False`, la moitié d'un garde composé et la moitié d'un
-   booléen rendu -- et sa docstring
-   trie les survivants en **quatre** familles. Seule la première est un trou :
-   écris le témoin. La deuxième et la quatrième sont des assurances — un contrôle
-   antérieur les couvre, ou rien ne produit leur entrée — et leur écrire un test
-   demanderait de désactiver `verify()`, donc de tester un chemin qui n'existe
-   pas ; on écrit alors la raison à côté du code, pas un test. La troisième, la
-   **moitié morte**, ne se teste ni ne se documente : elle se retire, parce
-   qu'aucune entrée ne peut la distinguer de sa voisine. Sa forme la plus commune
-   est désormais impossible — `tests/test_moitie_morte.py` la refuse dans tout le
-   dépôt. Relance l'outil après avoir touché à la frontière, pas avant.
+   partie normal : `tools/gardes_sans_test.py` les liste, et sa docstring trie les
+   survivants en familles — leur nombre est écrit là-bas et nulle part ici, parce
+   qu'il a déjà vieilli deux fois dans ce fichier. Une seule famille est un trou :
+   écris le témoin. Les assurances — un contrôle antérieur les couvre, ou rien ne
+   produit leur entrée — ne se testent pas : leur écrire un test demanderait de
+   désactiver `verify()`, donc de tester un chemin qui n'existe pas ; on écrit
+   alors la raison à côté du code. La **moitié morte** ne se teste ni ne se
+   documente : elle se retire, parce qu'aucune entrée ne peut la distinguer de sa
+   voisine. Sa forme la plus commune est désormais impossible —
+   `tests/test_moitie_morte.py` la refuse dans tout le dépôt. Relance l'outil
+   après avoir touché à la frontière, pas avant.
 2. ~~**« La suite passe en ordre aléatoire » est mesuré, pas garanti.**~~ Réglé
    le 13 septembre 2026, et la cause était plus bête que la piste : `pytest-randomly`
    n'était pas dans les dépendances `dev`, donc le CI ne l'installait pas et

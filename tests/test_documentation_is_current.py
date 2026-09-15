@@ -471,6 +471,40 @@ def test_aucun_document_n_affirme_qu_on_ne_peut_pas_reunir_deux_journaux() -> No
     )
 
 
+#: Ce qui nomme une histoire qu'on tient et qu'on peut perdre. Sans elle, deux
+#: choses qui divergent sont juste deux choses qui divergent.
+HISTOIRE = re.compile(r"journal|journaux|candidature", re.IGNORECASE)
+
+#: Ce qui dit qu'elles se sont séparées.
+DIVERGENCE = re.compile(r"deux journaux|divergen", re.IGNORECASE)
+
+
+def _parle_de_journaux_divergents(brut: str) -> bool:
+    """Un paragraphe qui dit qu'une histoire tenue s'est séparée en deux."""
+    return any(HISTOIRE.search(paragraphe) and DIVERGENCE.search(paragraphe)
+               for paragraphe in re.split(r"\n\s*\n", brut))
+
+
+def test_le_garde_des_journaux_divergents_attrape_encore_ce_qu_il_vise() -> None:
+    """Le témoin, parce que ce garde a été rétréci.
+
+    Il regardait le document entier et réclamait `singular import` à tout texte
+    contenant le mot « divergent », y compris à une page sur les empreintes
+    d'artefact. Rétrécir un garde pour faire passer son propre document est le
+    genre de geste qui mérite d'être prouvé : celui-ci doit encore crier sur ce
+    qu'il visait, et se taire sur le reste.
+    """
+    vise = "Deux journaux qui divergent donnent deux calibrations fausses."
+    assert _parle_de_journaux_divergents(vise)
+
+    hors_sujet = "Deux empreintes écrites séparément finiraient par divergerment."
+    assert not _parle_de_journaux_divergents(hors_sujet)
+
+    # Séparés par un paragraphe, les deux mots ne parlent plus de la même chose.
+    eloignes = "Le journal du Mac.\n\nDeux empreintes qui divergent."
+    assert not _parle_de_journaux_divergents(eloignes)
+
+
 def test_un_document_qui_parle_de_deux_journaux_nomme_la_reprise() -> None:
     """La moitié qui compte : l'oubli silencieux, pas la phrase fausse.
 
@@ -485,8 +519,14 @@ def test_un_document_qui_parle_de_deux_journaux_nomme_la_reprise() -> None:
     """
     manquants = []
     for chemin in _documents_markdown():
-        texte = " ".join(chemin.read_text(encoding="utf-8").split())
-        if "deux journaux" not in texte.lower() and "divergent" not in texte.lower():
+        brut = chemin.read_text(encoding="utf-8")
+        texte = " ".join(brut.split())
+        # Paragraphe par paragraphe, et pas document entier : « divergent » est un
+        # mot ordinaire. `docs/AZAZEL_GENESIS.md` l'emploie pour deux empreintes
+        # d'artefact qui se sépareraient, ce qui n'a rien à voir avec un journal
+        # -- et le garde le réclamait quand même à `singular import`. Un garde qui
+        # crie sur ce qu'il ne vise pas finit désarmé par celui qu'il dérange.
+        if not _parle_de_journaux_divergents(brut):
             continue
         if "singular import" not in texte:
             manquants.append(str(chemin.relative_to(ROOT)))
@@ -494,4 +534,66 @@ def test_un_document_qui_parle_de_deux_journaux_nomme_la_reprise() -> None:
         "ces documents decrivent deux journaux divergents sans nommer la reprise :\n  "
         + "\n  ".join(manquants)
         + "\nDis `python3 -m singular import`, ou dis pourquoi il ne s'applique pas."
+    )
+
+
+#: Un nombre de tests ecrit en toutes lettres, dans un document qui se lit comme
+#: l'etat courant. « 2038 tests passent », « 1925 tests ».
+COMPTE_DE_TESTS = re.compile(r"\b\d{3,5}\s+tests?\b", re.IGNORECASE)
+
+
+def test_aucun_document_n_ecrit_le_nombre_de_tests() -> None:
+    """Le `README` a pris cette decision pour lui ; elle vaut pour tout le depot.
+
+    « Le compte est deliberement pas ecrit ici — il etait faux en une semaine,
+    deux fois. » Une session l'a quand meme ecrit trois fois de suite dans des
+    messages de commit, en se trompant deux fois, dont une en corrigeant la
+    premiere. Troisieme passage, donc la regle cesse d'etre un conseil.
+
+    Un message de commit deja pousse ne se reecrit pas : ce garde tient les
+    documents, qui eux se lisent comme l'etat courant. Le chiffre ne prouve rien
+    que le CI ne prouve mieux, et le verifier coute une passe complete.
+    """
+    fautifs = []
+    for chemin in _documents_markdown():
+        for numero, ligne in enumerate(chemin.read_text(encoding="utf-8").splitlines(), 1):
+            trouve = COMPTE_DE_TESTS.search(ligne)
+            if trouve and "nombre de tests" not in ligne and "compte" not in ligne.lower():
+                fautifs.append(f"{chemin.relative_to(ROOT)}:{numero} — {trouve.group(0)}")
+    assert not fautifs, (
+        "ces documents ecrivent un nombre de tests, qui sera faux au prochain commit :\n  "
+        + "\n  ".join(fautifs)
+        + "\nDis que la suite passe, pas combien elle compte."
+    )
+
+
+#: Un nombre de formes de sabotage recopie dans un document. « Quatre formes »,
+#: « les quatre formes ». Le chiffre vit dans `tools/gardes_sans_test.py`.
+NOMBRE_DE_FORMES = re.compile(
+    r"\b(deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+formes\b", re.IGNORECASE)
+
+
+def test_aucun_document_ne_recopie_le_nombre_de_formes_de_l_outil() -> None:
+    """Deux fois faux dans le meme fichier, donc le chiffre n'a plus le droit d'y etre.
+
+    `PROMPT_NOUVELLE_CONVERSATION.md` annoncait « quatre formes » a deux endroits
+    apres qu'une cinquieme eut ete ajoutee -- celle qui a trouve l'angle mort sur
+    les verdicts en dictionnaire. Un chiffre recopie dans un document vieillit au
+    commit suivant et personne ne le relit ; celui-la est `len(FORMES)`, dans
+    l'outil, et un lecteur qui a besoin du compte lance l'outil.
+
+    Le meme piege a deja coute le nombre de tests, le nombre de familles de
+    triage, et une heure de vrai travail a partir d'une phrase fausse. Troisieme
+    fois : ca devient un garde.
+    """
+    fautifs = []
+    for chemin in _documents_markdown():
+        for numero, ligne in enumerate(chemin.read_text(encoding="utf-8").splitlines(), 1):
+            trouve = NOMBRE_DE_FORMES.search(ligne)
+            if trouve and "nombre de formes" not in ligne.lower():
+                fautifs.append(f"{chemin.relative_to(ROOT)}:{numero} — {trouve.group(0)}")
+    assert not fautifs, (
+        "ces documents recopient le nombre de formes de `tools/gardes_sans_test.py` :\n  "
+        + "\n  ".join(fautifs)
+        + "\nRenvoie a sa docstring ; elle, au moins, est a cote du code."
     )

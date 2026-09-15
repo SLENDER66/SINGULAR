@@ -1,0 +1,774 @@
+"""Genesis, et surtout ce qu'elle refuse de conclure.
+
+L'hypothèse de la directive est qu'une expérience vérifiée devient une capacité
+réutilisable, et qu'une capacité réutilisable rend une mission suivante
+objectivement meilleure. Un banc qui ne sait que confirmer ne prouve rien : il
+mesure sa propre complaisance.
+
+Ce fichier tient donc les deux bords, et le second est le vrai sujet.
+
+**Ce qui doit marcher.** Les trois missions sur les fichiers réels du dépôt :
+ALPHA exécute et vérifie, BETA détecte un manque et récupère sans rien inventer,
+GAMMA échoue faute de capacité puis construit la sienne, l'éprouve et l'inscrit.
+
+**Ce qui doit être refusé.** Une amélioration mesurée sur l'instance qui a servi
+à apprendre. Une capacité qui a mémorisé au lieu d'apprendre. Un gain de coût
+payé par un appel à un humain. Une réponse fausse mais moins chère. Un niveau de
+preuve qui monte malgré un échec. Un artefact substitué sous un nom déjà prouvé.
+
+Chaque refus a son test, parce qu'un refus sans test est une intention.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from singular.genesis import (Etape, Mission, Preuve, Registre, SubstitutionRefusee,
+                             Trajectoire, banc, executer, constater_naissance)
+from singular.genesis.bench import AMELIORATION, AUCUNE, REFUTE
+from singular.genesis.capability import PLAFOND_APRES_ECHEC
+from singular.genesis.lecteurs import FormatRefuse
+from singular.genesis.missions import (GAMMA_ABIMEE, GAMMA_APPRENTISSAGE, GAMMA_CONTROLE,
+                                       LECTEUR_APPRIS, LECTEUR_EGAL,
+                                       alpha, apprendre_de_gamma, beta, construire_lecteur,
+                                       apprendre_le_egal, delta, epsilon, zeta,
+                                       construire_lecteur_memorisant, gamma, prouver_emploi,
+                                       resoudre, sources_du_depot)
+
+RACINE = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture
+def sources() -> dict[str, str]:
+    return sources_du_depot(RACINE)
+
+
+def solveur(mission, trajectoire, registre):
+    return resoudre(mission, trajectoire, registre)
+
+
+def _registre_apres_gamma() -> Registre:
+    registre = Registre()
+    assert apprendre_de_gamma(registre, Trajectoire("acquisition"))
+    return registre
+
+
+# --- ALPHA : exécuter et vérifier ---------------------------------------------
+
+def test_alpha_repond_et_le_juge_recalcule(sources) -> None:
+    """Deux sources, deux formats, et un verdict que le solveur ne donne pas.
+
+    Le vérificateur relit `CHANGELOG.md` et `pyproject.toml` par son propre
+    chemin. Un solveur qui déclarerait avoir réussi ne changerait rien au verdict.
+    """
+    resultat = executer(alpha(sources), lambda m, t: resoudre(m, t, Registre()))
+    assert resultat.verifie
+    assert resultat.reponse["pyproject.version"] == resultat.reponse["changelog.version"][:1], (
+        "le changelog ouvre sur la version publiée : c'est ce que la mission demandait")
+
+
+def test_alpha_tatonne_et_la_trajectoire_le_montre(sources) -> None:
+    """Sans capacité, le solveur essaie des lecteurs et se trompe avant de trouver.
+
+    Ce n'est pas un défaut : c'est la ligne de base contre laquelle une capacité
+    apprise sera mesurée. Une trajectoire sans aucun échec signifierait que le
+    chemin long n'est pas plus long, et il n'y aurait rien à améliorer.
+    """
+    resultat = executer(alpha(sources), lambda m, t: resoudre(m, t, Registre()))
+    assert resultat.erreurs > 0
+    assert resultat.recuperations > 0
+
+
+def test_un_solveur_qui_ment_ne_passe_pas(sources) -> None:
+    """Le point entier de séparer le juge du solveur."""
+    resultat = executer(alpha(sources), lambda m, t: {"changelog.version": ["999.0.0"]})
+    assert not resultat.verifie
+    assert "vérificateur" in resultat.pourquoi
+
+
+def test_un_solveur_qui_plante_rate_au_lieu_de_tout_interrompre(sources) -> None:
+    """Le banc doit pouvoir comparer une mission ratée à une mission réussie."""
+    def casse(mission, trajectoire):
+        raise RuntimeError("boum")
+
+    resultat = executer(alpha(sources), casse)
+    assert not resultat.verifie
+    assert resultat.erreurs == 1
+    assert "RuntimeError" in resultat.pourquoi
+
+
+# --- BETA : échouer, diagnostiquer, récupérer ---------------------------------
+
+def test_beta_recupere_sans_rien_inventer(sources) -> None:
+    """Une source tronquée, une absente, et une réponse qui ne comble pas les trous.
+
+    Le mandat en fait une règle de vie : ne jamais combler un blanc par une
+    déduction. Ici c'est vérifiable — le vérificateur refuse toute réponse qui
+    contiendrait une version pour la source qu'on n'a pas pu lire.
+    """
+    resultat = executer(beta(sources), lambda m, t: resoudre(m, t, Registre()))
+    assert resultat.verifie
+    assert "pyproject.version" not in resultat.reponse
+    assert "notice.version" not in resultat.reponse
+
+
+def test_beta_voit_l_echec_avant_de_le_contourner(sources) -> None:
+    """« Il a récupéré » ne se mesure pas sans un échec enregistré avant."""
+    resultat = executer(beta(sources), lambda m, t: resoudre(m, t, Registre()))
+    genres = [pas.genre for pas in resultat.trajectoire]
+    assert Etape.ECHEC in genres
+    assert Etape.RECUPERATION in genres
+    assert genres.index(Etape.ECHEC) < genres.index(Etape.RECUPERATION)
+    absente = [pas for pas in resultat.trajectoire if pas.detail == "source absente"]
+    assert absente, "la source manquante doit être diagnostiquée, pas seulement ratée"
+
+
+# --- GAMMA : détecter le manque et devenir capable ----------------------------
+
+def test_gamma_echoue_avant_d_avoir_la_capacite() -> None:
+    """Sans le manque, il n'y a rien à acquérir et la démonstration est truquée."""
+    resultat = executer(gamma(GAMMA_APPRENTISSAGE), lambda m, t: resoudre(m, t, Registre()))
+    assert not resultat.verifie
+
+
+def test_gamma_suit_le_cycle_en_entier() -> None:
+    """Détecter → construire → bac à sable → inscrire, et dans cet ordre."""
+    registre = Registre()
+    trajectoire = Trajectoire("acquisition")
+    assert apprendre_de_gamma(registre, trajectoire)
+
+    genres = [pas.genre for pas in trajectoire.pas]
+    assert genres[0] is Etape.ECHEC, "le manque se constate avant qu'on construise"
+    assert Etape.CONSTRUCTION in genres
+    assert LECTEUR_APPRIS in registre
+    assert registre.chercher(LECTEUR_APPRIS).provenance == "GAMMA"
+
+
+def test_un_lecteur_qui_rate_le_bac_a_sable_n_est_pas_inscrit() -> None:
+    """L'inscription se mérite : un contrôle faux ne doit rien laisser au registre.
+
+    Sans ça, le registre accepterait une capacité sur la foi de celui qui l'a
+    écrite, et le niveau de preuve mesurerait sa confiance en lui.
+    """
+    from singular.genesis.missions import acquerir_lecteur
+
+    registre = Registre()
+    acquis = acquerir_lecteur(GAMMA_APPRENTISSAGE, ("journal", "une valeur qui n'y est pas"),
+                              Trajectoire("acquisition"), registre, provenance="GAMMA")
+    assert not acquis
+    assert LECTEUR_APPRIS not in registre
+
+
+def test_la_capacite_sert_sur_une_autre_instance() -> None:
+    """Ce qui distingue une capacité d'un souvenir."""
+    registre = _registre_apres_gamma()
+    resultat = executer(gamma(GAMMA_CONTROLE, attendu="téléphone"),
+                        lambda m, t: resoudre(m, t, registre))
+    assert resultat.verifie
+    assert resultat.capacites_reutilisees == (LECTEUR_APPRIS,)
+
+
+# --- le test de naissance : ce qu'on a le droit de conclure -------------------
+
+def test_la_naissance_se_constate_sur_une_instance_nouvelle() -> None:
+    """Le cas favorable, et il doit exister, sinon le banc ne mesure rien."""
+    naissance = constater_naissance(
+        gamma(GAMMA_CONTROLE, nom="GAMMA-controle", attendu="téléphone"),
+        solveur, _registre_apres_gamma(), instance="soir", apprises_sur={"matin"})
+    assert naissance.ne
+    assert naissance.capacites == (LECTEUR_APPRIS,)
+    assert naissance.comparaison.verdict == AMELIORATION
+
+
+def test_une_amelioration_sur_l_instance_apprise_n_est_pas_une_naissance() -> None:
+    """Rejouer ce qu'on a vu mesure une mémoire, pas une capacité.
+
+    Le banc tourne quand même et le chiffre reste vrai ; c'est le mot qui est
+    refusé, et la raison est écrite plutôt que sous-entendue.
+    """
+    naissance = constater_naissance(
+        gamma(GAMMA_APPRENTISSAGE, nom="GAMMA-rejeu"),
+        solveur, _registre_apres_gamma(), instance="matin", apprises_sur={"matin"})
+    assert not naissance.ne
+    assert "mémorisation" in naissance.pourquoi
+    assert naissance.comparaison.verdict == AMELIORATION, (
+        "le chiffre reste ce qu'il est : c'est la conclusion qu'on refuse")
+
+
+def test_une_capacite_qui_a_memorise_est_refutee() -> None:
+    """Le cas que ce fichier existe pour attraper.
+
+    Une capacité qui a retenu la réponse réussit la mission d'apprentissage et
+    rate la suivante. Le banc doit dire REFUTE, pas AMELIORATION.
+    """
+    registre = Registre()
+    registre.inscrire(LECTEUR_APPRIS, "lire un format clé/valeur",
+                      construire_lecteur_memorisant(GAMMA_APPRENTISSAGE,
+                                                    {"machine": ["mac"]}),
+                      provenance="GAMMA")
+    naissance = constater_naissance(
+        gamma(GAMMA_CONTROLE, nom="GAMMA-controle", attendu="téléphone"),
+        solveur, registre, instance="soir", apprises_sur={"matin"})
+    assert not naissance.ne
+    assert naissance.comparaison.verdict == REFUTE
+
+
+def test_une_amelioration_sans_capacite_employee_n_est_pas_une_naissance() -> None:
+    """Si l'expérience n'y est pour rien, ce n'est pas l'expérience qui a payé.
+
+    Le solveur va plus vite quand le registre n'est pas vide, mais il n'emploie
+    aucune capacité : il regarde seulement s'il y en a. Le chiffre s'améliore,
+    et pourtant rien de ce qui a été appris n'a servi. C'est la corrélation
+    qu'un banc naïf appellerait un progrès.
+    """
+    def verifier(reponse, _sources):
+        return reponse == "bon"
+
+    mission = Mission("CORRELATION", "peu importe", {"a": "x"}, verifier)
+
+    def solveur_chanceux(mission, trajectoire, registre):
+        for _ in range(1 if len(registre) else 4):
+            trajectoire.note(Etape.LECTURE, "je cherche")
+        return "bon"
+
+    naissance = constater_naissance(mission, solveur_chanceux, _registre_apres_gamma(),
+                                    instance="soir", apprises_sur={"matin"})
+    assert naissance.comparaison.verdict == AMELIORATION, "le coût a bien baissé"
+    assert not naissance.ne
+    assert "l'expérience n'y est pour rien" in naissance.pourquoi
+
+
+def test_un_gain_de_cout_paye_par_un_humain_est_refuse() -> None:
+    """Moins d'étapes en appelant plus souvent à l'aide n'est pas une autonomie.
+
+    C'est la métrique optimisée contre la réalité que la directive interdit
+    nommément, et c'est le seul refus du banc qu'aucune donnée réelle ne
+    produirait toute seule : il se construit.
+    """
+    def verifier(reponse, _sources):
+        return reponse == "bon"
+
+    mission = Mission("PIEGE", "peu importe", {"a": "x"}, verifier)
+
+    def solveur_piege(mission, trajectoire, registre):
+        if len(registre):
+            trajectoire.note(Etape.HUMAIN, "je demande", cout=0.5)
+            return "bon"
+        for _ in range(4):
+            trajectoire.note(Etape.LECTURE, "je cherche")
+        return "bon"
+
+    comparaison = banc(mission, solveur_piege, _registre_apres_gamma())
+    assert comparaison.verdict == REFUTE
+    assert "interventions_humaines" in comparaison.pourquoi
+
+
+def test_une_reponse_fausse_moins_chere_est_refusee() -> None:
+    """Un coût plus bas sur une réponse fausse est un coût plus bas sur une réponse fausse."""
+    def verifier(reponse, _sources):
+        return reponse == "bon"
+
+    mission = Mission("PIEGE", "peu importe", {"a": "x"}, verifier)
+
+    def solveur_piege(mission, trajectoire, registre):
+        if len(registre):
+            trajectoire.note(Etape.LECTURE, "vite")
+            return "faux"
+        for _ in range(5):
+            trajectoire.note(Etape.LECTURE, "lentement")
+        return "bon"
+
+    assert banc(mission, solveur_piege, _registre_apres_gamma()).verdict == REFUTE
+
+
+def test_un_banc_sans_rien_a_gagner_dit_aucune() -> None:
+    """Le verdict neutre existe, et ce n'est pas un bug du banc."""
+    def verifier(reponse, _sources):
+        return reponse == "bon"
+
+    mission = Mission("PLAT", "peu importe", {"a": "x"}, verifier)
+
+    def solveur_plat(mission, trajectoire, registre):
+        trajectoire.note(Etape.LECTURE, "pareil des deux côtés")
+        return "bon"
+
+    comparaison = banc(mission, solveur_plat, _registre_apres_gamma())
+    assert comparaison.verdict == AUCUNE
+
+
+# --- le registre : l'échelle de preuve et l'identité de l'artefact ------------
+
+def test_le_niveau_ne_monte_que_sur_des_instances_distinctes() -> None:
+    """Deux emplois sur la même instance font un rejeu, pas une répétition."""
+    registre = _registre_apres_gamma()
+    for _ in range(4):
+        prouver_emploi(registre, instance="matin", domaine="releve", abimee=False, reussi=True)
+    assert registre.chercher(LECTEUR_APPRIS).niveau == "E1"
+
+
+def test_l_echelle_monte_jusqu_a_E5_et_pas_avant() -> None:
+    """Chaque barreau demande quelque chose de plus, et le dit."""
+    registre = _registre_apres_gamma()
+    capacite = registre.chercher
+    assert capacite(LECTEUR_APPRIS).niveau == "E0"
+
+    prouver_emploi(registre, instance="a", domaine="releve", abimee=False, reussi=True)
+    assert capacite(LECTEUR_APPRIS).niveau == "E1"
+    prouver_emploi(registre, instance="b", domaine="releve", abimee=False, reussi=True)
+    assert capacite(LECTEUR_APPRIS).niveau == "E2"
+    prouver_emploi(registre, instance="c", domaine="releve", abimee=False, reussi=True)
+    assert capacite(LECTEUR_APPRIS).niveau == "E3", "trois instances, aucun échec"
+    prouver_emploi(registre, instance="d", domaine="releve", abimee=True, reussi=True)
+    assert capacite(LECTEUR_APPRIS).niveau == "E4", "une instance abîmée tenue"
+    prouver_emploi(registre, instance="e", domaine="config", abimee=False, reussi=True)
+    assert capacite(LECTEUR_APPRIS).niveau == "E5", "un deuxième domaine"
+
+
+def test_un_seul_echec_plafonne_le_niveau() -> None:
+    """« Vérifiée » et « robuste » sont des affirmations de fiabilité, pas des compteurs."""
+    registre = _registre_apres_gamma()
+    for nom in "abcde":
+        prouver_emploi(registre, instance=nom, domaine="releve", abimee=True, reussi=True)
+    assert registre.chercher(LECTEUR_APPRIS).niveau == "E4"
+
+    prouver_emploi(registre, instance="f", domaine="releve", abimee=False, reussi=False)
+    assert registre.chercher(LECTEUR_APPRIS).niveau == PLAFOND_APRES_ECHEC
+
+
+def test_un_niveau_ne_se_pose_pas_a_la_main() -> None:
+    """Il est recalculé à chaque lecture depuis les preuves : il n'y a rien à écrire."""
+    registre = _registre_apres_gamma()
+    capacite = registre.chercher(LECTEUR_APPRIS)
+    with pytest.raises((AttributeError, TypeError)):
+        capacite.niveau = "E5"
+
+
+def test_reinscrire_un_autre_artefact_remet_les_preuves_a_zero() -> None:
+    """« Candidat X, évalué, approuvé » ne doit pas activer autre chose que X.
+
+    Les preuves avaient été gagnées par l'ancien code. Les laisser au nouveau
+    serait exactement la substitution d'artefact que la directive demande de
+    rendre impossible.
+    """
+    registre = _registre_apres_gamma()
+    for nom in "abc":
+        prouver_emploi(registre, instance=nom, domaine="releve", abimee=False, reussi=True)
+    assert registre.chercher(LECTEUR_APPRIS).niveau == "E3"
+
+    registre.inscrire(LECTEUR_APPRIS, "lire un format clé/valeur",
+                      construire_lecteur("="), provenance="autre")
+    remplacee = registre.chercher(LECTEUR_APPRIS)
+    assert remplacee.niveau == "E0"
+    assert remplacee.version == 2
+    assert remplacee.preuves == ()
+
+
+def test_deux_lecteurs_sur_deux_separateurs_sont_deux_artefacts() -> None:
+    """La capture de fermeture fait partie de l'identité, sinon l'empreinte ment."""
+    registre = Registre()
+    un = registre.inscrire("lecteur", "lire", construire_lecteur(": "))
+    deux = registre.inscrire("lecteur", "lire", construire_lecteur("="))
+    assert un.empreinte != deux.empreinte
+
+
+def test_reinscrire_le_meme_artefact_ne_perd_rien() -> None:
+    """Une réinscription à l'identique n'est pas un changement, donc ne coûte rien."""
+    registre = Registre()
+    lecteur = construire_lecteur(": ")
+    registre.inscrire("lecteur", "lire", lecteur)
+    registre.prouver("lecteur", Preuve(instance="a", domaine="releve"))
+    registre.inscrire("lecteur", "lire", lecteur)
+    assert registre.chercher("lecteur").version == 1
+    assert registre.chercher("lecteur").niveau == "E1"
+
+
+def test_employer_refuse_un_artefact_substitue() -> None:
+    """Le contrôle du côté de l'appelant, pour qui a gardé une référence."""
+    registre = _registre_apres_gamma()
+    with pytest.raises(SubstitutionRefusee):
+        registre.employer(LECTEUR_APPRIS, construire_lecteur("="))
+
+
+def test_employer_une_capacite_inconnue_leve() -> None:
+    """Fail-closed : un nom inconnu n'est pas une capacité vide, c'est une erreur."""
+    with pytest.raises(KeyError):
+        Registre().employer("rien")
+
+
+# --- numérique et formes limites ----------------------------------------------
+
+@pytest.mark.parametrize("cout", [float("nan"), float("inf"), float("-inf"), -1.0])
+def test_un_pas_refuse_un_cout_qui_n_est_pas_un_nombre(cout) -> None:
+    """Un coût NaN empoisonnerait toutes les comparaisons du banc en silence."""
+    from singular.genesis.mission import Pas
+
+    with pytest.raises(ValueError):
+        Pas(Etape.LECTURE, "quoi", cout)
+
+
+def test_un_lecteur_refuse_ce_qui_n_est_pas_de_son_format() -> None:
+    """Sans refus, le tâtonnement serait invisible et tout texte serait lisible."""
+    for _, lecteur in __import__("singular.genesis.lecteurs", fromlist=["TOUS"]).TOUS:
+        with pytest.raises(FormatRefuse):
+            lecteur("")
+
+
+def test_le_registre_vide_ne_trouve_rien() -> None:
+    assert Registre().chercher(LECTEUR_APPRIS) is None
+    assert len(Registre()) == 0
+
+
+# --- l'expérience doit pouvoir être lancée ------------------------------------
+
+def test_l_experience_entiere_se_lance_et_rend_son_verdict() -> None:
+    """Une expérience qu'on ne lance pas est une expérience qui n'existe pas.
+
+    Le mandat garde le souvenir d'une application web finie et jamais lancée
+    pendant qu'une session réparait l'autre. Ce test est ce qui empêche
+    `tools/genesis_experiment.py` de devenir la même chose : il le fait tourner
+    en entier, sur les vrais fichiers du dépôt.
+    """
+    from tools.genesis_experiment import experience
+
+    rapport = experience(RACINE)
+    assert rapport["acquise"], "GAMMA doit avoir acquis sa capacité"
+    assert [resultat.verifie for resultat in rapport["resultats"]] == [True, True, False, True], (
+        "ALPHA et BETA passent, GAMMA échoue sans capacité puis réussit avec")
+    assert rapport["naissance"].ne
+    capacite = rapport["registre"].chercher(LECTEUR_APPRIS)
+    assert capacite.echecs == 1, "l'expérience doit finir sur un échec réel, pas sur un triomphe"
+    assert capacite.niveau == PLAFOND_APRES_ECHEC, (
+        "l'échelle est montée jusqu'à E5 puis redescendue : c'est la descente qui "
+        "prouve qu'elle mesure quelque chose")
+
+
+# --- le deuxième domaine, et ce que la capacité ne sait pas faire -------------
+
+def test_la_capacite_apprise_generalise_a_un_vrai_fichier(sources) -> None:
+    """Appris sur un relevé écrit à la main, employé sur le workflow du CI.
+
+    C'est ce qui sépare « généralisation » du mot « généralisation ». Le fichier
+    est réel, il n'a rien à voir avec ce qui a servi à apprendre, et rien n'a été
+    réappris entre les deux.
+    """
+    registre = _registre_apres_gamma()
+    resultat = executer(delta(sources), lambda m, t: resoudre(m, t, registre))
+    assert resultat.verifie
+    assert resultat.reponse["ci.name"] == ["CI"]
+    assert resultat.capacites_reutilisees == (LECTEUR_APPRIS,)
+
+
+def test_la_capacite_tient_sur_une_instance_abimee() -> None:
+    """Des lignes qui ne sont pas des paires, un commentaire, du blanc.
+
+    E4 sépare « ça marche » de « ça tient », et le barreau n'a de sens que si
+    l'instance abîmée l'est pour de vrai.
+    """
+    registre = _registre_apres_gamma()
+    resultat = executer(gamma(GAMMA_ABIMEE), lambda m, t: resoudre(m, t, registre))
+    assert resultat.verifie
+
+
+def test_la_capacite_echoue_pour_de_vrai_sur_un_format_qu_elle_ne_tient_pas(sources) -> None:
+    """`pyproject.toml` écrit `cle = "valeur"` : le lecteur appris n'en tire rien.
+
+    La mission, elle, **réussit** — par le tâtonnement, qui a un lecteur TOML.
+    Les deux faits sont vrais en même temps et c'est le sujet de ce test : ce
+    qu'on enregistre au registre est ce que la capacité a fait, pas ce que la
+    mission a obtenu. Créditer la capacité d'un succès que le tâtonnement a
+    décroché ferait monter un niveau de preuve sur le travail d'un autre.
+    """
+    registre = _registre_apres_gamma()
+    resultat = executer(epsilon(sources), lambda m, t: resoudre(m, t, registre))
+    assert resultat.verifie, "le solveur sait se rabattre, et c'est ce qu'il doit faire"
+    assert LECTEUR_APPRIS not in resultat.capacites_reutilisees, (
+        "la capacité n'a pas répondu : elle ne doit pas figurer parmi celles employées")
+
+
+def test_l_experience_gravit_l_echelle_puis_la_redescend() -> None:
+    """Monter jusqu'à E5 dans un script ne prouve rien ; retomber, si.
+
+    Quand on a les instances sous la main, une échelle se gravit. Ce qu'elle
+    vaut se lit à ce qu'elle refuse, et c'est ce que ce test tient : les deux
+    emplois réussis montent, l'échec réel ramène au plafond.
+    """
+    from tools.genesis_experiment import experience
+
+    echelle = experience(RACINE)["echelle"]
+    assert [(instance, niveau, reussi) for instance, niveau, reussi, _ in echelle] == [
+        ("ci", "E3", True),
+        ("abimee", "E5", True),
+        ("pyproject", "E2", False),
+    ]
+
+
+# --- la composition : deux capacités valent-elles mieux qu'une ? --------------
+
+def _registre_deux_capacites(sources) -> Registre:
+    registre = _registre_apres_gamma()
+    assert apprendre_le_egal(sources, registre, Trajectoire("GAMMA-bis"))
+    return registre
+
+
+def test_le_second_cycle_produit_une_autre_capacite(sources) -> None:
+    """Deux acquisitions, deux artefacts, deux noms — sinon rien à composer.
+
+    Le séparateur est trouvé par le bac à sable, pas par une liste écrite
+    d'avance : `': '` est essayé le premier sur `pytest.ini` et refusé.
+    """
+    registre = _registre_deux_capacites(sources)
+    assert LECTEUR_APPRIS in registre and LECTEUR_EGAL in registre
+    assert registre.chercher(LECTEUR_APPRIS).empreinte != registre.chercher(LECTEUR_EGAL).empreinte
+    assert registre.chercher(LECTEUR_EGAL).provenance == "GAMMA-bis"
+
+
+def test_zeta_est_hors_de_portee_de_tout_ce_qui_existait(sources) -> None:
+    """Sans quoi la composition serait une mise en scène.
+
+    `pytest.ini` n'est lisible par aucun des quatre lecteurs du dépôt. Si ZETA
+    était soluble par le tâtonnement, mesurer deux capacités contre une ne
+    mesurerait rien.
+    """
+    assert not executer(zeta(sources), lambda m, t: resoudre(m, t, Registre())).verifie
+
+
+def test_une_seule_capacite_ne_suffit_pas_a_zeta(sources) -> None:
+    """La ligne de base de la composition est une capacité, pas zéro."""
+    resultat = executer(zeta(sources), lambda m, t: resoudre(m, t, _registre_apres_gamma()))
+    assert not resultat.verifie
+    assert resultat.capacites_reutilisees == (LECTEUR_APPRIS,), (
+        "la première capacité répond sur ci.yml, et ne peut rien pour pytest.ini")
+
+
+def test_deux_capacites_composent_et_le_banc_le_mesure(sources) -> None:
+    """Le compounding, mesuré contre une capacité — jamais contre rien.
+
+    C'est l'hypothèse stratégique de la directive, et elle n'est pas
+    automatique : essayer deux lecteurs coûte plus que d'en essayer un. Ici le
+    surcoût est payé, mais c'est un fait mesuré sur ces fichiers-là, pas une
+    règle.
+    """
+    comparaison = banc(zeta(sources), solveur, _registre_deux_capacites(sources),
+                       base_registre=_registre_apres_gamma())
+    assert comparaison.verdict == AMELIORATION
+    assert comparaison.capacites_reutilisees == (LECTEUR_APPRIS, LECTEUR_EGAL)
+
+
+def test_le_banc_sans_ligne_de_base_donnee_part_du_registre_vide(sources) -> None:
+    """Le défaut ne bouge pas : c'est le bon départ pour une première acquisition."""
+    comparaison = banc(zeta(sources), solveur, _registre_deux_capacites(sources))
+    assert comparaison.base.capacites_reutilisees == ()
+
+
+def test_le_compteur_de_reutilisation_ne_compte_que_ce_qui_a_tenu(sources) -> None:
+    """« Employée 2× » se lisait comme deux succès pour zéro réponse.
+
+    Le solveur essaie les lecteurs inscrits jusqu'à ce qu'un réponde : le
+    compteur de remises grandit donc avec la taille du registre, pas avec
+    l'utilité de la capacité. Les deux chiffres existent maintenant séparément,
+    et celui qui porte le nom « réutilisations » est dérivé des preuves.
+    """
+    registre = _registre_deux_capacites(sources)
+    executer(zeta(sources), lambda m, t: resoudre(m, t, registre))
+    egal = registre.chercher(LECTEUR_EGAL)
+    assert egal.remises >= 1, "elle a bien été remise"
+    assert egal.reutilisations == 0, "aucune preuve enregistrée : elle n'a tenu nulle part"
+
+    registre.prouver(LECTEUR_EGAL, Preuve(instance="pytest", domaine="config"))
+    registre.prouver(LECTEUR_EGAL, Preuve(instance="autre", domaine="config", reussi=False))
+    assert registre.chercher(LECTEUR_EGAL).reutilisations == 1, (
+        "un échec ne compte pas comme une réutilisation")
+
+
+def test_le_compteur_de_reutilisation_ne_se_pose_pas_a_la_main(sources) -> None:
+    """Dérivé, donc il n'y a nulle part où écrire un chiffre flatteur."""
+    capacite = _registre_deux_capacites(sources).chercher(LECTEUR_APPRIS)
+    with pytest.raises((AttributeError, TypeError)):
+        capacite.reutilisations = 99
+
+
+# --- les vérificateurs vérifient-ils vraiment ? -------------------------------
+#
+# `tools/gardes_sans_test.py` a mute les refus de Genesis : treize survivants sur
+# vingt-deux, tous ici. Les verificateurs acceptaient une reponse juste partout
+# sauf a un endroit, parce qu'aucun test ne leur en avait jamais donne une. Un
+# verificateur qui ne verifie qu'a moitie rend le mot « verifiee » plus faible
+# qu'il n'en a l'air -- et tout ce que le banc affirme repose dessus.
+
+def test_le_juge_qui_leve_refuse_au_lieu_d_accepter(sources) -> None:
+    """La garantie fail-closed du juge, et elle n'avait aucun témoin.
+
+    C'est la mutation la plus grave que l'audit ait trouvée dans Genesis :
+    remplacer le `return False` de `Mission.juger` par `return True` faisait
+    passer toute la suite. Autrement dit, un vérificateur qui plante valait un
+    succès et rien ne l'aurait dit.
+    """
+    def verificateur_qui_plante(_reponse, _sources):
+        raise RuntimeError("le juge lui-même a un bug")
+
+    mission = Mission("JUGE", "peu importe", {"a": "x"}, verificateur_qui_plante)
+    assert mission.juger("n'importe quoi") is False
+    assert not executer(mission, lambda m, t: "une réponse").verifie
+
+
+def test_une_reponse_qui_n_est_pas_un_dictionnaire_est_refusee(sources) -> None:
+    """La discipline de type vit dans `juger`, donc elle se teste là.
+
+    Les vérificateurs portaient chacun leur `isinstance`, qu'aucune entrée ne
+    pouvait distinguer de son absence : un `.get` sur autre chose qu'un
+    dictionnaire lève, et `juger` rattrape. Ils sont retirés ; ce test tient ce
+    que leur retrait suppose.
+    """
+    for reponse in (None, "une chaîne", 42, ["une", "liste"]):
+        assert alpha(sources).juger(reponse) is False, reponse
+        assert gamma(GAMMA_APPRENTISSAGE).juger(reponse) is False, reponse
+
+
+def test_alpha_exige_ses_deux_morceaux(sources) -> None:
+    """Juste sur le changelog et faux sur pyproject : refusé, et l'inverse aussi."""
+    mission = alpha(sources)
+    bonne = executer(mission, lambda m, t: resoudre(m, t, Registre())).reponse
+    assert mission.juger(bonne)
+
+    for champ in ("changelog.version", "pyproject.version"):
+        boiteuse = dict(bonne) | {champ: ["999.0.0"]}
+        assert not mission.juger(boiteuse), f"{champ} n'était pas réellement exigé"
+        assert not mission.juger({c: v for c, v in bonne.items() if c != champ}), champ
+
+
+def test_beta_exige_ses_trois_morceaux(sources) -> None:
+    """Et surtout les deux qui interdisent d'inventer.
+
+    Les deux `not in` sont le cœur de BETA : ils refusent une réponse qui
+    comblerait ce qu'elle n'a pas pu lire. Aucun test ne leur avait jamais donné
+    une réponse qui comble.
+    """
+    mission = beta(sources)
+    bonne = executer(mission, lambda m, t: resoudre(m, t, Registre())).reponse
+    assert mission.juger(bonne)
+
+    assert not mission.juger(dict(bonne) | {"changelog.version": ["999.0.0"]})
+    assert not mission.juger(dict(bonne) | {"pyproject.version": ["3.0.0"]}), (
+        "une version inventée pour la source tronquée doit être refusée")
+    assert not mission.juger(dict(bonne) | {"notice.version": ["3.0.0"]}), (
+        "une version inventée pour la source absente doit être refusée")
+
+
+@pytest.mark.parametrize("mission_faite, champ, faux", [
+    (lambda s: gamma(GAMMA_APPRENTISSAGE), "releve.machine", ["téléphone"]),
+    (lambda s: delta(s), "ci.name", ["autre chose"]),
+    (lambda s: epsilon(s), "pyproject.version", None),
+])
+def test_chaque_mission_exige_vraiment_sa_valeur(sources, mission_faite, champ, faux) -> None:
+    """Un dictionnaire ne suffit pas : il faut la bonne valeur dedans."""
+    mission = mission_faite(sources)
+    assert not mission.juger({champ: faux})
+    assert not mission.juger({}), "une réponse vide n'est pas une réponse juste"
+
+
+def test_zeta_exige_les_deux_sources(sources) -> None:
+    """La composition n'est démontrée que si les deux valeurs sont exigées."""
+    mission = zeta(sources)
+    bonne = {"ci.name": ["CI"], "pytest.testpaths": ["tests"]}
+    assert mission.juger(bonne)
+    assert not mission.juger({"ci.name": ["CI"]})
+    assert not mission.juger({"pytest.testpaths": ["tests"]})
+    assert not mission.juger(dict(bonne) | {"ci.name": ["autre"]})
+
+
+# --- les refus que l'outil ne voyait pas --------------------------------------
+#
+# `tools/gardes_sans_test.py` ne connaissait que quatre noms d'exception du
+# langage, et comparait le nom **ecrit dans le `raise`**. Tous les refus de
+# Genesis en portent un autre -- `FormatRefuse`, `SubstitutionRefusee` -- donc
+# aucun n'a jamais ete mute. « Zero survivant sur treize » couvrait la moitie des
+# refus de ce paquet ; la liste est derivee depuis, et en compte vingt-cinq.
+
+def test_employer_refuse_un_artefact_substitue_dans_le_registre() -> None:
+    """Le contrôle du côté du registre, celui que la section 12 du mandat vise.
+
+    Le test voisin couvre l'autre : un appelant qui a gardé une référence exige
+    que ce soit encore le même code. Celui-ci couvre le cas où **le registre
+    lui-même** ne porte plus l'artefact sous lequel il a inscrit l'empreinte --
+    « ancien jeton + nouvel objet arbitraire ne doit jamais devenir une
+    autorisation valide ». C'est le scénario du redémarrage et de la
+    réinscription, et rien ne l'essayait.
+
+    L'empreinte n'est jamais crue : elle est recalculée sur l'objet réellement
+    stocké à chaque emploi. Substituer la procédure sans toucher à l'empreinte
+    enregistrée est donc exactement l'attaque que ce refus existe pour attraper.
+    """
+    from dataclasses import replace as _replace
+
+    registre = Registre()
+    inscrite = registre.inscrire("lecteur", "lire", construire_lecteur(": "))
+    substituee = _replace(inscrite, procedure=construire_lecteur("="))
+    registre._capacites["lecteur"] = substituee
+
+    assert substituee.empreinte == inscrite.empreinte, (
+        "l'empreinte enregistrée ne bouge pas : c'est tout le piège")
+    with pytest.raises(SubstitutionRefusee):
+        registre.employer("lecteur")
+
+
+def test_une_capacite_qui_a_memorise_la_bonne_reponse_est_refutee_aussi() -> None:
+    """Le cas que le test voisin manquait, et il le manquait complètement.
+
+    `test_une_capacite_qui_a_memorise_est_refutee` donne au mémorisant une
+    réponse **fausse** pour la mission de contrôle. Il est donc réfuté par le
+    vérificateur, pas par son refus : neutralisé, le garde laissait la suite
+    verte. Le banc prouvait « une mauvaise réponse est refusée », ce que personne
+    ne mettait en doute.
+
+    Ici le mémorisant retient une réponse qui satisferait le contrôle. Ce qui
+    l'arrête est le seul fait qu'il n'a jamais vu ce texte-là. Sans ce refus, le
+    banc créditerait d'un apprentissage une capacité qui n'a rien appris -- soit
+    exactement l'auto-illusion que Genesis existe pour rendre impossible.
+    """
+    registre = Registre()
+    registre.inscrire(LECTEUR_APPRIS, "lire un format clé/valeur",
+                      construire_lecteur_memorisant(GAMMA_APPRENTISSAGE,
+                                                    {"machine": ["téléphone"]}),
+                      provenance="GAMMA")
+    naissance = constater_naissance(
+        gamma(GAMMA_CONTROLE, nom="GAMMA-controle", attendu="téléphone"),
+        solveur, registre, instance="soir", apprises_sur={"matin"})
+
+    assert not naissance.ne
+    assert naissance.comparaison.verdict == REFUTE, (
+        "une réponse juste retenue par cœur reste une réponse qui n'a pas été lue")
+
+
+def test_un_lecteur_construit_refuse_un_texte_sans_aucune_paire() -> None:
+    """Rendre un dictionnaire vide serait pire qu'échouer : ça ressemble à un succès."""
+    lire = construire_lecteur(": ")
+    assert lire("machine: mac\n") == {"machine": ["mac"]}
+    with pytest.raises(FormatRefuse):
+        lire("# rien que des commentaires\n\ndu texte sans separateur\n")
+
+
+def test_un_json_valide_qui_n_est_pas_un_objet_est_refuse() -> None:
+    """« Ça parse » ne veut pas dire « c'est le format demandé »."""
+    from singular.genesis.lecteurs import lire_json
+
+    assert lire_json('{"machine": "mac"}') == {"machine": ["mac"]}
+    for valide_mais_pas_un_objet in ("[1, 2, 3]", '"du texte"', "42", "null"):
+        with pytest.raises(FormatRefuse):
+            lire_json(valide_mais_pas_un_objet)
+
+
+def test_un_csv_sans_en_tete_a_virgules_est_refuse() -> None:
+    """`csv` avale à peu près n'importe quoi ; le refus est plus strict que lui.
+
+    Sans ce garde, un fichier d'une seule colonne sans séparateur serait accepté
+    et le tâtonnement du solveur deviendrait inobservable : tout texte serait un
+    CSV valide, donc le lecteur ne dirait jamais « ce n'est pas mon format ».
+    """
+    from singular.genesis.lecteurs import lire_csv
+
+    assert lire_csv("machine,lieu\nmac,ici\n") == {"machine": ["mac"], "lieu": ["ici"]}
+    with pytest.raises(FormatRefuse):
+        lire_csv("machine\nmac\n")          # une seule colonne, pas de virgule
+    with pytest.raises(FormatRefuse):
+        lire_csv("machine,lieu\n")           # une en-tête et rien d'autre

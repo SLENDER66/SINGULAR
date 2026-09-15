@@ -76,6 +76,10 @@ struct Report: Sendable {
     /// Une moyenne ne dit pas si un écart vient du hasard : voir
     /// `chanceDuHasard`.
     var resolvedProbabilities: [Double] = []
+    /// Les mêmes verdicts, dans le même ordre, ramenés à « c'est arrivé ou non ».
+    /// La moyenne ne dit pas *quand* il s'est trompé : voir
+    /// `calibrationProgression`.
+    var resolvedOutcomes: [Int] = []
     /// Les heures posées hors des rangs fondateurs — les seules que
     /// `foundationItem` a le droit d'appeler « ailleurs ».
     var hoursOutsideFoundation = 0.0
@@ -96,6 +100,7 @@ struct Report: Sendable {
             entries.filter { $0.status == .happened }.reduce(0) { $0 + $1.costHours }, places: 1)
         report.tiersWithDecisions = Set(entries.map(\.tier))
         report.resolvedProbabilities = settled.map(\.probability)
+        report.resolvedOutcomes = settled.map { $0.status == .happened ? 1 : 0 }
         report.hoursOutsideFoundation = Numbers.round(
             entries.filter { !Tier.foundation.contains($0.tier) }.reduce(0) { $0 + $1.costHours },
             places: 1)
@@ -262,8 +267,12 @@ enum NoticeEngine {
     ///
     /// Mêmes opérations, dans le même ordre, que `chance_du_hasard` en Python :
     /// les vecteurs comparent les phrases produites, donc les nombres.
-    static func chanceDuHasard(_ probabilities: [Double], hits: Int) -> Double {
-        guard !probabilities.isEmpty else { return 1.0 }
+    /// La loi du nombre de réussites, exacte, quand chaque pari a sa probabilité.
+    ///
+    /// Deux questions s'en servent — « son écart vient-il du hasard ? » et
+    /// « son écart est-il devenu petit ? » — et elles la calculaient chacune de
+    /// leur côté avant que la seconde existe.
+    static func distribution(_ probabilities: [Double]) -> [Double] {
         var distribution: [Double] = [1.0]
         for p in probabilities {
             var suivante = [Double](repeating: 0.0, count: distribution.count + 1)
@@ -273,6 +282,12 @@ enum NoticeEngine {
             }
             distribution = suivante
         }
+        return distribution
+    }
+
+    static func chanceDuHasard(_ probabilities: [Double], hits: Int) -> Double {
+        guard !probabilities.isEmpty else { return 1.0 }
+        let distribution = distribution(probabilities)
         let attendu = probabilities.reduce(0, +)
         let ecart = abs(Double(hits) - attendu)
         return distribution.enumerated()
@@ -309,6 +324,11 @@ enum NoticeEngine {
         let gap: Double
         let chance: Double
         let conclusive: Bool
+        /// « Y a-t-il lieu d'en parler ? » est encore une question de la règle,
+        /// et elle vivait dans deux corps de fonction qui n'en donnaient pas la
+        /// même réponse. Démontré, on le dit quel que soit l'écart ; sinon,
+        /// seulement s'il saute aux yeux.
+        let montrable: Bool
     }
 
     static func calibrationVerdict(_ report: Report) -> CalibrationVerdict? {
@@ -316,9 +336,103 @@ enum NoticeEngine {
               report.resolved >= calibrationMinimum else { return nil }
         let hits = Int((hit * Double(report.resolved)).rounded())
         let hasard = chanceDuHasard(report.resolvedProbabilities, hits: hits)
+        let conclusive = hasard <= calibrationHasard && abs(gap) >= calibrationArrondi
         return CalibrationVerdict(
-            gap: gap, chance: hasard,
-            conclusive: hasard <= calibrationHasard && abs(gap) >= calibrationArrondi
+            gap: gap, chance: hasard, conclusive: conclusive,
+            montrable: conclusive || abs(gap) >= calibrationGap
+        )
+    }
+
+    /// La chance de paraître aussi juste **en étant** biaisé d'au moins `borne`.
+    ///
+    /// `chanceDuHasard` répond à « son écart peut-il venir du hasard ? ». Elle
+    /// ne répond pas à la question inverse, et c'est celle-là qui décide s'il
+    /// faut se taire : « son écart est-il devenu petit ? ». Un écart non
+    /// démontré n'est pas un écart démontré nul.
+    ///
+    /// On suppose donc qu'il se surestime d'au moins `borne` : chacune de ses
+    /// prédictions à `p` n'arriverait qu'à `p - borne`. Sous cette hypothèse,
+    /// quelle chance de réussir au moins autant qu'il a réussi ? Le symétrique
+    /// tombe de la même façon pour la sous-estimation, et c'est le plus grand
+    /// des deux qui est rendu.
+    static func chanceDUnEcartMoindre(_ probabilities: [Double], hits: Int,
+                                      borne: Double) -> Double {
+        // `borne > 0` ne suffisait pas : avec `.infinity`, toutes les
+        // probabilités se ramenaient aux bornes et la fonction rendait zéro,
+        // c'est-à-dire « écart démontré petit, avec certitude ». Une entrée
+        // dégénérée donnait le verdict le plus permissif. `borne < 1` ferme ça,
+        // et écarte aussi `nan`, dont toutes les comparaisons sont fausses.
+        guard !probabilities.isEmpty, borne > 0, borne < 1 else { return 1.0 }
+        let surestime = probabilities.map { min(1.0, max(0.0, $0 - borne)) }
+        let sousestime = probabilities.map { min(1.0, max(0.0, $0 + borne)) }
+        let haut = distribution(surestime).enumerated()
+            .filter { $0.offset >= hits }.reduce(0.0) { $0 + $1.element }
+        let bas = distribution(sousestime).enumerated()
+            .filter { $0.offset <= hits }.reduce(0.0) { $0 + $1.element }
+        return max(haut, bas)
+    }
+
+    /// Ce que vaut sa confiance sur une tranche de son journal.
+    struct CalibrationPeriode {
+        let verdicts: Int
+        let gap: Double
+        let chance: Double
+        let conclusive: Bool
+        let equivalence: Double
+    }
+
+    /// Les deux moitiés du journal, et si l'écart a été corrigé entre elles.
+    struct CalibrationProgression {
+        let debut: CalibrationPeriode
+        let recent: CalibrationPeriode
+        let corrige: Bool
+    }
+
+    private static func periode(_ probabilites: [Double],
+                                _ resultats: [Int]) -> CalibrationPeriode {
+        let verdicts = resultats.count
+        // « Arrivé ou non », pas « combien » : un rapport d'une autre version ne
+        // doit pas pouvoir gonfler le compte au-dessus du nombre de verdicts.
+        let hits = resultats.filter { $0 != 0 }.count
+        var gap = Numbers.round(probabilites.reduce(0, +) / Double(verdicts)
+                                - Double(hits) / Double(verdicts), places: 2)
+        if gap == 0 { gap = 0 }
+        let hasard = chanceDuHasard(probabilites, hits: hits)
+        return CalibrationPeriode(
+            verdicts: verdicts, gap: gap, chance: hasard,
+            conclusive: hasard <= calibrationHasard && abs(gap) >= calibrationArrondi,
+            equivalence: chanceDUnEcartMoindre(probabilites, hits: hits, borne: calibrationGap)
+        )
+    }
+
+    /// Son écart a une date, et le chiffre du jour ne la portait pas.
+    ///
+    /// `calibrationVerdict` mesure toute la vie du journal d'un seul bloc. Un
+    /// biais corrigé il y a deux mois y pèse donc autant qu'hier, et la Notice
+    /// continuait de dire « baisse tes probabilités d'autant » à quelqu'un qui
+    /// les avait déjà baissées.
+    ///
+    /// Le journal est coupé en deux moitiés, dans l'ordre où les décisions ont
+    /// été prises. `corrige` n'est vrai que si la première moitié montre un
+    /// écart que le hasard n'explique pas *et* que la seconde démontre un écart
+    /// inférieur à `calibrationGap`. Les deux, sinon rien : une moitié récente
+    /// muette est une moitié sans preuve, pas une preuve d'amélioration.
+    static func calibrationProgression(_ report: Report) -> CalibrationProgression? {
+        let probabilites = report.resolvedProbabilities
+        let resultats = report.resolvedOutcomes
+        guard probabilites.count == resultats.count,
+              resultats.count >= 2 * calibrationMinimum else { return nil }
+        let coupe = resultats.count / 2
+        let debut = periode(Array(probabilites[..<coupe]), Array(resultats[..<coupe]))
+        let recent = periode(Array(probabilites[coupe...]), Array(resultats[coupe...]))
+        return CalibrationProgression(
+            debut: debut, recent: recent,
+            // Trois conditions. « L'ecart recent est demontre inferieur a quinze
+            // points » ne veut pas dire « il n'y a plus d'ecart » : sur quatre
+            // cents verdicts, un ecart de dix points passe l'equivalence *et* se
+            // demontre, et le Sage aurait tenu les deux phrases a la fois.
+            corrige: debut.conclusive && recent.equivalence <= calibrationHasard
+                && !recent.conclusive
         )
     }
 
@@ -326,7 +440,7 @@ enum NoticeEngine {
         guard let verdict = calibrationVerdict(report),
               let predicted = report.meanProbability,
               let happened = report.hitRate,
-              verdict.conclusive || abs(verdict.gap) >= calibrationGap else { return nil }
+              verdict.montrable else { return nil }
 
         let gap = verdict.gap
         let hasard = verdict.chance
@@ -344,13 +458,41 @@ enum NoticeEngine {
             )
         }
 
+        let progression = calibrationProgression(report)
+        if let progression, progression.corrige {
+            return NoticeItem(
+                severity: .info,
+                // Le titre devient l'en-tête du rapport : il doit tenir seul.
+                title: "Ton écart de confiance est déjà corrigé",
+                detail: constat + " Mais cet écart est celui de tes "
+                    + "\(progression.debut.verdicts) premières décisions : sur les "
+                    + "\(progression.recent.verdicts) suivantes, il est démontré inférieur à "
+                    + "\(Numbers.percent(calibrationGap)). Le chiffre du haut traîne ton "
+                    + "passé. Ne corrige pas ce que tu as déjà corrigé."
+            )
+        }
+
+        // « Baisse tes probabilités d'autant » ne se dit que si `d'autant` veut
+        // dire quelque chose, c'est-à-dire tant qu'on n'a qu'un seul chiffre.
+        let conseil: String
+        if let progression {
+            conseil = "Sur tes \(progression.recent.verdicts) plus récentes tranchées, "
+                + "l'écart est de "
+                + "\(Numbers.signedPercent(progression.recent.gap)) : c'est ce chiffre-là qui "
+                + "dit où tu en es aujourd'hui, pas celui du haut. Corrige d'après lui."
+        } else if gap > 0 {
+            conseil = "Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+        } else {
+            conseil = "Tu réussis plus souvent que tu ne l'oses, tes paris sont trop petits."
+        }
+
         if gap > 0 {
             return NoticeItem(
                 severity: .attention,
                 title: "Tu te surestimes de \(Numbers.signedPercent(gap))",
                 detail: constat + " Sur \(report.resolved) verdicts, ce n'est plus de la "
                     + "malchance : le hasard seul produirait cet écart \(uneFoisSur(hasard)). "
-                    + "Baisse tes probabilités d'autant, ou choisis des paris plus sûrs."
+                    + conseil
             )
         }
         return NoticeItem(
@@ -358,7 +500,7 @@ enum NoticeEngine {
             title: "Tu te sous-estimes de \(Numbers.signedPercent(gap))",
             detail: constat + " Sur \(report.resolved) verdicts, ce n'est plus de la "
                 + "malchance : le hasard seul produirait cet écart \(uneFoisSur(hasard)). "
-                + "Tu réussis plus souvent que tu ne l'oses, tes paris sont trop petits."
+                + conseil
         )
     }
 

@@ -315,15 +315,29 @@ def test_the_keyboard_says_a_second_verdict_in_his_language(tmp_path, capsys, co
     assert "singular list" in sortie
 
 
-def test_the_keyboard_explains_an_unknown_identifier(tmp_path, capsys):
+#: Les deux commandes qui tranchent une décision par son identifiant, avec ce
+#: qu'elles demandent en plus. Elles vont toujours par paire et se sont déjà
+#: séparées : le test ci-dessous ne jouait que `resolve`, donc le même garde dans
+#: `abandon` n'avait aucun témoin -- neutralisé, il rendait une pile Python au
+#: lieu de la phrase. Le test juste en dessous, lui, était déjà paramétré sur les
+#: deux. Troisième fois que l'aller est prouvé et le retour non, donc la paire
+#: cesse d'être une liste qu'on complète à la main.
+TRANCHENT_PAR_IDENTIFIANT = (("resolve", ["--yes"]), ("abandon", ["parce que"]))
+
+
+@pytest.mark.parametrize("commande, reste", TRANCHENT_PAR_IDENTIFIANT,
+                         ids=[nom for nom, _ in TRANCHENT_PAR_IDENTIFIANT])
+def test_the_keyboard_explains_an_unknown_identifier(tmp_path, capsys, commande, reste):
     """Il affichait `'DEC-inconnu'`, guillemets compris, et rien d'autre."""
     journal = DecisionJournal(tmp_path / "journal.db")
     assert journal is not None
 
-    assert main(["--db", str(tmp_path / "journal.db"), "resolve", "DEC-inconnu", "--yes"]) == 1
+    code = main(["--db", str(tmp_path / "journal.db"), commande, "DEC-inconnu", *reste])
+    assert code == 1
     sortie = capsys.readouterr().out
     assert introuvable("DEC-inconnu") in sortie
     assert "'DEC-inconnu'" not in sortie, "le repr d'une cle absente n'explique rien"
+    assert "Traceback" not in sortie, "un identifiant tapé de travers n'est pas un bug"
 
 
 @pytest.mark.parametrize("route", ["resolve", "abandon"])

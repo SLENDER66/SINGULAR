@@ -1,5 +1,272 @@
 # Changelog
 
+## 3.37.0 — Ce que la cinquieme forme et la frontiere ont trouve
+
+Trois audits de mutation, et cette fois ils mesurent ce qu'ils annoncent.
+
+**La frontiere d'execution**, priorite 1 du mandat. Trois refus atteignables sans
+temoin, chacun verifie par l'inverse -- garde neutralise, le test echoue.
+
+- **La derive de gouvernance n'etait testee qu'a l'aller.** `execute_validated`
+  et `execute_effect_validated` avaient leur temoin ; `reconcile_effect_validated`
+  porte le meme garde, a la meme place, et personne ne l'essayait. C'est le plus
+  dangereux des trois a laisser nu : la reconciliation ne demande pas au monde
+  d'agir, elle **conclut** ce qui a peut-etre deja agi. Une autorisation perimee
+  qui franchirait ce garde graverait comme acquis un effet que plus personne
+  n'autorise.
+- **Un contrat retrograde tombe avant la comparaison de gouverneur.** Le test
+  voisin altere l'autonomie vers EXECUTE_AUTHORIZED et tombe sur « governance no
+  longer matches ». Vers PREPARE, on ne va pas si loin : `_authorize` recalcule
+  avant, et `_validate_governance` refuse des qu'il voit le mode. Deux gardes sur
+  le meme chemin, un seul etait joue.
+- **Deux gardes de la porte d'autonomie.** `Autonomy` compte sept modes et seuls
+  deux sont rejetes avant le garde final ; `can_execute` vient de la politique,
+  pas du mode. `Governor.evaluate` n'emet jamais OBSERVE ni ANALYZE, mais
+  `_from_cached` reconstruit mode, `can_prepare` et `can_execute` depuis la base,
+  separement. Ce sont les « anciennes donnees persistees » de la section 7.
+
+**Le moteur des matins**, avec la cinquieme forme.
+
+- **Une moitie morte retiree** : `overconfidence` testait `mean_probability` et
+  `hit_rate` alors que les deux valent None exactement ensemble. Une seule
+  condition decide maintenant, et c'est celle qui decidait deja.
+- **La lecon traverse l'API, et son absence devient une chaine vide.** Ni l'un
+  ni l'autre n'avait de temoin. C'est la seule phrase du journal qui vienne de
+  lui ; une carte qui l'avalerait effacerait ce qu'il a compris sans rien dire.
+
+## 3.36.0 — « Corrige » voulait dire deux choses a la fois
+
+Trouve en attaquant ma propre garantie plutot qu'en la relisant, comme la regle
+22 du mandat le demande.
+
+`corrige` exigeait deux choses : un ecart demontre dans la premiere moitie, et un
+ecart demontre **sous** quinze points dans la seconde. Ca ne veut pas dire « il
+n'y a plus d'ecart ». Sur quatre cents verdicts recents, un ecart de dix points
+passe le test d'equivalence *et* se demontre par `chance_du_hasard`.
+
+Le Sage aurait donc tenu deux phrases contradictoires sur le meme ecran — « ton
+ecart recent est de +10 %, c'est prouve » et « c'est corrige, ne corrige pas ».
+C'est exactement le defaut que toute cette section existe pour fermer, et je
+venais de l'y remettre.
+
+- **Une troisieme condition** : la moitie recente ne doit plus rien demontrer
+  elle-meme. « Corrige » veut dire qu'il ne reste rien a montrer, pas qu'il reste
+  peu. Dans le cas a dix points, on lit desormais le reproche ordinaire, qui
+  pointe le chiffre recent — il s'est ameliore, il lui reste dix points, c'est de
+  ceux-la qu'il corrige.
+- Le port iOS suit, et un garde exige la troisieme condition des deux cotes.
+- **L'audit des matins relance apres la correction du 3.34.0** : deux survivants
+  sur quarante-deux, et ce sont les deux assurances derriere `BEGIN IMMEDIATE`.
+  Le trou de `is_shared_memory_target` est ferme, et le triage des deux
+  assurances a ete attaque avant d'etre ecrit -- six `resolve()` concurrents et
+  une ecriture brute entre deux transactions tombent tous sur le controle
+  anterieur, jamais sur le `rowcount`.
+
+## 3.35.0 — Les verificateurs de Genesis ne verifiaient qu'a moitie
+
+L'audit de mutation, lance sur Genesis pour la premiere fois : **treize refus
+survivants sur vingt-deux**, tous dans le code ecrit aujourd'hui. Tout ce que le
+banc affirme repose sur ce que ces verificateurs refusent, donc treize refus sans
+temoin rendaient le mot « verifiee » plus faible qu'il n'en avait l'air.
+
+- **Le juge qui leve acceptait, et rien ne le disait.** Remplacer le
+  `return False` de `Mission.juger` par `return True` faisait passer toute la
+  suite : un verificateur qui plante valait un succes. C'est la garantie
+  fail-closed du fichier, elle etait ecrite dans la docstring et nulle part
+  ailleurs. Elle a maintenant son test.
+- **Aucun verificateur n'avait jamais vu une reponse juste partout sauf a un
+  endroit.** Chacun exige maintenant chaque morceau, et c'est verifie morceau par
+  morceau — y compris les deux `not in` de BETA, qui sont son coeur : ils
+  refusent une reponse qui comblerait ce qu'elle n'a pas pu lire.
+- **La discipline de type n'a plus qu'un domicile.** Les six verificateurs
+  portaient chacun un `isinstance(reponse, dict)` qu'aucune entree ne peut
+  distinguer de son absence : un `.get` sur autre chose leve, et `juger`
+  rattrape. Ils promettaient un controle deja fait ailleurs et seraient revenus
+  dans chaque rapport d'audit. Retires, et ce que leur retrait suppose est teste.
+
+Chaque correction est verifiee par l'inverse : le mutant remis en place fait
+echouer la suite, et le retirer la fait repasser. **Et l'audit a ete relance :
+zero survivant sur treize mutes** -- treize et non vingt-deux, les six moities
+mortes ayant ete retirees. Chaque refus que Genesis porte a maintenant un temoin.
+
+## 3.34.0 — Un test qui couvrait aucune des deux moitiés qu'il visait
+
+- **Ce que la ligne de statut coûte, mesuré.** Lui faire lire le verdict du
+  moteur au lieu d'en tenir une copie a un prix : le calcul exact de la rareté
+  est quadratique en nombre de verdicts, et cette ligne s'imprime à **chaque**
+  ouverture de terminal. Mesuré, puis arrondi à ce qui se reproduit — deux
+  passages écartent de 25 %, donc un chiffre précis mentirait : de l'ordre de
+  10 ms à 100 verdicts, 50 ms à 500, 200 ms à 1000, 700 ms à 2000. Avant
+  aujourd'hui elle ne payait rien de tout ça.
+  À un verdict par jour, c'est dans trois ans et dans six ans. Une dette datée,
+  donc, écrite dans `journal.py` et dans `USAGE.md` plutôt que corrigée tout de
+  suite — un cache ou une approximation coûterait de la complexité maintenant
+  contre rien de mesurable. La correction, le jour venu, est nommée : une borne
+  de Hoeffding qui tranche en temps linéaire quand elle suffit, ou un cache posé
+  sur l'empreinte de tête du journal.
+
+`tools/gardes_sans_test.py` a tourné sur le moteur des matins : 42 refus mutés,
+quatre survivants. Deux sont des assurances derrière `BEGIN IMMEDIATE` — le
+triage est écrit dans l'outil pour que le prochain passage ne le refasse pas.
+Les deux autres étaient un vrai trou, et sous la forme la plus sournoise : un
+test existait.
+
+- **`is_shared_memory_target` n'était couverte par aucune de ses deux moitiés.**
+  Les trois cas du test voisin passaient à l'identique avec `raw.startswith("file:")`
+  ou `"mode=memory" in raw` remplacée par `True`. Ce qu'elle décide n'est pas
+  cosmétique : une base prise pour une base en mémoire vit en RAM et s'ancre pour
+  la durée du processus, donc le journal s'ouvrirait, s'écrirait et se relirait
+  normalement — et **rien n'atteindrait le disque**. La perte silencieuse, sur le
+  seul fichier irremplaçable du dépôt. Deux cas manquaient : un `file:` qui n'est
+  pas en mémoire, et un chemin de disque qui contient les mots. Vérifié par
+  l'inverse : chaque moitié remplacée par `True` fait maintenant échouer le test.
+- **Le serveur sert bien la progression à l'app.** `Notice.as_dict()` la porte et
+  `renderFigures` sait la lire ; entre les deux, `/api/notice` n'était garanti
+  par rien. Une liste blanche ajoutée un jour aurait rendu la bascule muette sans
+  faire rougir quoi que ce soit.
+
+## 3.33.0 — Deux defauts de ce que je viens d'ecrire, et une vignette qui s'execute
+
+Relecture adversariale de mon propre code, comme la regle 22 du mandat le
+demande. Les deux trouvailles sont dans ce qui a ete ajoute aujourd'hui.
+
+- **`chance_d_un_ecart_moindre` penchait du mauvais cote sur une entree
+  degeneree.** Le garde etait `borne <= 0` ; avec `inf`, toutes les probabilites
+  se ramenaient aux bornes et la fonction rendait **zero** — c'est-a-dire
+  « ecart demontre petit, avec certitude ». Le verdict le plus permissif
+  possible, produit par l'entree la plus absurde, dans la fonction dont tout le
+  role est de refuser de conclure trop vite. C'est maintenant
+  `not 0 < borne < 1`, qui ferme l'infini et attrape `nan` au passage. Le port
+  iOS suit.
+- **Genesis affichait « employée 2× » pour une capacité qui n'avait rien
+  répondu.** Le solveur essaie les lecteurs inscrits jusqu'a ce qu'un reponde,
+  donc le compteur grandissait avec la taille du registre et pas avec l'utilite
+  de la capacite. Un chiffre juste qui se lisait faux. Les deux existent
+  desormais separement : `remises` compte les passages de main, `reutilisations`
+  est **derive des preuves** et ne compte que ce qui a tenu — donc il n'y a nulle
+  part ou ecrire un chiffre flatteur.
+- **La vignette de calibration est maintenant *executee* par les tests**, pas
+  lue. Les autres tests du client web lisent le source faute de DOM ; pour
+  celle-ci ca ne suffit plus, parce que c'est la troisieme fois qu'elle survit a
+  la correction de sa phrase et que deux fois sur trois le source contenait deja
+  un mot rassurant. `node` est la, donc `renderFigures` tourne pour de vrai avec
+  un DOM de fortune et on regarde ce qu'elle pose. Verifie par l'inverse : en
+  remettant le defaut dans `app.js`, le test echoue.
+
+## 3.32.0 — AZAZEL Genesis : la plus petite chose capable de dire non
+
+`singular/genesis/` et `docs/AZAZEL_GENESIS.md`. Cinq modules, aucun qui exécute,
+aucun qui coûte un jeton. L'expérience se lance avec
+`python3 tools/genesis_experiment.py` et la suite la rejoue en entier à chaque
+commit — une expérience qui demanderait une clé d'API et cinq dollars de crédit
+finirait comme l'application web finie et jamais lancée dont le mandat garde le
+souvenir.
+
+- **Les trois missions, sur les fichiers réels du dépôt.** ALPHA lit `CHANGELOG.md`
+  et `pyproject.toml` dans deux formats et synthétise. BETA affronte une source
+  tronquée et une source absente, les diagnostique, récupère, et ne comble aucun
+  trou — le vérificateur refuse toute réponse qui inventerait ce qu'elle n'a pas
+  pu lire. GAMMA détecte un format que rien ne sait lire, construit un lecteur,
+  l'éprouve sur un contrôle mis de côté, et ne l'inscrit que s'il tient.
+- **Une échelle de preuve, E0 à E5**, recalculée depuis les preuves à chaque
+  lecture : il n'y a aucun champ où écrire un niveau, donc aucun moyen d'en poser
+  un sans l'avoir gagné. **Un seul échec plafonne à E2** — « observée » et
+  « répétée » sont des faits, « vérifiée » et « robuste » sont des affirmations
+  de fiabilité qu'un échec réfute.
+- **Réinscrire un autre artefact sous un nom déjà prouvé remet les preuves à
+  zéro.** Elles avaient été gagnées par l'ancien code. C'est ce qui empêche
+  « candidat X, évalué, approuvé » d'activer autre chose que X. L'empreinte vient
+  d'`artifact_fingerprint`, celle que la frontière d'exécution utilise déjà : une
+  deuxième empreinte écrite à côté aurait divergé de la première.
+- **Un banc différentiel qui sait refuser.** La même mission deux fois, un seul
+  changement entre les deux. Il dit `REFUTE` quand la version expérimentée rate
+  le vérificateur, quand un axe a empiré, et il refuse le mot « naissance » quand
+  la mission de contrôle retombe sur l'instance qui a servi à apprendre. Un cas
+  de capacité **qui a mémorisé** est fourni exprès et réfuté par le banc : sans
+  lui, le chiffre positif ne prouverait que la complaisance du banc.
+- **Genesis réfléchit, elle n'exécute pas.** Aucun import de ce qui peut agir,
+  une seule exception nommée et justifiée, aucun écrit sur le disque, et la
+  preuve par l'acte : les trois missions tournent avec les sockets retirées, avec
+  un témoin qui vérifie que le garde attraperait vraiment une connexion. Le
+  paquet est supprimable sans rien casser, et un test le tient.
+- **Un deuxième domaine, et c'est un vrai fichier.** Le lecteur appris sur un
+  relevé écrit à la main répond sur `.github/workflows/ci.yml` sans avoir rien
+  réappris — DELTA. Il échoue pour de bon sur `pyproject.toml`, qui écrit
+  `cle = "valeur"` — EPSILON. L'expérience gravit donc l'échelle jusqu'à E5 puis
+  **retombe à E2** sur cet échec réel, et c'est la descente qui montre que
+  l'échelle mesure quelque chose : monter, quand on a les instances sous la main,
+  n'importe quelle échelle le fait.
+- **La composition, mesurée contre une capacité et pas contre rien.** Un second
+  cycle d'acquisition tourne sur `pytest.ini`, qu'aucun lecteur du depot ne sait
+  lire et que le premier lecteur appris ne sait pas lire non plus. ZETA demande
+  une valeur au workflow et une autre a `pytest.ini` : rien n'y arrive, une
+  capacité n'y arrive pas non plus, les deux y arrivent. C'est l'hypothèse
+  stratégique de la directive, et elle est mesurée au lieu d'être supposée. Ce
+  qui est composé reste modeste : le composite **sélectionne** parmi les lecteurs
+  appris, il ne produit rien qu'aucun des deux ne portait.
+- **Un solveur qui se rabat, et une capacité qu'on ne crédite plus du travail
+  d'un autre.** Un lecteur qui « réussissait » en rendant autre chose que le
+  champ demandé bloquait la suite. Il rend la main maintenant, et `CAPACITE`
+  n'est posé dans la trajectoire que quand la capacité **répond** : sans ça, une
+  mission sauvée par le tâtonnement aurait fait monter le niveau de preuve de la
+  capacité qui avait échoué.
+- **Le résultat est positif sur un cas, et le document le dit comme ça.** Une
+  capacité, deux domaines proches, cinq instances, et un lecteur qui ne comprend
+  pas YAML — il lit des paires à plat. Le compounding n'est pas démontré. La
+  prochaine action justifiée est dans `docs/AZAZEL_GENESIS.md` : un domaine
+  réellement éloigné, parce qu'un deuxième domaine trop proche déplace la
+  question plutôt qu'il ne la règle.
+
+## 3.31.0 — Ton écart a une date
+
+La calibration mesurait toute la vie du journal d'un seul bloc. Quelqu'un qui se
+surestimait de trente points en juin et plus du tout en septembre lisait donc,
+chaque matin, « tu te surestimes de +15 % — baisse tes probabilités d'autant ».
+Suivre ce conseil aurait déréglé un jugement devenu juste, et `notice.py` écrit
+déjà, pour le petit échantillon, que corriger un jugement juste c'est le
+dérégler. Le défaut était le même, une tranche de temps plus loin.
+
+- **Le journal se coupe en deux moitiés** dès six verdicts, dans l'ordre où les
+  décisions ont été prises — l'instant du jugement, pas celui du verdict. Une
+  reprise (`import`) qui écrit d'anciennes décisions après des récentes range
+  donc le passé du bon côté ; un test le tient.
+- **Le reproche donne le chiffre récent** et dit de corriger d'après lui.
+  « Baisse tes probabilités d'autant » ne subsiste que tant qu'il n'y a qu'un
+  seul chiffre — `d'autant` doit vouloir dire quelque chose.
+- **« Tu l'as déjà corrigé »** remplace le reproche quand la première moitié
+  montrait un écart que le hasard n'explique pas *et* que la seconde démontre un
+  écart passé sous les quinze points. Les deux, sinon rien.
+- **On ne conclut pas depuis un silence.** Un écart qu'on n'arrive plus à
+  démontrer n'est pas un écart démontré nul. `chance_d_un_ecart_moindre()`
+  renverse donc la charge : elle suppose le biais et calcule la chance de
+  paraître aussi juste en l'ayant. Il faut une quarantaine de verdicts récents
+  pour que l'hypothèse tombe, contre quelques-uns pour établir un écart. Exact,
+  déterministe, sans réseau ni modèle, comme sa voisine.
+- **La règle de calibration descend dans le moteur**, entière. `summary_line` --
+  la ligne que son profil shell imprime dans *chaque* terminal -- ne peut pas
+  importer le Sage et tenait donc sa propre version : celle d'avant le
+  9 septembre, « assez de verdicts, et quinze points d'écart ». Elle se taisait
+  sur dix points établis sur deux cents verdicts pendant que la Notice concluait,
+  et elle aurait affiché l'écart d'une vie pendant que le Sage disait qu'il était
+  corrigé. Sixième occurrence de ce défaut : la règle n'a plus qu'un domicile,
+  `montrable` y compris -- « y a-t-il lieu d'en parler ? » était encore une
+  question de la règle, recombinée par chacun de ceux qui l'affichent. Le test
+  qui gardait ça exigeait que la ligne *nomme* les bons seuils ; il exige
+  maintenant qu'elle n'en nomme **aucun**.
+- **La vignette suit la phrase.** C'était la troisième fois pour celle-ci : le
+  rapport web et `review` affichaient le total d'une vie en rouge pendant que
+  l'observation, juste en dessous, disait que c'était corrigé. Le moteur tranche,
+  les interfaces lisent `progression`.
+- **`analyse` envoyait le chiffre d'une vie, seul.** Un modèle qui lit
+  « overconfidence: 0.2 » conseille de baisser les probabilités, même quand
+  l'observation juste au-dessus, dans le même texte, dit que c'est corrigé. Le
+  même défaut que celui des vignettes, transporté dans la seule faculté qui
+  coûte de l'argent. L'écart récent part avec, et `--blanc` le montre.
+- **Le port iOS suit**, et un vecteur de soixante entrées épingle la bascule :
+  sans lui, la règle vivrait dans deux moteurs et ne serait éprouvée que dans un.
+  Le Swift est écrit, pas compilé — aucun compilateur n'est installable ici, et
+  c'est la limite déjà déclarée pour tout le port.
+
 ## 3.30.0 — Deux chiffres justes qui se lisaient faux, et l'export décalé
 
 - **`review`** : « 16h encore sans verdict (5 ouvertes, 5 en retard) ». Les

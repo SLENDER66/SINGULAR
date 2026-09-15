@@ -40,13 +40,36 @@ def test_registry_rejects_token_collision_and_supports_revoke():
 
 
 def test_registry_refuses_an_empty_token_or_a_missing_target():
-    """Deux refus d'entree que rien n'essayait."""
+    """Quatre refus d'entree que rien n'essayait.
+
+    Les deux derniers sont arrives avec l'audit de mutation : `register(None)` et
+    `artifact_fingerprint(None)` levent tous deux, et personne ne l'essayait. Ils
+    sont triviaux a atteindre -- c'est justement ce qui fait qu'on ne les ecrit
+    pas -- et le second est la fonction dont depend toute l'identite d'artefact
+    du depot, Genesis compris.
+
+    Une precision qui evite de croire ce test plus fort qu'il n'est : le garde de
+    `register` est **masque** par celui d'`artifact_fingerprint`, qui leve la
+    meme erreur un cran plus bas. Neutraliser le premier ne change donc rien
+    d'observable. Cette ligne-la epingle le comportement -- inscrire `None` est
+    refuse -- pas ce garde-ci en particulier. Seul celui d'`artifact_fingerprint`
+    a un temoin au sens de l'audit.
+    """
+    import pytest
+
+    from singular.execution_capability import artifact_fingerprint
+
     registry = ExecutionCapabilityRegistry()
     handler = lambda _action: None
     capability = registry.register(handler, "cap_garde_d_entree")
 
     assert registry.matches("", handler) is False
     assert registry.matches(capability, None) is False
+
+    with pytest.raises(ValueError, match="execution target is required"):
+        registry.register(None, "cap_sans_cible")
+    with pytest.raises(ValueError, match="execution target is required"):
+        artifact_fingerprint(None)
 
 
 def test_registry_refuses_an_artifact_whose_fingerprint_moved():

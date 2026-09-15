@@ -84,7 +84,7 @@ function renderNotice(notice) {
     }
     container.append(card);
   }
-  renderFigures(notice.report, notice.calibration);
+  renderFigures(notice.report, notice.calibration, notice.progression);
 }
 
 function figure(value, label, warn) {
@@ -101,7 +101,11 @@ function figure(value, label, warn) {
 // à la même question, sur le même écran. C'est la deuxième vignette à survivre
 // à la correction de sa phrase : la première est gardée par
 // `test_the_hours_figure_waits_for_a_verdict_before_warning`.
-function renderFigures(report, calibration) {
+// La troisieme fois pour cette vignette-ci : quand l'ecart a ete corrige, la
+// phrase le dit et le chiffre du haut continuait de s'allumer en rouge sur le
+// total d'une vie. Le moteur tranche (`calibration_progression`), la vignette
+// lit `corrige` et `recent` -- aucun seuil ne redescend ici.
+function renderFigures(report, calibration, progression) {
   if (!report || !report.decisions) { $("numbers").hidden = true; return; }
   const percent = (x) => `${Math.round(x * 100)}%`;
   const boxes = [
@@ -115,11 +119,13 @@ function renderFigures(report, calibration) {
     figure(String(report.overdue), "à trancher", report.overdue > 0),
   ];
   if (calibration) {
-    const gap = calibration.gap;
+    const corrige = Boolean(progression && progression.corrige);
+    const gap = corrige ? progression.recent.gap : calibration.gap;
+    const suffixe = corrige ? ` sur tes ${progression.recent.verdicts} plus récentes tranchées` : "";
     boxes.push(figure(
       `${gap > 0 ? "+" : ""}${percent(gap)}`,
-      gap > 0 ? "de surconfiance" : "de sous-confiance",
-      calibration.conclusive,
+      (gap > 0 ? "de surconfiance" : "de sous-confiance") + suffixe,
+      calibration.conclusive && !corrige,
     ));
     boxes.push(figure(percent(report.hit_rate), `arrivent, sur ${percent(report.mean_probability)} annoncés`));
   }

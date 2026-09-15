@@ -221,6 +221,28 @@ CASES: list[dict[str, Any]] = [
         ],
     },
     {
+        "name": "surconfiance_corrigee",
+        "why": "Trente paris annoncés à 90 % dont la moitié arrivent, puis trente "
+               "autres à 90 % dont vingt-sept arrivent. Le chiffre d'une vie dit encore "
+               "« tu te surestimes de vingt points » ; la moitié récente démontre un "
+               "écart inférieur aux quinze points du seuil. Sans ce vecteur, la bascule "
+               "vit dans deux moteurs et n'est éprouvée que dans un.\n"
+               "Soixante entrées pour un seul cas : c'est le prix du fond. Démontrer "
+               "qu'un écart est devenu *petit* demande bien plus de verdicts que "
+               "démontrer qu'il existe, et un vecteur plus court ne prouverait que le "
+               "silence.",
+        "at_offset_days": 70,
+        "entries": [
+            _entry(f"Ancien pari {index}", tier=Tier.REVENUS, probability=0.9, days=1,
+                   created_offset=index, resolved=index % 2 == 0)
+            for index in range(30)
+        ] + [
+            _entry(f"Pari récent {index}", tier=Tier.REVENUS, probability=0.9, days=1,
+                   created_offset=30 + index, resolved=index % 10 < 9)
+            for index in range(30)
+        ],
+    },
+    {
         "name": "surconfiance",
         "why": "Quatre paris à 90 % tous perdus : une fois sur dix mille. Là, on conclut.",
         "at_offset_days": 2,

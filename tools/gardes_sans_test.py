@@ -5,7 +5,7 @@ il neutralise chaque refus des modules vises, un par un, relance une sous-suite
 ciblee, et nomme ceux qui survivent. Un survivant est un refus qu'aucun test
 n'atteint.
 
-**Quatre formes, parce qu'il y en a quatre.**
+**Cinq formes, parce qu'il y en a cinq.**
 
 1. Un `if ... raise` : sa condition devient fausse.
 2. Un `return False` dans une fonction qui rend un booleen : il devient
@@ -27,6 +27,46 @@ n'atteint.
    des `or`, cinq facons differentes d'exiger un humain. Si une seule n'est prouvee
    par aucun test, toute une categorie peut cesser d'en exiger un sans que rien ne
    rougisse.
+5. **Une moitie d'un booleen rendu dans un dictionnaire.** La forme 4 ne voit un
+   verdict que s'il est rendu tout nu, par une fonction annotee `-> bool`. Or ce
+   depot construit ses verdicts les plus lus dans des dictionnaires :
+   `calibration_verdict` rend `{"conclusive": ..., "montrable": ...}`,
+   `calibration_progression` rend `{"corrige": ...}`, et la regle du depot est
+   precisement que les interfaces les **lisent** sans jamais les recalculer.
+   Ces booleens etaient donc entierement hors de portee de cet outil -- et
+   c'etait la regle de calibration, celle qui s'est deja corrigee six fois, qui
+   vivait dans l'angle mort. Le defaut que l'outil traque etait dans l'outil.
+   Trouve le 14 septembre 2026, en verifiant a la main une condition que l'outil
+   disait couverte et qu'il n'avait jamais touchee.
+
+   **L'angle mort sur les imbrications est ferme, et il etait pire qu'annonce.**
+   Cette place disait qu'une ligne portant plusieurs `BoolOp` imbriques etait
+   ignoree, et demandait au prochain lecteur de mesurer `calibration_verdict
+   ['montrable']` a la main. C'etait vrai de la forme 5 seule. Les formes 3 et 4
+   affirmaient la meme prudence sans l'appliquer : elles ne regardaient que le
+   `BoolOp` de tete -- le test d'un `if`, la valeur d'un `return` -- et ne voyaient
+   donc jamais les imbriques. Elles ne sautaient rien : elles annoncaient une
+   moitie et le transformateur, qui visait la ligne, en neutralisait une autre.
+
+   Mesure le 14 septembre 2026 sur `GlobalDecisionReport.requires_human`, celui-la
+   meme dont la forme 4 se reclame : trois de ses cinq raisons annoncees comme
+   mesurees ne l'etaient pas, et une passe entiere de la frontiere a ete triee sur
+   ces etiquettes. La clef porte desormais la colonne du `BoolOp`, l'etiquette
+   porte le texte de l'operande, et les trois formes descendent dans les
+   imbrications au lieu de les confondre ou de les sauter.
+   `tests/test_l_outil_de_mesure.py` tient le temoin : deux `BoolOp` sur une meme
+   ligne, et chacun doit recevoir exactement ce que son etiquette annonce.
+
+   **Jusqu'ou le defaut allait, mesure plutot que craint.** Dans les trois
+   groupes, exactement deux lignes portent des `BoolOp` imbriques :
+   `global_control.py:45` (`requires_human`) et `journal.py:280`
+   (`calibration_verdict['montrable']`). Le reste des etiquettes des passes
+   precedentes designait bien ce qu'il neutralisait. Mais ces deux lignes-la sont
+   les deux verdicts les plus lourds du depot -- « faut-il un humain » et « y
+   a-t-il lieu de parler de la calibration » -- donc l'angle mort etait etroit et
+   place au plus mauvais endroit possible. `journal.py:280` a recu son temoin ;
+   pour `global_control.py:45`, la premiere passe honnete de `frontiere` est ce
+   qui tranchera, et rien d'autre ne doit etre affirme avant elle.
 
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
@@ -43,7 +83,22 @@ autant. Elargir ne ferait donc pas gagner de temps -- ca rendrait seulement la
 passe rapide plus lente. Ce qui rend l'outil juste est la confirmation, pas la
 largeur du sous-ensemble.
 
-**Un survivant confirme est une question, pas un defaut.** Trois reponses
+**Le tri va plus vite avec ce principe, trouve le 14 septembre 2026 en triant
+une soixantaine de survivants de la frontiere.** `verify()` reconstruit tout ce
+que la decision porte en elle -- rapport, gouverneur, politique, contrat,
+capacite, cible du fournisseur. Donc tout refus de la frontiere qui **relit un
+champ de la decision** est une assurance : une decision qui le violerait aurait
+une autre empreinte et serait refusee a la porte. Les refus qui comptent sont
+ceux qui comparent la decision a l'**etat durable d'aujourd'hui** -- le contrat
+relu en base, la gouvernance recalculee, la capacite reinscrite -- parce que
+`verify()` ne peut rien savoir de ce qui a change depuis.
+
+Les trois vrais trous de ce jour-la sont tous de la seconde famille, et tous sur
+le chemin de la reconciliation : derive de gouvernance, contrat retrograde,
+interdiction arrivee apres coup. Les huit refus de `validated_execution.py`
+nommes le meme jour sont tous de la premiere.
+
+**Un survivant confirme est une question, pas un defaut.** Cinq reponses
 possibles, et il faut choisir la bonne avant d'ecrire une ligne :
 
 1. *Le refus est atteignable et personne ne l'essaie.* C'est un trou. Ecris le
@@ -51,12 +106,107 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    d'operation et de charge etait testee a l'aller et pas au retour, alors que la
    reconciliation atteint le meme fournisseur et peut faire passer une execution
    a COMPLETED.
+
+   `is_shared_memory_target` l'etait aussi, et sous la forme la plus sournoise :
+   un test existait et couvrait **aucune** des deux moities. Ses trois cas
+   passaient a l'identique avec l'une ou l'autre remplacee par `True`. Ce que la
+   condition decide n'est pourtant pas cosmetique -- une base prise pour une base
+   en memoire vit en RAM et s'ancre pour la duree du processus, donc le journal
+   s'ecrirait et se relirait normalement sans que rien n'atteigne le disque.
+   Corrige le 14 septembre 2026 : un `file:` qui n'est pas en memoire, et un
+   chemin de disque qui contient les mots.
 2. *Le refus ne peut pas se declencher parce qu'un controle anterieur le couvre.*
    La plupart des refus de `validated_execution.py` sont dans ce cas : une
    decision qui les violerait a une empreinte differente, donc `verify()` la
    refuse avant. Ce sont des assurances, pas des trous. Leur ecrire un test
    demanderait de desactiver `verify()`, donc de tester un chemin qui n'existe
    pas -- ce que la regle 18 du depot appelle un test suspect.
+
+   Les deux `if ecrit.rowcount != 1` du journal -- dans `resolve()` et
+   `abandon()` -- sont dans ce cas, et c'est ecrit ici pour que le prochain
+   passage ne refasse pas le triage. `BEGIN IMMEDIATE` prend le verrou d'ecriture
+   avant le SELECT, donc aucune autre connexion ne peut changer la ligne entre
+   le SELECT et l'UPDATE, et le `AND status=OPEN` de l'UPDATE vise exactement la
+   ligne qu'on vient de lire ouverte. Le refus est la pour le jour ou la course
+   se rouvrirait par un autre chemin -- ce que son propre commentaire annonce.
+   L'atteindre demanderait de defaire le verrou, donc de tester un chemin qui
+   n'existe pas.
+
+   **`if collisions: raise ImportRefused` dans `import_from`** est dans ce cas, et
+   c'est mesure. Neutralise, la reprise part quand meme, la cle primaire de
+   SQLite refuse l'entree en double, `IntegrityError` est rattrapee et convertie
+   en `ImportRefused("duplicates", ...)` -- **le meme code de refus**. Et la ligne
+   de commande n'imprime que ce code (`REPRISE_REFUSEE[refus.reason]`), jamais le
+   message de detail : les deux chemins sont donc indiscernables pour qui s'en
+   sert. Le controle prealable evite d'ouvrir une transaction pour rien ; il ne
+   decide rien que la cle primaire ne decide deja.
+
+   La famille `action is None` de `singular/execution.py` -- aux trois portes,
+   plus les deux liaisons contrat et capacite qui la suivent -- est dans ce cas
+   aussi, et c'est ecrit ici pour qu'on ne refasse pas le triage. `verify()`
+   reconstruit chacune de ces proprietes avant que l'execution commence :
+   « global report and governor must target authorized actions », la boucle qui
+   exige que chaque action autorisee porte l'identifiant du contrat, et le
+   controle que l'action selectionnee porte la capacite validee. Une decision
+   qui violerait l'un des trois est refusee a la porte.
+
+   **La branche ESCALATE de `_validate_governance` est dans ce cas, et elle vaut
+   pour cinq survivants d'un coup** -- `approval_id` vide, approbation non
+   APPROVED, aux deux endroits, et la liaison d'identite de `_validate_approval_
+   binding`. Ces refus peuvent bien se declencher, mais leur **succes** ne peut
+   jamais produire une execution : `ValidatedTrajectoryDecision._validate` exige
+   `governor.mode in {EXECUTE_REVERSIBLE, EXECUTE_AUTHORIZED}` -- « governor
+   decision must explicitly authorize execution », tenu par
+   `tests/test_global_verdict_human_review.py` -- donc aucune decision valide ne
+   scelle un gouverneur ESCALATE. Et les deux portes validees comparent
+   `governed.governor != decision.governor` juste apres avoir autorise. Si la
+   gouvernance du jour escalade, les modes different et l'execution est refusee
+   la, que la branche ait laisse passer ou non. Les neutraliser ne peut donc
+   changer aucun resultat.
+
+   Le controle voisin, lui, n'est pas une assurance : `_validate_approval_binding`
+   compare le magasin natif au magasin **legacy**, et une divergence entre les
+   deux ne serait vue par rien d'autre. Elle reste hors de portee tant que la
+   branche ESCALATE l'est ; c'est une raison d'en retirer un jour le chemin
+   legacy, pas d'ecrire un test qui desactiverait la porte pour y arriver.
+
+   **Les deux moities de `mode == BLOCK or not can_prepare`, aux deux portes
+   (`_validate_governance` et `_authorize_reconciliation`), sont dans ce cas.** Le
+   soupcon naturel est que la reconciliation n'appelle pas
+   `_assert_policy_unchanged`, contrairement aux deux chemins d'execution : un
+   durcissement de politique refuserait une execution neuve et laisserait passer
+   une reconciliation, laquelle peut finaliser une mission en COMPLETED. La
+   question a deja ete posee et tranchee **par la mesure**, dans
+   `tests/test_reconciliation_policy_drift.py` : `ValidatedTrajectoryDecision._
+   validate` recalcule `ActionPolicy.evaluate`, donc `verify()` echoue des que la
+   politique a bouge, et les trois portes commencent par `verify()`.
+   `_assert_policy_unchanged` est une defense en profondeur, pas la seule garde --
+   et le cout reel du durcissement est l'inverse de celui qu'on cherchait : un
+   effet externe ambigu devient definitivement irreconciliable, ce que ce
+   fichier-la fige aussi. Ne refais pas ce triage ; il coute une demi-heure et il
+   est deja ecrit.
+
+   `lire_csv` de Genesis a le meme motif, et il est ecrit ici pour la meme
+   raison : `if not colonnes` ne peut pas se declencher, parce que le garde de la
+   ligne au-dessus exige une virgule dans la premiere ligne et qu'une virgule
+   donne toujours au moins deux colonnes a `csv.DictReader`. Cherche : une
+   premiere ligne entre guillemets, une virgule dans un champ multiligne, une
+   en-tete vide apres `strip()`. Aucune n'atteint le second garde. Il reste,
+   fail-closed, mais il n'aura jamais de temoin.
+
+   Meme chose pour `mode == Autonomy.BLOCK` : les trois facons de produire un
+   BLOCK que le depot sait produire -- politique, red team, bus -- rendent toutes
+   `can_prepare=False`, donc la moitie voisine refuse deja. `v32_governed_core`
+   a bien un chemin qui rendrait BLOCK avec `can_prepare=True`, mais rien ne le
+   nourrit ; la moitie est masquee, pas morte.
+
+   Ce triage-la a ete **attaque avant d'etre ecrit**, parce qu'un raisonnement
+   qui conclut « inatteignable » est exactement le genre de raisonnement qu'on
+   aime trop. Six `resolve()` concurrents sur la meme entree : un passe, les cinq
+   autres tombent sur le `status != OPEN` d'avant. Une ecriture brute par une
+   autre connexion entre deux transactions : le `resolve()` suivant tombe encore
+   sur ce meme controle. Les deux chemins atteignent le garde anterieur, jamais
+   le `rowcount`.
 3. *La moitie est morte.* Ni trou ni assurance : aucune entree ne peut la
    distinguer de sa voisine, donc elle ne decide jamais. `store is None` a cote de
    `not hasattr(store, "path")` -- `hasattr(None, "path")` est faux de toute
@@ -71,20 +221,53 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    dans tout le Python du depot. Cet outil ne devrait donc plus la rencontrer ;
    s'il la nomme, c'est que le garde a ete contourne, pas que le triage est a
    refaire.
-4. *Le refus ne peut pas se declencher parce que rien ne produit son entree.*
+4. *Deux refus qui se couvrent l'un l'autre.* Ni trou, ni assurance, ni moitie
+   morte : deux gardes sur le meme chemin dont **chacun suffit seul**. Cet outil
+   mute un refus a la fois, donc il ne peut par construction en tuer aucun des
+   deux, et il les nommera tous les deux a chaque passage.
+
+   Les deux refus de l'effet ambigu en sont l'exemple, et c'est mesure :
+   `effects.py` refuse de reexecuter un effet UNKNOWN au debut d'`execute`, puis
+   une seconde fois quand la revendication echoue et qu'on relit l'etat.
+   Neutraliser l'un ou l'autre laisse la suite verte ; neutraliser **les deux**
+   la fait echouer. La garantie que le README annonce -- « on resout en demandant
+   au fournisseur, jamais en reessayant » -- est donc bien tenue par un test ;
+   c'est la paire qui porte, pas chaque ligne.
+
+   Ne cherche pas a isoler l'un des deux : ici c'est impossible, la revendication
+   ne peut pas reussir sur un effet UNKNOWN. Verifie que la suite echoue quand
+   les deux tombent, ecris-le, et passe au suivant.
+
+5. *Le refus ne peut pas se declencher parce que rien ne produit son entree.*
    Les quatre refus lies a l'approbation humaine sont dans ce cas : une decision
    validee ne peut pas porter ESCALATE, donc aucune execution escaladee n'atteint
    la frontiere. C'est ce que le README annonce -- « human approval is currently
    not an authorization channel » -- et cet outil le mesure au lieu de le croire.
 
-Il ne tourne pas dans le CI : compte une dizaine de minutes par groupe. C'est un
-instrument d'audit, a relancer quand on touche a ce qu'il mesure.
+Il ne tourne pas dans le CI, et **« une dizaine de minutes par groupe » etait
+faux**. Ce que ca coute vraiment, mesure le 14 septembre 2026 : le prix est
+domine par le nombre de survivants, parce que chacun est reverifie contre la
+suite entiere -- une passe complete chacun. `genesis` : cinq minutes sans
+survivant, treize avec treize. `matins` : dix a quinze. `frontiere` : **plus
+d'une heure, sans avoir fini** -- c'est le groupe le plus gros, et il est celui
+qu'on veut le plus.
 
-    python3 tools/gardes_sans_test.py              # les deux groupes
+Deux consequences operatoires, payees une heure pour les apprendre :
+
+* ne l'enferme pas dans un `timeout` court. Une heure ne suffit pas pour
+  `frontiere` ;
+* ne le passe pas dans un tube qui tamponne, `| tail` en tete. S'il est coupe,
+  tu ne recois rien du tout -- pas meme les survivants deja nommes. Ecris dans un
+  fichier et lis-le au fur et a mesure.
+
+C'est un instrument d'audit, a relancer quand on touche a ce qu'il mesure.
+
+    python3 tools/gardes_sans_test.py              # les trois groupes
     python3 tools/gardes_sans_test.py frontiere    # decision, autorisation, effet
     python3 tools/gardes_sans_test.py matins       # journal, saisie, Scout, Notice, Sage
+    python3 tools/gardes_sans_test.py genesis      # missions, capacites, banc differentiel
 
-**Deux groupes, parce que la priorite du depot est celle de la section 0 du
+**Trois groupes, parce que la priorite du depot est celle de la section 0 du
 mandat** : ce qui tourne sans jeton passe avant ce qui en consomme. Le moteur
 qu'il lance chaque matin s'en sort mieux que la frontiere -- c'est la partie la
 mieux testee du depot -- et il avait quand meme des refus sans temoin, dont deux
@@ -225,6 +408,11 @@ CIBLES_MATINS = (
     "singular/sage/server.py",
     "singular/fichiers.py",
     "singular/sqlite_support.py",
+    # La sauvegarde du journal : le seul fichier irremplacable du depot, et le
+    # module qui decide s'il est fidelement copie. Il etait hors de tous les
+    # groupes, et rendait zero mutant tant que l'outil ne voyait pas
+    # `SauvegardeRefusee`.
+    "singular/sauvegarde.py",
     "proto/suivi_candidatures.py",
 )
 
@@ -240,16 +428,95 @@ SOUS_SUITE_MATINS = (
     "tests/test_etat_en_francais.py", "tests/test_notice_vectors.py",
     "tests/test_une_seule_regle_par_phrase.py", "tests/test_commandes_de_sa_fenetre.py",
     "tests/test_messages_recopies.py", "tests/test_windows_console.py",
+    "tests/test_sauvegarde.py",
+    # La calibration datee. Sans elle, l'outil annoncait « sous-suite trop
+    # etroite » sur les conditions de `corrige` : elles etaient couvertes, mais
+    # par un fichier que la passe rapide ne lancait pas, donc chacune coutait une
+    # passe complete pour rien.
+    "tests/test_calibration_datee.py",
+)
+
+#: L'experience Genesis. Elle ne tourne pas les matins et ne touche pas la
+#: frontiere, donc elle n'a sa place dans aucun des deux groupes -- et elle a
+#: quand meme besoin d'etre mesuree ici, plus qu'eux : tout ce qu'elle affirme
+#: repose sur ce qu'elle refuse. Un banc differentiel dont un refus n'a pas de
+#: temoin ne mesure plus que sa propre complaisance, et son chiffre positif ne
+#: vaut plus rien.
+CIBLES_GENESIS = (
+    "singular/genesis/bench.py",
+    "singular/genesis/capability.py",
+    "singular/genesis/mission.py",
+    "singular/genesis/missions.py",
+    "singular/genesis/lecteurs.py",
+)
+
+SOUS_SUITE_GENESIS = (
+    "tests/test_genesis.py", "tests/test_genesis_isolation.py",
 )
 
 GROUPES = {
     "frontiere": (CIBLES_FRONTIERE, SOUS_SUITE_FRONTIERE),
     "matins": (CIBLES_MATINS, SOUS_SUITE_MATINS),
+    "genesis": (CIBLES_GENESIS, SOUS_SUITE_GENESIS),
 }
 
 #: Les exceptions qui disent « refuse ». Une `KeyError` ou une `AttributeError`
 #: n'est pas un refus, c'est un accident -- on ne les mute pas.
-REFUS = frozenset({"PermissionError", "ValueError", "RuntimeError", "TypeError"})
+#: Les exceptions du langage qui disent « non ». La racine de la derivation
+#: ci-dessous, et rien de plus : `Exception` en fait partie parce qu'une classe
+#: de refus du depot en herite souvent directement.
+REFUS_DU_LANGAGE = frozenset({"PermissionError", "ValueError", "RuntimeError",
+                              "TypeError", "KeyError", "Exception"})
+
+#: Les dossiers ou ce depot definit ses propres exceptions.
+SOURCES_D_EXCEPTIONS = ("singular", "proto")
+
+
+def refus_du_depot(racine: pathlib.Path = RACINE) -> frozenset[str]:
+    """Tout ce dont un `raise` peut refuser : le langage **et** ce depot.
+
+    La liste etait ecrite a la main, et ne portait que quatre noms du langage.
+    Or ce depot nomme ses refus -- `SauvegardeRefusee`, `ImportRefused`,
+    `ExecutionRecoveryRequired`, `EffectInProgress`, `FormatRefuse`,
+    `SubstitutionRefusee`, `AuditChainOutOfDate` -- et la forme 1 compare le nom
+    **ecrit dans le `raise`**, pas la classe. Un `raise ExecutionRecoveryRequired`
+    etait donc invisible alors que c'est un `RuntimeError`.
+
+    Consequence mesuree le 15 septembre 2026 : `singular/sauvegarde.py`, 261
+    lignes qui gardent le seul fichier irremplacable du depot, rendait **zero**
+    mutant. Le silence de l'outil sur ce module se lisait comme une couverture ;
+    c'etait une cecite. Et elle s'aggrave toute seule : plus le depot nomme ses
+    refus, moins l'outil en voit.
+
+    La liste est donc derivee de l'arbre, comme celle de `tools/etat_reel.py`, et
+    par fermeture transitive : une exception qui herite d'une exception de refus
+    refuse aussi. Une classe de refus ajoutee demain entre sans que personne y
+    pense -- c'est tout l'interet de ne plus l'ecrire a la main.
+    """
+    heritages: dict[str, set[str]] = {}
+    for dossier in SOURCES_D_EXCEPTIONS:
+        for chemin in sorted((racine / dossier).rglob("*.py")):
+            try:
+                arbre = ast.parse(chemin.read_text(encoding="utf-8"))
+            except (SyntaxError, OSError):
+                continue
+            for noeud in ast.walk(arbre):
+                if not isinstance(noeud, ast.ClassDef):
+                    continue
+                bases = {base.id for base in noeud.bases if isinstance(base, ast.Name)}
+                bases |= {base.attr for base in noeud.bases if isinstance(base, ast.Attribute)}
+                if bases:
+                    heritages.setdefault(noeud.name, set()).update(bases)
+
+    noms = set(REFUS_DU_LANGAGE)
+    while True:
+        gagnes = {nom for nom, bases in heritages.items() if nom not in noms and bases & noms}
+        if not gagnes:
+            return frozenset(noms)
+        noms |= gagnes
+
+
+REFUS = refus_du_depot()
 
 
 class RendUneMoitieFausse(ast.NodeTransformer):
@@ -258,15 +525,27 @@ class RendUneMoitieFausse(ast.NodeTransformer):
     L'element neutre depend de l'operateur : `a or False` vaut `a`, `a and True`
     vaut `a`. Remplacer par la mauvaise constante ferait un mutant qui ne mesure
     rien -- `a or True` refuse toujours, `a and False` ne refuse jamais.
+
+    **La clef porte la colonne, pas seulement la ligne.** Une ligne peut porter
+    plusieurs `BoolOp` -- `a or b or (c and d)` en porte deux -- et `generic_visit`
+    visite les enfants avant leur parent : viser « la ligne 45 » mutait donc le
+    `and` imbrique en croyant muter le `or` exterieur. Le rapport nommait une
+    moitie et en neutralisait une autre, et les deux premieres moities du `or`
+    n'etaient jamais mutees du tout. Mesure sur
+    `GlobalDecisionReport.requires_human`, l'exemple meme dont cet outil se
+    reclame : trois de ses cinq raisons annoncees comme mesurees ne l'etaient pas.
+    La colonne distingue deux `BoolOp` d'une meme ligne ; l'etiquette porte en
+    plus le texte de l'operande, pour qu'un mauvais ciblage se voie.
     """
 
-    def __init__(self, clef: tuple[int, int]) -> None:
-        self.ligne, self.index = clef
+    def __init__(self, clef: tuple[int, int, int]) -> None:
+        self.ligne, self.colonne, self.index = clef
         self.touche = False
 
     def visit_BoolOp(self, node: ast.BoolOp) -> ast.BoolOp:
         self.generic_visit(node)
-        if node.lineno == self.ligne and self.index < len(node.values) and not self.touche:
+        vise = node.lineno == self.ligne and node.col_offset == self.colonne
+        if vise and self.index < len(node.values) and not self.touche:
             neutre = isinstance(node.op, ast.And)
             node.values[self.index] = ast.Constant(value=neutre)
             self.touche = True
@@ -344,13 +623,33 @@ def refus_booleens_d_un_fichier(arbre: ast.AST) -> list[tuple[int, str]]:
     return trouves
 
 
-def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
-    """Chaque moitie d'un garde compose, par (ligne, rang de la moitie).
+def _operande(valeur: ast.expr) -> str:
+    """Le texte de la moitie neutralisee, pour que l'etiquette ne puisse pas mentir.
 
-    Une ligne portant deux `BoolOp` rendrait la clef ambigue : on ne mute alors
-    ni l'une ni l'autre. Refuser de deviner vaut mieux que mesurer la mauvaise.
+    Une etiquette qui ne dit que « moitie 2 » oblige a recompter les operandes a
+    la main, et un mauvais ciblage passe alors inapercu -- c'est exactement ce qui
+    est arrive. Le texte de l'operande rend la verification immediate.
     """
-    par_ligne: dict[int, list[ast.BoolOp]] = {}
+    texte = ast.unparse(valeur).replace("\n", " ")
+    return texte if len(texte) <= 60 else texte[:57] + "..."
+
+
+def _boolops(racine: ast.expr) -> list[ast.BoolOp]:
+    """Tous les `BoolOp` d'une expression, imbriques compris, du plus externe au plus interne."""
+    return [noeud for noeud in ast.walk(racine) if isinstance(noeud, ast.BoolOp)]
+
+
+def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int, int], str]]:
+    """Chaque moitie d'un garde compose, par (ligne, colonne, rang de la moitie).
+
+    La clef portait autrefois la seule ligne, et sautait les lignes ambigues. Les
+    deux choix etaient faux : une ligne peut porter plusieurs `BoolOp` imbriques,
+    que cette forme ne voyait meme pas -- elle ne regardait que le `BoolOp` de tete
+    -- donc elle ne sautait rien et laissait le transformateur muter l'imbrique a la
+    place de celui qu'elle annoncait. La colonne les distingue, et l'imbrique
+    devient mesurable au lieu d'etre confondu ou saute.
+    """
+    trouves = []
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.If) or noeud.orelse or len(noeud.body) != 1:
             continue
@@ -362,15 +661,12 @@ def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
             nom = getattr(leve.func, "id", "") or getattr(leve.func, "attr", "")
         if nom not in REFUS or not isinstance(noeud.test, ast.BoolOp):
             continue
-        par_ligne.setdefault(noeud.test.lineno, []).append(noeud.test)
-    trouves = []
-    for ligne, tests in sorted(par_ligne.items()):
-        if len(tests) != 1:
-            continue
-        operateur = "and" if isinstance(tests[0].op, ast.And) else "or"
-        for index in range(len(tests[0].values)):
-            trouves.append(((ligne, index), f"moitie {index + 1} du {operateur}"))
-    return trouves
+        for boolop in _boolops(noeud.test):
+            operateur = "and" if isinstance(boolop.op, ast.And) else "or"
+            for index, valeur in enumerate(boolop.values):
+                trouves.append(((boolop.lineno, boolop.col_offset, index),
+                                f"moitie {index + 1} du {operateur} :: {_operande(valeur)}"))
+    return sorted(trouves)
 
 
 def moities_rendues_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
@@ -392,25 +688,61 @@ def moities_rendues_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int], 
     fonction annotee `-> bool` declare etre un predicat. Une propriete compte, c'est
     une fonction annotee comme les autres.
     """
-    par_ligne: dict[int, list[ast.BoolOp]] = {}
-    noms: dict[int, str] = {}
+    trouves = []
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.FunctionDef):
             continue
         if not (isinstance(noeud.returns, ast.Name) and noeud.returns.id == "bool"):
             continue
         for interne in ast.walk(noeud):
-            if isinstance(interne, ast.Return) and isinstance(interne.value, ast.BoolOp):
-                par_ligne.setdefault(interne.value.lineno, []).append(interne.value)
-                noms[interne.value.lineno] = noeud.name
+            if not (isinstance(interne, ast.Return) and isinstance(interne.value, ast.BoolOp)):
+                continue
+            for boolop in _boolops(interne.value):
+                operateur = "and" if isinstance(boolop.op, ast.And) else "or"
+                for index, valeur in enumerate(boolop.values):
+                    trouves.append(((boolop.lineno, boolop.col_offset, index),
+                                    f"moitie {index + 1} du {operateur} rendu ({noeud.name})"
+                                    f" :: {_operande(valeur)}"))
+    return sorted(trouves)
+
+
+def moities_d_un_verdict_en_dictionnaire(arbre: ast.AST) -> list[tuple[tuple[int, int], str]]:
+    """Forme 5 : une moitie d'un booleen rendu **dans un dictionnaire**.
+
+    Les quatre premieres formes ne voient un verdict que s'il est rendu tout nu,
+    par une fonction annotee `-> bool`. Or ce depot construit ses verdicts les
+    plus lus dans des dictionnaires : `calibration_verdict` rend
+    `{"conclusive": ..., "montrable": ...}`, `calibration_progression` rend
+    `{"corrige": ...}`, et toutes les interfaces les lisent sans jamais les
+    recalculer -- c'est meme la regle du depot qu'elles ne les recalculent pas.
+
+    Ces booleens-la etaient donc **entierement hors de portee de cet outil**, et
+    c'est la regle de calibration, celle qui s'est deja corrigee six fois, qui
+    vivait dans l'angle mort. Le defaut que l'outil traque etait dans l'outil.
+
+    Cette forme etait la seule a voir les imbrications, et elle les sautait :
+    l'etiquette aurait ete ambigue, parce que le transformateur visait une ligne et
+    visite les enfants avant leur parent. La clef porte maintenant la colonne, donc
+    l'ambiguite n'existe plus et rien n'est saute -- `calibration_verdict
+    ['montrable']`, un `and` dans un `or`, redevient mesurable.
+    """
     trouves = []
-    for ligne, rendus in sorted(par_ligne.items()):
-        if len(rendus) != 1:
+    for noeud in ast.walk(arbre):
+        if not isinstance(noeud, ast.FunctionDef):
             continue
-        operateur = "and" if isinstance(rendus[0].op, ast.And) else "or"
-        for index in range(len(rendus[0].values)):
-            trouves.append(((ligne, index), f"moitie {index + 1} du {operateur} rendu ({noms[ligne]})"))
-    return trouves
+        for interne in ast.walk(noeud):
+            if not (isinstance(interne, ast.Return) and isinstance(interne.value, ast.Dict)):
+                continue
+            for clef, valeur in zip(interne.value.keys, interne.value.values, strict=False):
+                etiquette = clef.value if isinstance(clef, ast.Constant) else "?"
+                for boolop in _boolops(valeur):
+                    operateur = "and" if isinstance(boolop.op, ast.And) else "or"
+                    for index, operande in enumerate(boolop.values):
+                        trouves.append((
+                            (boolop.lineno, boolop.col_offset, index),
+                            f"moitie {index + 1} du {operateur} en dictionnaire "
+                            f"({noeud.name}[{etiquette!r}]) :: {_operande(operande)}"))
+    return sorted(trouves)
 
 
 #: Chaque forme de refus : ce qui la trouve, ce qui la neutralise.
@@ -419,6 +751,7 @@ FORMES = (
     (refus_booleens_d_un_fichier, RendLeRefusVrai),
     (moities_d_un_fichier, RendUneMoitieFausse),
     (moities_rendues_d_un_fichier, RendUneMoitieFausse),
+    (moities_d_un_verdict_en_dictionnaire, RendUneMoitieFausse),
 )
 
 
@@ -545,7 +878,10 @@ def main(arguments: list[str] | None = None) -> int:
     demandes = arguments if arguments else list(GROUPES)
     inconnus = [nom for nom in demandes if nom not in GROUPES]
     if inconnus:
-        print(f"groupe inconnu : {', '.join(inconnus)}. Les deux : {', '.join(GROUPES)}.",
+        # « Les deux » etait ecrit en toutes lettres a cote d'une liste qui en
+        # contient trois. Le message se compte lui-meme maintenant.
+        print(f"groupe inconnu : {', '.join(inconnus)}. Les {len(GROUPES)} : "
+              f"{', '.join(GROUPES)}.",
               file=sys.stderr)
         return 2
     with copie_a_mesurer() as copie:

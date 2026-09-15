@@ -44,7 +44,7 @@ from .saisie import CHAMP_ATTENDU as _CHAMP_ATTENDU
 from .saisie import CHAMP_DECISION as _CHAMP_DECISION
 from .saisie import verifie_texte as _verifie_texte
 from .sage import notice as _notice
-from .sage.notice import calibration_verdict, foundation_item
+from .sage.notice import calibration_progression, calibration_verdict, foundation_item
 
 DIM = "\033[2m"
 BOLD = "\033[1m"
@@ -712,9 +712,19 @@ def cmd_review(journal: DecisionJournal, args) -> int:
         # jugement deregle.
         gap = report["overconfidence"]
         verdict = calibration_verdict(report)
+        progression = calibration_progression(report)
         if verdict is None or not verdict["conclusive"]:
             print(_colour(f"  écart de {gap:+.0%} sur {_pluriel(report['resolved'], 'verdict')}"
                           " - le hasard seul en produit autant, rien a conclure", DIM))
+        elif progression is not None and progression["corrige"]:
+            # Le rouge disait « surconfiance de +22% » pendant que l'observation,
+            # deux lignes plus bas, expliquait que c'etait corrige. Le verdict
+            # vient du moteur, la couleur aussi.
+            recent = progression["recent"]
+            print(_colour(f"  écart de {gap:+.0%} sur toute ta vie de journal, mais "
+                          f"{recent['gap']:+.0%} sur tes {recent['verdicts']} plus récentes "
+                          "tranchées "
+                          "- c'est corrigé", DIM))
         elif gap > 0:
             print(_colour(f"  surconfiance de {gap:+.0%} - tu crois plus que ce qui arrive", RED))
         else:

@@ -760,3 +760,197 @@ def test_une_revocation_en_memoire_seule_arrete_l_execution(tmp_path):
 
     # Ce qui isole la moitie testee : le durable, lui, dit encore oui.
     assert moteur.capability_store.verify(jeton, executable_jetable) is True
+
+
+def test_un_mode_d_autonomie_qui_n_execute_pas_est_refuse(tmp_path):
+    """La derniere porte sur le mode, et elle n'avait aucun temoin.
+
+    `_validate_governance` rejette BLOCK, puis PREPARE, puis verifie que le mode
+    est bien l'un des trois qui executent. `Autonomy` en compte **sept** :
+    OBSERVE et ANALYZE ne sont rejetes par aucun des gardes precedents, et
+    `can_execute` vient de la politique -- risque et reversibilite -- pas du
+    mode. Une action verte en mode OBSERVE passe donc les trois premiers gardes,
+    et seule cette ligne-ci l'arrete.
+
+    `Governor.evaluate` n'emet jamais ces deux modes aujourd'hui. Mais
+    `_from_cached` reconstruit le mode depuis la base -- `Autonomy(cached["mode"])`
+    -- donc une ligne de gouvernance persistee par une autre version, ou abimee,
+    arrive ici avec le mode qu'elle porte. C'est exactement la « stale policy »
+    et les « anciennes donnees persistees » que le mandat demande de chercher, et
+    ce garde est ce qui les refuse.
+    """
+    from singular.autopilot import ActionRequest, Autonomy, GovernorDecision
+    from singular.v32_governed_core import GovernedAction
+
+    engine = DurableExecutionEngine(DurableMissionRuntime(DurableStore(tmp_path / "d.db")))
+    action = ActionRequest("lire_fichier", "une action verte", 1, 9, 9, contract_id="MIS-MODE")
+
+    for mode in (Autonomy.OBSERVE, Autonomy.ANALYZE):
+        governed = GovernedAction(
+            action, "GREEN", GovernorDecision(action.id, mode, ()),
+            can_prepare=True, can_execute=True, requires_human=False,
+            reasons=("etat venu du disque",),
+        )
+        with pytest.raises(PermissionError, match="non exécutable"):
+            engine._validate_governance(governed, action, "MIS-MODE")
+
+
+def test_une_gouvernance_qui_prepare_sans_executer_est_refusee(tmp_path):
+    """Preparer n'est pas executer, et le garde d'avant masque celui-ci.
+
+    La premiere version de ce docstring disait que `can_prepare` et
+    `can_execute` sont toujours egaux parce que les sept `PolicyDecision` du
+    depot rendent `(False, False)` ou `(True, True)`. **C'etait faux**, et la
+    mesure l'a montre : `GovernedAction.can_execute` n'est pas celui de la
+    politique. `v32_governed_core.route` calcule
+    `can_execute = policy.can_execute and governor_can_execute`, donc une
+    gouvernance PREPARE rend bien `can_prepare=True, can_execute=False` --
+    mesure, pas suppose.
+
+    Ce qui masque reellement ce garde, c'est celui d'avant : sur le chemin
+    d'execution, `mode == PREPARE` refuse une ligne plus haut. Il reste donc
+    atteignable par une combinaison que rien ne produit -- un mode executable
+    avec `can_execute` faux -- et `_from_cached` relit precisement ces deux
+    champs **separement** depuis la base. C'est ce que ce test joue : « prepare »
+    ne doit pas valoir « execute » apres un redemarrage.
+    """
+    from singular.autopilot import ActionRequest, Autonomy, GovernorDecision
+    from singular.v32_governed_core import GovernedAction
+
+    engine = DurableExecutionEngine(DurableMissionRuntime(DurableStore(tmp_path / "d.db")))
+    action = ActionRequest("lire_fichier", "une action verte", 1, 9, 9, contract_id="MIS-PREP")
+    governed = GovernedAction(
+        action, "GREEN", GovernorDecision(action.id, Autonomy.EXECUTE_REVERSIBLE, ()),
+        can_prepare=True, can_execute=False, requires_human=False,
+        reasons=("etat venu du disque",),
+    )
+    with pytest.raises(PermissionError, match="non autorisée à l'exécution"):
+        engine._validate_governance(governed, action, "MIS-PREP")
+
+
+
+def test_un_contrat_retrograde_a_prepare_tombe_avant_la_comparaison_de_gouverneur(tmp_path):
+    """Retrograde, pas seulement change : c'est un autre garde qui refuse.
+
+    Le test voisin altere l'autonomie vers EXECUTE_AUTHORIZED, ce qui fait
+    diverger le gouverneur et tombe sur « governance no longer matches ». Vers
+    PREPARE, on ne va pas si loin : `_authorize` recalcule la gouvernance
+    **avant** cette comparaison -- l'ordre des lignes de `execute_validated` le
+    montre -- et `_validate_governance` refuse des qu'il voit le mode PREPARE.
+
+    Les deux gardes vivent donc sur le meme chemin et seul le premier etait
+    joue. Celui-ci est celui qui dit « preparee mais non autorisee a
+    l'execution » : c'est la difference entre un contrat qui a change et un
+    contrat qui a **perdu** le droit d'executer, et c'est la seconde qui est la
+    « stale authorization » de la section 7 du mandat.
+    """
+    decision = _build_decision()
+    moteur = _moteur(decision, tmp_path)
+    _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                               autonomy=Autonomy.PREPARE.value)
+
+    with pytest.raises(PermissionError, match="préparée mais non autorisée"):
+        moteur.execute_validated(decision, authorized_handler)
+
+
+def test_un_contrat_altere_refuse_aussi_la_reconciliation(tmp_path):
+    """Teste a l'aller, jamais au retour -- et c'est le retour qui conclut l'effet.
+
+    Les deux tests voisins jouent la derive de gouvernance sur
+    `execute_validated` et `execute_effect_validated`. `reconcile_effect_validated`
+    porte le meme garde, a la meme place, et personne ne l'essayait. L'audit de
+    mutation l'a nomme.
+
+    Ce chemin-la est le plus dangereux des trois a laisser sans temoin : la
+    reconciliation ne demande pas au monde d'agir, elle **conclut** ce qui a
+    peut-etre deja agi -- elle fait passer une execution a COMPLETED. Une
+    autorisation perimee qui franchirait ce garde ne declencherait rien de
+    nouveau ; elle graverait comme acquis un effet que plus personne n'autorise.
+    """
+    decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+    _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                               autonomy=Autonomy.EXECUTE_AUTHORIZED.value)
+
+    with pytest.raises(PermissionError, match="governance no longer matches"):
+        moteur.reconcile_effect_validated(
+            decision, AUTHORIZED_PROVIDER, provider_name="bounded-provider",
+            operation="apply", payload=payload,
+        )
+
+
+# --- la troisieme fois : teste a l'aller, nu au retour -------------------------
+#
+# Ce defaut s'est paye trois fois, toujours de la meme facon. La substitution de
+# fournisseur, d'operation et de charge etait testee sur le chemin d'execution et
+# pas sur celui de la reconciliation -- c'est ce que raconte l'en-tete de ce
+# fichier. La derive de gouvernance : pareil. L'interdiction par le contrat :
+# pareil, et c'est l'audit qui l'a nomme une fois de plus.
+#
+# On arrete donc de corriger un chemin a la fois. Les scenarios de derive se
+# jouent contre **les trois portes**, et une porte ajoutee un jour sans son
+# refus fera rougir ce test-la.
+
+#: Les trois façons d'atteindre la frontière avec une décision validée.
+PORTES = ("execute_validated", "execute_effect_validated", "reconcile_effect_validated")
+
+
+def _franchir(moteur, porte: str, decision, payload):
+    """Appelle la porte nommée avec ce qu'elle attend, et rien de plus."""
+    if porte == "execute_validated":
+        return moteur.execute_validated(decision, authorized_handler)
+    return getattr(moteur, porte)(decision, AUTHORIZED_PROVIDER,
+                                  provider_name="bounded-provider",
+                                  operation="apply", payload=payload)
+
+
+#: La dérive, et ce que chaque porte répond. Quand deux portes ne disent pas la
+#: même chose, ce n'est pas une négligence : `_authorize_reconciliation` ne porte
+#: pas de garde PREPARE, donc une rétrogradation y est refusée par l'égalité des
+#: gouverneurs — la décision validée ne peut pas porter PREPARE, `verify()` s'y
+#: oppose, donc l'égalité échoue forcément. C'est écrit ici plutôt que masqué
+#: derrière un `PermissionError` nu : savoir **quel** garde a refusé est tout
+#: l'intérêt de ces tests.
+DERIVES = [
+    ("interdiction", {porte: "bloquée par la gouvernance" for porte in PORTES}),
+    ("retrogradation", {
+        "execute_validated": "préparée mais non autorisée",
+        "execute_effect_validated": "préparée mais non autorisée",
+        "reconcile_effect_validated": "governance no longer matches",
+    }),
+    ("autre_autonomie", {porte: "governance no longer matches" for porte in PORTES}),
+]
+
+
+@pytest.mark.parametrize("porte", PORTES)
+@pytest.mark.parametrize("derive, messages", DERIVES)
+def test_les_trois_portes_refusent_la_meme_derive(tmp_path, porte, derive, messages):
+    """La même dérive, contre les trois portes, sans en oublier une.
+
+    Chacune de ces trois dérives a déjà été testée contre une porte ou deux, et
+    c'est l'audit de mutation qui a nommé les manquantes — une par une, trois
+    fois de suite. Les écrire une par une aurait garanti une quatrième.
+
+    La réconciliation est celle qu'on oublie, et c'est la plus grave à laisser
+    nue : elle ne demande pas au monde d'agir, elle **conclut** ce qui a
+    peut-être déjà agi.
+    """
+    message = messages[porte]
+    if porte == "execute_validated":
+        decision, payload = _build_decision(), None
+    else:
+        decision, payload = _build_effect_decision()
+    moteur = _moteur(decision, tmp_path)
+
+    if derive == "interdiction":
+        _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                                   forbidden_actions=[decision.authorized_actions[0].name])
+    elif derive == "retrogradation":
+        _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                                   autonomy=Autonomy.PREPARE.value)
+    else:
+        _altere_le_contrat_durable(moteur.store, decision.contract.mission_id,
+                                   autonomy=Autonomy.EXECUTE_AUTHORIZED.value)
+
+    with pytest.raises(PermissionError, match=message):
+        _franchir(moteur, porte, decision, payload)

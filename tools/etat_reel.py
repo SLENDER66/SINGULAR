@@ -47,6 +47,7 @@ import ast
 import pathlib
 import sys
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
@@ -227,6 +228,72 @@ def _sources(dossier: str) -> list[pathlib.Path]:
     return sorted((RACINE / dossier).rglob("*.py"))
 
 
+@lru_cache(maxsize=None)
+def _lu(chemin: str, signature: tuple[int, int]) -> str:
+    """Le texte d'un fichier, retenu tant qu'il n'a pas bougé.
+
+    `signature` n'est jamais lue : elle est dans la clé pour que le cache tombe
+    de lui-même si le fichier change. Un registre qui répondrait d'après un
+    fichier périmé serait exactement ce que cet outil existe pour empêcher, donc
+    la fraîcheur ne repose pas sur la promesse que le processus est court.
+    """
+    return pathlib.Path(chemin).read_text(encoding="utf-8")
+
+
+@lru_cache(maxsize=None)
+def _arbre(chemin: str, signature: tuple[int, int]) -> ast.Module | None:
+    """L'arbre syntaxique d'un fichier, ou `None` s'il ne se lit pas.
+
+    `_qui_importe` relit et reparse tout `singular/` à chaque module interrogé, et
+    `modules_hors_registre` l'appelle une fois par module : le même fichier était
+    donc parsé autant de fois qu'il y a de modules. Mesuré sur ce dépôt avant la
+    correction : 5850 appels à `ast.parse` pour moins de cent fichiers, neuf
+    secondes, et douze pour `rapport()`. Le registre entier coûtait deux minutes
+    dans la suite, et l'audit de mutation relance la suite entière une fois par
+    survivant.
+
+    Rien de la dérivation ne change : on retient le parse, jamais la réponse. Le
+    résultat est comparé champ par champ à celui d'avant le cache.
+    """
+    try:
+        return ast.parse(_lu(chemin, signature))
+    except SyntaxError:
+        return None
+
+
+def _signature(chemin: pathlib.Path) -> tuple[int, int]:
+    etat = chemin.stat()
+    return (etat.st_mtime_ns, etat.st_size)
+
+
+#: Un import tel qu'il est écrit : sa forme, le module nommé, le niveau du point
+#: relatif, et les noms importés. C'est tout ce dont `_qui_importe` a besoin, et
+#: ça ne dépend pas du module cherché.
+Import = tuple[str, str, int, tuple[str, ...]]
+
+
+@lru_cache(maxsize=None)
+def _imports(chemin: str, signature: tuple[int, int]) -> tuple[Import, ...]:
+    """Les imports écrits dans un fichier, dans l'ordre où l'arbre les donne.
+
+    `_qui_importe` parcourait l'arbre de **chaque** fichier de `singular/` pour
+    **chaque** module interrogé : le travail était quadratique alors que ce qu'on
+    extrait d'un fichier ne dépend pas du module cherché. Seule la comparaison en
+    dépend, et elle reste là-bas, à l'identique.
+    """
+    arbre = _arbre(chemin, signature)
+    if arbre is None:
+        return ()
+    ecrits: list[Import] = []
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.ImportFrom):
+            ecrits.append(("from", noeud.module or "", noeud.level or 0,
+                           tuple(alias.name for alias in noeud.names)))
+        elif isinstance(noeud, ast.Import):
+            ecrits.append(("import", "", 0, tuple(alias.name for alias in noeud.names)))
+    return tuple(ecrits)
+
+
 def _qui_importe(module: str) -> list[str]:
     """Les modules de `singular/` qui importent celui-ci, lui-meme exclu.
 
@@ -241,24 +308,18 @@ def _qui_importe(module: str) -> list[str]:
         relatif = chemin.relative_to(RACINE).as_posix()
         if relatif == module:
             continue
-        try:
-            arbre = ast.parse(chemin.read_text(encoding="utf-8"))
-        except SyntaxError:
-            continue
-        for noeud in ast.walk(arbre):
-            if isinstance(noeud, ast.ImportFrom):
+        for forme, nom, niveau_relatif, noms in _imports(str(chemin), _signature(chemin)):
+            if forme == "from":
                 # `from .notice import x` comme `from singular.sage.notice import x`.
-                nom = noeud.module or ""
-                if nom == cible or nom.endswith("." + court) or (noeud.level and nom == court):
+                if nom == cible or nom.endswith("." + court) or (niveau_relatif and nom == court):
                     lecteurs.append(relatif)
                     break
-                if noeud.level and any(alias.name == court for alias in noeud.names):
+                if niveau_relatif and any(alias == court for alias in noms):
                     lecteurs.append(relatif)
                     break
-            elif isinstance(noeud, ast.Import):
-                if any(alias.name == cible for alias in noeud.names):
-                    lecteurs.append(relatif)
-                    break
+            elif any(alias == cible for alias in noms):
+                lecteurs.append(relatif)
+                break
     return lecteurs
 
 
@@ -268,7 +329,7 @@ def _tests_qui_nomment(module: str) -> list[str]:
     court = cible.rsplit(".", 1)[-1]
     trouves = []
     for chemin in _sources("tests"):
-        texte = chemin.read_text(encoding="utf-8")
+        texte = _lu(str(chemin), _signature(chemin))
         if f"from {cible} import" in texte or f"import {cible}" in texte \
                 or f"from singular import {court}" in texte:
             trouves.append(chemin.relative_to(RACINE).as_posix())

@@ -145,10 +145,12 @@ def test_the_engine_still_owns_the_thresholds():
 #: « >= 3 ». Le moteur porte les seuils, donc il les nomme.
 COMPARE_UN_NOMBRE = re.compile(r"[<>]=?\s*\d")
 
-#: Les deux seuils que la ligne de statut du journal lit aussi. Ils vivent dans
-#: le moteur et pas dans la Notice, parce que `singular/journal.py` ne peut pas
-#: importer le Sage — la dépendance va dans l'autre sens.
-SEUILS_DU_JOURNAL = ("CALIBRATION_MINIMUM", "CALIBRATION_GAP")
+#: Les seuils de calibration. Ils vivent dans le moteur et pas dans la Notice,
+#: parce que `singular/journal.py` ne peut pas importer le Sage — la dépendance
+#: va dans l'autre sens. Aucun endroit qui *affiche* ne doit les nommer : les
+#: nommer, c'est pouvoir les recombiner autrement que la règle ne le fait.
+SEUILS_DU_JOURNAL = ("CALIBRATION_MINIMUM", "CALIBRATION_GAP", "CALIBRATION_HASARD",
+                     "CALIBRATION_ARRONDI")
 
 
 def test_les_deux_seuils_partages_n_ont_qu_un_domicile():
@@ -169,12 +171,21 @@ def test_les_deux_seuils_partages_n_ont_qu_un_domicile():
 
 
 def test_la_ligne_de_statut_du_moteur_ne_reecrit_aucun_seuil():
-    """La cinquième occurrence : le moteur affiche, donc il est une interface aussi.
+    """La cinquième occurrence, puis la sixième : le moteur affiche, donc il est
+    une interface aussi.
 
     `summary_line` est imprimée par son profil shell. Elle comparait
-    `abs(...) >= 0.1` sur place et ne comptait pas les verdicts. Le test lit le
-    corps de la fonction, pas le fichier : le moteur a le droit de calculer les
-    seuils, pas de les recopier là où il affiche.
+    `abs(...) >= 0.1` sur place et ne comptait pas les verdicts. Ce test exigeait
+    alors qu'elle nomme les seuils du moteur au lieu de les recopier.
+
+    Ça ne suffisait pas, et la sixième occurrence l'a montré : nommer les bons
+    seuils tout en les recombinant soi-même, c'est encore tenir sa propre règle.
+    Elle en était restée à « assez de verdicts, et quinze points d'écart »,
+    c'est-à-dire à la version d'avant le 9 septembre, et se taisait donc sur un
+    écart de dix points établi sur deux cents verdicts pendant que la Notice
+    concluait. La règle entière est descendue dans le moteur — `montrable` y
+    compris — et ce test garde désormais la propriété forte : cette ligne ne
+    nomme **aucun** seuil, elle lit un verdict.
     """
     import ast
 
@@ -188,8 +199,12 @@ def test_la_ligne_de_statut_du_moteur_ne_reecrit_aucun_seuil():
     corps = ast.get_source_segment(source, fonction) or ""
     assert PARLE_DE_CALIBRATION.search(corps), (
         "`summary_line` ne parle plus de calibration : ce test ne garde plus rien")
+    assert "calibration_verdict(" in corps, (
+        "`summary_line` ne lit plus le verdict du moteur : elle le refait")
     for nom in SEUILS_DU_JOURNAL:
-        assert nom in corps, f"`summary_line` n'utilise pas {nom}"
+        assert nom not in corps, (
+            f"`summary_line` nomme {nom} : recombiner les bons seuils soi-même, "
+            "c'est encore tenir sa propre règle. Elle lit `montrable`.")
     # Le moteur a le droit de comparer -- c'est lui qui porte les seuils -- mais
     # pas de comparer a un nombre ecrit sur place. C'est ce qui distingue son cas
     # de celui des interfaces, qui doivent lire `conclusive` sans rien comparer.
@@ -265,7 +280,10 @@ def test_the_notice_hands_over_its_verdict(tmp_path):
     notice = build_notice(_journal(tmp_path, [(0.75, False)] * 3), now=NOW + timedelta(days=30))
     rendu = notice.as_dict()
 
-    assert set(rendu["calibration"]) == {"gap", "chance", "conclusive"}
+    # `montrable` a rejoint le verdict le jour où la ligne de statut a cessé
+    # d'avoir sa propre réponse à « y a-t-il lieu d'en parler ? ». C'est une
+    # question de la règle, pas de l'interface : elle est donc tranchée ici.
+    assert set(rendu["calibration"]) == {"gap", "chance", "conclusive", "montrable"}
     assert rendu["calibration"]["conclusive"] is True
     # Sérialisable : c'est du JSON qui traverse le réseau local.
     assert json.loads(json.dumps(rendu))["calibration"] == rendu["calibration"]
@@ -362,7 +380,13 @@ def test_le_port_ios_applique_la_meme_condition():
     qu'aucun compilateur Swift n'est installable dans cet environnement.
     """
     swift = (RACINE / "ios/SingularSage/Core/Notice.swift").read_text(encoding="utf-8")
-    assert "conclusive: hasard <= calibrationHasard && abs(gap) >= calibrationArrondi" in swift, (
+    assert "let conclusive = hasard <= calibrationHasard && abs(gap) >= calibrationArrondi" in swift, (
         "le port conclut encore sur `calibrationGap` : un écart démontré de dix "
         "points parlerait sur le PC et se tairait sur le téléphone")
-    assert "verdict.conclusive || abs(verdict.gap) >= calibrationGap" in swift
+    # Même déplacement que côté Python : « y a-t-il lieu d'en parler ? » est
+    # tranché dans le verdict, pas recombiné par chacun de ceux qui l'affichent.
+    assert "montrable: conclusive || abs(gap) >= calibrationGap" in swift
+    # La troisieme condition de `corrige` : sans elle, le port dirait « c'est
+    # corrige » sur une moitie recente qui demontre encore un ecart.
+    assert "&& !recent.conclusive" in swift
+    assert "verdict.montrable else { return nil }" in swift

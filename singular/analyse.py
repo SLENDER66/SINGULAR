@@ -145,6 +145,19 @@ def contexte_pour_analyse(notice: dict[str, Any]) -> str:
         )
         if cle in rapport
     }
+    # `overconfidence` couvre toute la vie du journal. Envoyé seul, il fait
+    # conseiller de corriger un écart qui ne dit plus rien d'aujourd'hui --
+    # y compris quand l'observation, deux lignes plus haut dans le même texte,
+    # dit qu'il est corrigé. Le modèle recevrait alors deux réponses à la même
+    # question et trancherait sur le chiffre, comme les interfaces le faisaient.
+    progression = notice.get("progression")
+    if progression is not None:
+        interessant["calibration_recente"] = {
+            "ecart_premiere_moitie": progression["debut"]["gap"],
+            "ecart_moitie_recente": progression["recent"]["gap"],
+            "verdicts_moitie_recente": progression["recent"]["verdicts"],
+            "ecart_corrige": progression["corrige"],
+        }
     lignes = [
         f"Date du rapport : {notice.get('generated_at', 'inconnue')}",
         f"En-tête du moteur : {notice.get('headline', '')}",

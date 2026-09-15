@@ -82,6 +82,29 @@ def test_is_shared_memory_target_recognises_foreign_uris():
     assert not is_shared_memory_target(":memory:")
 
 
+def test_les_deux_moities_de_la_condition_decident_vraiment():
+    """Ni `file:` ni `mode=memory` ne suffit seul, et rien ne le vérifiait.
+
+    `tools/gardes_sans_test.py` a nommé les deux moitiés de ce `and` comme des
+    refus qu'aucun test n'atteint : les trois cas du test voisin passent à
+    l'identique si l'une ou l'autre est remplacée par `True`. Une condition dont
+    aucune moitié n'est éprouvée est une condition dont on ne sait pas ce qu'elle
+    fait.
+
+    Ce qu'elle décide n'est pas cosmétique. Une base prise pour une base en
+    mémoire vit en RAM et s'ancre pour la durée du processus : le journal
+    s'ouvrirait, s'écrirait, se relirait normalement — et **rien n'atteindrait le
+    disque**. C'est la perte silencieuse, sur le seul fichier de ce dépôt qui
+    soit irremplaçable.
+    """
+    # Une vraie URI de fichier : `file:` sans `mode=memory` reste un fichier.
+    assert not is_shared_memory_target("file:/var/lib/singular.db")
+    assert not is_shared_memory_target("file:journal.db?cache=shared")
+    # Et un chemin de disque qui contient les mots reste un chemin de disque.
+    assert not is_shared_memory_target("/tmp/mode=memory/journal.db")
+    assert not is_shared_memory_target("./sauvegarde-mode=memory.db")
+
+
 def test_no_module_opens_sqlite_directly():
     """One resolution point, or ":memory:" silently regresses in the next store."""
     offenders = []

@@ -519,10 +519,22 @@ SINGULAR · 3 à trancher · 42h sans verdict · calibration +35%
 Un journal qu'il faut penser à ouvrir est un journal qu'on arrête d'ouvrir.
 
 La calibration n'apparaît sur cette ligne qu'aux conditions décrites plus bas
-pour la Notice — assez de verdicts, et un écart voyant. Le seuil est le même
-parce qu'il n'est écrit qu'une fois, dans le moteur : la ligne avait longtemps le
-sien, et annonçait donc un écart après un seul verdict pendant que la Notice se
-taisait sur les mêmes données.
+pour la Notice, et c'est littéralement la même condition : la ligne lit le
+verdict du moteur au lieu de le refaire. Elle avait longtemps le sien, et
+annonçait donc un écart après un seul verdict pendant que la Notice se taisait
+sur les mêmes données ; puis, corrigée, elle a gardé la version d'avant le
+9 septembre — « assez de verdicts, et quinze points » — et se taisait sur dix
+points établis sur deux cents verdicts. Quand ton écart est corrigé, elle le dit
+aussi : `calibration +2% (corrigee)`.
+
+**Ce que cette ligne coûte, et quand ça te gênera.** Lire le verdict du moteur a
+un prix : le calcul exact de la rareté est quadratique en nombre de verdicts.
+Mesuré le 14 septembre 2026, arrondi à ce qui se reproduit — deux passages sur
+la même machine écartent de 25 %, donc un chiffre précis mentirait : de l'ordre
+de 10 ms à 100 verdicts, 50 ms à 500, 200 ms à 1000, 700 ms à 2000. À un verdict
+par jour, les 200 ms arrivent dans trois ans et les 700 ms dans six. C'est une dette datée, écrite plutôt que corrigée tout de
+suite : si un jour ton terminal traîne à l'ouverture, c'est ça, et
+`singular/journal.py` dit à quoi ressemble la correction.
 
 ## Les règles qui font que ça marche
 
@@ -590,7 +602,8 @@ n'est plus de la malchance » est une affirmation, et elle doit être vraie.
 Le Sage calcule donc, exactement, à quelle fréquence des probabilités **justes**
 produiraient un écart au moins aussi grand, et il te donne le nombre : « une
 fois sur 6 », « une fois sur 117 ». En dessous d'une fois sur vingt, il conclut
-et te conseille de baisser tes probabilités — **quel que soit l'écart**. Au-dessus,
+et te dit quoi corriger — **quel que soit l'écart** ; ce qu'il te dit de corriger
+dépend de la section suivante. Au-dessus,
 il ne conclut pas : il montre l'écart s'il saute aux yeux (quinze points ou plus)
 et te dit de le regarder sans le corriger, et il se tait s'il est à la fois petit
 et incertain.
@@ -609,6 +622,55 @@ paris à 75 %, n'en gagner qu'un arrive **une fois sur six** par pur hasard :
 l'outil conseillait de corriger un jugement que rien ne montrait faux. Corriger
 un jugement juste, c'est le dérégler — sur la seule question pour laquelle ce
 journal existe.
+
+### Ton écart a une date
+
+Le chiffre du haut couvre **toute la vie de ton journal**. Si tu te surestimais
+de trente points en juin et plus du tout en septembre, il affiche encore un gros
+écart, et il te conseillait de baisser des probabilités que tu avais déjà
+baissées. Corriger un jugement devenu juste, c'est le dérégler : c'est le même
+défaut qu'au-dessus, une tranche de temps plus loin.
+
+Dès six verdicts, le journal est donc coupé en deux moitiés, **dans l'ordre où
+les décisions ont été prises** — l'instant du jugement, pas celui du verdict — et
+chaque moitié est mesurée seule. Ce que tu lis change alors :
+
+- l'écart de ta moitié récente est donné avec le reproche, et c'est **lui**
+  qu'on te dit de corriger, pas le chiffre du haut. « Tes trente plus récentes
+  **tranchées** » : une décision plus fraîche qui attend encore son verdict n'y
+  est pas, et le mot est là pour que tu ne comptes pas les mauvaises ;
+- quand la première moitié montrait un écart démontré, que la seconde démontre
+  qu'il est passé sous les quinze points, **et** que cette seconde moitié ne
+  démontre plus rien elle-même, le reproche disparaît : « ton écart de confiance
+  est déjà corrigé ». La vignette du rapport bascule sur le chiffre récent et
+  s'éteint, au lieu de rougir sur un total qui traîne ton passé.
+
+  La troisième condition n'est pas une précaution de style. Sur quatre cents
+  verdicts récents, un écart de dix points passe le test des quinze points *et*
+  se démontre : sans elle, le Sage aurait dit « ton écart récent est de +10 %,
+  c'est prouvé » et « c'est corrigé, ne corrige pas » sur le même écran. Dans ce
+  cas-là tu lis le reproche ordinaire, qui pointe les dix points — tu t'es
+  amélioré, il t'en reste dix, corrige de ceux-là.
+
+  **Et donc « c'est corrigé » se fait rare à mesure que ton journal grossit.**
+  Ce n'est pas une panne. Sur huit cents verdicts récents, même deux points
+  d'écart finissent par se démontrer, et une phrase qui dirait « il n'y a plus
+  rien » serait fausse : il y a deux points, c'est prouvé, et tu lis « +2 % :
+  corrige d'après lui ». Plus tu accumules de données, plus le Sage a le droit
+  d'être précis, et moins il a le droit de te dire grossièrement que tout va
+  bien. C'est l'inverse d'un défaut.
+
+**Démontrer qu'un écart est devenu petit demande beaucoup plus de verdicts que
+démontrer qu'il existe** — de l'ordre de quarante dans la moitié récente, donc
+quatre-vingts en tout. C'est voulu. Un écart qu'on n'arrive plus à démontrer
+n'est pas un écart démontré nul : se taire faute de preuve et appeler ce silence
+« c'est corrigé » serait déclarer victoire sur du bruit. Le Sage suppose donc
+l'inverse — que tu es toujours biaisé — et ne lâche l'hypothèse que si tes
+résultats la rendent improbable.
+
+Une limite, dite plutôt que cachée : une décision récente dont l'horizon court
+encore n'a pas de verdict et n'entre nulle part. Ta moitié récente penche donc
+vers les horizons courts, et une amélioration lue ici vaut d'abord pour eux.
 
 Le calcul tient compte de **chaque** probabilité, pas de leur moyenne. Deux
 paris à 5 % et un à 95 %, tous perdus : la moyenne les ramènerait à 35 % et

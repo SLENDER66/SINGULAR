@@ -7,7 +7,10 @@ GovernedExecutor into an in-memory AuditTrail that is never persisted and dies
 with the process. So after a restart nothing could answer "why was this action
 allowed to execute?", and a red-team BLOCK left no durable evidence at all.
 """
+import ast
+import inspect
 import json
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -138,6 +141,104 @@ def test_governance_drift_still_fails_closed_without_recording_a_verdict(tmp_pat
     drifted["can_execute"] = not drifted["can_execute"]
     with runtime.store._connect() as conn:
         conn.execute("UPDATE idempotency SET result=? WHERE key=?", (json.dumps(drifted, sort_keys=True), key))
+
+    with pytest.raises(PermissionError, match="politique de gouvernance"):
+        runtime.route(action, contract.mission_id)
+
+    assert _events(runtime, "governance_route_replayed") == []
+    assert len(_events(runtime, "governance_drift")) == 1
+
+
+# `_governance_matches` compare six dimensions du verdict persiste a celui que la
+# gouvernance rendrait aujourd'hui. C'est le garde anti-politique-perimee : un
+# verdict favorable enregistre hier ne doit pas etre reservi si la politique a
+# change depuis. Six dimensions, six facons de rejouer une autorisation morte.
+#
+# Le test ci-dessus n'en essayait qu'une, `can_execute`. Les cinq autres ont ete
+# mesurees : neutralisees une a une, la suite entiere restait verte. Une seule
+# comparaison qui disparait, et toute une classe de derive redevient rejouable
+# sans que rien ne rougisse.
+#
+# Ce n'est pas la meme famille que les refus qui relisent la decision :
+# `verify()` reconstruit ce que la decision porte, donc un refus qui relit un
+# champ de la decision est une assurance. Celui-ci compare la decision a l'etat
+# **d'aujourd'hui**, et rien d'autre ne le fait a sa place.
+
+
+#: Les six dimensions de derive, ecrites a la main -- et c'est voulu. La
+#: parametrisation ne doit pas se deduire du code qu'elle mesure : un garde
+#: neutralise ferait alors disparaitre son propre cas de test, et la mesure
+#: dirait « vert » en ne mesurant plus rien. La liste litterale reste, et
+#: `test_les_six_dimensions_sont_toutes_couvertes` la confronte au code.
+DIMENSIONS_DE_DERIVE = ("policy_tier", "mode", "reasons", "can_prepare", "can_execute", "requires_human")
+
+
+def _champs_compares() -> tuple[str, ...]:
+    """Les clefs du verdict persiste que `_governance_matches` relit vraiment.
+
+    Lues dans le code, pour que la liste ci-dessus ne puisse pas vieillir en
+    silence : une septieme comparaison ajoutee sans son cas de derive fait rougir
+    `test_les_six_dimensions_sont_toutes_couvertes`, au lieu d'ajouter une
+    dimension rejouable que personne n'essaie.
+
+    Seul le premier `cached.get(...)` de chaque comparaison compte : les `get`
+    imbriques (`cached.get("can_prepare", cached.get("allowed", False))`) sont des
+    valeurs de repli pour un ancien format de cache, pas des dimensions de derive.
+    """
+    source = textwrap.dedent(inspect.getsource(DurableMissionRuntime._governance_matches))
+    retour = next(noeud for noeud in ast.walk(ast.parse(source)) if isinstance(noeud, ast.Return))
+    assert isinstance(retour.value, ast.BoolOp), "le garde doit rester une conjonction de comparaisons"
+
+    champs = []
+    for comparaison in retour.value.values:
+        lus = [noeud.args[0].value for noeud in ast.walk(comparaison)
+               if isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Attribute)
+               and noeud.func.attr == "get" and noeud.args
+               and isinstance(noeud.args[0], ast.Constant)]
+        assert lus, f"comparaison qui ne relit pas le verdict persiste : {ast.unparse(comparaison)}"
+        champs.append(lus[0])
+    return tuple(champs)
+
+
+def _derive(nom: str, valeur):
+    """Une valeur differente de celle enregistree, du meme genre."""
+    if isinstance(valeur, bool):
+        return not valeur
+    if isinstance(valeur, list):
+        return [*valeur, "raison apparue apres coup"]
+    if nom == "mode":
+        return next(mode.value for mode in Autonomy if mode.value != valeur)
+    return valeur + "_DERIVE"
+
+
+def test_les_six_dimensions_sont_toutes_couvertes():
+    """Le garde compare exactement ce que le test parametre ci-dessous essaie."""
+    assert set(_champs_compares()) == set(DIMENSIONS_DE_DERIVE)
+
+
+@pytest.mark.parametrize("champ", DIMENSIONS_DE_DERIVE)
+def test_chaque_dimension_de_derive_refuse_le_rejeu(tmp_path: Path, champ: str):
+    """Une seule dimension derive, et le rejeu doit echouer -- pour chacune des six.
+
+    La derive est ecrite dans la ligne d'idempotence, pas dans la politique : c'est
+    le meme modele de menace que le test ci-dessus, celui d'un verdict persiste
+    altere. Le refus ne doit dependre d'aucune autre dimension, donc une seule
+    bouge a la fois.
+    """
+    runtime = _runtime(tmp_path)
+    contract = runtime.create_mission("career", "application prepared", autonomy=Autonomy.PREPARE)
+    action = ActionRequest("send_application", "send", 5, 6, 6)
+    runtime.route(action, contract.mission_id)
+
+    key = runtime.store.idempotency_key("route", contract.mission_id, action.id)
+    enregistre = dict(runtime.store.get_idempotent(key))
+    assert champ in enregistre, f"{champ} est compare mais n'est pas persiste"
+    altere = dict(enregistre)
+    altere[champ] = _derive(champ, enregistre[champ])
+    assert altere[champ] != enregistre[champ], "le cas ne derive de rien"
+    with runtime.store._connect() as conn:
+        conn.execute("UPDATE idempotency SET result=? WHERE key=?",
+                     (json.dumps(altere, sort_keys=True), key))
 
     with pytest.raises(PermissionError, match="politique de gouvernance"):
         runtime.route(action, contract.mission_id)
