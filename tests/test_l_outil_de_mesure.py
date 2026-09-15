@@ -324,3 +324,55 @@ def test_un_refus_nomme_par_le_depot_est_bien_mute():
     assert mutant.touche
     ast.fix_missing_locations(arbre)
     assert "if False:" in ast.unparse(arbre)
+
+
+def test_un_refus_qui_fait_quelque_chose_avant_de_lever_est_vu():
+    """Exiger un corps d'un seul pas rendait des refus entiers invisibles.
+
+    Ce qu'on mesure est « si cette branche cesse de se declencher, quelque chose
+    rougit-il ? ». Le nombre de pas avant le `raise` n'y change rien -- mais le
+    collecteur exigeait `len(body) == 1`, donc un refus qui relit un etat,
+    journalise ou distingue deux causes avant de lever n'etait jamais mute.
+
+    Trouve en me le faisant a moi-meme le 15 septembre 2026 : ajouter une
+    relecture avant le refus de fidelite de `sauvegarde.py` a fait disparaitre ce
+    garde du rapport, dans le commit meme qui le corrigeait. Huit refus du depot
+    etaient deja dans ce cas, dont ceux du chemin de recuperation.
+    """
+    source = (
+        "def copier(cible, attendu):\n"
+        "    if cible != attendu or not cible:\n"
+        "        journal = relire(cible)\n"
+        "        raise PermissionError('la copie ne rend pas la source')\n"
+        "    return cible\n"
+    )
+    arbre = ast.parse(source)
+
+    trouves = refus_d_un_fichier(arbre)
+    assert trouves == [(2, "PermissionError")], trouves
+
+    moities = moities_d_un_fichier(arbre)
+    assert [quoi.split(" :: ")[0] for _, quoi in moities] == [
+        "moitie 1 du or", "moitie 2 du or"], moities
+
+
+def test_un_if_qui_ne_finit_pas_par_un_refus_reste_ignore():
+    """L'elargissement ne doit pas transformer tout `if` en mutant.
+
+    Le critere reste « cette branche refuse » : c'est le dernier pas du corps qui
+    le dit, pas le premier. Un `if` qui leve au milieu puis fait autre chose
+    n'est pas un refus, et un `if` qui ne leve pas du tout non plus.
+    """
+    assert refus_d_un_fichier(ast.parse(
+        "def f(x):\n"
+        "    if x:\n"
+        "        journal = 1\n"
+        "        return journal\n"
+    )) == []
+    assert refus_d_un_fichier(ast.parse(
+        "def f(x):\n"
+        "    if x:\n"
+        "        raise PermissionError('non')\n"
+        "    else:\n"
+        "        return 1\n"
+    )) == [], "un `else` n'est plus un refus simple : le mutant dirait autre chose"

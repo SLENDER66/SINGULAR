@@ -552,3 +552,59 @@ def test_un_actif_fichier_non_copie_du_tout_est_refuse(tmp_path, monkeypatch) ->
         sauvegarder(source, dossier=tmp_path / "sauvegardes")
 
     assert refus.value.reason == "copie_infidele"
+
+
+def test_la_sauvegarde_annonce_la_vraie_tete_de_chaine(tmp_path) -> None:
+    """Le champ existait, et il valait la chaîne vide à tous les coups.
+
+    `_empreinte_de_tete` la cherchait dans `export_rows()`, qui ne porte que les
+    colonnes d'affichage — ni `fingerprint`, ni `previous_fingerprint`. Le
+    `.get(..., "")` rendait donc `""`, toujours. Personne ne lisait ce champ,
+    donc rien ne rougissait : une sauvegarde annonçait une empreinte qu'elle
+    n'avait pas.
+
+    C'est l'empreinte qui permet de dire « cette copie est bien celle de ce
+    journal-là ». Vide, elle ne dit rien.
+    """
+    source = _trois_decisions(tmp_path)
+    journal = DecisionJournal(source, lecture_seule=True)
+
+    faite = sauvegarder(source, dossier=tmp_path / "sauvegardes")
+
+    assert faite.empreinte, "une sauvegarde sans empreinte ne prouve rien"
+    assert faite.empreinte == journal.head_fingerprint()
+    assert faite.empreinte == DecisionJournal(faite.journal,
+                                              lecture_seule=True).head_fingerprint(), (
+        "et la copie doit porter la même tête que la source")
+
+
+def test_une_copie_dont_la_chaine_est_cassee_est_refusee(tmp_path, monkeypatch) -> None:
+    """La moitié « chaîne » du garde de fidélité, que les lignes ne peuvent pas voir.
+
+    Les deux moitiés ne regardent pas la même chose, et c'est mesurable :
+    `export_rows()` ne porte aucune empreinte, donc une copie dont les empreintes
+    ont été réécrites rend **exactement les mêmes lignes** que la source. Seul le
+    verdict de chaîne la distingue.
+
+    Sans cette moitié, une copie dont la chaîne ne se vérifie plus serait
+    annoncée comme une sauvegarde fidèle — et c'est précisément la propriété pour
+    laquelle ce journal existe.
+    """
+    from singular import sauvegarde as module
+
+    source = _trois_decisions(tmp_path)
+    vrai_copier = module._copier
+
+    def copier_puis_casser_la_chaine(origine, vers):
+        vrai_copier(origine, vers)
+        base = sqlite3.connect(vers)
+        base.execute("UPDATE journal_entries SET fingerprint='0' * 64")
+        base.commit()
+        base.close()
+
+    monkeypatch.setattr(module, "_copier", copier_puis_casser_la_chaine)
+    with pytest.raises(SauvegardeRefusee) as refus:
+        sauvegarder(source, dossier=tmp_path / "sauvegardes")
+
+    assert refus.value.reason == "copie_infidele"
+    assert _restes(tmp_path / "sauvegardes") == []

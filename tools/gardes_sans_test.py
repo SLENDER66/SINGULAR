@@ -595,20 +595,40 @@ class RendLaConditionFausse(ast.NodeTransformer):
         return node
 
 
+def _refus_leve(noeud: ast.If) -> str:
+    """Le nom de l'exception qu'un `if` finit par lever, ou une chaine vide.
+
+    **Le corps peut faire quelque chose avant de refuser**, et c'est la seule
+    chose qui compte : ce qu'on mesure est « si cette branche cesse de se
+    declencher, quelque chose rougit-il ? ». Exiger un corps d'un seul pas
+    rendait invisibles les refus qui relisent un etat, journalisent, ou
+    distinguent deux causes avant de lever.
+
+    Mesure du 15 septembre 2026, en ajoutant a `sauvegarde.py` une relecture
+    avant le refus : le garde de fidelite du seul fichier irremplacable du depot
+    a disparu du rapport dans le meme commit. Huit refus du depot etaient dans ce
+    cas, dont `ExecutionInProgress`, `ExecutionRecoveryRequired` et
+    `EffectInProgress` -- les refus du chemin de recuperation, ceux que la
+    section 7 du mandat nomme « recovery ambiguity » et « external-effect
+    ambiguity ». Aucun n'avait jamais ete mute.
+    """
+    if noeud.orelse or not noeud.body:
+        return ""
+    dernier = noeud.body[-1]
+    if not isinstance(dernier, ast.Raise):
+        return ""
+    leve = dernier.exc
+    if not isinstance(leve, ast.Call):
+        return ""
+    return getattr(leve.func, "id", "") or getattr(leve.func, "attr", "")
+
+
 def refus_d_un_fichier(arbre: ast.AST) -> list[tuple[int, str]]:
-    """Les `if <condition>: raise <refus>` d'un module, par ligne de condition."""
+    """Les `if <condition>: ... raise <refus>` d'un module, par ligne de condition."""
     trouves = []
     for noeud in ast.walk(arbre):
-        if not isinstance(noeud, ast.If) or noeud.orelse:
-            continue
-        if len(noeud.body) != 1 or not isinstance(noeud.body[0], ast.Raise):
-            continue
-        leve = noeud.body[0].exc
-        nom = ""
-        if isinstance(leve, ast.Call):
-            nom = getattr(leve.func, "id", "") or getattr(leve.func, "attr", "")
-        if nom in REFUS:
-            trouves.append((noeud.test.lineno, nom))
+        if isinstance(noeud, ast.If) and _refus_leve(noeud) in REFUS and _refus_leve(noeud):
+            trouves.append((noeud.test.lineno, _refus_leve(noeud)))
     return trouves
 
 
@@ -661,15 +681,10 @@ def moities_d_un_fichier(arbre: ast.AST) -> list[tuple[tuple[int, int, int], str
     """
     trouves = []
     for noeud in ast.walk(arbre):
-        if not isinstance(noeud, ast.If) or noeud.orelse or len(noeud.body) != 1:
+        if not isinstance(noeud, ast.If):
             continue
-        if not isinstance(noeud.body[0], ast.Raise):
-            continue
-        leve = noeud.body[0].exc
-        nom = ""
-        if isinstance(leve, ast.Call):
-            nom = getattr(leve.func, "id", "") or getattr(leve.func, "attr", "")
-        if nom not in REFUS or not isinstance(noeud.test, ast.BoolOp):
+        nom = _refus_leve(noeud)
+        if not nom or nom not in REFUS or not isinstance(noeud.test, ast.BoolOp):
             continue
         for boolop in _boolops(noeud.test):
             operateur = "and" if isinstance(boolop.op, ast.And) else "or"

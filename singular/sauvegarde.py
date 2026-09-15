@@ -127,11 +127,13 @@ class Sauvegarde:
 def _empreinte_de_tete(journal: DecisionJournal) -> str:
     """La dernière empreinte de la chaîne, ou une chaîne vide s'il n'y a rien.
 
-    `entries()` peut trier pour l'affichage ; la tête se lit donc sur la
-    dernière entrée écrite, qui est celle que `export_rows` rend en dernier.
+    Elle se lisait dans `export_rows()`, qui ne porte que les colonnes
+    d'affichage : ni `fingerprint`, ni `previous_fingerprint`. Le `.get(...,
+    "")` rendait donc la chaîne vide à tous les coups, et l'empreinte annoncée
+    avec chaque sauvegarde ne valait rien -- sans que rien ne le dise, puisque
+    personne ne la lisait. Le journal la donne maintenant lui-même.
     """
-    lignes = journal.export_rows()
-    return str(lignes[-1].get("fingerprint", "")) if lignes else ""
+    return journal.head_fingerprint()
 
 
 def _photographie(journal: DecisionJournal) -> tuple[list[dict], bool]:

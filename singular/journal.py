@@ -986,6 +986,22 @@ class DecisionJournal:
         echues.sort(key=lambda e: (e.due_at, e.created_at))
         return tuple(echues)
 
+    def head_fingerprint(self) -> str:
+        """L'empreinte de la dernière décision écrite, ou une chaîne vide.
+
+        La tête de la chaîne se lit dans l'ordre d'écriture, pas dans celui de
+        l'affichage : `entries()` trie par date de création, et ce n'est plus le
+        même ordre dès qu'une reprise écrit d'anciennes décisions après des
+        récentes.
+
+        Elle existe parce que la sauvegarde en avait besoin et la cherchait dans
+        `export_rows()`, qui ne porte que les colonnes d'affichage -- ni
+        empreinte, ni empreinte précédente. Le champ annoncé avec chaque
+        sauvegarde valait donc la chaîne vide, toujours, et rien ne le lisait.
+        """
+        chaine = self._chain()
+        return chaine[-1].fingerprint if chaine else ""
+
     def _chain(self) -> tuple[Entry, ...]:
         """Entries in the order they were written, which is the order they were chained.
 
