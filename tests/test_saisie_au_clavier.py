@@ -381,6 +381,39 @@ def test_the_form_can_only_produce_what_the_journal_accepts():
     assert attribut("horizon_days", "min") >= 1
 
 
+def test_les_deux_zones_de_texte_s_arretent_ou_le_serveur_refuse():
+    """Le meme nombre vit en HTML et en Python, et rien ne les comparait.
+
+    `maxlength` ne previent pas : il **empeche de taper**. Une limite plus basse
+    que celle du serveur couperait donc sa question au milieu, en silence, et
+    c'est elle qui partirait au modele -- pire qu'un refus. Une limite plus
+    haute ferait refuser apres l'envoi, sur un ecran de six pouces.
+
+    Aucune des deux n'est arrivee : les nombres sont egaux aujourd'hui. Ce test
+    existe pour qu'ils le restent, parce que la meme divergence avait deja
+    laisse le curseur de probabilite porter une borne que le clavier ignorait.
+    """
+    import pathlib
+    import re
+
+    from singular.sage.server import QUESTION_MAX
+
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "singular/sage/web/index.html").read_text(encoding="utf-8")
+
+    zones = re.findall(r'<textarea[^>]*name="(question|precision)"[^>]*>', page)
+    assert sorted(zones) == ["precision", "question"], (
+        f"les deux zones de texte du Sage ont change de forme : {zones}")
+
+    for nom in zones:
+        balise = re.search(rf'<textarea[^>]*name="{nom}"[^>]*>', page).group(0)
+        trouve = re.search(r'maxlength="(\d+)"', balise)
+        assert trouve, f"la zone « {nom} » n'a plus de maxlength : rien ne l'arrete"
+        assert int(trouve.group(1)) == QUESTION_MAX, (
+            f"« {nom} » s'arrete a {trouve.group(1)} et le serveur refuse au-dela "
+            f"de {QUESTION_MAX}")
+
+
 # --- le refus d'ecrire, pas seulement le refus de saisir ----------------------
 
 def _journal_tranche(tmp_path):
