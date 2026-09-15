@@ -132,6 +132,15 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    L'atteindre demanderait de defaire le verrou, donc de tester un chemin qui
    n'existe pas.
 
+   **`if collisions: raise ImportRefused` dans `import_from`** est dans ce cas, et
+   c'est mesure. Neutralise, la reprise part quand meme, la cle primaire de
+   SQLite refuse l'entree en double, `IntegrityError` est rattrapee et convertie
+   en `ImportRefused("duplicates", ...)` -- **le meme code de refus**. Et la ligne
+   de commande n'imprime que ce code (`REPRISE_REFUSEE[refus.reason]`), jamais le
+   message de detail : les deux chemins sont donc indiscernables pour qui s'en
+   sert. Le controle prealable evite d'ouvrir une transaction pour rien ; il ne
+   decide rien que la cle primaire ne decide deja.
+
    La famille `action is None` de `singular/execution.py` -- aux trois portes,
    plus les deux liaisons contrat et capacite qui la suivent -- est dans ce cas
    aussi, et c'est ecrit ici pour qu'on ne refasse pas le triage. `verify()`
