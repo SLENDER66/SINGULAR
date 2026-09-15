@@ -511,3 +511,44 @@ def test_chaque_refus_de_sauvegarde_a_une_phrase_pour_l_ecran() -> None:
     sans_phrase = sorted(levees - set(REFUS_DE_SAUVEGARDE))
     assert not sans_phrase, (
         f"ces raisons sont levées sans phrase pour l'écran : {sans_phrase}")
+
+
+def test_un_actif_fichier_copie_de_travers_est_refuse(tmp_path, monkeypatch) -> None:
+    """Le second actif irremplaçable a sa propre vérification, et rien ne l'essayait.
+
+    `journal.db` passe par l'API de sauvegarde de SQLite et se relit comme un
+    journal ; `candidatures.json` est un fichier ordinaire, confronté à son
+    original par empreinte. Le cas nominal était couvert — le fichier revient
+    octet pour octet — mais pas le refus. Neutralisé, une copie tronquée ou
+    absente était annoncée comme une sauvegarde vérifiée.
+    """
+    from singular import sauvegarde as module
+
+    source = _trois_decisions(tmp_path)
+    candidatures = tmp_path / "candidatures.json"
+    candidatures.write_text('{"envoyees": [{"entreprise": "Une boîte"}]}', encoding="utf-8")
+
+    def copier_de_travers(origine, vers):
+        vers.write_text("ce n'est pas ce qu'il y avait dedans", encoding="utf-8")
+
+    monkeypatch.setattr(module, "_copier_fichier", copier_de_travers)
+    with pytest.raises(SauvegardeRefusee) as refus:
+        sauvegarder(source, dossier=tmp_path / "sauvegardes")
+
+    assert refus.value.reason == "copie_infidele"
+    assert _restes(tmp_path / "sauvegardes") == [], (
+        "une copie non vérifiée est restée : elle serait prise pour une sauvegarde")
+
+
+def test_un_actif_fichier_non_copie_du_tout_est_refuse(tmp_path, monkeypatch) -> None:
+    """L'autre moitié du même garde : la cible n'existe même pas."""
+    from singular import sauvegarde as module
+
+    source = _trois_decisions(tmp_path)
+    (tmp_path / "candidatures.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(module, "_copier_fichier", lambda origine, vers: None)
+    with pytest.raises(SauvegardeRefusee) as refus:
+        sauvegarder(source, dossier=tmp_path / "sauvegardes")
+
+    assert refus.value.reason == "copie_infidele"

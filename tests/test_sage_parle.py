@@ -526,3 +526,69 @@ def test_le_sage_annonce_l_etat_sans_le_nommer_lui_meme() -> None:
     assert dans_serve, "la fonction serve() a disparu"
     assert any(isinstance(n, ast.ImportFrom) and "parle" in (n.module or "")
                for n in ast.walk(dans_serve[0])), "l'import a quitté la fonction"
+
+
+# --- l'argent, et le garde que rien n'essayait --------------------------------
+
+def _tarifs_epuises(tmp_path, monkeypatch, credit: float):
+    """Un fichier de tarifs réel, avec le crédit qu'on veut."""
+    import json
+
+    from singular import parle
+
+    fichier = tmp_path / "tarifs.json"
+    fichier.write_text(json.dumps({
+        "credit_usd": credit, "alerte_usd": 0.0,
+        "modeles": {"claude-sonnet-5": {"entree": 3.0, "sortie": 15.0}},
+    }), encoding="utf-8")
+    monkeypatch.setattr(parle, "FICHIER_TARIFS", fichier)
+    return fichier
+
+
+def test_un_credit_epuise_refuse_avant_de_depenser(app, sans_cle, tmp_path, monkeypatch) -> None:
+    """Le garde qui protège ses cinq dollars, et rien ne le déclenchait.
+
+    `restant is not None and restant <= 0` : la première moitié est couverte
+    ailleurs, la seconde ne l'était par rien. Neutralisée, la suite entière
+    restait verte — parce qu'aucun test n'écrit de tarifs, donc `restant` vaut
+    toujours `None` et la garde ne s'allume jamais.
+
+    L'ordre compte autant que le refus : sans clé, `parle` échoue en
+    SERVICE_UNAVAILABLE. Si le refus d'argent arrive **avant**, c'est bien qu'il
+    garde la dépense et pas seulement la réponse. C'est ce que ce test distingue.
+    """
+    _tarifs_epuises(tmp_path, monkeypatch, credit=0.0)
+
+    with pytest.raises(SageError) as refus:
+        app.parle({"question": "et alors ?"})
+
+    assert refus.value.status == HTTPStatus.PAYMENT_REQUIRED, (
+        "le crédit épuisé doit refuser avant tout le reste")
+    assert "crédit est épuisé" in refus.value.message
+
+
+def test_un_credit_qui_reste_ne_refuse_pas_pour_l_argent(app, sans_cle, tmp_path,
+                                                         monkeypatch) -> None:
+    """Sans ça, le test ci-dessus passerait avec une garde qui refuse toujours."""
+    _tarifs_epuises(tmp_path, monkeypatch, credit=5.0)
+
+    with pytest.raises(SageError) as refus:
+        app.parle({"question": "et alors ?"})
+
+    assert refus.value.status == HTTPStatus.SERVICE_UNAVAILABLE, (
+        "avec du crédit, c'est l'absence de clé qui doit parler")
+
+
+def test_le_meme_garde_tient_les_offres(app, sans_cle, tmp_path, monkeypatch) -> None:
+    """Les deux routes partagent `_garde_le_budget` : les deux doivent refuser.
+
+    Le commentaire du garde dit que ces deux refus vivaient en double et qu'on
+    les a réunis parce que « corriger l'une laisse l'autre payer ». Une seule
+    des deux routes essayée aurait laissé la réunion sans preuve.
+    """
+    _tarifs_epuises(tmp_path, monkeypatch, credit=0.0)
+
+    with pytest.raises(SageError) as refus:
+        app.offres({})
+
+    assert refus.value.status == HTTPStatus.PAYMENT_REQUIRED
