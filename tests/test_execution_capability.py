@@ -20,6 +20,27 @@ def test_registry_binds_to_exact_object_identity():
 
 
 def test_registry_rejects_token_collision_and_supports_revoke():
+    """Le refus de collision, et la moitie qui n'a pas de temoin -- avec pourquoi.
+
+    `if bound is not None and bound is not target` : ce test tue la premiere
+    moitie, jamais la seconde. Neutralisee, la condition devient « le jeton est
+    deja pris », ce qui refuse **aussi** la collision -- donc ce test passe
+    quand meme. La seconde moitie ne decide que dans l'autre sens : le jeton est
+    pris par **ce meme objet**, et il ne faut pas refuser.
+
+    Cet etat n'a pas ete atteint, et trois chemins ont ete essayes le 15
+    septembre 2026 : reinscrire le meme objet sous le meme jeton (retour
+    anticipe par `_by_object`, la ligne n'est pas atteinte), le meme objet sous
+    un second jeton (refuse un cran plus haut, « already bound to a different
+    capability »), et une revocation suivie d'une reinscription (`bound` est
+    alors None). `_targets` gardant une reference forte, `id()` ne peut pas etre
+    reutilise par un autre objet tant que le premier est inscrit.
+
+    C'est donc une moitie masquee, comme celle de `register(None)` decrite plus
+    bas, et elle reste : la retirer sur « je n'ai pas trouve » plutot que sur
+    « c'est impossible » irait dans le sens permissif, ce que la section 7 du
+    mandat interdit.
+    """
     registry = ExecutionCapabilityRegistry()
     first = lambda _action: None
     second = lambda _action: None
