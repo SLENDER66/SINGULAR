@@ -285,3 +285,162 @@ def test_a_schema_from_the_future_is_still_refused(tmp_path: Path):
         conn.execute("UPDATE execution_capability_schema SET version=99")
     with pytest.raises(RuntimeError, match="does not match"):
         DurableCapabilityStore(path)
+
+
+# --- un objet ne peut pas effacer sa propre identite --------------------------
+
+class _FournisseurAutorise:
+    """Un fournisseur appelable, comme ceux que la frontiere accepte."""
+
+    def __call__(self, requete):
+        return {"ok": True}
+
+
+class _FournisseurImposteur:
+    """Le meme code, une autre classe. Rien ne les distingue que leur nom."""
+
+    def __call__(self, requete):
+        return {"ok": True}
+
+
+def test_un_objet_ne_peut_pas_se_rendre_anonyme_pour_en_imiter_un_autre():
+    """L'identite d'un appelable se lit sur sa classe, pas sur ce qu'il declare.
+
+    Un objet peut poser `self.__module__ = ""` et `self.__qualname__ = ""` sur
+    lui-meme -- l'affectation tient, `getattr` rend bien la chaine vide. Si
+    l'empreinte le croyait, deux classes dont le `__call__` a le meme code
+    deviendraient indiscernables : la substitution que la section 12 interdit,
+    sous sa forme la plus economique -- pas besoin de reecrire du code, il suffit
+    de mentir sur son nom.
+
+    Ce que ce test couvre exactement, et pas davantage : `artifact_fingerprint`
+    passe par `_code_identity`, qui lit la classe. Il ne couvre **pas** le repli
+    de `_member_identity['callable']`, qui sert aux membres d'une classe -- celui
+    du test suivant.
+    """
+    autorise, imposteur = _FournisseurAutorise(), _FournisseurImposteur()
+    assert artifact_fingerprint(autorise) != artifact_fingerprint(imposteur), (
+        "deux classes au code identique doivent deja se distinguer")
+
+    for objet in (autorise, imposteur):
+        objet.__module__ = ""
+        objet.__qualname__ = ""
+
+    assert artifact_fingerprint(autorise) != artifact_fingerprint(imposteur), (
+        "un objet qui efface son nom ne doit pas pouvoir en prendre un autre")
+    assert artifact_fingerprint(autorise) == artifact_fingerprint(_FournisseurAutorise()), (
+        "et effacer son nom ne doit pas non plus changer sa propre empreinte : "
+        "un fournisseur legitime cesserait sinon d'etre reconnu par son jeton")
+
+
+class _AideAutorisee:
+    def __call__(self, valeur):
+        return valeur
+
+
+class _AideImposteur:
+    def __call__(self, valeur):
+        return valeur
+
+
+def test_un_membre_appelable_est_identifie_par_sa_classe_et_pas_par_ce_qu_il_declare():
+    """Le repli de `_member_identity['callable']`, qui sert aux membres.
+
+    Un artefact peut porter, en attribut de classe, un objet appelable -- une
+    aide, un adaptateur. `_class_identity` marche sur les membres et confie
+    celui-la a `_member_identity`, qui l'identifie par
+    `getattr(member, "__module__", "") or owner.__module__` et la meme forme pour
+    `__qualname__`.
+
+    Sans ces replis, un membre qui efface son propre nom rendrait deux artefacts
+    porteurs d'aides differentes indiscernables : le jeton d'un fournisseur
+    accepterait celui d'un autre.
+    """
+    def fabrique(aide):
+        """Deux classes au **meme** nom et dans le meme module.
+
+        C'est ce qui isole le membre : deux classes ecrites cote a cote se
+        distinguent deja par leur `__qualname__`, et l'aide qu'elles portent ne
+        decide alors de rien. Ici tout est identique sauf elle.
+        """
+        class Fournisseur:
+            pass
+
+        Fournisseur.aide = aide
+        return Fournisseur
+
+    autorisee, imposteur = _AideAutorisee(), _AideImposteur()
+    porteur, substitue = fabrique(autorisee), fabrique(imposteur)
+    assert porteur.__qualname__ == substitue.__qualname__, "le cas n'isole rien sinon"
+    assert porteur.__module__ == substitue.__module__
+    assert artifact_fingerprint(porteur()) != artifact_fingerprint(substitue()), (
+        "l'aide portee doit suffire a distinguer deux artefacts par ailleurs identiques")
+
+    for aide in (autorisee, imposteur):
+        aide.__module__ = ""
+        aide.__qualname__ = ""
+
+    assert artifact_fingerprint(fabrique(autorisee)()) != artifact_fingerprint(
+        fabrique(imposteur)()), (
+        "une aide qui efface son propre nom ne doit pas rendre son porteur "
+        "indiscernable d'un autre")
+
+
+def test_deux_aides_du_meme_nom_dans_deux_modules_restent_distinctes():
+    """Le repli sur le module, que celui sur le nom masquait.
+
+    Tant que deux aides portent des noms differents, le module ne decide de rien :
+    trois des quatre moities de ce repli survivent a toute mutation, parce que le
+    nom tranche avant. Elles ne comptent que si les noms sont **identiques** --
+    deux classes du meme nom dans deux modules, ce qui est le cas ordinaire d'un
+    fournisseur et de son imitation.
+
+    Le cas est monte sans ecrire de fichiers : on donne aux deux classes le meme
+    `__qualname__` et deux `__module__` differents. Rien d'autre ne les separe,
+    donc c'est le module ou rien.
+    """
+    class Aide:
+        def __call__(self, valeur):
+            return valeur
+
+    class AideAilleurs:
+        def __call__(self, valeur):
+            return valeur
+
+    AideAilleurs.__qualname__ = Aide.__qualname__
+    AideAilleurs.__module__ = "un.autre.module"
+
+    def fabrique(aide):
+        class Fournisseur:
+            pass
+
+        Fournisseur.aide = aide
+        return Fournisseur
+
+    ici, ailleurs = Aide(), AideAilleurs()
+    for aide in (ici, ailleurs):
+        aide.__module__ = ""
+        aide.__qualname__ = ""
+
+    assert type(ici).__qualname__ == type(ailleurs).__qualname__, "le cas n'isole rien sinon"
+    assert type(ici).__module__ != type(ailleurs).__module__
+
+    assert artifact_fingerprint(fabrique(ici)()) != artifact_fingerprint(
+        fabrique(ailleurs)()), (
+        "deux aides du meme nom venues de deux modules doivent rester distinctes")
+
+
+# Ce que ces deux tests laissent, et pourquoi c'est fini plutot qu'a moitie.
+#
+# `getattr(member, "__x__", "") or owner.__x__` a quatre moities. Les deux
+# replis -- `owner.__module__` et `owner.__qualname__` -- sont des gardes, et les
+# deux tests ci-dessus les tuent : sans eux, un objet qui efface son nom rend son
+# porteur indiscernable d'un autre.
+#
+# Les deux premieres moities, celles qui lisent ce que l'objet **declare**, ne
+# sont pas des gardes et survivront a toute mutation. Les retirer ferait lire
+# l'identite sur la seule classe, ce qui est strictement **plus** severe : un
+# objet ne pourrait plus se nommer lui-meme. Une mutation qui ne peut que
+# resserrer ne peut pas ouvrir de trou, donc il n'y a pas de temoin a ecrire --
+# et il ne faut pas en chercher un, c'est ce que cette note evite au passage
+# suivant.
