@@ -74,7 +74,13 @@ que celle qui part ensuite, et un test l'impose.
 Le modèle par défaut est `claude-sonnet-5` depuis le 14 septembre 2026 — voir
 « Pourquoi Sonnet et pas Opus » plus bas. `SINGULAR_ANALYSE_MODELE=claude-opus-5`
 revient en arrière ; c'est ton arbitrage, pas le mien.
-`SINGULAR_ANALYSE_EFFORT` accepte `low`, `medium` (défaut), `high`.
+
+`SINGULAR_ANALYSE_EFFORT` accepte `low`, `medium` (défaut), `high`, `xhigh`,
+`max`. Il achète de la réflexion, donc il coûte : le plafond de sortie monte
+avec lui, sinon la réflexion mange le budget de la réponse et tu la reçois
+coupée au milieu d'une phrase. Ce qu'elle commente est déjà calculé par le
+moteur — elle met des chiffres en perspective, elle n'en cherche aucun —, donc
+`medium` suffit, et c'est pour ça que c'est le défaut.
 
 Ce qu'elle ne peut pas faire, et ce n'est pas une consigne mais une absence
 d'import : écrire dans ton journal, résoudre une décision, en créer une. Elle
@@ -89,7 +95,8 @@ python3 -m singular parle --oubli             # efface le fil, garde le journal
 ```
 
 C'est la différence exacte entre parler à Claude dans son application et parler
-à SINGULAR : **le modèle est le même** — Opus 5, ta clé — mais l'application
+à SINGULAR : **le modèle est un vrai modèle Claude** — Sonnet 5 par défaut depuis le
+14 septembre 2026, Opus 5 si tu le demandes, ta clé — mais l'application
 repart de zéro à chaque fois, alors qu'ici le rapport du jour et le fil de la
 conversation précédente sont déjà là. Le fil vit dans `~/.singular/conversation.json`,
 à côté du journal, et survit à la fermeture de la fenêtre.
@@ -109,7 +116,8 @@ qu'on ne voit pas.
 
 Mêmes conditions qu'`analyse` : clé requise, coupée sans elle, le reste de
 SINGULAR marche sans. `SINGULAR_PARLE_MODELE` et `SINGULAR_PARLE_EFFORT`
-valent pour elle ce que leurs équivalents valent pour `analyse`.
+valent pour elle ce que leurs équivalents valent pour `analyse` — et
+`SINGULAR_OFFRES_MODELE` et `SINGULAR_OFFRES_EFFORT` pour `offres`.
 
 #### Depuis le téléphone
 

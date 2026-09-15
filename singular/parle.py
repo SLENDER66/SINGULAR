@@ -35,6 +35,7 @@ from .analyse import (
     _sdk,
     client_par_defaut,
     effort_valide,
+    jetons_max,
     traduit_les_pannes,
 )
 from .fichiers import ecrire_atomique
@@ -69,7 +70,12 @@ EFFORT = effort_valide("SINGULAR_PARLE_EFFORT")
 #: ce qui manque, et ils sont renvoyes en entier a chaque question.
 TOURS_GARDES = 20
 
-JETONS_MAX = 2000
+#: Ce que la reponse visible a le droit de couter. Le plafond envoye est plus
+#: haut : `max_tokens` porte aussi la reflexion, et c'est exactement ce que
+#: l'effort demande achete. La raison complete est dans `analyse.jetons_max` --
+#: elle n'est ecrite qu'une fois.
+JETONS_REPONSE = 2000
+JETONS_MAX = jetons_max(JETONS_REPONSE, EFFORT)
 
 #: Le plafond quotidien, quand la conversation est ouverte depuis le telephone.
 #: Un bouton se tapote ; une commande se tape. Ce n'est pas la meme retenue.
@@ -674,7 +680,13 @@ def repondre(
         )
 
     if reponse.stop_reason == "refusal":
-        raise AnalyseIndisponible(REFUS["refus_du_modele"])
+        raise AnalyseIndisponible(REFUS["refus_du_modele"], cout=_consommation(reponse))
+    # Avant d'ecrire dans le fil, et c'est tout l'interet de la garde : une
+    # reponse coupee au milieu d'une phrase resterait dans l'historique, serait
+    # renvoyee a chaque tour suivant, et sa derniere phrase pourrait dire le
+    # contraire de celle qu'elle n'a pas eu la place d'ecrire.
+    if reponse.stop_reason == "max_tokens":
+        raise AnalyseIndisponible(REFUS["reponse_coupee"], cout=_consommation(reponse))
 
     texte = "\n".join(b.text for b in reponse.content if b.type == "text").strip()
     conversation.ajouter("user", question)
@@ -683,6 +695,7 @@ def repondre(
 
 
 __all__ = ["FICHIER", "FICHIER_QUOTA", "FICHIER_TARIFS", "JETONS_MAX",
+           "JETONS_REPONSE",
            "MODELE_PAR_DEFAUT", "PLAFOND_PAR_JOUR", "TOURS_GARDES",
            "Conversation", "PlafondAtteint", "Quota", "Tarifs",
            "apercu", "bilan", "etat_de_la_faculte", "modele_de_tarifs",

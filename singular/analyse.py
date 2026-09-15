@@ -42,9 +42,10 @@ from typing import Any
 #: variable : `SINGULAR_ANALYSE_MODELE=claude-opus-5`.
 MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_ANALYSE_MODELE", "claude-sonnet-5")
 
-#: La réponse tient en quelques paragraphes : plafonner la sortie est ici une
-#: décision de coût assumée, pas une troncature accidentelle.
-JETONS_MAX = 2000
+#: Ce que la réponse visible a le droit de coûter. Quelques paragraphes :
+#: plafonner est ici une décision de coût assumée, pas une troncature
+#: accidentelle. Le plafond réellement envoyé est plus bas, `JETONS_MAX`.
+JETONS_REPONSE = 2000
 
 #: Les seules valeurs que l'API accepte. Une faute de frappe dans la variable
 #: d'environnement -- « moyen » au lieu de « medium », le réflexe naturel ici --
@@ -70,6 +71,41 @@ def effort_valide(variable: str) -> str:
 #: Ni un audit exhaustif ni une réponse expédiée. Relevable si les réponses
 #: manquent de fond.
 EFFORT = effort_valide("SINGULAR_ANALYSE_EFFORT")
+
+#: Ce que l'effort demandé ajoute au plafond de sortie.
+#:
+#: Les deux réglages ont l'air indépendants et ne le sont pas. `max_tokens`
+#: plafonne tout ce que le modèle produit : sa réflexion d'abord, sa réponse
+#: ensuite. L'effort, lui, achète de la réflexion. `SINGULAR_ANALYSE_EFFORT=xhigh`
+#: sur un plafond de 2000, c'était donc une réflexion qui mange le budget de la
+#: réponse -- et la réponse rendue coupée au milieu d'une phrase, sans un mot,
+#: parce que seul le refus du modèle était vérifié. La variable existait déjà et
+#: acceptait « xhigh » : la panne était à une faute de frappe de distance.
+#:
+#: Le plafond suit donc l'effort : la réponse garde son budget, la réflexion
+#: reçoit le sien. Ce n'est pas une dépense de plus par soi-même -- on paie les
+#: jetons produits, pas le plafond. Ce qui coûte, c'est l'effort, et c'est lui
+#: qu'on choisit.
+MARGE_DE_REFLEXION = {"low": 1, "medium": 1, "high": 2, "xhigh": 4, "max": 8}
+
+
+def jetons_max(reponse: int, effort: str) -> int:
+    """Le plafond à envoyer pour une réponse de `reponse` jetons à cet effort.
+
+    Un effort inconnu est refusé plutôt que replié sur la marge la plus basse :
+    un repli silencieux ici recréerait exactement la troncature qu'on corrige,
+    et `effort_valide` garantit déjà que la valeur vient de `EFFORTS`.
+    """
+    if reponse <= 0:
+        raise ValueError("le budget de réponse doit être positif")
+    if effort not in MARGE_DE_REFLEXION:
+        raise ValueError(f"effort inconnu : {effort!r}")
+    return reponse * MARGE_DE_REFLEXION[effort]
+
+
+#: Le plafond réellement envoyé au service : la réponse, plus la place que
+#: l'effort demandé réclame pour réfléchir.
+JETONS_MAX = jetons_max(JETONS_REPONSE, EFFORT)
 
 INSTRUCTION = """\
 Tu es la faculté « Analyse » de SINGULAR, l'outil personnel de Thomas.
@@ -123,7 +159,18 @@ class AnalyseIndisponible(RuntimeError):
     Pas de clé, pas de paquet, pas de réseau : le reste de SINGULAR doit
     continuer exactement comme avant. Cette exception existe pour que
     l'appelant puisse le dire à Thomas au lieu de planter.
+
+    `cout` est renseigné quand l'appel a eu lieu et a été payé : un refus du
+    modèle, une réponse coupée au plafond. Il vaut `None` quand rien n'est
+    parti -- pas de clé, pas de réseau, pas de paquet. Sans lui, les seuls
+    appels facturés que le compteur ignorait étaient précisément ceux qui
+    finissent mal, et le total affiché sur le téléphone était faux toujours
+    dans le même sens : à la baisse.
     """
+
+    def __init__(self, message: str, *, cout: dict[str, int] | None = None) -> None:
+        super().__init__(message)
+        self.cout = cout
 
 
 def contexte_pour_analyse(notice: dict[str, Any]) -> str:
@@ -193,6 +240,11 @@ REFUS = {
     # Message fixe, sans interpolation : voir `traduit_les_pannes`.
     "imprevu": "le service a échoué d'une façon imprévue. Rien n'a été écrit.",
     "refus_du_modele": "le modèle a refusé de répondre. Rien n'a été écrit dans ton journal.",
+    # Une réponse coupée reste une réponse : elle s'affiche, elle a l'air
+    # complète, et sa dernière phrase peut dire le contraire de la suivante.
+    # Ici une phrase fausse est un bug, donc on refuse au lieu de rendre.
+    "reponse_coupee": ("la réponse a été coupée avant la fin : le plafond de jetons "
+                       "est atteint. Rien n'a été écrit. Baisse l'effort, ou relance."),
 }
 
 
@@ -300,13 +352,16 @@ def analyser(notice: dict[str, Any], *, modele: str | None = None,
         )
 
     if reponse.stop_reason == "refusal":
-        raise AnalyseIndisponible(REFUS["refus_du_modele"])
+        raise AnalyseIndisponible(REFUS["refus_du_modele"], cout=_consommation(reponse))
+    if reponse.stop_reason == "max_tokens":
+        raise AnalyseIndisponible(REFUS["reponse_coupee"], cout=_consommation(reponse))
     texte = "\n".join(bloc.text for bloc in reponse.content if bloc.type == "text").strip()
     return texte, _consommation(reponse)
 
 
 __all__ = [
-    "EFFORT", "EFFORTS", "JETONS_MAX", "MODELE_PAR_DEFAUT",
+    "EFFORT", "EFFORTS", "JETONS_MAX", "JETONS_REPONSE", "MARGE_DE_REFLEXION",
+    "MODELE_PAR_DEFAUT",
     "AnalyseIndisponible", "analyser", "apercu", "contexte_pour_analyse",
-    "effort_valide",
+    "effort_valide", "jetons_max",
 ]

@@ -50,6 +50,25 @@ from ..saisie import (
 from .icon import render_icon
 from .notice import build_notice
 
+
+def _compter_l_appel_paye(exc: Exception, quota: Any, modele: str) -> None:
+    """Compte un appel qui a echoue apres avoir ete facture.
+
+    Meme raison que du cote de la ligne de commande : un refus du modele et une
+    reponse coupee au plafond sont payes comme une reussite. `exc.cout` vaut
+    None quand rien n'est parti -- pas de cle, pas de reseau -- et il n'y a
+    alors rien a compter. Le plafond qui se remplit ici n'annule rien : la
+    depense a eu lieu, c'est tout ce que le compteur doit savoir.
+    """
+    cout = getattr(exc, "cout", None)
+    if cout is None:
+        return
+    from ..parle import PlafondAtteint
+    try:
+        quota.consommer(cout=cout, modele=modele)
+    except PlafondAtteint:
+        pass
+
 WEB_ROOT = Path(__file__).parent / "web"
 TOKEN_PATH = DEFAULT_PATH.parent / "sage_token"
 
@@ -544,6 +563,7 @@ class SageApp:
             try:
                 texte, cout = repondre(question, contexte_pour_analyse(self.notice()), fil)
             except AnalyseIndisponible as exc:
+                _compter_l_appel_paye(exc, quota, MODELE_PAR_DEFAUT)
                 raise SageError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from None
             fil.sauver()
             try:
@@ -619,6 +639,7 @@ class SageApp:
             try:
                 texte, cout = chercher(precision)
             except AnalyseIndisponible as exc:
+                _compter_l_appel_paye(exc, quota, MODELE_PAR_DEFAUT)
                 raise SageError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from None
             try:
                 restants = quota.consommer(cout=cout, modele=MODELE_PAR_DEFAUT)

@@ -137,6 +137,21 @@ def _gain_prompt() -> float | None:
     return valeur
 
 
+def _compter_l_appel_paye(exc, modele: str) -> None:
+    """Compte un appel qui a echoue apres avoir ete facture.
+
+    Un refus du modele et une reponse coupee au plafond se paient comme une
+    reussite : les jetons sont partis. Ne compter que les succes faisait un
+    total faux toujours dans le meme sens -- a la baisse, et precisement les
+    jours ou quelque chose se passe mal. `exc.cout` vaut None quand rien n'est
+    parti (pas de cle, pas de reseau) : il n'y a alors rien a compter.
+    """
+    if getattr(exc, "cout", None) is None:
+        return
+    from .parle import Quota
+    Quota().ajouter_depense(cout=exc.cout, modele=modele)
+
+
 def cmd_parle(journal: DecisionJournal, args) -> int:
     """Une conversation, pas un rapport. Le fil survit entre deux lancements.
 
@@ -190,6 +205,7 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
         try:
             texte, cout = repondre(question, contexte, fil, modele=args.modele)
         except AnalyseIndisponible as exc:
+            _compter_l_appel_paye(exc, args.modele or MODELE_PAR_DEFAUT)
             print(_colour(f"\n  {exc}\n", DIM))
             return False
         fil.sauver()
@@ -245,6 +261,7 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
     try:
         texte, cout = chercher(args.precision, modele=args.modele)
     except AnalyseIndisponible as exc:
+        _compter_l_appel_paye(exc, args.modele or MODELE_PAR_DEFAUT)
         print(_colour(f"\n  Recherche impossible : {exc}\n", DIM))
         return 1
 
@@ -284,6 +301,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
     try:
         texte, cout = analyser(notice, modele=args.modele)
     except AnalyseIndisponible as exc:
+        _compter_l_appel_paye(exc, args.modele or MODELE_PAR_DEFAUT)
         print(_colour(f"\n  Analyse coupée : {exc}", DIM))
         print(_colour("  La Notice ci-dessous est calculee sans elle.\n", DIM))
         print(_colour(f"  {notice['headline']}", BOLD))

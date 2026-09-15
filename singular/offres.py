@@ -29,6 +29,7 @@ from .analyse import (
     _consommation,
     client_par_defaut,
     effort_valide,
+    jetons_max,
     traduit_les_pannes,
 )
 
@@ -45,9 +46,13 @@ MODELE_PAR_DEFAUT = os.environ.get("SINGULAR_OFFRES_MODELE", "claude-sonnet-5")
 RECHERCHES_MAX = 5
 
 #: Une liste courte se lit ; une liste longue se survole puis s'abandonne.
-JETONS_MAX = 4000
+JETONS_REPONSE = 4000
 
 EFFORT = effort_valide("SINGULAR_OFFRES_EFFORT")
+
+#: Le plafond envoyé porte aussi la réflexion que l'effort achète : la raison
+#: est écrite une seule fois, dans `analyse.jetons_max`.
+JETONS_MAX = jetons_max(JETONS_REPONSE, EFFORT)
 
 #: Les deux seules provenances possibles pour une ligne de profil. Memes noms
 #: et meme sens que dans `proto/suivi_candidatures.py`, qui les a introduits.
@@ -192,11 +197,14 @@ def chercher(question: str = "", *, modele: str | None = None,
         )
 
     if reponse.stop_reason == "refusal":
-        raise AnalyseIndisponible(REFUS["refus_du_modele"])
+        raise AnalyseIndisponible(REFUS["refus_du_modele"], cout=_consommation(reponse))
+    if reponse.stop_reason == "max_tokens":
+        raise AnalyseIndisponible(REFUS["reponse_coupee"], cout=_consommation(reponse))
     texte = "\n".join(b.text for b in reponse.content if b.type == "text").strip()
     return texte, _consommation(reponse)
 
 
-__all__ = ["CRITERES", "DEDUIT", "DIT", "JETONS_MAX", "MODELE_PAR_DEFAUT",
+__all__ = ["CRITERES", "DEDUIT", "DIT", "JETONS_MAX", "JETONS_REPONSE",
+           "MODELE_PAR_DEFAUT",
            "RECHERCHES_MAX",
            "apercu", "chercher", "contexte_pour_recherche"]
