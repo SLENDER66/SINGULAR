@@ -6,8 +6,9 @@ se cite, elle ne se reformule pas. `DOCTRINE.md` dit *pourquoi* AZAZEL existe ;
 ce fichier dit *ce que SINGULAR doit devenir*.
 
 **Pourquoi il est ici, et pas seulement dans une conversation.** Il a déjà servi.
-`tools/etat_reel.py` cite « la directive » six fois, et le registre de réalité,
-son échelle et ses champs `limites` / `prochaine` en viennent directement. Une
+`tools/etat_reel.py` cite « la directive » à chaque décision de forme, et le
+registre de réalité, son échelle et ses champs `limites` / `prochaine` en
+viennent directement. Une
 spécification qui commande le code sans être dans le dépôt est la pire forme de
 mémoire : la session suivante hérite de ses conséquences sans pouvoir vérifier
 ses termes. `CLAUDE.md` §0 le dit sans détour — ce qui persiste est dans ce

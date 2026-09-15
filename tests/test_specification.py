@@ -138,3 +138,40 @@ def test_l_annexe_nomme_la_contradiction_au_lieu_de_la_lisser() -> None:
     assert "décision du fondateur" in annexe, (
         "la contradiction est nommée mais ne dit plus à qui elle revient : "
         "une session ne tranche pas cela seule")
+
+
+def test_le_document_ne_compte_pas_les_occurrences_d_un_fichier() -> None:
+    """La promesse que l'annexe se fait a elle-meme, tenue par un test.
+
+    Ce document a ete ecrit en meme temps que le garde contre les comptes
+    perissables, et il en portait un : « `tools/etat_reel.py` cite la directive
+    six fois ». C'etait vrai une heure, et faux au commit suivant -- celui qui a
+    ajoute la divulgation a ce meme fichier, donc une septieme occurrence. Ecrit
+    par la session qui venait d'etendre le garde a ce fichier, et invisible pour
+    lui : `tests/test_docs_sans_compte_perissable.py` ne connait que les etapes
+    du CV et les branches du depot.
+
+    La regle de `CLAUDE.md` §24 est qu'a la troisieme occurrence d'une erreur on
+    cesse de la corriger et on la rend impossible. Celle-ci est de la meme
+    famille que les trois precedentes : un nombre annonce pour quelque chose
+    qu'une commande derive -- ici `grep -c`. Le garde est donc etroit et vise
+    exactement ce que ce document promet en tete de son annexe : aucun compte.
+
+    Ce qui reste permis est ce qui ne se recompte pas : « trois fois la meme
+    panne » raconte un incident date. Ce qui est refuse est un nombre colle a un
+    fichier cite, parce que ce nombre-la bouge des qu'on touche le fichier.
+    """
+    mots = r"\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix"
+    motif = re.compile(rf"`[A-Za-z_0-9./]+\.py`[^.\n]{{0,80}}?\b({mots})\s+fois\b",
+                       re.IGNORECASE)
+
+    fautes = []
+    for trouve in motif.finditer(_texte()):
+        ligne = _texte()[:trouve.start()].count("\n") + 1
+        fautes.append(f"SPECIFICATION.md:{ligne} : « {trouve.group(0)} »")
+
+    assert not fautes, (
+        "ce document annonce un nombre d'occurrences dans un fichier :\n  "
+        + "\n  ".join(fautes)
+        + "\n  ce compte vieillit des qu'on touche le fichier -- et il a deja "
+          "menti une fois ici. Dis-le sans nombre, ou laisse grep -c compter.")
