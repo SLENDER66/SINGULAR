@@ -212,6 +212,32 @@ def test_le_conseil_en_pourcents_ne_propose_jamais_un_chiffre_refuse(valeur):
     assert "sort des bornes" in dit
 
 
+def test_une_decision_deja_ecrite_hors_borne_se_relit_sans_rien_casser(tmp_path):
+    """La borne s'applique a la saisie, jamais a la lecture. Et il en a deja.
+
+    La ligne de commande acceptait `0.99` jusqu'au jour ou cette borne est
+    devenue vraie : des decisions hors borne sont donc dans son journal, et une
+    chaine d'empreintes ne se reecrit pas. Resserrer une entree ne doit jamais
+    rendre illisible ce qui est deja ecrit -- c'est le refus qui bouge, pas
+    l'histoire.
+
+    Le test tient les deux bords : l'ecriture directe passe encore (le journal
+    garde `0 < p < 1`, son invariant mathematique) et le rapport la compte.
+    """
+    journal = DecisionJournal(tmp_path / "ancien.db")
+    ancienne = journal.add(title="t", action="a", predicted="p", probability=0.99,
+                           tier=Tier.REVENUS, cost_hours=4.0, horizon_days=14)
+    journal.resolve(ancienne.entry_id, happened=False)
+
+    assert journal.verify(), "la chaine doit rester intacte"
+    rapport = journal.review()
+    assert rapport["resolved"] == 1
+    # Un pari perdu annonce a 99 % : exactement le cas que la borne evite
+    # desormais a l'entree, et qui doit rester mesure quand il existe.
+    assert rapport["mean_brier"] == pytest.approx(0.9801)
+    assert rapport["hit_rate"] == 0.0
+
+
 def test_the_gain_question_reads_numbers_the_same_way(tmp_path, monkeypatch, capsys):
     """« 1 500 » doit valoir 1500 euros à cette question comme aux autres.
 
