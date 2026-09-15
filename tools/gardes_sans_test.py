@@ -268,13 +268,20 @@ survivant, treize avec treize. `matins` : dix a quinze. `frontiere` : **plus
 d'une heure, sans avoir fini** -- c'est le groupe le plus gros, et il est celui
 qu'on veut le plus.
 
-Deux consequences operatoires, payees une heure pour les apprendre :
+Quatre consequences operatoires, chacune payee pour l'apprendre :
 
 * ne l'enferme pas dans un `timeout` court. Une heure ne suffit pas pour
   `frontiere` ;
 * ne le passe pas dans un tube qui tamponne, `| tail` en tete. S'il est coupe,
   tu ne recois rien du tout -- pas meme les survivants deja nommes. Ecris dans un
-  fichier et lis-le au fur et a mesure.
+  fichier et lis-le au fur et a mesure ;
+* n'attends pas sa fin avec `until ! pgrep -f "gardes_sans_test.py matins"`. Le
+  motif figure dans la ligne de commande du shell qui attend : il se trouve
+  lui-meme et attend pour toujours. Vise le processus python
+  (`pgrep -f "^python3 tools/gardes_sans_test"`), ou attends le fichier ;
+* meme piege pour `pkill -f '<motif>'` : si le motif apparait dans la commande
+  `pkill` elle-meme, elle tue son propre shell avant d'avoir tue quoi que ce
+  soit d'autre -- et la commande qui suivait le `&&` ne part jamais.
 
 C'est un instrument d'audit, a relancer quand on touche a ce qu'il mesure.
 
