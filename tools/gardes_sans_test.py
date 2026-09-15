@@ -78,6 +78,23 @@ n'atteint.
    pas moitie morte. `journal.py:280` et les deux moities de `can_prepare` ont
    leur temoin depuis.
 
+**Les formes de refus que le depot n'emploie pas, verifiees plutot que supposees.**
+Apres trois cecites trouvees dans cet outil, la question suivante est : quelle
+autre forme de refus lui echapperait ? Mesure du 15 septembre 2026 sur les trois
+groupes :
+
+* **aucun garde ecrit en `assert`** -- zero dans les cibles. Une assertion
+  disparait sous `python -O`, donc un refus ecrit ainsi ne refuserait pas en
+  production ; il n'y en a pas ;
+* **aucun refus qui rend `None` au lieu de lever.** Les trente et un `return
+  None` explicites des cibles sont des lectures qui ne trouvent rien, pas des
+  refus -- `load_mission`, `_declared_identity`, la recherche d'un jour ;
+* **un seul `raise <nom>` sans appel**, et c'est une relance de fin de fonction
+  qui laisse remonter un errno inconnu, pas un garde dans un `if`.
+
+Ces trois formes-la ne sont donc pas des angles morts ici. Si l'une apparait un
+jour, c'est une forme a ajouter -- et ce paragraphe dit comment l'avoir cherchee.
+
 **Ce que cet outil ne mesure pas, et il vaut mieux le savoir que le supposer.**
 `tools/` n'est dans aucun groupe, et l'y mettre ne servirait presque a rien :
 mesure du 15 septembre 2026, `tools/etat_reel.py` rend **deux** mutants pour
