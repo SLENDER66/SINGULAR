@@ -158,5 +158,15 @@ def test_une_approbation_sans_empreinte_native_est_refusee(tmp_path) -> None:
             "UPDATE approvals SET action_fingerprint=NULL, capability_fingerprint=NULL,"
             " contract_fingerprint=NULL WHERE approval_id=?", (approval_id,))
 
-    with pytest.raises(PermissionError):
+    # Le type ne suffit pas, et c'est la mutation qui l'a montre : sans ce
+    # garde-ci, `stored != expected` refuse de toute facon -- NULL ne vaut pas
+    # une empreinte calculee. Le mutant survivait donc a un test qui n'attendait
+    # qu'un `PermissionError`.
+    #
+    # Ce qui distingue les deux refus est ce qu'ils disent, et la distinction
+    # compte pour qui lit l'erreur : une approbation ecrite avant que ces
+    # colonnes existent n'est pas une falsification, c'est une approbation d'un
+    # autre temps. Confondre les deux enverrait chercher un attaquant la ou il
+    # n'y a qu'une migration.
+    with pytest.raises(PermissionError, match="sans empreintes natives"):
         integrite.validate(approval_id, action, mission.mission_id, contrat)
