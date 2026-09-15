@@ -288,7 +288,7 @@ def test_the_cli_records_and_reviews_without_a_terminal(tmp_path, capsys):
     # exactement le défaut. Un pari à 50 % perdu ne dit rien de son jugement, et
     # l'imprimer en rouge lui conseillait de corriger ce que rien ne montre faux.
     assert "surconfiance" not in output, output
-    assert "rien a conclure" in output
+    assert "rien à conclure" in output
 
 
 def test_the_command_line_only_calls_him_overconfident_when_it_can(tmp_path, capsys):

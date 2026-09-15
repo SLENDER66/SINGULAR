@@ -642,7 +642,7 @@ def texte_pour_claude(donnees: dict, question: str) -> str:
         for nom, reste in restantes.items():
             total = len(donnees["cv"][nom])
             if not reste:
-                lignes.append(f"Mon {NOMS_CV[nom]} est termine.")
+                lignes.append(f"Mon {NOMS_CV[nom]} est terminé.")
                 continue
             lignes.append(f"Mon {NOMS_CV[nom]} : {total - len(reste)} étape(s) sur {total}."
                           " Il me reste :")

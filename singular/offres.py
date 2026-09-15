@@ -146,7 +146,7 @@ def contexte_pour_recherche(question: str = "") -> str:
         lignes += ["", "Ceci n'est pas vérifié, ne t'appuie pas dessus :"]
         lignes += [f"- {texte}" for texte in a_confirmer]
     if question.strip():
-        lignes += ["", "Precision pour cette recherche :", question.strip()]
+        lignes += ["", "Précision pour cette recherche :", question.strip()]
     return "\n".join(lignes)
 
 

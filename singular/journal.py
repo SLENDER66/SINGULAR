@@ -792,7 +792,7 @@ class DecisionJournal:
                  entry_id, Status.OPEN.value),
             )
             if ecrit.rowcount != 1:
-                raise PermissionError(f"{entry_id} a ete tranche par quelqu'un d'autre entre-temps")
+                raise PermissionError(f"{entry_id} a été tranché par quelqu'un d'autre entre-temps")
             row = conn.execute("SELECT * FROM journal_entries WHERE entry_id=?", (entry_id,)).fetchone()
         return self._entry(row)
 
@@ -812,7 +812,7 @@ class DecisionJournal:
                 (Status.ABANDONED.value, moment.isoformat(), reason, entry_id, Status.OPEN.value),
             )
             if ecrit.rowcount != 1:
-                raise PermissionError(f"{entry_id} a ete tranche par quelqu'un d'autre entre-temps")
+                raise PermissionError(f"{entry_id} a été tranché par quelqu'un d'autre entre-temps")
             row = conn.execute("SELECT * FROM journal_entries WHERE entry_id=?", (entry_id,)).fetchone()
         return self._entry(row)
 

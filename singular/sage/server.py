@@ -613,7 +613,7 @@ class SageApp:
 
         precision = payload.get("precision", "")
         if not isinstance(precision, str):
-            raise SageError(HTTPStatus.BAD_REQUEST, "« precision » doit être du texte")
+            raise SageError(HTTPStatus.BAD_REQUEST, "« précision » doit être du texte")
         if len(precision) > QUESTION_MAX:
             raise SageError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
                             f"une précision tient en {QUESTION_MAX} caractères")

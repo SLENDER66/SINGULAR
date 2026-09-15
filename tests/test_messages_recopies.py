@@ -227,6 +227,7 @@ DEUX_MOTS_VRAIMENT = {
     "parle", "analyse", "demande", "corrige", "compte", "cherche", "efface",
     "bouge", "route", "des", "cote", "precise", "installe", "vise", "refuse",
     "sur", "entree", "cree", "note", "reste", "trouve", "pense", "ecarte",
+    "tranche",
 }
 
 #: Les mots qui s'ecrivent dans ses fichiers et se relisent tels quels.
@@ -236,10 +237,47 @@ DEUX_MOTS_VRAIMENT = {
 #: libelle affiche ; exempte partout, il s'affichait « envoyee » sous des yeux
 #: francais sans que rien ne tombe. L'exemption de stockage ne vaut donc plus a
 #: l'interieur d'une valeur de table de libelles -- la, c'est du texte lu.
+#:
+#: **Et pas davantage a l'interieur d'une phrase francaise.** C'etait l'autre
+#: moitie du meme defaut, et elle a coute six phrases : « Ce qui serait envoye »
+#: s'affichait ainsi a trois endroits, « a ete tranche » a deux, sans que rien
+#: ne tombe -- « envoye » et « ete » sont des cles, donc exemptes partout. Une
+#: cle s'ecrit `credit_usd` ou seule ; dans une phrase, c'est un mot lu.
 NOMS_DE_CHAMPS = {
     "decision", "decisions", "precision", "credit", "ete", "envoye", "etape",
     "envoyee", "deduit", "modele", "modeles", "ecrire", "reponds",
 }
+
+#: Ce qui fait qu'une phrase est francaise, et pas un message d'API en anglais.
+#:
+#: `journal.py` porte les deux : « a ete tranche par quelqu'un d'autre » va a
+#: l'ecran, « a decision needs a horizon » ne l'atteint jamais -- `saisie.py`
+#: refuse avant, dans sa langue. Sans cette distinction, fermer l'exemption
+#: ci-dessus accusait le message anglais d'ecrire « decision » sans accent.
+#:
+#: La liste ne decrit pas le francais : elle contient des mots-outils sans
+#: homographe anglais. Un mot qui manque ne fait que perdre une phrase de vue ;
+#: aucun n'accuse a tort, et c'est le sens dans lequel on veut se tromper.
+MOTS_OUTILS_FRANCAIS = frozenset({
+    "le", "les", "une", "des", "du", "dans", "par", "pour", "avec", "sans",
+    "que", "qui", "quoi", "est", "sont", "etait", "cette", "ces", "ton",
+    "tes", "son", "ses", "leur", "nous", "vous", "elle", "rien", "plus", "pas",
+    "deja", "encore", "aucun", "aucune", "chaque", "tout", "tous", "toute",
+})
+
+
+def _est_une_phrase_francaise(texte: str) -> bool:
+    # `_mot` s'arrete a trois lettres ; « le », « du » et « ses » comptent ici.
+    mots = re.findall(r"[A-Za-zÀ-ÿ]{2,}", texte)
+    return any(_sans_accents(mot).lower() in MOTS_OUTILS_FRANCAIS for mot in mots)
+
+
+#: Une cle telle qu'elle s'ecrit dans un fichier : `credit_usd`, `entry_id`.
+_IDENTIFIANT = re.compile(r"[A-Za-z]+(?:_[A-Za-z]+)+")
+
+
+def _mots_de_cles(texte: str) -> set[str]:
+    return {m.lower() for ident in _IDENTIFIANT.findall(texte) for m in _mot(ident)}
 
 
 def _mot(texte: str) -> list[str]:
@@ -265,6 +303,17 @@ def test_le_programme_n_ecrit_pas_le_meme_mot_de_deux_facons() -> None:
     demandait une « Probabilité ». Le Sage annonçait « credit epuise » pendant
     que la page web affichait « crédit épuisé ». Chaque fois, les deux
     graphies étaient dans le même dépôt, souvent dans le même fichier.
+
+    **Ce qu'il ne voit pas, et comment l'a-t-on cherché.** La règle compare le
+    dépôt à lui-même : un mot que rien n'écrit accentué ailleurs lui est
+    invisible, et un nom de champ l'est aussi jusque dans une phrase. Six
+    phrases en avaient profité — « Ce qui serait envoye », « la Notice est
+    calculee », « Precision pour cette recherche », « a ete tranche par
+    quelqu'un d'autre », « tarifs a remplir », « est termine ». Elles ont été
+    trouvées en balayant les phrases affichées **entièrement sans accent** qui
+    portent un mot-outil français (« le », « pour », « et »...) : une phrase
+    française sans un seul accent est le signe, et elles se relisent d'un œil.
+    C'est à refaire ainsi, pas à déduire d'ici.
     """
     arbres = {nom: ast.parse((RACINE / nom).read_text(encoding="utf-8")) for nom in AFFICHENT}
     libelles = {nom: _tables_de_libelles(arbre) for nom, arbre in arbres.items()}
@@ -285,13 +334,16 @@ def test_le_programme_n_ecrit_pas_le_meme_mot_de_deux_facons() -> None:
             if id(noeud) in docs or (noeud.value.count(" ") < 1
                                      and id(noeud) not in libelles[nom][0]):
                 continue
+            cles = _mots_de_cles(noeud.value)
             for mot in _mot(noeud.value):
                 nu = mot.lower()
                 if nu in DEUX_MOTS_VRAIMENT or _porte_un_accent(mot):
                     continue
-                # Dans une table de libelles, un nom de champ n'en est plus un :
-                # c'est sa traduction pour l'ecran.
-                if nu in NOMS_DE_CHAMPS and id(noeud) not in libelles[nom][0]:
+                # Dans une table de libelles ou dans une phrase francaise, un
+                # nom de champ n'en est plus un : c'est du texte lu.
+                lu_a_l_ecran = (id(noeud) in libelles[nom][0]
+                                or (nu not in cles and _est_une_phrase_francaise(noeud.value)))
+                if nu in NOMS_DE_CHAMPS and not lu_a_l_ecran:
                     continue
                 if nu in accentues:
                     fautes.append(f"{nom}:{noeud.lineno} : « {mot} » "

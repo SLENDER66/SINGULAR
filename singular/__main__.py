@@ -176,7 +176,7 @@ def cmd_parle(journal: DecisionJournal, args) -> int:
         # `analyse` et `offres` ont leur `--blanc` depuis le debut ; la
         # conversation ne l'avait pas, alors que c'est elle qui envoie le plus
         # -- le rapport du jour et tout le fil -- et depuis son telephone.
-        print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
+        print(_colour("\n  Ce qui serait envoyé, et rien d'autre :\n", BOLD))
         print(apercu(contexte, fil, args.question or "<ta question>"))
         print(_colour("\n  Rien n'a été envoyé.\n", DIM))
         return 0
@@ -230,7 +230,7 @@ def cmd_offres(journal: DecisionJournal, args) -> int:
     from .parle import Quota, bilan, phrase_de_bilan
 
     if args.blanc:
-        print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
+        print(_colour("\n  Ce qui serait envoyé, et rien d'autre :\n", BOLD))
         print(apercu(args.precision))
         print(_colour(f"\n  Rien n'a été envoyé. Jusqu'à {RECHERCHES_MAX} recherches web"
                       " seraient faites.\n", DIM))
@@ -271,7 +271,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
     notice = build_notice(journal).as_dict()
 
     if args.blanc:
-        print(_colour("\n  Ce qui serait envoye, et rien d'autre :\n", BOLD))
+        print(_colour("\n  Ce qui serait envoyé, et rien d'autre :\n", BOLD))
         print(apercu(notice))
         print(_colour("\n  Rien n'a été envoyé.\n", DIM))
         return 0
@@ -280,7 +280,7 @@ def cmd_analyse(journal: DecisionJournal, args) -> int:
         texte, cout = analyser(notice, modele=args.modele)
     except AnalyseIndisponible as exc:
         print(_colour(f"\n  Analyse coupée : {exc}", DIM))
-        print(_colour("  La Notice ci-dessous est calculee sans elle.\n", DIM))
+        print(_colour("  La Notice ci-dessous est calculée sans elle.\n", DIM))
         print(_colour(f"  {notice['headline']}", BOLD))
         for item in notice["items"]:
             print(f"  [{item['severity']}] {item['title']}")
@@ -721,7 +721,7 @@ def cmd_review(journal: DecisionJournal, args) -> int:
         progression = calibration_progression(report)
         if verdict is None or not verdict["conclusive"]:
             print(_colour(f"  écart de {gap:+.0%} sur {_pluriel(report['resolved'], 'verdict')}"
-                          " - le hasard seul en produit autant, rien a conclure", DIM))
+                          " - le hasard seul en produit autant, rien à conclure", DIM))
         elif progression is not None and progression["corrige"]:
             # Le rouge disait « surconfiance de +22% » pendant que l'observation,
             # deux lignes plus bas, expliquait que c'etait corrige. Le verdict
@@ -864,7 +864,7 @@ def build_parser() -> argparse.ArgumentParser:
     parle.add_argument("--blanc", action="store_true",
                        help="montre ce qui partirait, n'envoie rien")
     parle.add_argument("--tarifs", action="store_true",
-                       help="afficher le fichier de tarifs a remplir")
+                       help="afficher le fichier de tarifs à remplir")
     parle.set_defaults(func=cmd_parle)
     return parser
 
