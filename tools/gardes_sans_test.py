@@ -611,6 +611,13 @@ def _refus_leve(noeud: ast.If) -> str:
     `EffectInProgress` -- les refus du chemin de recuperation, ceux que la
     section 7 du mandat nomme « recovery ambiguity » et « external-effect
     ambiguity ». Aucun n'avait jamais ete mute.
+
+    **Et aucun n'etait un trou**, mesure aussitot apres l'elargissement : les
+    sept refus de la frontiere rendus visibles sont tous tues, six par la
+    sous-suite et un par la suite entiere. La cecite ne cachait pas un defaut,
+    elle cachait la preuve -- ce qui est une autre chose, et pas une bonne
+    nouvelle pour autant : un instrument qui ne mesure pas ne peut pas dire
+    lequel des deux c'est.
     """
     if noeud.orelse or not noeud.body:
         return ""
