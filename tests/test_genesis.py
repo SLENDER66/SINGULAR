@@ -675,3 +675,100 @@ def test_zeta_exige_les_deux_sources(sources) -> None:
     assert not mission.juger({"ci.name": ["CI"]})
     assert not mission.juger({"pytest.testpaths": ["tests"]})
     assert not mission.juger(dict(bonne) | {"ci.name": ["autre"]})
+
+
+# --- les refus que l'outil ne voyait pas --------------------------------------
+#
+# `tools/gardes_sans_test.py` ne connaissait que quatre noms d'exception du
+# langage, et comparait le nom **ecrit dans le `raise`**. Tous les refus de
+# Genesis en portent un autre -- `FormatRefuse`, `SubstitutionRefusee` -- donc
+# aucun n'a jamais ete mute. « Zero survivant sur treize » couvrait la moitie des
+# refus de ce paquet ; la liste est derivee depuis, et en compte vingt-cinq.
+
+def test_employer_refuse_un_artefact_substitue_dans_le_registre() -> None:
+    """Le contrôle du côté du registre, celui que la section 12 du mandat vise.
+
+    Le test voisin couvre l'autre : un appelant qui a gardé une référence exige
+    que ce soit encore le même code. Celui-ci couvre le cas où **le registre
+    lui-même** ne porte plus l'artefact sous lequel il a inscrit l'empreinte --
+    « ancien jeton + nouvel objet arbitraire ne doit jamais devenir une
+    autorisation valide ». C'est le scénario du redémarrage et de la
+    réinscription, et rien ne l'essayait.
+
+    L'empreinte n'est jamais crue : elle est recalculée sur l'objet réellement
+    stocké à chaque emploi. Substituer la procédure sans toucher à l'empreinte
+    enregistrée est donc exactement l'attaque que ce refus existe pour attraper.
+    """
+    from dataclasses import replace as _replace
+
+    registre = Registre()
+    inscrite = registre.inscrire("lecteur", "lire", construire_lecteur(": "))
+    substituee = _replace(inscrite, procedure=construire_lecteur("="))
+    registre._capacites["lecteur"] = substituee
+
+    assert substituee.empreinte == inscrite.empreinte, (
+        "l'empreinte enregistrée ne bouge pas : c'est tout le piège")
+    with pytest.raises(SubstitutionRefusee):
+        registre.employer("lecteur")
+
+
+def test_une_capacite_qui_a_memorise_la_bonne_reponse_est_refutee_aussi() -> None:
+    """Le cas que le test voisin manquait, et il le manquait complètement.
+
+    `test_une_capacite_qui_a_memorise_est_refutee` donne au mémorisant une
+    réponse **fausse** pour la mission de contrôle. Il est donc réfuté par le
+    vérificateur, pas par son refus : neutralisé, le garde laissait la suite
+    verte. Le banc prouvait « une mauvaise réponse est refusée », ce que personne
+    ne mettait en doute.
+
+    Ici le mémorisant retient une réponse qui satisferait le contrôle. Ce qui
+    l'arrête est le seul fait qu'il n'a jamais vu ce texte-là. Sans ce refus, le
+    banc créditerait d'un apprentissage une capacité qui n'a rien appris -- soit
+    exactement l'auto-illusion que Genesis existe pour rendre impossible.
+    """
+    registre = Registre()
+    registre.inscrire(LECTEUR_APPRIS, "lire un format clé/valeur",
+                      construire_lecteur_memorisant(GAMMA_APPRENTISSAGE,
+                                                    {"machine": ["téléphone"]}),
+                      provenance="GAMMA")
+    naissance = constater_naissance(
+        gamma(GAMMA_CONTROLE, nom="GAMMA-controle", attendu="téléphone"),
+        solveur, registre, instance="soir", apprises_sur={"matin"})
+
+    assert not naissance.ne
+    assert naissance.comparaison.verdict == REFUTE, (
+        "une réponse juste retenue par cœur reste une réponse qui n'a pas été lue")
+
+
+def test_un_lecteur_construit_refuse_un_texte_sans_aucune_paire() -> None:
+    """Rendre un dictionnaire vide serait pire qu'échouer : ça ressemble à un succès."""
+    lire = construire_lecteur(": ")
+    assert lire("machine: mac\n") == {"machine": ["mac"]}
+    with pytest.raises(FormatRefuse):
+        lire("# rien que des commentaires\n\ndu texte sans separateur\n")
+
+
+def test_un_json_valide_qui_n_est_pas_un_objet_est_refuse() -> None:
+    """« Ça parse » ne veut pas dire « c'est le format demandé »."""
+    from singular.genesis.lecteurs import lire_json
+
+    assert lire_json('{"machine": "mac"}') == {"machine": ["mac"]}
+    for valide_mais_pas_un_objet in ("[1, 2, 3]", '"du texte"', "42", "null"):
+        with pytest.raises(FormatRefuse):
+            lire_json(valide_mais_pas_un_objet)
+
+
+def test_un_csv_sans_en_tete_a_virgules_est_refuse() -> None:
+    """`csv` avale à peu près n'importe quoi ; le refus est plus strict que lui.
+
+    Sans ce garde, un fichier d'une seule colonne sans séparateur serait accepté
+    et le tâtonnement du solveur deviendrait inobservable : tout texte serait un
+    CSV valide, donc le lecteur ne dirait jamais « ce n'est pas mon format ».
+    """
+    from singular.genesis.lecteurs import lire_csv
+
+    assert lire_csv("machine,lieu\nmac,ici\n") == {"machine": ["mac"], "lieu": ["ici"]}
+    with pytest.raises(FormatRefuse):
+        lire_csv("machine\nmac\n")          # une seule colonne, pas de virgule
+    with pytest.raises(FormatRefuse):
+        lire_csv("machine,lieu\n")           # une en-tête et rien d'autre

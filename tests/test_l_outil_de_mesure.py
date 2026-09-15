@@ -273,3 +273,54 @@ def test_une_suite_entiere_deja_rouge_arrete_l_outil(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(outil, "_la_suite_entiere_passe", lambda *args, **kwargs: False)
 
     assert _un_groupe("frontiere") == -1
+
+
+# --- ce qu'un `raise` peut refuser ---------------------------------------------
+
+def test_les_refus_du_depot_entrent_sans_qu_on_les_ecrive():
+    """La liste des exceptions de refus est derivee, plus ecrite a la main.
+
+    Elle ne portait que quatre noms du langage, et la forme 1 compare le nom
+    **ecrit dans le `raise`**, pas la classe. Un `raise ExecutionRecoveryRequired`
+    -- qui est un `RuntimeError` -- etait donc invisible, comme `ImportRefused`,
+    `SauvegardeRefusee`, `EffectInProgress`, `FormatRefuse`.
+
+    Mesure du 15 septembre 2026 : `singular/sauvegarde.py`, 261 lignes qui
+    gardent le seul fichier irremplacable du depot, rendait zero mutant. Le
+    silence de l'outil se lisait comme une couverture ; c'etait une cecite, et
+    elle s'aggravait toute seule -- plus le depot nomme ses refus, moins l'outil
+    en voit.
+    """
+    from tools.gardes_sans_test import REFUS, REFUS_DU_LANGAGE, refus_du_depot
+
+    assert REFUS_DU_LANGAGE <= REFUS, "les refus du langage doivent rester dedans"
+    propres = REFUS - REFUS_DU_LANGAGE
+    assert {"SauvegardeRefusee", "ImportRefused", "ExecutionRecoveryRequired",
+            "EffectInProgress", "FormatRefuse", "SubstitutionRefusee"} <= propres, (
+        f"des refus du depot manquent a la derivation : {sorted(propres)}")
+
+    # La fermeture est transitive : une exception qui herite d'une exception de
+    # refus refuse aussi, si loin qu'elle soit de la racine.
+    derives = refus_du_depot()
+    assert derives == REFUS, "la derivation doit etre stable d'un appel a l'autre"
+
+
+def test_un_refus_nomme_par_le_depot_est_bien_mute():
+    """Le bout qui compte : le derive doit produire un mutant, pas juste un nom."""
+    source = (
+        "class SauvegardeRefusee(Exception):\n"
+        "    pass\n"
+        "\n"
+        "def copie(actif):\n"
+        "    if not actif.exists():\n"
+        "        raise SauvegardeRefusee('source absente')\n"
+        "    return actif\n"
+    )
+    trouves = refus_d_un_fichier(ast.parse(source))
+    assert trouves, "un refus nomme par le depot doit etre mutable"
+
+    mutant = RendLaConditionFausse(trouves[0][0])
+    arbre = mutant.visit(ast.parse(source))
+    assert mutant.touche
+    ast.fix_missing_locations(arbre)
+    assert "if False:" in ast.unparse(arbre)

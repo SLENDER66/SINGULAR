@@ -235,13 +235,43 @@ Chaque correction est vérifiée par l'inverse : le mutant remis en place fait
 
 **Deuxième passage, après correction : zéro survivant sur treize mutés.** Treize
 et non vingt-deux, parce que les six moitiés mortes ont été retirées et que deux
-conditions ont perdu un terme. Chaque refus que Genesis porte a maintenant un
-témoin, et c'est le seul argument sérieux en faveur du chiffre positif de la
-section 4 — sans ça, le banc mesurait sa propre complaisance.
+conditions ont perdu un terme.
+
+**Et « treize » ne voulait pas dire ce que j'en avais conclu.** L'outil ne
+connaissait que quatre noms d'exception du langage et comparait le nom *écrit
+dans le `raise`*. Or tous les refus de Genesis en portent un autre —
+`FormatRefuse`, `SubstitutionRefusee` — donc **aucun d'eux n'avait jamais été
+muté**. Les treize étaient des `return False`, des moitiés de condition et des
+`except`. La phrase « chaque refus que Genesis porte a maintenant un témoin »
+était fausse au moment où je l'écrivais, et rien ne pouvait le dire : le silence
+de l'instrument se lisait comme une couverture.
+
+Liste dérivée de l'arbre depuis, et le paquet compte **vingt-cinq** mutants. Au
+troisième passage, **six survivants**, tous dans la famille que l'outil ne voyait
+pas :
+
+| ce qui survivait | ce que ça voulait dire |
+|---|---|
+| `Registre.employer` : l'empreinte enregistrée ≠ l'artefact stocké | **la substitution côté registre** n'était essayée par personne — « ancien jeton + nouvel objet arbitraire » est exactement ce que la section 12 du mandat interdit |
+| `construire_lecteur_memorisant` : « je n'ai vu que l'autre texte » | le test qui refute le mémorisant lui donnait une réponse **fausse** : il était réfuté par le vérificateur, pas par son refus |
+| `construire_lecteur` : aucune paire trouvée | rendre un dictionnaire vide ressemble à un succès |
+| `lire_json` : JSON valide mais pas un objet | « ça parse » n'est pas « c'est le format » |
+| `lire_csv` : pas d'en-tête à virgules | sans lui tout texte est un CSV, et le tâtonnement devient inobservable |
+| `lire_csv` : en-tête vide | **assurance** : une virgule dans la première ligne donne toujours au moins deux colonnes, donc le garde voisin a déjà refusé. Cherché un contre-exemple, pas trouvé ; le garde reste, fail-closed |
+
+Cinq témoins écrits, chacun vérifié par l'inverse. Le sixième est documenté comme
+assurance plutôt que testé, parce qu'aucune entrée ne l'atteint.
+
+Celui du mémorisant est le plus instructif, et c'est le pire qu'on pouvait avoir
+ici : le banc aurait crédité d'un apprentissage une capacité qui retient par cœur
+une réponse juste. C'est l'auto-illusion que Genesis existe pour rendre
+impossible, et elle vivait dans l'angle mort de l'instrument censé la traquer.
+C'est le seul argument sérieux en faveur du chiffre positif de la section 4 —
+sans ça, le banc mesurait sa propre complaisance.
 
 L'outil ne tourne pas dans le CI. Son prix est dominé par le nombre de
-survivants, chacun étant revérifié contre la suite entière : cinq minutes pour
-`genesis` sans survivant, treize avec treize. Le groupe `frontiere`, lui, dépasse
+survivants, chacun étant revérifié contre la suite entière : quelques minutes
+pour `genesis` sans survivant, bien plus dès qu'il y en a. Le groupe `frontiere`, lui, dépasse
 l'heure. C'est un instrument d'audit : il se relance quand on touche à ce qu'il
 mesure, et sa docstring dit comment le lancer sans perdre son résultat.
 

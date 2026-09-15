@@ -177,6 +177,14 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    fichier-la fige aussi. Ne refais pas ce triage ; il coute une demi-heure et il
    est deja ecrit.
 
+   `lire_csv` de Genesis a le meme motif, et il est ecrit ici pour la meme
+   raison : `if not colonnes` ne peut pas se declencher, parce que le garde de la
+   ligne au-dessus exige une virgule dans la premiere ligne et qu'une virgule
+   donne toujours au moins deux colonnes a `csv.DictReader`. Cherche : une
+   premiere ligne entre guillemets, une virgule dans un champ multiligne, une
+   en-tete vide apres `strip()`. Aucune n'atteint le second garde. Il reste,
+   fail-closed, mais il n'aura jamais de temoin.
+
    Meme chose pour `mode == Autonomy.BLOCK` : les trois facons de produire un
    BLOCK que le depot sait produire -- politique, red team, bus -- rendent toutes
    `can_prepare=False`, donc la moitie voisine refuse deja. `v32_governed_core`
@@ -381,6 +389,11 @@ CIBLES_MATINS = (
     "singular/sage/server.py",
     "singular/fichiers.py",
     "singular/sqlite_support.py",
+    # La sauvegarde du journal : le seul fichier irremplacable du depot, et le
+    # module qui decide s'il est fidelement copie. Il etait hors de tous les
+    # groupes, et rendait zero mutant tant que l'outil ne voyait pas
+    # `SauvegardeRefusee`.
+    "singular/sauvegarde.py",
     "proto/suivi_candidatures.py",
 )
 
@@ -396,6 +409,7 @@ SOUS_SUITE_MATINS = (
     "tests/test_etat_en_francais.py", "tests/test_notice_vectors.py",
     "tests/test_une_seule_regle_par_phrase.py", "tests/test_commandes_de_sa_fenetre.py",
     "tests/test_messages_recopies.py", "tests/test_windows_console.py",
+    "tests/test_sauvegarde.py",
     # La calibration datee. Sans elle, l'outil annoncait « sous-suite trop
     # etroite » sur les conditions de `corrige` : elles etaient couvertes, mais
     # par un fichier que la passe rapide ne lancait pas, donc chacune coutait une
@@ -429,7 +443,61 @@ GROUPES = {
 
 #: Les exceptions qui disent « refuse ». Une `KeyError` ou une `AttributeError`
 #: n'est pas un refus, c'est un accident -- on ne les mute pas.
-REFUS = frozenset({"PermissionError", "ValueError", "RuntimeError", "TypeError"})
+#: Les exceptions du langage qui disent « non ». La racine de la derivation
+#: ci-dessous, et rien de plus : `Exception` en fait partie parce qu'une classe
+#: de refus du depot en herite souvent directement.
+REFUS_DU_LANGAGE = frozenset({"PermissionError", "ValueError", "RuntimeError",
+                              "TypeError", "KeyError", "Exception"})
+
+#: Les dossiers ou ce depot definit ses propres exceptions.
+SOURCES_D_EXCEPTIONS = ("singular", "proto")
+
+
+def refus_du_depot(racine: pathlib.Path = RACINE) -> frozenset[str]:
+    """Tout ce dont un `raise` peut refuser : le langage **et** ce depot.
+
+    La liste etait ecrite a la main, et ne portait que quatre noms du langage.
+    Or ce depot nomme ses refus -- `SauvegardeRefusee`, `ImportRefused`,
+    `ExecutionRecoveryRequired`, `EffectInProgress`, `FormatRefuse`,
+    `SubstitutionRefusee`, `AuditChainOutOfDate` -- et la forme 1 compare le nom
+    **ecrit dans le `raise`**, pas la classe. Un `raise ExecutionRecoveryRequired`
+    etait donc invisible alors que c'est un `RuntimeError`.
+
+    Consequence mesuree le 15 septembre 2026 : `singular/sauvegarde.py`, 261
+    lignes qui gardent le seul fichier irremplacable du depot, rendait **zero**
+    mutant. Le silence de l'outil sur ce module se lisait comme une couverture ;
+    c'etait une cecite. Et elle s'aggrave toute seule : plus le depot nomme ses
+    refus, moins l'outil en voit.
+
+    La liste est donc derivee de l'arbre, comme celle de `tools/etat_reel.py`, et
+    par fermeture transitive : une exception qui herite d'une exception de refus
+    refuse aussi. Une classe de refus ajoutee demain entre sans que personne y
+    pense -- c'est tout l'interet de ne plus l'ecrire a la main.
+    """
+    heritages: dict[str, set[str]] = {}
+    for dossier in SOURCES_D_EXCEPTIONS:
+        for chemin in sorted((racine / dossier).rglob("*.py")):
+            try:
+                arbre = ast.parse(chemin.read_text(encoding="utf-8"))
+            except (SyntaxError, OSError):
+                continue
+            for noeud in ast.walk(arbre):
+                if not isinstance(noeud, ast.ClassDef):
+                    continue
+                bases = {base.id for base in noeud.bases if isinstance(base, ast.Name)}
+                bases |= {base.attr for base in noeud.bases if isinstance(base, ast.Attribute)}
+                if bases:
+                    heritages.setdefault(noeud.name, set()).update(bases)
+
+    noms = set(REFUS_DU_LANGAGE)
+    while True:
+        gagnes = {nom for nom, bases in heritages.items() if nom not in noms and bases & noms}
+        if not gagnes:
+            return frozenset(noms)
+        noms |= gagnes
+
+
+REFUS = refus_du_depot()
 
 
 class RendUneMoitieFausse(ast.NodeTransformer):
