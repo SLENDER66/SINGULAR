@@ -744,6 +744,67 @@ def test_un_jeton_deja_ecrit_est_resserre_au_passage(tmp_path) -> None:
     assert stat.S_IMODE(chemin.stat().st_mode) == 0o600
 
 
+def test_le_jeton_cree_porte_assez_de_hasard_pour_ne_pas_se_deviner(tmp_path) -> None:
+    """Un jeton court se devine ; rien ne mesurait sa longueur.
+
+    C'est une propriete de securite ecrite comme une **affirmation** -- un
+    argument passe a `token_urlsafe` -- et pas comme un refus. L'instrument
+    d'audit du depot mute des refus : celle-la lui est structurellement
+    invisible, comme l'etaient les quatre en-tetes de durcissement. La ramener
+    a 4 caracteres laissait toute la suite verte.
+
+    La mesure est faite sur le jeton produit, pas sur l'appel qui le produit :
+    chaque caractere d'un alphabet url-safe vaut six bits. Le seuil est 128,
+    en dessous duquel on ne parle plus de secret.
+    """
+    import math
+
+    from singular.sage.server import read_token
+
+    jeton = read_token(tmp_path / "sage_token")
+    alphabet = len(set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"))
+    bits = len(jeton) * math.log2(alphabet)
+    assert bits >= 128, f"{len(jeton)} caracteres, soit {bits:.0f} bits : c'est devinable"
+
+    # Et deux installations ne partagent pas le meme : un jeton constant serait
+    # long et sans valeur.
+    autre = read_token(tmp_path / "ailleurs" / "sage_token")
+    assert autre != jeton
+
+
+def test_le_jeton_se_compare_en_temps_constant() -> None:
+    """Un `==` sur un secret rend sa reponse plus vite quand le debut est bon.
+
+    Le test lit la source parce qu'aucune mesure de temps n'est honnete ici :
+    un chronometre sur ce serveur rendrait un test qui echoue un jour sur dix
+    selon la charge de la machine, et ce depot tient qu'un test instable est
+    pire que pas de test. Ce qui se verifie, c'est que la comparaison passe par
+    la fonction qui existe pour ca.
+
+    Meme forme que la longueur ci-dessus : une affirmation, pas un refus, donc
+    invisible a l'instrument qui mute les refus.
+    """
+    import ast
+    import inspect
+
+    from singular.sage.server import SageApp
+
+    source = inspect.getsource(SageApp.authorised)
+    arbre = ast.parse(source.lstrip())
+    appels = {getattr(n.func, "attr", "") or getattr(n.func, "id", "")
+              for n in ast.walk(arbre) if isinstance(n, ast.Call)}
+    assert "compare_digest" in appels, (
+        "le jeton se compare sans `secrets.compare_digest` : la duree de la "
+        "reponse dit alors combien de caracteres sont justes")
+
+    egalites = [n for n in ast.walk(arbre)
+                if isinstance(n, ast.Compare)
+                and any(isinstance(op, ast.Eq) for op in n.ops)
+                and any(isinstance(c, ast.Name) and c.id in {"supplied", "token"}
+                        for c in (n.left, *n.comparators))]
+    assert not egalites, "le jeton est aussi compare avec `==`, ce qui suffit a fuir"
+
+
 def test_an_empty_journal_says_where_it_looked(tmp_path):
     """« Le journal est vide » ne dit pas s'il a tout perdu ou si on cherche mal.
 
