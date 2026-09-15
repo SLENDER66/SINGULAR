@@ -517,14 +517,20 @@ def cmd_sauvegarde(journal: DecisionJournal, args) -> int:
         # jamais ete ecrit.
         print(_colour(f"    (pas encore ici : {', '.join(faite.absents)})", DIM))
     if faite.chaine_intacte:
-        print(_colour("  Copie relue et confrontée à l'original : identique, chaîne intacte.\n", DIM))
+        print(_colour("  Copie relue et confrontée à l'original : identique, chaîne intacte.", DIM))
     else:
         # Le journal va mal et la copie le dit. On sauvegarde quand meme -- c'est
         # exactement ce qu'il faut avoir en main avant d'y toucher -- mais on ne
         # laisse personne lire « sauvegarde reussie » comme « tout va bien ».
         print(_colour("  La copie est fidèle, mais la CHAÎNE DE L'ORIGINAL EST ROMPUE.", RED))
         print(_colour("  Cette copie est donc la photographie d'un journal abîmé. Garde-la :\n"
-                      "  c'est la pièce à conviction, et elle vaut mieux que rien.\n", DIM))
+                      "  c'est la pièce à conviction, et elle vaut mieux que rien.", DIM))
+    # L'empreinte de tete, pour qui veut verifier qu'une copie retrouvee est bien
+    # celle-ci. Elle etait calculee et jamais montree -- donc jamais lue, donc
+    # personne n'a vu qu'elle valait la chaine vide pendant tout ce temps. Un
+    # chiffre affiche est un chiffre qu'on peut prendre en defaut.
+    if faite.empreinte:
+        print(_colour(f"  Tête de chaîne : {faite.empreinte[:16]}...", DIM))
     print(_colour("\n  Pour restaurer le journal : reprends-le dans un journal neuf avec\n"
                   f"  python3 -m singular import {faite.journal}\n"
                   "  Les autres fichiers se remettent à leur place dans ~/.singular/.\n", DIM))

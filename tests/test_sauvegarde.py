@@ -643,3 +643,30 @@ def test_un_journal_falsifie_pendant_la_copie_n_accuse_pas_la_copie(tmp_path, mo
     assert refus.value.reason == "journal_modifie", (
         "c'est la source qui a bougé, pas la copie qui est infidèle")
     assert _restes(tmp_path / "sauvegardes") == []
+
+
+def test_l_ecran_montre_la_tete_de_chaine_de_la_copie(tmp_path, capsys) -> None:
+    """Une empreinte calculee et jamais montree n'est lue par personne.
+
+    Elle valait la chaine vide depuis toujours, et rien ne l'a dit parce que rien
+    ne l'affichait : `Sauvegarde.empreinte` etait construite, puis abandonnee.
+    Corrigee, elle ne servait toujours a rien tant qu'elle restait interne.
+
+    Montree, elle sert : celui qui retrouve un dossier de sauvegarde peut
+    comparer cette tete a celle de son journal et savoir si c'est bien la copie
+    qu'il croit. Un chiffre affiche est un chiffre qu'on peut prendre en defaut.
+    """
+    from singular.__main__ import main
+
+    source = _trois_decisions(tmp_path)
+    tete = DecisionJournal(source, lecture_seule=True).head_fingerprint()
+    assert tete, "le cas n'a de sens que si le journal a une tete"
+    capsys.readouterr()
+
+    code = main(["--db", str(source), "sauvegarde", "--vers", str(tmp_path / "s")])
+    sortie = capsys.readouterr().out
+
+    assert code == 0
+    assert tete[:16] in sortie, (
+        "l'ecran ne montre pas la tete de chaine : l'empreinte reste invisible, "
+        "donc invérifiable")
