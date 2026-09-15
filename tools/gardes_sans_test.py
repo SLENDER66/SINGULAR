@@ -194,6 +194,7 @@ SOUS_SUITE_FRONTIERE = (
     "tests/test_capability_field_separation.py", "tests/test_decision_attestation.py",
     "tests/test_adversarial.py", "tests/test_v47_adversarial_core.py",
     "tests/test_v41_approval_integrity.py", "tests/test_approval_durability.py",
+    "tests/test_approbation_gardes_sans_temoin.py",
     "tests/test_strict_execution_boundary_effects.py", "tests/test_effect_execution_boundary.py",
     "tests/test_execution_capability.py", "tests/test_effect_capability_time_of_use.py",
     "tests/test_effect_reconciliation_boundary.py", "tests/test_reconciliation_policy_drift.py",
@@ -268,6 +269,7 @@ CIBLES_APPROBATION = (
 )
 
 SOUS_SUITE_APPROBATION = (
+    "tests/test_approbation_gardes_sans_temoin.py",
     "tests/test_v41_approval_integrity.py", "tests/test_approval_durability.py",
     "tests/test_execution_bypass_resistance.py", "tests/test_v33_durable.py",
     "tests/test_v36_capabilities.py", "tests/test_v37_red_team.py",
