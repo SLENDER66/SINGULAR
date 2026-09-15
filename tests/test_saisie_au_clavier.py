@@ -381,6 +381,39 @@ def test_the_form_can_only_produce_what_the_journal_accepts():
     assert attribut("horizon_days", "min") >= 1
 
 
+def test_le_choix_de_reversibilite_offre_exactement_ce_que_le_journal_connait():
+    """La seule enumeration que le HTML recopie a la main.
+
+    Le `<select>` des rangs est vide dans la page et rempli par le JS depuis
+    l'API : un seul domicile, rien a verifier. Celui-ci ecrit ses trois valeurs
+    en dur. Une quatrieme ajoutee au journal ne serait pas proposee au telephone,
+    et une renommee ferait envoyer depuis la page une valeur que le serveur
+    refuse -- apres l'appui sur « Enregistrer ».
+
+    C'est la troisieme forme de la meme derive trouvee ici : le curseur portait
+    une borne que le clavier ignorait, les deux zones de texte recopient la
+    limite du serveur, et cette liste recopie une enumeration. Le remede est le
+    meme -- comparer les deux fichiers plutot que de relire l'un des deux.
+    """
+    import pathlib
+    import re
+
+    from singular.journal import Reversibility
+
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "singular/sage/web/index.html").read_text(encoding="utf-8")
+
+    liste = re.search(r'<select name="reversibility">(.*?)</select>', page, re.S)
+    assert liste, "le choix de réversibilité a changé de forme : relire ce test"
+
+    valeurs = re.findall(r'<option value="([^"]*)"', liste.group(1))
+    assert "" in valeurs, (
+        "« je ne sais pas encore » a disparu : le champ est facultatif, et une "
+        "liste sans vide force un choix que le journal n'exige pas")
+
+    assert sorted(v for v in valeurs if v) == sorted(r.value for r in Reversibility)
+
+
 def test_les_deux_zones_de_texte_s_arretent_ou_le_serveur_refuse():
     """Le meme nombre vit en HTML et en Python, et rien ne les comparait.
 
