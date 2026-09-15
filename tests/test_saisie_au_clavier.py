@@ -350,7 +350,15 @@ def test_the_form_can_only_produce_what_the_journal_accepts():
     Ses bornes doivent rester dans ce que le journal accepte : un curseur qui
     irait jusqu'a 100 produirait une valeur refusee, et le refus arriverait
     apres l'appui sur « Enregistrer ».
+
+    **Rester dedans ne suffisait pas.** `min=5 max=95` passait cette condition
+    pendant que le clavier acceptait `0.99` : le curseur portait la borne, les
+    deux refus l'annoncaient sans l'appliquer, et rien ne les comparait. Sur la
+    probabilite c'est donc une egalite, lue dans la constante -- deplacer l'un
+    sans l'autre fait rougir ici. Les deux autres champs n'ont pas de borne
+    haute, donc l'inclusion reste ce qui se verifie.
     """
+    from singular.saisie import PROBABILITE_MAX, PROBABILITE_MIN
     import pathlib
     import re
 
@@ -365,8 +373,10 @@ def test_the_form_can_only_produce_what_the_journal_accepts():
         return float(trouve.group(1))
 
     # Le curseur est en pourcents ; le journal veut une fraction.
-    assert 0 < attribut("probability", "min") / 100 < 1
-    assert 0 < attribut("probability", "max") / 100 < 1
+    assert attribut("probability", "min") / 100 == PROBABILITE_MIN, (
+        "le curseur ne commence pas ou le clavier commence a refuser")
+    assert attribut("probability", "max") / 100 == PROBABILITE_MAX, (
+        "le curseur ne s'arrete pas ou le clavier commence a refuser")
     assert attribut("cost_hours", "min") >= 0
     assert attribut("horizon_days", "min") >= 1
 

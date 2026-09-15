@@ -509,32 +509,3 @@ def test_la_vignette_garde_le_total_et_l_alerte_quand_rien_n_est_corrige() -> No
         assert calibration["warn"], "un écart démontré et non corrigé reste une alerte"
         assert "plus récentes" not in calibration["label"]
 
-
-def test_le_curseur_et_le_refus_du_clavier_portent_la_meme_borne() -> None:
-    """Trois portes mènent au même journal ; une seule appliquait la borne.
-
-    Le curseur de cette page dit `min=5 max=95` depuis toujours. Les deux refus
-    du clavier annonçaient « entre 0.05 et 0.95 » et n'appliquaient que
-    `0 < p < 1` : `0.99` entrait par le clavier et par l'API après s'être fait
-    répondre, la fois d'avant, qu'il fallait rester entre 0.05 et 0.95.
-
-    Une borne vraie à une porte sur trois est une phrase fausse aux deux autres.
-    Elles sont désormais la même, et ce test est la raison pour laquelle elles le
-    restent : déplacer le curseur sans déplacer la constante fait rougir ici.
-    """
-    import re
-
-    from singular.saisie import PROBABILITE_MAX, PROBABILITE_MIN
-
-    page = (CLIENT.parent / "index.html").read_text(encoding="utf-8")
-    curseur = re.search(r'<input[^>]*id="probability"[^>]*>', page)
-    assert curseur, "le curseur de probabilité a changé de forme : relire ce test"
-
-    borne = dict(re.findall(r'(min|max)="([0-9.]+)"', curseur.group(0)))
-    assert borne, "le curseur n'annonce plus ses bornes"
-    assert float(borne["min"]) / 100 == PROBABILITE_MIN, (
-        f"le curseur commence à {borne['min']} %, le clavier refuse sous "
-        f"{PROBABILITE_MIN:g}")
-    assert float(borne["max"]) / 100 == PROBABILITE_MAX, (
-        f"le curseur s'arrête à {borne['max']} %, le clavier refuse au-dessus de "
-        f"{PROBABILITE_MAX:g}")
