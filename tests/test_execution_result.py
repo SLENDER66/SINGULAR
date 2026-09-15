@@ -285,3 +285,4 @@ def test_authorize_accepte_une_execution_autorisee_qui_porte_sa_reference() -> N
     assert autorisee.authorization_id == "APR-12345678"
     assert autorisee.action_id == "a1"
     assert autorisee.idempotency_key == "k1"
+

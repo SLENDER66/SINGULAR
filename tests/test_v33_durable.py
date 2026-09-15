@@ -514,3 +514,21 @@ def test_une_execution_dont_la_mission_a_disparu_est_refusee(tmp_path: Path):
 
     assert store.get_execution("cle-orpheline")["status"] == "RECOVERY_REQUIRED", (
         "l'execution reste en attente plutôt que de passer COMPLETED sans mission")
+
+
+def test_l_etat_d_une_mission_inconnue_est_refuse(tmp_path: Path):
+    """`state()` refuse une mission inconnue -- et ce test ne prouve pas plus.
+
+    Ce qu'il epingle est le comportement : demander l'etat d'une mission qui
+    n'existe pas leve, plutot que de rendre un `MissionState` fabrique.
+
+    Ce qu'il **n'isole pas**, et c'est mesure : neutraliser le refus de `state()`
+    laisse la suite verte, parce que `get_mission_status`, appele juste apres,
+    leve le meme `KeyError` sur le meme identifiant. Les deux se couvrent, et
+    rien ne les distingue -- meme exception, meme argument. C'est la quatrieme
+    reponse du triage, pas un trou : neutraliser les deux fait rougir ce test.
+    """
+    runtime = DurableMissionRuntime(DurableStore(tmp_path / "singular.db"))
+
+    with pytest.raises(KeyError):
+        runtime.state("MIS-QUI-N-EXISTE-PAS")

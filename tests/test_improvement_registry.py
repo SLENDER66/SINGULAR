@@ -608,3 +608,46 @@ def test_un_artefact_indexe_autrement_que_par_des_chaines_est_refuse(artefact):
     """
     with pytest.raises(ValueError, match="keyed by strings"):
         artifact_fingerprint(artefact)
+
+
+# --- le cycle refuse un candidat qu'il n'a jamais inscrit ----------------------
+#
+# Les trois etapes du cycle de la section 13 -- evaluation, revue, promotion --
+# refusent chacune un identifiant inconnu, et aucune ne l'essayait. Elles etaient
+# invisibles a l'outil de mutation tant que sa liste de refus ne portait pas
+# `KeyError`.
+#
+# Ce qu'elles tiennent ensemble est le premier maillon de la chaine que le mandat
+# exige verifiable : on ne peut pas evaluer, reviser ni promouvoir ce qui n'a
+# jamais ete inscrit. Sans elles, une evaluation flotterait sans candidat, et une
+# promotion activerait un identifiant que rien ne decrit.
+
+ETAPES_DU_CYCLE = {
+    "evaluate": lambda r: r.evaluate(evaluation(candidate_id="IMP-JAMAIS-INSCRIT")),
+    "review": lambda r: r.review("IMP-JAMAIS-INSCRIT", "ACCEPTED"),
+    "promote": lambda r: r.promote("IMP-JAMAIS-INSCRIT"),
+}
+
+
+@pytest.mark.parametrize("etape", sorted(ETAPES_DU_CYCLE))
+def test_une_etape_du_cycle_refuse_un_candidat_inconnu(tmp_path, etape):
+    """Et rien n'est ecrit au passage : un refus qui laisse une trace est pire."""
+    registry = ImprovementRegistry(tmp_path / "improvements.db")
+    _accepted(registry)  # un candidat legitime existe a cote
+
+    with pytest.raises(KeyError):
+        ETAPES_DU_CYCLE[etape](registry)
+
+    with registry._connect() as conn:
+        for table in ("improvement_candidates", "improvement_evaluations"):
+            reste = conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE candidate_id=?",
+                ("IMP-JAMAIS-INSCRIT",),
+            ).fetchone()["n"]
+            assert reste == 0, f"{etape} a ecrit dans {table} pour un candidat inconnu"
+
+    with registry._connect() as conn:
+        intact = conn.execute(
+            "SELECT COUNT(*) AS n FROM improvement_candidates WHERE candidate_id='IMP-1'"
+        ).fetchone()["n"]
+    assert intact == 1, "le refus a touche le candidat legitime d'a cote"

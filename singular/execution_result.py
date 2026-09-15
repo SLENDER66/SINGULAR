@@ -67,12 +67,6 @@ class ExecutionResultBridge:
     def __init__(self) -> None:
         self._results: dict[str, ExecutionResult] = {}
 
-    @staticmethod
-    def _action_id(recommendation: DecisionRecommendation) -> str:
-        if recommendation.selected_option_id is None:
-            raise ValueError("recommendation has no selected action")
-        return recommendation.selected_option_id
-
     def prepare(
         self,
         recommendation: DecisionRecommendation,
