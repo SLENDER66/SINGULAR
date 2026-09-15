@@ -608,3 +608,38 @@ def test_une_copie_dont_la_chaine_est_cassee_est_refusee(tmp_path, monkeypatch) 
 
     assert refus.value.reason == "copie_infidele"
     assert _restes(tmp_path / "sauvegardes") == []
+
+
+def test_un_journal_falsifie_pendant_la_copie_n_accuse_pas_la_copie(tmp_path, monkeypatch) -> None:
+    """La moitié « chaîne » de la relecture, et elle décide seule.
+
+    Quand la copie ne correspond pas, la source est relue pour savoir laquelle
+    des deux a bougé. Deux moitiés : les lignes, et le verdict de chaîne. Les
+    lignes couvrent le cas courant — une décision ajoutée pendant la copie.
+
+    Le verdict de chaîne couvre celui que les lignes ne peuvent pas voir :
+    `export_rows()` ne porte aucune empreinte, donc une falsification qui
+    réécrit les empreintes de la **source** laisse les lignes identiques. Sans
+    cette moitié, la sauvegarde accuserait la copie — « la copie ne rend pas la
+    même chose que l'original » — alors que c'est l'original qui a été touché.
+    Accuser la copie enverrait chercher le défaut à l'endroit où il n'est pas.
+    """
+    from singular import sauvegarde as module
+
+    source = _trois_decisions(tmp_path)
+    vrai_copier = module._copier
+
+    def falsifier_la_source_puis_copier(origine, vers):
+        base = sqlite3.connect(origine)
+        base.execute("UPDATE journal_entries SET fingerprint='0' * 64")
+        base.commit()
+        base.close()
+        vrai_copier(origine, vers)
+
+    monkeypatch.setattr(module, "_copier", falsifier_la_source_puis_copier)
+    with pytest.raises(SauvegardeRefusee) as refus:
+        sauvegarder(source, dossier=tmp_path / "sauvegardes")
+
+    assert refus.value.reason == "journal_modifie", (
+        "c'est la source qui a bougé, pas la copie qui est infidèle")
+    assert _restes(tmp_path / "sauvegardes") == []

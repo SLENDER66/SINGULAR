@@ -157,9 +157,10 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    sert. Le controle prealable evite d'ouvrir une transaction pour rien ; il ne
    decide rien que la cle primaire ne decide deja.
 
-   `effects.py` : `if row is None` apres un `INSERT OR IGNORE` suivi du `SELECT`
-   de la meme clef, dans la meme transaction. Insere ou deja la, la ligne est
-   trouvee ; `None` demanderait que l'ecriture s'evapore sous le verrou. C'est
+   `effects.py` : `if row is None` apres une insertion « or ignore » suivie de la
+   relecture de la meme clef, dans la meme transaction. Inseree ou deja la, la
+   ligne est trouvee ; `None` demanderait que l'ecriture s'evapore sous le
+   verrou. C'est
    une assurance contre un etat impossible, de la meme famille que les
    `rowcount != 1` du journal, et l'atteindre demanderait de saboter SQLite.
 
@@ -452,6 +453,10 @@ SOUS_SUITE_MATINS = (
     "tests/test_une_seule_regle_par_phrase.py", "tests/test_commandes_de_sa_fenetre.py",
     "tests/test_messages_recopies.py", "tests/test_windows_console.py",
     "tests/test_sauvegarde.py",
+    # Les refus du Sage qui gardent l'argent et le fil de conversation. Sans ce
+    # fichier, sept d'entre eux etaient annonces « sous-suite trop etroite » a
+    # chaque passage, et chacun coutait une passe entiere de la suite.
+    "tests/test_sage_parle.py",
     # La calibration datee. Sans elle, l'outil annoncait « sous-suite trop
     # etroite » sur les conditions de `corrige` : elles etaient couvertes, mais
     # par un fichier que la passe rapide ne lancait pas, donc chacune coutait une
