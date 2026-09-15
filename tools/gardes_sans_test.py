@@ -150,6 +150,22 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    branche ESCALATE l'est ; c'est une raison d'en retirer un jour le chemin
    legacy, pas d'ecrire un test qui desactiverait la porte pour y arriver.
 
+   **Les deux moities de `mode == BLOCK or not can_prepare`, aux deux portes
+   (`_validate_governance` et `_authorize_reconciliation`), sont dans ce cas.** Le
+   soupcon naturel est que la reconciliation n'appelle pas
+   `_assert_policy_unchanged`, contrairement aux deux chemins d'execution : un
+   durcissement de politique refuserait une execution neuve et laisserait passer
+   une reconciliation, laquelle peut finaliser une mission en COMPLETED. La
+   question a deja ete posee et tranchee **par la mesure**, dans
+   `tests/test_reconciliation_policy_drift.py` : `ValidatedTrajectoryDecision._
+   validate` recalcule `ActionPolicy.evaluate`, donc `verify()` echoue des que la
+   politique a bouge, et les trois portes commencent par `verify()`.
+   `_assert_policy_unchanged` est une defense en profondeur, pas la seule garde --
+   et le cout reel du durcissement est l'inverse de celui qu'on cherchait : un
+   effet externe ambigu devient definitivement irreconciliable, ce que ce
+   fichier-la fige aussi. Ne refais pas ce triage ; il coute une demi-heure et il
+   est deja ecrit.
+
    Meme chose pour `mode == Autonomy.BLOCK` : les trois facons de produire un
    BLOCK que le depot sait produire -- politique, red team, bus -- rendent toutes
    `can_prepare=False`, donc la moitie voisine refuse deja. `v32_governed_core`
