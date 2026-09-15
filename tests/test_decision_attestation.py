@@ -431,3 +431,43 @@ def test_revoquer_une_autre_decision_ne_touche_pas_la_bonne(tmp_path):
         store.revoke("DEC-QUI-N-EXISTE-PAS")
 
     assert store.verify(gardee) is True, "la révocation ratée a touché une autre ligne"
+
+
+# --- la fenetre de validite, entre la verification et l'emission ---------------
+
+@pytest.mark.parametrize("quand", ["pas_encore_active", "deja_expiree"])
+def test_une_decision_qui_sort_de_sa_fenetre_entre_les_deux_controles_est_refusee(
+        tmp_path, monkeypatch, quand):
+    """Le second contrôle de la fenêtre, et ce qu'il défend est une course.
+
+    `issue()` commence par `decision.verify()`, qui refuse déjà une décision
+    inactive — `_validate` lève « not active yet » et « has expired ». Le contrôle
+    qui suit, `now < issued_at or now >= expires_at`, ne peut donc jamais se
+    déclencher sur la même horloge : les deux moitiés survivaient à toute
+    mutation, et ça ressemblait à un garde décoratif.
+
+    Ce n'en est pas un. Les deux lectures de l'horloge sont **distinctes** :
+    `verify()` prend la sienne, `issue()` prend la sienne juste après. Une
+    décision qui expire entre les deux passe la première et doit échouer à la
+    seconde. C'est un TOCTOU d'une poignée de microsecondes, et c'est exactement
+    ce que la section 7 du mandat demande de chercher.
+
+    Le test le rend constructible en figeant la seconde lecture, sans toucher à
+    la première : la décision est vraiment valide quand `verify()` la regarde.
+    """
+    from singular import decision_attestation as module
+
+    decision = _build_decision()
+    store = DecisionAttestationStore(tmp_path / "attestations.db")
+    assert decision.verify() is True, "la décision doit être valide au premier regard"
+
+    dehors = (decision.issued_at - 1.0 if quand == "pas_encore_active"
+              else decision.expires_at + 1.0)
+    monkeypatch.setattr(module, "time", lambda: dehors)
+
+    with pytest.raises(ValueError, match="inactive"):
+        store.issue(decision)
+
+    monkeypatch.undo()
+    assert store.get(decision.decision_id) is None, (
+        "rien ne doit avoir été écrit pour une décision hors de sa fenêtre")
