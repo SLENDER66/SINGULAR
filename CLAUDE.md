@@ -22,9 +22,23 @@ claude/singular-mandate-setup-d51s9t
 Pull Request en cours :
 
 **#6**, `claude/azazel-genesis-constitution-d8jndl` → la branche de travail.
-Elle porte la calibration datée et la descente de sa règle dans le moteur. Tant
-qu'elle n'est pas fusionnée, le hook de démarrage signale ce travail comme hors
-mandat — c'est exact, et c'est un clic, pas un problème à réparer.
+Elle a commencé par la calibration datée et la descente de sa règle dans le
+moteur ; elle porte depuis bien davantage, et le décrire par son point de départ
+serait faux. Ce qu'elle contient aujourd'hui, dans l'ordre de ce qui compte :
+
+* **l'instrument d'audit était aveugle trois fois** — étiquettes qui ne
+  désignaient pas ce qu'elles neutralisaient, aucun refus que le dépôt nomme
+  lui-même, et les refus qui agissent avant de lever. Ce qu'il cachait touchait
+  le jeton d'accès du Sage, la sauvegarde du journal et la frontière ;
+* **AZAZEL Genesis**, le paquet expérimental et son banc différentiel ;
+* la fusion de la branche de travail, et la correction du coût qu'elle traînait
+  (`etat_reel` reparsait tout `singular/` une fois par module : suite de 248 s à
+  87 s) ;
+* une soixantaine de témoins écrits, chacun vérifié par l'inverse, et le triage
+  écrit à côté du code pour ceux qui n'en auront jamais.
+
+Tant qu'elle n'est pas fusionnée, le hook de démarrage signale ce travail comme
+hors mandat — c'est exact, et c'est un clic, pas un problème à réparer.
 
 La PR #4 est fermée et son travail est intégré. `feat/validated-execution-boundary`
 est une branche morte : n'y retourne pas.
