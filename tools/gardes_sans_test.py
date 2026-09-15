@@ -77,15 +77,24 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    la frontiere. C'est ce que le README annonce -- « human approval is currently
    not an authorization channel » -- et cet outil le mesure au lieu de le croire.
 
+   **Et c'est la reponse a la question que pose la section 44 de la
+   specification.** Relier le canal d'approbation au pipeline valide rendrait ces
+   quatre refus atteignables : ils passeraient de cette famille-ci, l'assurance, a
+   la premiere, le trou. La sequence sure est donc dans cet ordre -- ecrire les
+   temoins d'abord, relier ensuite -- et non l'inverse. Le jour ou la frontiere
+   acceptera une decision escaladee, relancer cet outil est le premier geste, pas
+   le dernier.
+
 Il ne tourne pas dans le CI : compte une dizaine de minutes par groupe. C'est un
 instrument d'audit, a relancer quand on touche a ce qu'il mesure.
 
-    python3 tools/gardes_sans_test.py              # les deux groupes
+    python3 tools/gardes_sans_test.py              # tous les groupes
     python3 tools/gardes_sans_test.py frontiere    # decision, autorisation, effet
+    python3 tools/gardes_sans_test.py approbation  # le canal d'approbation seul
     python3 tools/gardes_sans_test.py matins       # journal, saisie, Scout, Notice, Sage
 
-**Deux groupes, parce que la priorite du depot est celle de la section 0 du
-mandat** : ce qui tourne sans jeton passe avant ce qui en consomme. Le moteur
+**Les deux grands groupes suivent la priorite de la section 0 du mandat** : ce qui
+tourne sans jeton passe avant ce qui en consomme. Le moteur
 qu'il lance chaque matin s'en sort mieux que la frontiere -- c'est la partie la
 mieux testee du depot -- et il avait quand meme des refus sans temoin, dont deux
 gardes qui refusaient l'infini tape au clavier.
@@ -242,8 +251,32 @@ SOUS_SUITE_MATINS = (
     "tests/test_messages_recopies.py", "tests/test_windows_console.py",
 )
 
+#: Le canal d'approbation seul, pour ne pas repayer la frontiere entiere.
+#:
+#: Les deux modules viennent d'entrer dans `CIBLES_FRONTIERE`, et le groupe entier
+#: depasse desormais vingt-cinq minutes -- mesure faite, le processus a ete tue
+#: avant sa fin. Un instrument qu'on ne peut plus lancer parce qu'il coute trop
+#: cher cesse d'etre un instrument : on ne le relance plus, et ses cibles
+#: recentes ne sont jamais mesurees.
+#:
+#: Ce groupe ne remplace pas `frontiere` -- les deux modules y restent, et c'est
+#: la seule liste qui fasse foi pour la question « tout est-il mesure ». Il sert a
+#: mesurer ce qu'on vient de toucher, tout de suite, au lieu d'attendre une demi-heure.
+CIBLES_APPROBATION = (
+    "singular/approval_integrity.py",
+    "singular/approval_binding.py",
+)
+
+SOUS_SUITE_APPROBATION = (
+    "tests/test_v41_approval_integrity.py", "tests/test_approval_durability.py",
+    "tests/test_execution_bypass_resistance.py", "tests/test_v33_durable.py",
+    "tests/test_v36_capabilities.py", "tests/test_v37_red_team.py",
+    "tests/test_audit_chain_growth.py", "tests/test_v13.py",
+)
+
 GROUPES = {
     "frontiere": (CIBLES_FRONTIERE, SOUS_SUITE_FRONTIERE),
+    "approbation": (CIBLES_APPROBATION, SOUS_SUITE_APPROBATION),
     "matins": (CIBLES_MATINS, SOUS_SUITE_MATINS),
 }
 
