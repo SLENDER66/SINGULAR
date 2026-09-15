@@ -379,15 +379,47 @@ def test_la_liste_est_derivee_et_non_ecrite_a_la_main() -> None:
         f"ces noms sont ecrits dans tools/etat_reel.py au lieu d'etre derives : {ecrits}")
 
 
-def test_un_module_sans_aucun_temoin_est_signale_comme_tel() -> None:
-    """Zero test qui le nomme est le seul cas que le rapport souligne."""
-    muets = [module for module, temoins in modules_hors_registre() if not temoins]
+def test_un_module_sans_aucun_temoin_est_signale_comme_tel(monkeypatch) -> None:
+    """Zero test qui le nomme est le seul cas que le rapport souligne.
+
+    Ce test bouclait sur les modules muets du depot, et il en restait deux :
+    `protocol` et `store`. Le 15 septembre 2026 ils sont partis a l'attic --
+    c'est ce que le registre demandait -- et la boucle s'est retrouvee vide. Le
+    test passait alors sans rien mesurer, ce qui est la panne que ce fichier
+    existe pour empecher : un garde vert parce que son entree a disparu.
+
+    Le cas est donc **fabrique** : un module muet est injecte, et on verifie que
+    le rapport le souligne. La mesure ne depend plus de l'etat du depot -- et le
+    jour ou un module redevient muet, c'est le garde du dessus qui le dira.
+    """
+    muet = "singular/module_fabrique_pour_ce_test.py"
+    monkeypatch.setattr("tools.etat_reel.modules_hors_registre",
+                        lambda: [(muet, 0), ("singular/un_autre.py", 3)])
+
     texte = "\n".join(rapport())
-    for module in muets:
-        ligne = next(brut for brut in texte.splitlines() if module in brut)
-        assert ligne.startswith("  ! "), (
-            f"{module} n'a aucun temoin et n'est pas souligne : {ligne!r}")
-        assert "AUCUN test" in ligne
+    ligne = next(brut for brut in texte.splitlines() if muet in brut)
+    assert ligne.startswith("  ! "), f"un module muet n'est pas souligne : {ligne!r}"
+    assert "AUCUN test" in ligne
+
+    voisine = next(brut for brut in texte.splitlines() if "un_autre.py" in brut)
+    assert voisine.startswith("  · "), (
+        f"un module qu'un test nomme ne doit pas etre souligne : {voisine!r}")
+    assert "3 test(s) le nomment" in voisine
+
+
+def test_le_depot_n_a_plus_de_module_muet() -> None:
+    """Ce que le test ci-dessus ne dit plus depuis qu'il fabrique son cas.
+
+    Installe, inatteignable, et nomme par aucun test : c'est le cas que le
+    registre appelle le plus dur, et `attic/` existe pour lui. La liste est vide
+    depuis le 15 septembre 2026 ; si elle se remplit, c'est ici qu'on l'apprend,
+    et non par une ligne de rapport que personne ne lit.
+    """
+    muets = sorted(module for module, temoins in modules_hors_registre() if not temoins)
+    assert not muets, (
+        f"ces modules s'installent, rien ne les atteint, aucun test ne les nomme : "
+        f"{muets}. `attic/` existe pour le code mis de cote ; celui-ci est reste "
+        "dans le paquet.")
 
 
 def test_aucun_module_ne_peut_etre_fait_taire_en_douce() -> None:

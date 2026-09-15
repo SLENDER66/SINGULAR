@@ -31,6 +31,16 @@ rank things nobody asked them to rank.
 `human_optimizer`, `openai_runtime` (25 lines that build an agent object nothing
 calls), `demo`.
 
+**Two modules the reality registry kept naming** — `protocol` and `store`, moved
+on 15 September 2026. `tools/etat_reel.py` lists what installs with the package,
+is reached by nothing, and is named by no test; these two were its only entries
+marked `!`, the case its own text calls the hardest. `protocol.SingularRuntime`
+wraps `Commander` the way the validated pipeline does now, and
+`store.JsonWorldStore` writes the world model to `data/world_model.json` —
+a second durable path, outside the hash chain the journal exists to keep, and
+one that creates a directory as a side effect of being constructed. Neither was
+imported anywhere; neither had a test.
+
 Their tests moved with them and still pass if run directly; they are outside
 `testpaths` so the suite does not collect them.
 
