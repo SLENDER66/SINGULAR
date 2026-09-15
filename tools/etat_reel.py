@@ -341,6 +341,56 @@ def _enveloppe(etiquette: str, texte: str, largeur: int = 76) -> list[str]:
     return [premiere, *suite]
 
 
+#: Un fichier que le paquet installe mais qui ne porte aucune capacité par
+#: lui-même : le point d'entrée du CLI, atteint par la ligne de commande et non
+#: par un import, et les `__init__.py`. Les exclure évite d'accuser de silence
+#: deux fichiers dont le silence est normal.
+HORS_COMPTE = ("__init__.py", "__main__.py")
+
+
+def modules_hors_registre() -> list[tuple[str, int]]:
+    """Les modules de `singular/` dont ce registre ne répond pas, et leurs témoins.
+
+    C'est la question que le registre ne se posait pas à lui-même. Il dérivait
+    honnêtement le barreau des capacités **déclarées**, et n'a jamais dit combien
+    de code vivait en dehors d'elles. Un lecteur voyait onze lignes au sommet de
+    l'échelle et en concluait que le dépôt était mesuré. La moitié de ce qui
+    s'installe n'était simplement pas regardée.
+
+    Omettre n'est pas mentir, mais le résultat est le même que flatter, et c'est
+    la forme que la directive nomme deux fois : « NO SILENT FAILURE » et la
+    défense contre l'auto-illusion. Un instrument qui choisit ses cibles doit
+    dire lesquelles il a laissées de côté, sinon sa couverture se lit comme une
+    conclusion.
+
+    Le critère retenu est le plus dur des deux possibles, et il est dérivé :
+
+    * **aucune capacité ne le revendique** -- personne ici n'en répond ;
+    * **aucun module de `singular/` ne l'importe** -- rien ne l'atteint non plus.
+
+    Un module que rien ne revendique mais qu'un module couvert importe est du
+    code de service derrière une capacité qui, elle, a un barreau : il n'est pas
+    dans cette liste, parce qu'il n'est pas invisible. Ce qui reste est ce qui
+    s'installe, que rien n'atteint et dont aucune ligne du registre ne parle.
+
+    Le nombre de tests qui nomment chaque module accompagne la liste au lieu
+    d'être jugé : à zéro, le fichier est installé, inatteignable **et** sans
+    témoin, et c'est le seul cas que le rapport souligne. Ce n'est pas une
+    accusation -- `attic/` prouve qu'on peut ranger du code sans le jeter -- mais
+    ces fichiers-là, eux, sont encore dans le paquet.
+    """
+    revendiques = {nom for capacite in CAPACITES for nom in capacite.modules}
+    dehors: list[tuple[str, int]] = []
+    for chemin in _sources("singular"):
+        relatif = chemin.relative_to(RACINE).as_posix()
+        if chemin.name in HORS_COMPTE or relatif in revendiques:
+            continue
+        if _qui_importe(relatif):
+            continue
+        dehors.append((relatif, len(_tests_qui_nomment(relatif))))
+    return sorted(dehors)
+
+
 def rapport() -> list[str]:
     mesures = cibles_de_l_instrument()
     lignes = ["état réel, dérivé de cet arbre — aucun niveau n'est écrit à la main", ""]
@@ -364,6 +414,32 @@ def rapport() -> list[str]:
         "  dessus. Le barreau au-dessus — chaque refus a son témoin — demande dix",
         "  minutes : python3 tools/gardes_sans_test.py",
     ]
+
+    dehors = modules_hors_registre()
+    lignes += ["", "CE QUE CE REGISTRE NE COUVRE PAS."]
+    if not dehors:
+        lignes.append("  Rien : chaque module installé est revendiqué ou atteint.")
+        return lignes
+
+    lignes += [
+        "  Ces modules s'installent avec le paquet, aucune capacité ci-dessus ne",
+        "  les revendique, et aucun module de singular/ ne les importe. Ils n'ont",
+        "  donc pas de barreau — ni bon, ni mauvais : personne n'en répond.",
+        "",
+    ]
+    for module, temoins in dehors:
+        marque = "  · " if temoins else "  ! "
+        detail = f"{temoins} test(s) le nomment" if temoins else "AUCUN test ne le nomme"
+        lignes.append(f"{marque}{module:<44} {detail}")
+
+    muets = [module for module, temoins in dehors if not temoins]
+    if muets:
+        lignes += [
+            "",
+            "  Les lignes marquées « ! » sont le cas le plus dur : installées,",
+            "  inatteignables, et sans un seul témoin. attic/ existe pour le code",
+            "  mis de côté ; celui-ci est resté dans le paquet.",
+        ]
     return lignes
 
 

@@ -26,6 +26,7 @@ from tools.etat_reel import (
     ECHELLE,
     Capacite,
     cibles_de_l_instrument,
+    modules_hors_registre,
     niveau,
     rapport,
 )
@@ -265,3 +266,169 @@ def test_la_preuve_du_vrai_serveur_est_derivee_et_non_declaree() -> None:
                    "apprentissage", "capital et patrimoine"):
         assert "vrai serveur" not in " ".join(par_nom[muette]), (
             f"« {muette} » obtient une preuve de socket qu'elle ne merite pas")
+
+
+# --- ce que le registre ne couvre pas ---------------------------------------
+#
+# Le registre a longtemps derive honnetement le barreau des capacites declarees
+# sans jamais dire combien de code vivait en dehors d'elles : onze lignes au
+# sommet de l'echelle, et la moitie du paquet hors champ. Omettre n'est pas
+# mentir, mais un lecteur y lit la meme chose qu'une conclusion. Les tests qui
+# suivent gardent la divulgation contre les deux facons de la vider : la rendre
+# fausse, et la rendre declarative.
+
+
+def _modules_installes() -> list[str]:
+    return [chemin.relative_to(RACINE).as_posix()
+            for chemin in sorted((RACINE / "singular").rglob("*.py"))]
+
+
+def _atteints_par_un_import_simple() -> set[str]:
+    """Qui est atteint, selon une lecture volontairement plus permissive.
+
+    Le registre decide par `_qui_importe`, qui exige une correspondance stricte
+    du chemin. Ce test re-derive la meme question autrement -- le nom court
+    suffit, quelle que soit la forme de l'import -- pour ne pas se contenter de
+    reproduire le bug qu'il cherche. Plus permissif veut dire : marque `atteint`
+    au moins tout ce que le registre marque `atteint`.
+    """
+    import ast
+
+    atteints: set[str] = set()
+    for chemin in sorted((RACINE / "singular").rglob("*.py")):
+        try:
+            arbre = ast.parse(chemin.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        noms: set[str] = set()
+        for noeud in ast.walk(arbre):
+            if isinstance(noeud, ast.ImportFrom):
+                if noeud.module:
+                    noms.add(noeud.module.rsplit(".", 1)[-1])
+                noms.update(alias.name for alias in noeud.names)
+            elif isinstance(noeud, ast.Import):
+                noms.update(alias.name.rsplit(".", 1)[-1] for alias in noeud.names)
+        for nom in noms:
+            if nom != chemin.stem:
+                atteints.add(nom)
+    return atteints
+
+
+def test_le_registre_dit_ce_qu_il_ne_couvre_pas() -> None:
+    """La section existe, et elle est imprimee : une divulgation muette n'en est pas une."""
+    texte = "\n".join(rapport())
+    assert "CE QUE CE REGISTRE NE COUVRE PAS." in texte, (
+        "le registre a cesse de dire ce qu'il laisse de cote : sa couverture "
+        "redevient lisible comme une conclusion")
+
+
+def test_aucune_capacite_declaree_n_est_annoncee_comme_non_couverte() -> None:
+    """Se denoncer a tort est l'autre facon de mentir."""
+    revendiques = {nom for capacite in CAPACITES for nom in capacite.modules}
+    dehors = {module for module, _ in modules_hors_registre()}
+    faux = sorted(dehors & revendiques)
+    assert not faux, f"ces modules sont revendiques par une capacite : {faux}"
+
+
+def test_un_module_atteint_par_la_production_n_est_pas_dans_la_liste() -> None:
+    """Le code de service derriere une capacite couverte n'est pas invisible.
+
+    Il est atteint ; son barreau est celui de la capacite qui l'utilise. Le
+    signaler noierait les vrais orphelins dans une liste que personne ne lirait.
+    """
+    atteints = _atteints_par_un_import_simple()
+    intrus = sorted(module for module, _ in modules_hors_registre()
+                    if pathlib.Path(module).stem in atteints)
+    assert not intrus, (
+        f"ces modules sont importes par singular/ et n'ont rien a faire dans la "
+        f"liste des non couverts : {intrus}")
+
+
+def test_le_point_d_entree_n_est_jamais_denonce() -> None:
+    """`__main__.py` est atteint par la ligne de commande, pas par un import."""
+    dehors = {module for module, _ in modules_hors_registre()}
+    for nom in ("singular/__main__.py", "singular/__init__.py"):
+        assert nom not in dehors, (
+            f"{nom} est accuse de silence alors que son silence est normal")
+
+
+def test_chaque_module_denonce_existe_vraiment() -> None:
+    """Une liste qui cite un fichier disparu decrit un depot imaginaire."""
+    for module, _ in modules_hors_registre():
+        assert (RACINE / module).exists(), f"module denonce mais absent : {module}"
+        assert module.startswith("singular/"), (
+            f"{module} n'est pas dans le paquet installe : la liste a change de sujet")
+
+
+def test_la_liste_est_derivee_et_non_ecrite_a_la_main() -> None:
+    """Le garde central : aucun nom denonce ne doit etre une constante du fichier.
+
+    C'est la reprise exacte du test qui interdit de declarer un barreau. Une
+    liste d'angles morts ecrite a la main vieillirait au premier renommage, et
+    surtout : celui qui ajoute un module orphelin n'aurait qu'a ne pas s'y
+    inscrire. La derivation est ce qui rend l'oubli impossible plutot que
+    deconseille.
+    """
+    source = (RACINE / "tools" / "etat_reel.py").read_text(encoding="utf-8")
+    dehors = modules_hors_registre()
+    assert dehors, (
+        "plus aucun module non couvert : si c'est vrai, tant mieux, mais ce test "
+        "ne prouve plus rien -- verifie que la derivation n'a pas ete videe")
+    ecrits = [module for module, _ in dehors if module in source]
+    assert not ecrits, (
+        f"ces noms sont ecrits dans tools/etat_reel.py au lieu d'etre derives : {ecrits}")
+
+
+def test_un_module_sans_aucun_temoin_est_signale_comme_tel() -> None:
+    """Zero test qui le nomme est le seul cas que le rapport souligne."""
+    muets = [module for module, temoins in modules_hors_registre() if not temoins]
+    texte = "\n".join(rapport())
+    for module in muets:
+        ligne = next(brut for brut in texte.splitlines() if module in brut)
+        assert ligne.startswith("  ! "), (
+            f"{module} n'a aucun temoin et n'est pas souligne : {ligne!r}")
+        assert "AUCUN test" in ligne
+
+
+def test_aucun_module_ne_peut_etre_fait_taire_en_douce() -> None:
+    """Le contournement que le test precedent laissait passer, et qui a ete essaye.
+
+    `test_la_liste_est_derivee_et_non_ecrite_a_la_main` n'inspecte que les noms
+    encore denonces. Il ne voit donc pas la triche inverse, qui est la seule
+    interessante : ajouter `singular/protocol.py` aux « revendiques » a
+    l'interieur de la fonction. Le module disparait de la liste, plus personne ne
+    le denonce, et le garde reste vert. La mutation a ete jouee : elle est passee.
+
+    Le vrai invariant n'est donc pas « les noms denonces sont derives », c'est :
+    **le seul endroit ou un chemin de `singular/` peut etre ecrit est la
+    declaration des capacites**. Un module revendique la-bas est public,
+    auditable, et doit porter ses `limites` et sa `prochaine` -- que d'autres
+    tests exigent. Un module tu ailleurs est une exemption invisible.
+
+    Les docstrings sont exclues : `_nom_importable` cite un chemin pour
+    s'expliquer, et une explication n'exempte rien.
+    """
+    import ast
+
+    source = (RACINE / "tools" / "etat_reel.py").read_text(encoding="utf-8")
+    arbre = ast.parse(source)
+
+    documentations = set()
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            texte = ast.get_docstring(noeud, clean=False)
+            if texte:
+                documentations.add(texte)
+
+    ecrits = {noeud.value for noeud in ast.walk(arbre)
+              if isinstance(noeud, ast.Constant) and isinstance(noeud.value, str)
+              and noeud.value not in documentations
+              and noeud.value.startswith("singular/") and noeud.value.endswith(".py")}
+
+    revendiques = {nom for capacite in CAPACITES for nom in capacite.modules}
+    exemptions = sorted(ecrits - revendiques)
+    assert not exemptions, (
+        "ces chemins sont ecrits dans tools/etat_reel.py sans etre revendiques par "
+        f"une capacite : {exemptions}. C'est une exemption invisible -- un module "
+        "qu'on fait taire sans l'inscrire au registre. S'il merite d'etre couvert, "
+        "il entre dans CAPACITES, avec ses limites et sa prochaine etape.")
