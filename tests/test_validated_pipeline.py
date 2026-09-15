@@ -517,3 +517,33 @@ def test_un_effet_externe_exige_sa_liaison_complete(manquant):
     liaison[manquant] = None
     with pytest.raises(ValueError, match="external-effect execution requires provider binding"):
         _build_avec(execution_kind="external_effect", **liaison)
+
+
+def test_une_seconde_correspondance_pour_la_meme_action_est_refusee():
+    """`dict()` fait disparaitre un doublon sans le dire, et c'est une substitution.
+
+    `action_to_intervention` arrive comme une suite de paires, et la porte en fait
+    un dictionnaire. Deux paires pour la **meme** action s'effondrent en une : la
+    seconde ecrase la premiere, en silence, et c'est elle qui decidera de quelle
+    intervention la decision se reclame.
+
+    Le garde compare donc les deux longueurs avant de regarder quoi que ce soit
+    d'autre. Sa voisine -- « la clef doit etre l'action autorisee » -- ne voit
+    rien ici : les deux paires nomment la bonne action. Seule la longueur separe
+    le cas legitime du doublon, et rien ne l'essayait.
+    """
+    contract, action, state, intervention, profile, dimensions = _inputs()
+
+    # L'action doit etre **celle** que la porte recoit : `_build_avec` appelle
+    # `_inputs()` pour son compte, et un identifiant d'action est tire au hasard a
+    # chaque fois. Une premiere ecriture de ce test ne passait pas la meme action,
+    # donc c'est la moitie voisine -- « la clef doit etre l'action autorisee » --
+    # qui refusait, et le doublon n'etait jamais atteint. Le controle par
+    # l'inverse l'a dit ; la phrase seule ne l'aurait pas dit.
+    with pytest.raises(ValueError, match="exactly one intervention mapping"):
+        _build_avec(actions=(action,), interventions=(intervention,),
+                    domain_states=(state,), contract=contract,
+                    objective=contract.objective,
+                    trajectory_profile=profile, trajectory_dimensions=dimensions,
+                    action_to_intervention=((action.id, intervention.id),
+                                            (action.id, intervention.id)))
