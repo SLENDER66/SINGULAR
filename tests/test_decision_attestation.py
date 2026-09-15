@@ -471,3 +471,40 @@ def test_une_decision_qui_sort_de_sa_fenetre_entre_les_deux_controles_est_refuse
     monkeypatch.undo()
     assert store.get(decision.decision_id) is None, (
         "rien ne doit avoir été écrit pour une décision hors de sa fenêtre")
+
+
+# --- l'invariant du dataclass, et ce qui s'appuie dessus -----------------------
+
+@pytest.mark.parametrize("champ, valeur, motif", [
+    ("status", "PEUT-ETRE", "status is invalid"),
+    ("status", "", "status is invalid"),
+    ("decision_id", "   ", "identity fields are required"),
+    ("context_fingerprint", "", "identity fields are required"),
+    ("issuer", " ", "identity fields are required"),
+    ("expires_at", 0.0, "validity interval is invalid"),
+    ("issued_at", float("nan"), "validity interval is invalid"),
+])
+def test_une_attestation_mal_formee_ne_se_construit_pas(champ, valeur, motif):
+    """L'invariant sur lequel `verify_issuance` s'appuie sans le redire.
+
+    `verify_issuance` finit par `attestation.status in {"ISSUED", "REVOKED"}`.
+    Cette moitié-là ne peut jamais décider, parce qu'aucune attestation ne se
+    construit avec un autre statut — mais c'était une promesse que rien ne
+    tenait : `__post_init__` n'avait aucun témoin, donc l'assurance s'appuyait
+    sur du vide.
+
+    Le mandat dit de refuser plutôt que d'autoriser en cas d'ambiguïté. Une
+    attestation est ce qui autorise une exécution à franchir la frontière : elle
+    n'existe pas à moitié.
+    """
+    from singular.decision_attestation import DecisionAttestation
+
+    valide = {
+        "decision_id": "DEC-1", "context_fingerprint": "abc", "issued_at": 1000.0,
+        "expires_at": 2000.0, "status": "ISSUED", "issuer": "test",
+        "created_at": "2026-09-15T00:00:00+00:00",
+    }
+    assert DecisionAttestation(**valide).status == "ISSUED", "le cas nominal doit tenir"
+
+    with pytest.raises(ValueError, match=motif):
+        DecisionAttestation(**(valide | {champ: valeur}))
