@@ -57,6 +57,17 @@ n'atteint.
    `tests/test_l_outil_de_mesure.py` tient le temoin : deux `BoolOp` sur une meme
    ligne, et chacun doit recevoir exactement ce que son etiquette annonce.
 
+   **Jusqu'ou le defaut allait, mesure plutot que craint.** Dans les trois
+   groupes, exactement deux lignes portent des `BoolOp` imbriques :
+   `global_control.py:45` (`requires_human`) et `journal.py:280`
+   (`calibration_verdict['montrable']`). Le reste des etiquettes des passes
+   precedentes designait bien ce qu'il neutralisait. Mais ces deux lignes-la sont
+   les deux verdicts les plus lourds du depot -- « faut-il un humain » et « y
+   a-t-il lieu de parler de la calibration » -- donc l'angle mort etait etroit et
+   place au plus mauvais endroit possible. `journal.py:280` a recu son temoin ;
+   pour `global_control.py:45`, la premiere passe honnete de `frontiere` est ce
+   qui tranchera, et rien d'autre ne doit etre affirme avant elle.
+
 **Un survivant du sous-ensemble n'est pas encore un survivant.** La sous-suite est
 ciblee pour tenir en quelques secondes, donc elle ne couvre pas tout : le premier
 refus que cet outil a denonce comme non prouve l'etait, par
