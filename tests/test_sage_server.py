@@ -107,7 +107,7 @@ def test_an_unknown_route_is_refused(app):
     assert refusal.value.status == HTTPStatus.NOT_FOUND
 
 
-@pytest.mark.parametrize("forged", ["DEC-XXXX", "DEC-", "DEC-deadbeefff", "",
+@pytest.mark.parametrize("forged", ["DEC-XXXX", "DEC-", "DEC-deadbeefff",
                                     "'; DROP TABLE journal_entries;--",
                                     "..%2f..%2fetc%2fpasswd"])
 def test_a_forged_entry_id_is_refused_before_the_journal(app, forged):
@@ -117,17 +117,38 @@ def test_a_forged_entry_id_is_refused_before_the_journal(app, forged):
     classique d'un routage qui décode avant de router. Celui-ci ne décode pas le
     chemin, donc `%2f` reste littéral et la garde de forme l'attrape.
     """
+    lectures = []
+    vrai_resolve = app.journal.resolve
+    app.journal.resolve = lambda *a, **k: lectures.append(a) or vrai_resolve(*a, **k)
+
     with pytest.raises(SageError) as refusal:
         app.route("POST", f"/api/entries/{forged}/resolve", {}, {"happened": True})
-    assert refusal.value.status in {HTTPStatus.BAD_REQUEST, HTTPStatus.NOT_FOUND}
-    assert "n'existe pas" not in refusal.value.message, (
-        "l'identifiant a été porté jusqu'au journal au lieu d'être refusé sur sa forme"
-    )
+
+    # Ce que le titre promet, prouve au lieu d'etre cherche dans une phrase.
+    # L'assertion portait sur l'absence de « n'existe pas » dans le message ; le
+    # journal refuse en disant « n'est dans aucune ligne de ce journal », donc le
+    # garde de forme pouvait disparaitre sans que rien ne rougisse -- mesure, en
+    # le neutralisant : l'identifiant contrefait arrivait jusqu'au journal et
+    # revenait en 404. Le seul temoin qui tienne est que la lecture n'a pas eu
+    # lieu, et le statut qui dit « ta requete est mal formee », pas « je n'ai pas
+    # trouve ».
+    assert lectures == [], (
+        "l'identifiant a été porté jusqu'au journal au lieu d'être refusé sur sa forme")
+    assert refusal.value.status == HTTPStatus.BAD_REQUEST, (
+        "un identifiant qui n'a pas la forme d'un identifiant est une requête mal "
+        "formée, pas une décision introuvable")
 
 
-@pytest.mark.parametrize("forged", ["../../etc/passwd", "a/b"])
+@pytest.mark.parametrize("forged", ["../../etc/passwd", "a/b", ""])
 def test_an_id_carrying_a_separator_matches_no_route_at_all(app, forged):
-    """Le chemin ne ressemble plus à la route : il est refusé avant d'être lu."""
+    """Le chemin ne ressemble plus à la route : il est refusé avant d'être lu.
+
+    L'identifiant vide est ici, et non avec les identifiants contrefaits : la
+    route exige au moins un caractère, donc `/api/entries//resolve` ne lui
+    ressemble pas du tout. Ce n'est pas le garde de forme qui le refuse, c'est le
+    routage, et confondre les deux faisait accepter un `404` là où le garde de
+    forme doit répondre `400`.
+    """
     with pytest.raises(SageError, match="route inconnue"):
         app.route("POST", f"/api/entries/{forged}/resolve", {}, {"happened": True})
 
@@ -286,12 +307,42 @@ def test_an_unreadable_body_is_refused(running):
 
 
 def test_a_json_body_that_is_not_an_object_is_refused(running):
+    """Et le refus doit dire ce qui ne va pas, sinon il ne prouve rien.
+
+    Le code seul ne distinguait pas ce garde de son absence : neutralisé, la
+    liste continue jusqu'au premier champ manquant et le serveur répond `400`
+    quand même -- « La probabilité : ce champ est obligatoire », à quelqu'un qui
+    a envoyé une liste. Mesuré. La phrase est donc le témoin, pas le code.
+    """
     request = urllib.request.Request(
         running + "/api/entries", data=b'["une liste"]',
         headers={"Content-Type": "application/json"}, method="POST")
     with pytest.raises(urllib.error.HTTPError) as refusal:
         urllib.request.urlopen(request)
     assert refusal.value.code == HTTPStatus.BAD_REQUEST
+    assert "objet JSON" in json.loads(refusal.value.read())["message"], (
+        "le refus doit nommer la forme du corps, pas le premier champ qui manque")
+
+
+@pytest.mark.parametrize("corps", [b"{}", b'{"lesson": "sans verdict"}'])
+def test_resolver_sans_verdict_refuse_au_lieu_de_casser(running, corps):
+    """« happened » absent faisait tomber le serveur en 500.
+
+    Le garde réunit deux conditions par un `or` : la clé manque, ou elle n'est
+    pas un booléen. Seule la seconde avait un témoin. Neutralisée, la première
+    laissait `payload["happened"]` lever un `KeyError` nu -- le téléphone
+    recevait « Quelque chose a cassé de mon côté » sur une requête incomplète,
+    qui est une faute du client et se dit.
+    """
+    request = urllib.request.Request(
+        running + "/api/entries/DEC-00000000/resolve", data=corps,
+        headers={"Content-Type": "application/json"}, method="POST")
+    with pytest.raises(urllib.error.HTTPError) as refusal:
+        urllib.request.urlopen(request)
+
+    assert refusal.value.code == HTTPStatus.BAD_REQUEST, (
+        "une requête incomplète est une faute du client, pas une panne du serveur")
+    assert "vrai ou faux" in json.loads(refusal.value.read())["message"]
 
 
 def test_writing_to_a_static_path_is_refused(running):
