@@ -704,6 +704,13 @@ class SageHandler(BaseHTTPRequestHandler):
     """Le peu de HTTP dont l'app a besoin."""
 
     server_version = "SINGULAR-Sage"
+    #: `BaseHTTPRequestHandler` ajoute `Python/3.11.15` derriere le nom, sur
+    #: **toutes** les reponses. Avec `--lan`, c'est la version exacte de son
+    #: interpreteur annoncee a tout le wifi -- de quoi choisir une faille plutot
+    #: que de les essayer. Le reste des en-tetes de ce fichier est durci a
+    #: dessein (CSP, `nosniff`, `no-referrer`, `no-store`) ; celui-la avait ete
+    #: oublie parce qu'il vient de la bibliotheque et non d'une ligne ecrite ici.
+    sys_version = ""
     app: SageApp
 
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A002 - signature imposée

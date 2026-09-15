@@ -898,3 +898,62 @@ def test_la_lecon_traverse_l_api_et_son_absence_devient_une_chaine_vide(journal)
     par_id = {entry.entry_id: _entry_as_dict(entry) for entry in journal.entries()}
     assert par_id[ecrite.entry_id]["lesson"] == "j'ai visé trop haut"
     assert par_id[muette.entry_id]["lesson"] == ""
+
+
+# --- ce que chaque réponse annonce -------------------------------------------
+
+#: Les quatre en-têtes que ce serveur pose lui-même, et pourquoi chacun.
+#:
+#: Ils étaient posés sans qu'aucun test ne les lise : on pouvait les retirer un
+#: par un, la suite restait verte. Les nommer ici rend leur retrait délibéré.
+DURCISSEMENT = {
+    # L'app ne charge rien d'extérieur : tout vient de ce processus.
+    "Content-Security-Policy": "default-src 'self'",
+    # Un journal ne se relit pas depuis le cache d'hier.
+    "Cache-Control": "no-store",
+    # Pas d'interprétation du contenu contre son type déclaré.
+    "X-Content-Type-Options": "nosniff",
+    # L'adresse de son journal ne part pas dans l'en-tête d'un autre site.
+    "Referrer-Policy": "no-referrer",
+}
+
+
+def _entetes(base: str, chemin: str, **extra) -> dict[str, str]:
+    requete = urllib.request.Request(f"{base}{chemin}", **extra)
+    try:
+        with urllib.request.urlopen(requete, timeout=5) as reponse:
+            return dict(reponse.headers)
+    except urllib.error.HTTPError as refus:
+        return dict(refus.headers)
+
+
+@pytest.mark.parametrize("chemin", ["/", "/api/notice", "/api/inconnue", "/icon-180.png"])
+def test_chaque_reponse_porte_les_quatre_entetes_de_durcissement(running, chemin):
+    """La page, les données, un refus, une image : la politique ne se choisit pas.
+
+    `Cache-Control` est le seul à varier -- les icônes sont les mêmes tout le
+    jour et se mettent en cache -- donc c'est sur elles qu'il se lit autrement.
+    """
+    entetes = _entetes(running, chemin)
+    for nom, debut in DURCISSEMENT.items():
+        valeur = entetes.get(nom, "")
+        if nom == "Cache-Control" and chemin.endswith(".png"):
+            assert valeur.startswith("public"), f"{chemin} : {nom} = {valeur!r}"
+            continue
+        assert valeur.startswith(debut), f"{chemin} : {nom} = {valeur!r}"
+
+
+@pytest.mark.parametrize("chemin", ["/", "/api/notice", "/api/inconnue"])
+def test_aucune_reponse_n_annonce_la_version_de_python(running, chemin):
+    """`--lan` sert ce port à tout le wifi ; l'en-tête `Server` en disait trop.
+
+    `BaseHTTPRequestHandler` ajoute `Python/3.x.y` derrière le nom du serveur, sur
+    toutes les réponses. C'est de quoi choisir une faille plutôt que de les
+    essayer, et ça n'apprend rien à personne d'autre. Le reste des en-têtes de
+    ce fichier est durci à dessein ; celui-là venait de la bibliothèque, donc
+    personne ne l'avait lu.
+    """
+    entetes = _entetes(running, chemin)
+    annonce = entetes.get("Server", "")
+    assert "Python" not in annonce, f"{chemin} annonce « {annonce} »"
+    assert not any(c.isdigit() for c in annonce), f"{chemin} annonce une version : « {annonce} »"
