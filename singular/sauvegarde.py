@@ -95,6 +95,8 @@ REFUS_DE_SAUVEGARDE = {
     "source_absente": "il n'y a pas encore de journal à sauvegarder",
     "copie_illisible": "la copie ne s'ouvre pas comme un journal : rien n'est gardé",
     "copie_infidele": "la copie ne rend pas la même chose que l'original : rien n'est gardé",
+    "journal_modifie": ("le journal a changé pendant la copie : rien n'est gardé, "
+                        "relance la sauvegarde"),
 }
 
 
@@ -225,6 +227,20 @@ def sauvegarder(chemin_journal: str | Path = DEFAULT_PATH, *,
                         "copie_illisible",
                         f"{REFUS_DE_SAUVEGARDE['copie_illisible']} : {erreur}") from erreur
                 if obtenu != attendu or chaine_copie != chaine_source:
+                    # Deux causes possibles, et une seule est inquietante. Si le
+                    # journal a bouge depuis la photographie -- une decision
+                    # ajoutee par le serveur pendant que la copie tournait -- la
+                    # copie est fidele a un instant plus tard, pas infidele. Le
+                    # dire « la copie ne rend pas la meme chose que l'original »
+                    # ferait craindre une corruption du seul fichier
+                    # irremplacable du depot, sur un evenement benin qu'une
+                    # relance regle. Une phrase fausse est un defaut, meme quand
+                    # le comportement est correct.
+                    encore, chaine_encore = _photographie(
+                        DecisionJournal(actif, lecture_seule=True))
+                    if encore != attendu or chaine_encore != chaine_source:
+                        raise SauvegardeRefusee(
+                            "journal_modifie", REFUS_DE_SAUVEGARDE["journal_modifie"])
                     raise SauvegardeRefusee("copie_infidele",
                                             REFUS_DE_SAUVEGARDE["copie_infidele"])
             else:

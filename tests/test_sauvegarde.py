@@ -160,12 +160,17 @@ def test_une_copie_infidele_est_refusee_et_ne_reste_pas(tmp_path, monkeypatch) -
     dossier = tmp_path / "sauvegardes"
 
     vraie = module._photographie
-    appels = {"n": 0}
 
     def truquee(journal):
-        appels["n"] += 1
         lignes, chaine = vraie(journal)
-        if appels["n"] > 1:  # la relecture de la copie
+        # C'est **la copie** qu'on ampute, et le test le dit par le chemin plutot
+        # que par le rang de l'appel. Il comptait « tout appel apres le premier »,
+        # ce qui etait un raccourci pour « la copie » tant qu'il n'y avait que
+        # deux lectures. La verification distingue maintenant une copie infidele
+        # d'un journal qui a bouge pendant la copie, donc elle relit la source une
+        # troisieme fois -- et le raccourci amputait cette relecture-la aussi,
+        # faisant passer ce cas pour une ecriture concurrente.
+        if ".partielle" in str(journal.path):
             return lignes[:-1], chaine  # une décision manque
         return lignes, chaine
 
@@ -419,3 +424,90 @@ def test_un_remplacement_reussi_ne_laisse_pas_l_ancienne_derriere(tmp_path) -> N
     assert seconde.dossier.exists()
     assert sorted(p.name for p in dossier.iterdir()) == [seconde.dossier.name], (
         "le dossier écarté doit être retiré une fois le remplacement fait")
+
+
+def test_une_decision_ecrite_pendant_la_copie_ne_dit_pas_que_la_copie_est_infidele(
+        tmp_path, monkeypatch) -> None:
+    """Deux causes, une seule inquiétante, et elles disaient la même phrase.
+
+    La photographie de la source est prise avant la copie. Si une décision est
+    écrite entre les deux — le serveur du Sage tourne en tâche de fond — la copie
+    contient une ligne de plus que la photographie, et la comparaison échoue.
+
+    Le comportement est correct : rien n'est gardé, la sauvegarde précédente est
+    intacte, une relance passe. C'est la phrase qui était fausse. « La copie ne
+    rend pas la même chose que l'original » sur le seul fichier irremplaçable du
+    dépôt fait craindre une corruption, pour un événement bénin. La copie est
+    fidèle — à un instant plus tard.
+    """
+    from singular import sauvegarde as module
+
+    source = _trois_decisions(tmp_path)
+    dossier = tmp_path / "sauvegardes"
+    avant = sauvegarder(source, dossier=dossier, maintenant=datetime(2026, 9, 15, 10, 0, 0))
+
+    vrai_copier = module._copier
+
+    def copier_pendant_qu_on_ecrit(origine, vers):
+        _journal(source, 1)
+        return vrai_copier(origine, vers)
+
+    monkeypatch.setattr(module, "_copier", copier_pendant_qu_on_ecrit)
+    with pytest.raises(SauvegardeRefusee) as refus:
+        sauvegarder(source, dossier=dossier, maintenant=datetime(2026, 9, 15, 11, 0, 0))
+    monkeypatch.undo()
+
+    assert refus.value.reason == "journal_modifie", (
+        "une écriture concurrente n'est pas une copie infidèle")
+    assert avant.dossier.exists(), "et la sauvegarde précédente n'a rien coûté"
+    assert sauvegarder(source, dossier=dossier,
+                       maintenant=datetime(2026, 9, 15, 12, 0, 0)).decisions == 4, (
+        "une relance doit passer : c'est toute la différence avec une vraie infidélité")
+
+
+def test_une_copie_vraiment_infidele_le_dit_encore(tmp_path, monkeypatch) -> None:
+    """Sans ça, le test ci-dessus aurait pu vider le refus de son sens.
+
+    La source ne bouge pas ; c'est la copie qui est fausse. Le refus doit rester
+    `copie_infidele`, celui qui dit qu'il ne faut pas se fier au fichier écrit.
+    """
+    from singular import sauvegarde as module
+
+    source = _trois_decisions(tmp_path)
+    vrai_copier = module._copier
+
+    def copier_une_source_amputee(origine, vers):
+        vrai_copier(origine, vers)
+        base = sqlite3.connect(vers)
+        base.execute("DELETE FROM journal_entries")
+        base.commit()
+        base.close()
+
+    monkeypatch.setattr(module, "_copier", copier_une_source_amputee)
+    with pytest.raises(SauvegardeRefusee) as refus:
+        sauvegarder(source, dossier=tmp_path / "sauvegardes")
+
+    assert refus.value.reason == "copie_infidele"
+
+
+def test_chaque_refus_de_sauvegarde_a_une_phrase_pour_l_ecran() -> None:
+    """La ligne de commande lit `REFUS_DE_SAUVEGARDE[raison]` : une raison sans
+    phrase y lèverait un `KeyError` devant l'utilisateur, au pire moment.
+
+    Les raisons sont lues dans le code plutôt qu'écrites ici : une quatrième
+    ajoutée demain sans sa phrase fait rougir la suite.
+    """
+    import ast
+
+    from singular.sauvegarde import REFUS_DE_SAUVEGARDE
+
+    arbre = ast.parse((RACINE_DEPOT / "singular/sauvegarde.py").read_text(encoding="utf-8"))
+    levees = {noeud.args[0].value for noeud in ast.walk(arbre)
+              if isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Name)
+              and noeud.func.id == "SauvegardeRefusee" and noeud.args
+              and isinstance(noeud.args[0], ast.Constant)}
+
+    assert levees, "plus aucun refus levé : ce test ne prouve plus rien"
+    sans_phrase = sorted(levees - set(REFUS_DE_SAUVEGARDE))
+    assert not sans_phrase, (
+        f"ces raisons sont levées sans phrase pour l'écran : {sans_phrase}")
