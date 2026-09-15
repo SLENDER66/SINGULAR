@@ -14,6 +14,7 @@ et pas sur les options.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import threading
 import urllib.error
@@ -32,6 +33,7 @@ from singular.sage.server import (
     is_loopback_bind,
     read_token,
     same_origin,
+    WEB_ROOT,
 )
 from tests.support import sans_accents
 
@@ -274,6 +276,47 @@ def test_no_path_escapes_the_web_directory(running, target):
     response = _raw_request(running, f"GET {target} HTTP/1.1")
     assert " 404 " in response.splitlines()[0], response.splitlines()[0]
     assert "root:" not in response and "import" not in response
+
+
+def test_no_path_escapes_to_a_file_that_really_exists(running, tmp_path):
+    """La seconde moitié du garde, et c'est elle qui protège le jeton d'accès.
+
+    `_static` refuse si la cible n'est pas un fichier **ou** si elle sort de
+    `WEB_ROOT`. Les chemins du test voisin remontent de deux crans ou plus et
+    atterrissent tous sur des chemins qui n'existent pas -- `WEB_ROOT` est
+    `singular/sage/web`, donc `/../../etc/hostname` donne `singular/etc/hostname`.
+    C'est donc la **première** moitié qui les refuse, et la seconde n'était
+    essayée par rien : neutralisée, la suite entière restait verte.
+
+    Ce qu'elle retient, mesuré en la neutralisant : un cran suffit pour atteindre
+    `singular/sage/notice.py`, et assez de crans pour atteindre
+    `~/.singular/sage_token` -- le jeton qui garde **toutes** les routes `/api/`,
+    servi en `200` sur un chemin statique qui, lui, ne demande aucun jeton. Le
+    garde du réseau se rendait alors lui-même inutile.
+
+    Les fichiers statiques sont publics par décision assumée ; ce qui est hors de
+    `WEB_ROOT` ne l'est pas.
+    """
+    secret = tmp_path / "faux_jeton"
+    secret.write_text("JETON-QUI-NE-DOIT-PAS-SORTIR", encoding="utf-8")
+
+    dehors = {
+        # Un cran : la source du Sage, qui existe vraiment.
+        "un cran au-dessus de WEB_ROOT": os.path.relpath(
+            (WEB_ROOT / ".." / "notice.py").resolve(), WEB_ROOT.resolve()),
+        # Autant de crans qu'il faut : un fichier que ce test vient d'écrire.
+        "un fichier hors du dépôt": os.path.relpath(secret, WEB_ROOT.resolve()),
+    }
+
+    for quoi, relatif in dehors.items():
+        cible = (WEB_ROOT / relatif).resolve()
+        assert cible.is_file(), f"{quoi} : le cas ne vaut que si la cible existe ({cible})"
+        assert WEB_ROOT.resolve() not in cible.parents, f"{quoi} : et qu'elle soit dehors"
+
+        reponse = _raw_request(running, f"GET /{relatif.replace(os.sep, '/')} HTTP/1.1")
+        assert " 404 " in reponse.splitlines()[0], f"{quoi} : {reponse.splitlines()[0]}"
+        assert "JETON-QUI-NE-DOIT-PAS-SORTIR" not in reponse
+        assert "def build_notice" not in reponse
 
 
 def test_the_app_shell_and_its_assets_are_served(running):
