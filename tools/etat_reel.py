@@ -127,14 +127,32 @@ CAPACITES = (
              ("singular/validated_trajectory_decision.py", "singular/validated_pipeline.py",
               "singular/validated_execution.py", "singular/execution.py",
               "singular/decision_attestation.py", "singular/execution_capability.py"),
-             limites="l'approbation humaine n'est pas un canal d'autorisation : une "
-                     "action escaladée est refusée à la porte, pas mise en attente. "
-                     "La chaîne est parcourue de bout en bout contre un vrai serveur "
-                     "local, jamais contre un tiers réel : aucune contrepartie n'a "
-                     "jamais reçu quoi que ce soit",
+             limites="l'approbation humaine n'est pas un canal d'autorisation **à "
+                     "travers ce pipeline-ci** : une action escaladée y est refusée "
+                     "à la porte, pas mise en attente. Le canal existe ailleurs, "
+                     "pour l'autopilote de mission -- voir la capacité "
+                     "« approbation humaine » ci-dessous. Cette ligne disait la "
+                     "restriction sans la borner, et se lisait donc comme « aucun "
+                     "canal nulle part », ce qui est faux. La chaîne est parcourue "
+                     "de bout en bout contre un vrai serveur local, jamais contre un "
+                     "tiers réel : aucune contrepartie n'a jamais reçu quoi que ce "
+                     "soit",
              prochaine="une contrepartie qui n'est pas 127.0.0.1. Le fournisseur "
                        "existe et il est réel ; ce qui manque est quelqu'un en face, "
                        "et ça demande une autorisation, pas du code"),
+    Capacite("approbation humaine",
+             ("singular/approval_integrity.py", "singular/approval_binding.py"),
+             limites="elle sert l'autopilote de mission, pas le pipeline validé : "
+                     "`ValidatedTrajectoryDecision` refuse encore à la porte une "
+                     "décision qui exige un humain. Et aucune approbation n'a jamais "
+                     "été donnée pour un effet réel -- le seul tiers joué est un "
+                     "serveur local",
+             prochaine="décider si le pipeline validé doit l'accepter. C'est une "
+                       "modification de la frontière d'exécution, donc une décision "
+                       "du fondateur, pas d'une session",
+             note="l'identité approuvée est recalculée et recomparée au moment de "
+                  "s'en servir : une action, une capability ou un contrat qui a "
+                  "bougé depuis l'approbation fait refuser l'exécution"),
     Capacite("socle durable", ("singular/durable.py", "singular/mission_runtime.py"),
              limites="SQLite sur une machine, pas de réplication. La sauvegarde "
                      "existe depuis le 15 septembre 2026, elle couvre les deux "
