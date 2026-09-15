@@ -157,6 +157,12 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
    sert. Le controle prealable evite d'ouvrir une transaction pour rien ; il ne
    decide rien que la cle primaire ne decide deja.
 
+   `effects.py` : `if row is None` apres un `INSERT OR IGNORE` suivi du `SELECT`
+   de la meme clef, dans la meme transaction. Insere ou deja la, la ligne est
+   trouvee ; `None` demanderait que l'ecriture s'evapore sous le verrou. C'est
+   une assurance contre un etat impossible, de la meme famille que les
+   `rowcount != 1` du journal, et l'atteindre demanderait de saboter SQLite.
+
    La famille `action is None` de `singular/execution.py` -- aux trois portes,
    plus les deux liaisons contrat et capacite qui la suivent -- est dans ce cas
    aussi, et c'est ecrit ici pour qu'on ne refasse pas le triage. `verify()`
