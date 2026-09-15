@@ -181,6 +181,13 @@ possibles, et il faut choisir la bonne avant d'ecrire une ligne :
      demanderait que l'ecriture s'evapore sous le verrou -- meme famille que les
      `rowcount != 1` du journal.
 
+   `effects.py` a une seconde paire de ce genre, mesuree le 15 septembre 2026 :
+   `if status == IN_FLIGHT: raise EffectInProgress` en tete d'`execute`, et le
+   `raise EffectInProgress` qui termine la branche de revendication ratee. Un
+   test met bien la ligne en IN_FLIGHT et attend l'exception ; neutraliser le
+   premier laisse le second la lever, donc il passe. Neutraliser les deux le fait
+   rougir. Ne cherche pas a isoler l'un des deux.
+
    `effects.py` : `if row is None` apres une insertion « or ignore » suivie de la
    relecture de la meme clef, dans la meme transaction. Inseree ou deja la, la
    ligne est trouvee ; `None` demanderait que l'ecriture s'evapore sous le

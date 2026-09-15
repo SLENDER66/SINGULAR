@@ -139,3 +139,50 @@ def test_in_flight_effect_has_single_claimant(tmp_path: Path):
     with pytest.raises(EffectInProgress):
         coordinator.execute(original, provider)
     assert provider.execute_calls == 0
+
+
+# --- ce que la relecture retient quand la ligne a ete editee a cote -----------
+
+@pytest.mark.parametrize("champ", ["execution_key", "provider", "operation"])
+def test_une_ligne_reetiquetee_sous_la_meme_clef_est_refusee(tmp_path: Path, champ):
+    """La clef d'idempotence **contient** ces trois champs, et on les relit quand meme.
+
+    Ca ressemble a une assurance : une ligne trouvee sous cette clef porte
+    forcement ces valeurs, puisque la clef en est l'empreinte. Elle ne l'est pas.
+    La clef est une empreinte, la ligne est une ligne, et rien n'empeche d'ecrire
+    l'une sous l'autre -- une base editee a cote du code est le modele de menace
+    de ce depot, celui que les tests de falsification du journal montent deja.
+
+    Sans ce refus, un effet externe repondrait sous l'identite d'une autre
+    execution, d'un autre fournisseur ou d'une autre operation : exactement la
+    substitution que la section 7 nomme, sur le chemin qui peut faire partir un
+    virement.
+
+    Les trois champs sont essayes separement : un seul suffirait sinon a laisser
+    les deux autres sans temoin.
+    """
+    store = claimed_store(tmp_path)
+    coordinator = ExternalEffectCoordinator(store)
+    demande = request()
+    coordinator.prepare(demande)
+
+    with coordinator._connect() as conn:
+        conn.execute(
+            f"UPDATE external_effects SET {champ}='autre chose' WHERE provider_idempotency_key=?",
+            (demande.provider_idempotency_key,),
+        )
+
+    with pytest.raises(ValueError, match="contexte différent"):
+        coordinator.prepare(demande)
+
+
+def test_faire_transiter_un_effet_qui_n_existe_pas_est_refuse(tmp_path: Path):
+    """Fail-closed sur l'entree de la transition : aucune ligne, aucune transition.
+
+    Sans ce refus, la transition suivante travaillerait sur `current` lu d'une
+    ligne absente -- et l'`UPDATE` qui suit ne toucherait rien en silence.
+    """
+    coordinator = ExternalEffectCoordinator(claimed_store(tmp_path))
+
+    with pytest.raises(KeyError):
+        coordinator._transition("clef-qui-n-existe-pas", EffectStatus.COMPLETED.value)
